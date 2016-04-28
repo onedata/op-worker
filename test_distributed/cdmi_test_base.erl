@@ -72,7 +72,7 @@ user_1_token_header(Config) ->
 
 % Tests cdmi container GET request (also refered as LIST)
 list_dir(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     {TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
@@ -195,7 +195,7 @@ list_dir(Config) ->
 get_file(Config) ->
     FileName = "toRead.txt",
     FileContent = <<"Some content...">>,
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
     {ok, _} = create_file(Config, FileName),
     ?assert(object_exists(Config, FileName)),
@@ -285,7 +285,7 @@ get_file(Config) ->
 
 % Tests cdmi metadata read on object GET request.
 metadata(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     FileName = "metadataTest.txt",
     FileContent = <<"Some content...">>,
     DirName = "metadataTestDir/",
@@ -478,7 +478,7 @@ metadata(Config) ->
 % Tests cdmi object DELETE requests
 delete_file(Config) ->
     FileName = "toDelete",
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     GroupFileName =
         filename:join(["spaces", binary_to_list(SpaceName), "groupFile"]),
@@ -509,7 +509,7 @@ delete_file(Config) ->
 
 % Tests cdmi container DELETE requests
 delete_dir(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     DirName = "toDelete/",
     ChildDirName = "toDelete/child/",
     SpacesDirName = "spaces/",
@@ -563,7 +563,7 @@ delete_dir(Config) ->
 % Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
 % json string), or without (when we treat request body as new file content)
 create_file(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     ToCreate = "file.txt",
     ToCreate2 = filename:join(["spaces", binary_to_list(SpaceName), "file1.txt"]),
@@ -640,7 +640,7 @@ create_file(Config) ->
 
 % Tests cdmi object PUT requests (updating content)
 update_file(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     {_TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
         create_test_dir_and_file(Config),
     NewValue = <<"New Value!">>,
@@ -711,7 +711,7 @@ update_file(Config) ->
 
 choose_adequate_handler(Config) ->
     % given
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     File = "file",
     Dir = "dir/",
 
@@ -727,7 +727,7 @@ choose_adequate_handler(Config) ->
 
 use_supported_cdmi_version(Config) ->
     % given
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     RequestHeaders = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
     % when
@@ -739,7 +739,7 @@ use_supported_cdmi_version(Config) ->
 
 use_unsupported_cdmi_version(Config) ->
     % given
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
 
     % when
@@ -752,7 +752,7 @@ use_unsupported_cdmi_version(Config) ->
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
 % with '/'
 create_dir(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     DirName = "toCreate/",
     DirName2 = "toCreate2/",
     MissingParentName = "unknown/",
@@ -814,7 +814,7 @@ create_dir(Config) ->
 
 % tests access to file by objectid
 objectid(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     {TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
@@ -924,7 +924,7 @@ objectid(Config) ->
 
 % tests if capabilities of objects, containers, and whole storage system are set properly
 capabilities(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
     %%--- system capabilities ------
     RequestHeaders8 = [?CDMI_VERSION_HEADER],
@@ -984,7 +984,7 @@ capabilities(Config) ->
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path
 moved_permanently(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     DirName = "somedir/",
     DirNameWithoutSlash = "somedir",
     FileName = "somedir/somefile.txt",
@@ -1039,7 +1039,7 @@ moved_permanently(Config) ->
 
 % tests req format checking
 request_format_check(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     FileToCreate = "file.txt",
     DirToCreate = "dir/",
     FileContent = <<"File content!">>,
@@ -1063,7 +1063,7 @@ request_format_check(Config) ->
 % tests mimetype and valuetransferencoding properties, they are part of cdmi-object and cdmi-container
 % and should be changeble
 mimetype_and_encoding(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     {TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
@@ -1126,7 +1126,7 @@ mimetype_and_encoding(Config) ->
 
 % tests reading&writing file at random ranges
 out_of_range(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     {TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
     FileName = "random_range_file.txt",
@@ -1172,7 +1172,7 @@ out_of_range(Config) ->
 
 % tests copy and move operations on dataobjects and containers
 copy_move(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
     FileName = "move_test_file.txt",
     DirName = "move_test_dir/",
@@ -1311,7 +1311,7 @@ copy_move(Config) ->
 
 % tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
 partial_upload(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     FileName = "partial.txt",
     FileName2 = "partial2.txt",
     Chunk1 = <<"some">>,
@@ -1647,7 +1647,7 @@ errors(Config) ->
 %%------------------------------
 
 accept_header(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     AcceptHeader = {<<"Accept">>, <<"*/*">>},
 
     {ok, Code1, _Headers1, _Response1} =
@@ -1728,7 +1728,7 @@ create_test_dir_and_file(Config) ->
     {TestDirName, TestFileName, FullTestFileName, TestFileContent}.
 
 object_exists(Config, Path) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
 
     case lfm_proxy:stat(WorkerP1, SessionId,
@@ -1740,7 +1740,7 @@ object_exists(Config, Path) ->
     end.
 
 create_file(Config, Path) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path), ?DEFAULT_FILE_MODE).
 
@@ -1749,14 +1749,14 @@ open_file(Worker, Config, Path, OpenMode) ->
     lfm_proxy:open(Worker, SessionId, {path, absolute_binary_path(Path)}, OpenMode).
 
 write_to_file(Config, Path, Data, Offset) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     {ok, FileHandle} = open_file(WorkerP1, Config, Path, write),
     Result = lfm_proxy:write(WorkerP1, FileHandle, Offset, Data),
     lfm_proxy:close(WorkerP1, FileHandle),
     Result.
 
 get_file_content(Config, Path) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     {ok, FileHandle} = open_file(WorkerP2, Config, Path, read),
     Result = case lfm_proxy:read(WorkerP2, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
         {error, Error} -> {error, Error};
@@ -1766,29 +1766,29 @@ get_file_content(Config, Path) ->
     Result.
 
 mkdir(Config, Path) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     lfm_proxy:mkdir(WorkerP1, SessionId, absolute_binary_path(Path)).
 
 set_acl(Config, Path, Acl) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     lfm_proxy:set_acl(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Acl).
 
 get_acl(Config, Path) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     lfm_proxy:get_acl(WorkerP2, SessionId, {path, absolute_binary_path(Path)}).
 
 add_xattrs(Config, Path, Xattrs) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     lists:foreach(fun(Xattr) ->
         ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Xattr)
     end, Xattrs).
 
 get_xattrs(Config, Path) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     {ok, Xattrs} = lfm_proxy:list_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}),
     lists:filtermap(
@@ -1807,11 +1807,11 @@ ensure_begins_with_slash(Path) ->
     lists:reverse(binary_to_list(filepath_utils:ensure_ends_with_slash(ReversedBinary))).
 
 mock_opening_file_without_perms(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, onedata_file_api),
     test_utils:mock_expect(
         Workers, onedata_file_api, open, fun (_, _ ,_) -> {error, ?EACCES} end).
 
 unmock_opening_file_without_perms(Config) ->
-    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, onedata_file_api).
