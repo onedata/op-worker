@@ -235,7 +235,7 @@ synchronize_block(_CTX, {uuid, FileUUID}, Block)  ->
     {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
 synchronize_block_and_compute_checksum(CTX, {uuid, FileUUID},
     #file_block{offset = Offset, size = Size})  ->
-    {ok, Handle} = lfm_files:open(fslogic_context:get_session_id(CTX), fslogic_uuid:to_file_guid(FileUUID), read),
+    {ok, Handle} = lfm_files:open(fslogic_context:get_session_id(CTX), {guid, fslogic_uuid:to_file_guid(FileUUID)}, read),
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
     Checksum = crypto:hash(md4, Data),
     #fuse_response{status = #status{code = ?OK},
