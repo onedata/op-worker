@@ -62,7 +62,7 @@ all() ->
 %%        delete_file_test,
 %%        delete_dir_test,
 %%        create_file_test,
-%%        update_file_test
+        update_file_test
 %%        create_dir_test,
 %%        capabilities_test,
 %%        choose_adequate_handler,
@@ -1707,7 +1707,8 @@ init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    mock_user_auth(ConfigWithSessionInfo),
+    initializer:enable_grpca_based_communication(Config),
+%%    mock_user_auth(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(choose_adequate_handler, Config) ->
@@ -1716,9 +1717,10 @@ end_per_testcase(choose_adequate_handler, Config) ->
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
-    unmock_user_auth(Config),
+%%    unmock_user_auth(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
     application:stop(ssl2).
 

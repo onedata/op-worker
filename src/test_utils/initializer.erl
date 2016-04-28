@@ -19,6 +19,7 @@
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
+-include_lib("public_key/include/public_key.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/message_id.hrl").
@@ -30,6 +31,7 @@
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
+-export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_GLOBAL_SETUP, [
@@ -259,8 +261,11 @@ setup_session(Worker, [{UserId, Spaces, _DefaultSpaceId, Groups} | R], Config) -
         end
     end, Spaces),
 
+    Macaroon = macaroon:create(<<"test">>, <<"key">>, UserId),
+    Auth = #auth{macaroon = Macaroon},
+
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, #auth{}, []])),
+        reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, fetch, [{user, {UserId, UserName}}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
@@ -268,6 +273,7 @@ setup_session(Worker, [{UserId, Spaces, _DefaultSpaceId, Groups} | R], Config) -
         {{spaces, UserId}, Spaces},
         {{groups, UserId}, Groups},
         {{user_id, UserId}, UserId},
+        {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
         {{session_id, UserId}, SessId},
         {{fslogic_ctx, UserId}, #fslogic_ctx{session = Session}}
@@ -361,6 +367,55 @@ communicator_mock(Workers) ->
     catch test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
+
+
+-spec enable_grpca_based_communication(Config :: list()) -> ok.
+enable_grpca_based_communication(Config) ->
+    AllWorkers = ?config(op_worker_nodes, Config),
+    DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
+
+    %% Enable grp certs
+    test_utils:mock_new(AllWorkers, [oz_plugin, provider_auth_manager]),
+    CertMappings = lists:map(fun({ProvKey, Domain}) ->
+        CertPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "cert.pem"),
+        KeyPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "key.pem"),
+        CertPath = re:replace(CertPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return,list}]),
+        KeyPath = re:replace(KeyPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return,list}]),
+
+
+        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_cert_path,
+            fun() -> CertPath end),
+        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_key_path,
+            fun() -> KeyPath end),
+
+        {ok, PEMBin} = file:read_file(CertPath0),
+        [{_, DER, _}] = public_key:pem_decode(PEMBin),
+        Cert = #'OTPCertificate'{} = public_key:pkix_decode_cert(DER, otp),
+
+        {Cert, Domain}
+    end, DomainMappings),
+
+    test_utils:mock_expect(AllWorkers, provider_auth_manager, is_provider,
+        fun(CertToCheck) ->
+            case lists:keyfind(CertToCheck, 1, CertMappings) of
+                false -> false;
+                _     -> true
+            end
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_auth_manager, get_provider_id,
+        fun(CertToCheck) ->
+            domain_to_provider_id(proplists:get_value(CertToCheck, CertMappings))
+        end),
+
+    ok.
+
+-spec disable_grpca_based_communication(Config :: list()) -> ok.
+disable_grpca_based_communication(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [oz_plugin, provider_auth_manager]).
+
+
 
 %%%===================================================================
 %%% Internal functions

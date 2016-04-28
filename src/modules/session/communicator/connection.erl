@@ -109,7 +109,7 @@ init(Ref, Socket, Transport, _Opts) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [{certfile, oz_plugin:get_cert_path()}, {keyfile, oz_plugin:get_key_path()}],
-    ?info("Connecting to ~p ~p", [Hostname, Port]),
+    ?info("Connecting to ~p ~p ~p", [Hostname, Port, TLSSettings]),
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
@@ -355,7 +355,7 @@ handle_client_message(State = #state{session_id = SessId, certificate = Cert}, D
 -spec handle_server_message(#state{}, binary()) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message(State = #state{session_id = SessId, certificate = Cert}, Data) ->
+handle_server_message(State = #state{session_id = SessId, certificate = _Cert}, Data) ->
     try serializator:deserialize_server_message(Data, SessId) of
         {ok, Msg} ->
             handle_normal_message(State, Msg)
