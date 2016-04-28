@@ -38,6 +38,7 @@ change_replicated(_, #change{model = file_meta, doc =  #document{key = FileUUID,
 change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?info("change_replicated: changed file_meta ~p", [FileUUID]),
+    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
@@ -46,6 +47,7 @@ change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = Fil
 change_replicated(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
     ?info("change_replicated: changed file_location ~p", [FileUUID]),
     ok = fslogic_utils:wait_for_file_meta(FileUUID, 5),
+    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
     ok = replication_dbsync_hook:on_file_location_change(SpaceId, Doc);
 change_replicated(_SpaceId, _Change) ->
     ok.

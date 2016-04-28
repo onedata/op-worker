@@ -19,7 +19,7 @@
 %% API
 -export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
--export([wait_for_file_meta/2]).
+-export([wait_for_links/3, wait_for_file_meta/2]).
 
 %%%===================================================================
 %%% API functions
@@ -83,6 +83,35 @@ get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DS
 get_local_storage_file_locations(Entry) ->
     #document{} = Doc = get_local_file_location(Entry),
     get_local_storage_file_locations(Doc).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waiting for links document associated with file_meta to be present.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_links(file_meta:uuid(), non_neg_integer(), SpaceId :: binary()) -> ok | no_return().
+% TODO - check if still needed
+wait_for_links(FileUuid, 0, _) ->
+    ?error("Waiting for links document, for file ~p failed.", [FileUuid]),
+    throw(no_link_document);
+wait_for_links(FileUuid, Retries, SpaceId) ->
+    IDs = dbsync_utils:get_providers_for_space(SpaceId),
+    IsOk = lists:foldl(fun(ID, Acc) ->
+        case Acc of
+            true ->
+                file_meta:exists({uuid, links_utils:links_doc_key(FileUuid, ID)});
+            _ ->
+                Acc
+        end
+    end, true, IDs -- [oneprovider:get_provider_id()]),
+    case IsOk of
+        true ->
+            ok;
+        false ->
+            timer:sleep(timer:seconds(1)),
+            wait_for_links(FileUuid, Retries - 1, SpaceId)
+    end.
 
 
 %%--------------------------------------------------------------------

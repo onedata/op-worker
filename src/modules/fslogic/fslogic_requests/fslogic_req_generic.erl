@@ -120,7 +120,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 StorageType = luma_utils:get_storage_type(StorageId),
                 fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
             catch
-                throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
+                % TODO - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
+                _:_ -> ?ROOT_POSIX_CTX
             end,
             FinalUID = case  session:get(SessId) of
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
