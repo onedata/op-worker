@@ -82,7 +82,7 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
-    version = 1, %% Snaphot version
+    version = 1, %% Snapshot version
     is_scope = false :: boolean(),
     scope :: datastore:key()
 }).
