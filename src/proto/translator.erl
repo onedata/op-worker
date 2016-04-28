@@ -490,7 +490,7 @@ translate_to_protobuf(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) 
     SecValues = [R || {ok, R} <- [macaroon:serialize(DMacaroon) || DMacaroon <- DMacaroons]],
     #'Token'{value = Token, secondary_values = SecValues};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
-    #'RemoteWriteResult'{wrote = Wrote};
+    {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 
 
 translate_to_protobuf(#fuse_request{fuse_request = Record}) ->
