@@ -148,8 +148,10 @@ translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = 
         storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #remote_read{offset = Offset, size = Size};
-translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
-    #remote_write{offset = Offset, data = Data};
+translate_from_protobuf(#'RemoteWrite'{byte_sequence = ByteSequences}) ->
+    #remote_write{byte_sequence = [translate_from_protobuf(BS) || BS <- ByteSequences]};
+translate_from_protobuf(#'ByteSequence'{offset = Offset, data = Data}) ->
+    #byte_sequence{offset = Offset, data = Data};
 translate_from_protobuf(#'GetXattr'{uuid = UUID, name = Name}) ->
     #get_xattr{uuid = UUID, name = Name};
 translate_from_protobuf(#'SetXattr'{uuid = UUID, xattr = {xattr, Xattr}}) ->
@@ -193,8 +195,15 @@ translate_from_protobuf(#'StatusReport'{space_id = SpaceId, seq_num = SeqNum}) -
     #status_report{space_id = SpaceId, seq = SeqNum};
 translate_from_protobuf(#'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
     #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes};
+
+% Replication
 translate_from_protobuf(#'SynchronizeBlock'{uuid = Uuid, block = #'FileBlock'{offset = O, size = S}}) ->
     #synchronize_block{uuid = Uuid, block = #file_block{offset = O, size = S}};
+translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{uuid = Uuid,
+    block = #'FileBlock'{offset = O, size = S}}) ->
+    #synchronize_block_and_compute_checksum{uuid = Uuid, block = #file_block{offset = O, size = S}};
+translate_from_protobuf(#'Checksum'{value = Value}) ->
+    #checksum{value = Value};
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -317,6 +326,10 @@ translate_to_protobuf(#proxyio_response{status = Status, proxyio_response = Prox
         status = StatProto,
         proxyio_response = translate_to_protobuf(ProxyIOResponse)
     }};
+translate_to_protobuf(#remote_write{byte_sequence = ByteSequences}) ->
+    #'RemoteWrite'{byte_sequence = [translate_to_protobuf(BS) || BS <- ByteSequences]};
+translate_to_protobuf(#'byte_sequence'{offset = Offset, data = Data}) ->
+    #'ByteSequence'{offset = Offset, data = Data};
 translate_to_protobuf(#remote_data{data = Data}) ->
     {remote_data, #'RemoteData'{data = Data}};
 translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
@@ -361,6 +374,16 @@ translate_to_protobuf(#status_report{space_id = SpaceId, seq = SeqNum}) ->
     {status_report, #'StatusReport'{space_id = SpaceId, seq_num = SeqNum}};
 translate_to_protobuf(#batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
     {batch_update, #'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}};
+
+% Replication
+translate_to_protobuf(#synchronize_block{uuid = Uuid, block = Block}) ->
+    {synchronize_block, #'SynchronizeBlock'{uuid = Uuid, block = Block}};
+translate_to_protobuf(#synchronize_block_and_compute_checksum{uuid = Uuid, block = Block}) ->
+    {synchronize_block_and_compute_checksum,
+        #'SynchronizeBlockAndComputeChecksum'{uuid = Uuid, block = Block}};
+translate_to_protobuf(#checksum{value = Value}) ->
+    {checksum, #'Checksum'{value = Value}};
+
 translate_to_protobuf(undefined) ->
     undefined.
 

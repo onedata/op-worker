@@ -24,7 +24,7 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
+-export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1,
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
@@ -148,10 +148,12 @@ clear_models(Worker, Names) ->
 %% @doc Setup test users' sessions on server
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
-    [Spaces :: {binary(), binary()}], [Groups :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
+    [Spaces :: {binary(), binary()}], DefaultSpace :: binary(),
+    [Groups :: {binary(), binary()}]}], Config :: term()) ->
+    NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
+setup_session(Worker, [{UserNum, Spaces, _DefaultSpace, Groups} | R], Config) ->
     Self = self(),
 
     Name = fun(Text, Num) -> name(Text, Num) end,
@@ -286,10 +288,15 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     SameDomainWorkers = get_same_domain_workers(Config, ?GET_DOMAIN(Worker)),
     initializer:space_storage_mock(SameDomainWorkers, StorageId),
 
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
+    SpaceId1 = <<"space_id1">>,
+    SpaceId2 = <<"space_id2">>,
+    SpaceId3 = <<"space_id3">>,
+    SpaceId4 = <<"space_id4">>,
+
+    Space1 = {SpaceId1, <<"space_name1">>},
+    Space2 = {SpaceId2, <<"space_name2">>},
+    Space3 = {SpaceId3, <<"space_name3">>},
+    Space4 = {SpaceId4, <<"space_name4">>},
     Spaces = [Space1, Space2, Space3, Space4],
 
     Group1 = {<<"group_id1">>, <<"group_name1">>},
@@ -298,10 +305,10 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     Group4 = {<<"group_id4">>, <<"group_name4">>},
     Groups = [Group1, Group2, Group3, Group4],
 
-    User1 = {1, [Space1, Space2, Space3, Space4], [Group1, Group2, Group3, Group4]},
-    User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
-    User3 = {3, [Space3, Space4], [Group3, Group4]},
-    User4 = {4, [Space4], [Group4]},
+    User1 = {1, [Space1, Space2, Space3, Space4], SpaceId1, [Group1, Group2, Group3, Group4]},
+    User2 = {2, [Space2, Space3, Space4], SpaceId2, [Group2, Group3, Group4]},
+    User3 = {3, [Space3, Space4], SpaceId3, [Group3, Group4]},
+    User4 = {4, [Space4], SpaceId4, [Group4]},
     Users = [User1, User2, User3, User4],
 
     SpaceUsers = [
@@ -373,7 +380,8 @@ name(Text, Num) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_users_mock_setup(Workers :: node() | [node()],
-    [{integer(), [{binary(), binary()}], [{binary(), binary()}]}]) ->
+    [{UserNum :: integer(), Spaces :: [{binary(), binary()}],
+        DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, oz_users),
@@ -385,13 +393,13 @@ oz_users_mock_setup(Workers, Users) ->
     end),
 
     test_utils:mock_expect(Workers, oz_users, get_spaces, fun({user, UserNum}) ->
-        {_, Spaces, _} = lists:keyfind(UserNum, 1, Users),
-        {[DefaultSpaceId | _] = SpaceIds, _} = lists:unzip(Spaces),
+        {_, Spaces, DefaultSpaceId, _} = lists:keyfind(UserNum, 1, Users),
+        {SpaceIds, _} = lists:unzip(Spaces),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
     end),
 
     test_utils:mock_expect(Workers, oz_users, get_groups, fun({user, UserNum}) ->
-        {_, _, Groups} = lists:keyfind(UserNum, 1, Users),
+        {_, _, _, Groups} = lists:keyfind(UserNum, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
     end).

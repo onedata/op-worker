@@ -20,7 +20,7 @@
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3,
     get_helper_params/3, release/2]).
--export([get_parent/2, synchronize_block/3]).
+-export([get_parent/2, synchronize_block/3, synchronize_block_and_compute_checksum/3]).
 
 %%%===================================================================
 %%% API functions
@@ -148,25 +148,34 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
     {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
+    try fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode) of
+        {StorageId, FileId} ->
+            fslogic_times:update_mtime_ctime({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
 
-    fslogic_times:update_mtime_ctime({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
+            {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
+                false ->
+                    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
+                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID,
+                        Storage, FileId),
+                    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
+                    save_handle(SessId, Handle);
+                true ->
+                    {ok, undefined}
+            end,
 
-    {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
-        false ->
-            {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
-            {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
-            save_handle(SessId, Handle);
-        true ->
-            {ok, undefined}
-    end,
-
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = UUID, provider_id = oneprovider:get_provider_id(),
-            storage_id = StorageId, file_id = FileId, blocks = [],
-            space_id = SpaceUUID, handle_id = HandleId})}.
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = file_location:ensure_blocks_not_empty(#file_location{
+                    uuid = UUID, provider_id = oneprovider:get_provider_id(),
+                    storage_id = StorageId, file_id = FileId, blocks = [],
+                    space_id = SpaceUUID, handle_id = HandleId})}
+    catch
+        T:M ->
+            {ok, FileLocations} = file_meta:get_locations({uuid, UUID}),
+            lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
+            file_meta:delete({uuid, UUID}),
+            ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
+            throw(?EACCES)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -202,9 +211,26 @@ get_parent(_CTX, File) ->
 %%--------------------------------------------------------------------
 -spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
     #fuse_response{}.
-synchronize_block(_Ctx, {uuid, Uuid}, Block)  ->
+synchronize_block(_CTX, {uuid, Uuid}, Block)  ->
     ok = replica_synchronizer:synchronize(Uuid, Block),
     #fuse_response{status = #status{code = ?OK}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Synchronizes given block with remote replicas and returns checksum of
+%% synchronized data.
+%% @end
+%%--------------------------------------------------------------------
+-spec synchronize_block_and_compute_checksum(fslogic_worker:ctx(),
+    {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
+synchronize_block_and_compute_checksum(CTX, {uuid, Uuid},
+    #file_block{offset = Offset, size = Size})  ->
+    {ok, Handle} = lfm_files:open(fslogic_context:get_session_id(CTX), {uuid, Uuid}, read),
+    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
+    Checksum = crypto:hash(md4, Data),
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #checksum{value = Checksum}}.
 
 
 %%%===================================================================

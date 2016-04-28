@@ -31,7 +31,8 @@
 %% Cowboy API
 -export([init/3, handle/2, terminate/3]).
 %% API
--export([upload_map_insert/2, upload_map_lookup/1, upload_map_lookup/2]).
+-export([upload_map_insert/2, upload_map_delete/1]).
+-export([upload_map_lookup/1, upload_map_lookup/2]).
 -export([clean_upload_map/0]).
 
 %% ====================================================================
@@ -41,7 +42,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Inserts a Key - Value pair info upload map.
+%% Inserts a Key - Value pair into upload map.
+%% Upload map is a map in session memory dedicated for handling chunked
+%% file uploads.
+%% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
 -spec upload_map_insert(Key :: term(), Value :: term()) -> ok.
@@ -54,6 +58,9 @@ upload_map_insert(Key, Value) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves a Value from upload map by Key.
+%% Upload map is a map in session memory dedicated for handling chunked
+%% file uploads.
+%% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
 -spec upload_map_lookup(Key :: term()) -> Value :: term().
@@ -64,6 +71,9 @@ upload_map_lookup(Key) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves a Value from upload map by Key or returns a default value.
+%% Upload map is a map in session memory dedicated for handling chunked
+%% file uploads.
+%% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
 -spec upload_map_lookup(Key :: term(), Default :: term()) -> Value :: term().
@@ -74,12 +84,30 @@ upload_map_lookup(Key, Default) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Deletes a Key Value pair from upload map.
+%% Upload map is a map in session memory dedicated for handling chunked
+%% file uploads.
+%% @todo Should be redesigned in VFS-1815.
+%% @end
+%%--------------------------------------------------------------------
+-spec upload_map_delete(Key :: term()) -> ok.
+upload_map_delete(Key) ->
+    Map = g_session:get_value(?UPLOAD_MAP, #{}),
+    NewMap = maps:remove(Key, Map),
+    g_session:put_value(?UPLOAD_MAP, NewMap).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Cleans all upload-related mappings in session memory.
+%% Upload map is a map in session memory dedicated for handling chunked
+%% file uploads.
+%% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
 -spec clean_upload_map() -> ok.
 clean_upload_map() ->
-    g_session:put_value(?UPLOAD_MAP, undefined).
+    g_session:put_value(?UPLOAD_MAP, #{}).
 
 
 %% ====================================================================
@@ -138,7 +166,7 @@ handle_http_upload(Req) ->
         try
             g_ctx:init(Req, false)
         catch _:_ ->
-            % Logging is done inside g_ctx:init
+            % Error logging is done inside g_ctx:init
             error
         end,
     case InitSession of
@@ -153,10 +181,14 @@ handle_http_upload(Req) ->
                 throw:{missing_param, _} ->
                     g_ctx:reply(500, [], <<"">>);
                 Type:Message ->
-                    ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
+                    ?error_stacktrace("Error while processing file upload "
+                    "from user ~p - ~p:~p",
                         [g_session:get_user_id(), Type, Message]),
-                    % Return 204 - resumable will retry the upload
-                    g_ctx:reply(204, [], <<"">>)
+                    % @todo VFS-1815 for now return 500,
+                    % because retries are not stable
+%%                    % Return 204 - resumable will retry the upload
+%%                    g_ctx:reply(204, [], <<"">>)
+                    g_ctx:reply(500, [], <<"">>)
             end
     end,
     g_ctx:finish().
@@ -182,8 +214,10 @@ multipart(Req, Params) ->
                     SessionId = g_session:get_session_id(),
                     {ok, FileHandle} = logical_file_manager:open(
                         SessionId, {uuid, FileId}, write),
-                    ChunkNumber = get_int_param(<<"resumableChunkNumber">>, Params),
-                    ChunkSize = get_int_param(<<"resumableChunkSize">>, Params),
+                    ChunkNumber = get_int_param(
+                        <<"resumableChunkNumber">>, Params),
+                    ChunkSize = get_int_param(
+                        <<"resumableChunkSize">>, Params),
                     % First chunk number in resumable is 1
                     Offset = ChunkSize * (ChunkNumber - 1),
                     Req3 = stream_file(Req2, FileHandle, Offset),

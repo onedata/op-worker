@@ -104,11 +104,14 @@ translate_proxyio_request_remote_write_from_protobuf_test() ->
     ?assertEqual(#proxyio_request{
         storage_id = <<"StorageID">>,
         file_id = <<"FileID">>,
-        proxyio_request = #remote_write{offset = 2, data = <<"data">>}},
+        proxyio_request = #remote_write{byte_sequence =
+            [#byte_sequence{offset = 2, data = <<"data">>}]},
+
         translator:translate_from_protobuf(#'ProxyIORequest'{
             storage_id = <<"StorageID">>,
             file_id = <<"FileID">>,
-            proxyio_request = {remote_write, #'RemoteWrite'{offset = 2, data = <<"data">>}}
+            proxyio_request = {remote_write, #'RemoteWrite'{byte_sequence =
+                [#'ByteSequence'{offset = 2, data = <<"data">>}]}}
         })).
 
 translate_get_protocol_version_from_protobuf_test() ->

@@ -60,7 +60,8 @@ struct HelpersNIF {
         SHFactory = std::make_unique<one::helpers::StorageHelperFactory>(
             helperServices["Ceph"]->service,
             helperServices["DirectIO"]->service,
-            helperServices["AmazonS3"]->service);
+            helperServices["AmazonS3"]->service, nullptr);
+
         umask(0);
     }
 

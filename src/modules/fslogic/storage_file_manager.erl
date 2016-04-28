@@ -24,7 +24,8 @@
 
 -export([new_handle/5]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
--export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1]).
+-export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
+    fsync/1]).
 -export([open_at_creation/1]).
 
 -type handle() :: #sfm_handle{}.
@@ -298,6 +299,18 @@ unlink(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, ses
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
     helpers:unlink(HelperHandle, FileId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Assures that changes made on file are persistent.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(handle()) -> ok | logical_file_manager:error_reply().
+fsync(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:fsync(HelperHandle, FileId, true).
 
 %%%===================================================================
 %%% Internal functions
