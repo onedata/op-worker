@@ -24,8 +24,33 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_runner.hrl").
 
-
 -export([init/1, handle/1, cleanup/0]).
+-export([refresh_subscription/0]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends subscription renew message & updates subscription progress.
+%% @end
+%%--------------------------------------------------------------------
+-spec refresh_subscription() -> ok.
+refresh_subscription() ->
+    {Missing, ResumeAt} = subscriptions:get_missing(),
+    Users = subscriptions:get_users(),
+    ?info("Subscription progress - last_seq: ~p, missing: ~p, users: ~p ",
+        [ResumeAt, Missing, Users]),
+
+    Message = json_utils:encode([
+        {users, Users},
+        {resume_at, ResumeAt},
+        {missing, Missing}
+    ]),
+
+    ensure_connection_running(),
+    subscription_wss:push(Message).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -40,7 +65,6 @@
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init([]) ->
     schedule_subscription_renew(),
-    schedule_connection_start(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -63,28 +87,19 @@ handle(healthcheck) ->
         {error, Reason} -> ?warning("Connection error:~p", [Reason])
     end;
 
-handle(start_provider_connection) ->
-    try
-        subscriptions:ensure_initialised(),
-        case subscription_wss:start_link() of
-            {ok, Pid} ->
-                ?info("Subscriptions connection started ~p", [Pid]);
-            {error, Reason} ->
-                ?error("Subscriptions connection failed to start: ~p", [Reason]),
-                schedule_connection_start()
-        end
-    catch
-        E:R ->
-            ?error("Connection not started: ~p:~p", [E, R]),
-            schedule_connection_start()
-    end,
-    ok;
+handle(ensure_connection_running) ->
+    case whereis(subscription_wss) of
+        undefined -> start_provider_connection();
+        _ -> ok
+    end;
 
 handle(refresh_subscription) ->
     Self = node(),
     case subscriptions:get_refreshing_node() of
         {ok, Self} -> refresh_subscription();
-        {ok, Node} -> ?debug("Pid ~p does not match dedicated ~p", [Self, Node])
+        {ok, Node} ->
+            ?debug("Pid ~p does not match dedicated ~p", [Self, Node]),
+            ensure_connection_running()
     end,
     ok;
 
@@ -98,9 +113,7 @@ handle({'EXIT', _Pid, _Reason} = Req) ->
     %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
     %% Handle possible websocket crashes
     case subscription_wss:healthcheck() of
-        {error, _} ->
-            ?error("Subscriptions connection crashed: ~p", [_Reason]),
-            schedule_connection_start();
+        {error, _} -> ?error("Connection crashed: ~p", [_Reason]);
         _ -> ?log_bad_request(Req)
     end,
     ok;
@@ -136,30 +149,9 @@ handle_update(#sub_update{model = Model, doc = Doc, revs = Revs}) ->
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Send subscription renew message.
-%% @end
-%%--------------------------------------------------------------------
--spec refresh_subscription() -> ok.
-refresh_subscription() ->
-    {Missing, ResumeAt} = subscriptions:get_missing(),
-    Users = subscriptions:get_users(),
-    ?info("Subscription progress - last_seq: ~p, missing: ~p, users: ~p ", [
-        ResumeAt, Missing, Users
-    ]),
-
-    Message = json_utils:encode([
-        {users, Users},
-        {resume_at, ResumeAt},
-        {missing, Missing}
-    ]),
-
-    %% todo: remove once VFS-1877 is resolved (and exit handler does it's job)
-    ensure_connection_running(),
-    subscription_wss:push(Message).
-
-%%--------------------------------------------------------------------
-%% @doc @private
 %% Schedule renewing the subscription at fixed interval.
+%% As connection check is performed during subscription renewals
+%% are sufficient to maintain healthy connection.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_subscription_renew() -> ok.
@@ -175,30 +167,25 @@ schedule_subscription_renew() ->
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Schedule restart of the provider - OZ link.
-%% Restart is delayed as conditions which led to loosing the connection
-%% may still apply.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_connection_start() -> ok.
-schedule_connection_start() ->
-    {ok, Delay} = application:get_env(?APP_NAME,
-        subscriptions_connection_restart_interval),
-
-    {ok, _} = timer:send_after(Delay, whereis(?MODULE),
-        {timer, start_provider_connection}),
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc @private
 %% Ensures if websocket is running & registered.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_connection_running() -> ok | {error, Reason :: term()}.
 ensure_connection_running() ->
-    case whereis(subscription_wss) of
-        undefined ->
-            worker_proxy:call(subscriptions_worker, start_provider_connection);
-        _ -> ok
+    worker_proxy:call(?MODULE, ensure_connection_running).
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Attempts to start the connection.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_provider_connection() -> ok.
+start_provider_connection() ->
+    try
+        case subscription_wss:start_link() of
+            {ok, Pid} -> ?info("Connection started ~p", [Pid]);
+            {error, Reason} -> ?error("Connection failed to start: ~p", [Reason])
+        end
+    catch
+        E:R -> ?error("Connection not started: ~p:~p", [E, R])
     end.

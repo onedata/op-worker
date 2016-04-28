@@ -157,34 +157,43 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
     {ok, FileUUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode),
+    try fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode) of
+        {StorageId, FileId} ->
+            {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
+            CurrTime = erlang:system_time(seconds),
+            #document{value = ParentMeta} = ParentDoc,
+            {ok, _} = file_meta:update(ParentDoc, #{mtime => CurrTime, ctime => CurrTime}),
 
-    {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
-    CurrTime = erlang:system_time(seconds),
-    #document{value = ParentMeta} = ParentDoc,
-    {ok, _} = file_meta:update(ParentDoc, #{mtime => CurrTime, ctime => CurrTime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                ParentDoc#document{value = ParentMeta#file_meta{
+                    mtime = CurrTime, ctime = CurrTime}
+                }
+            ) end),
 
-    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
-        ParentDoc#document{value = ParentMeta#file_meta{
-            mtime = CurrTime, ctime = CurrTime}
-        }
-    ) end),
+            {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
+                false ->
+                    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
+                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID,
+                        Storage, FileId),
+                    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
+                    save_handle(SessId, Handle);
+                true ->
+                    {ok, undefined}
+            end,
 
-    {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
-        false ->
-            {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
-            {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
-            save_handle(SessId, Handle);
-        true ->
-            {ok, undefined}
-    end,
-
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
-            storage_id = StorageId, file_id = FileId, blocks = [],
-            space_uuid = SpaceUUID, handle_id = HandleId})}.
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = file_location:ensure_blocks_not_empty(#file_location{
+                    uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
+                    storage_id = StorageId, file_id = FileId, blocks = [],
+                    space_id = SpaceUUID, handle_id = HandleId})}
+    catch
+        T:M ->
+            {ok, FileLocations} = file_meta:get_locations({uuid, UUID}),
+            lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
+            file_meta:delete({uuid, FileUUID}),
+            ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
+            throw(?EACCES)
+    end.
 
 
 %%--------------------------------------------------------------------

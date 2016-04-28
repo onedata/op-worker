@@ -418,12 +418,11 @@ handle_read_events(Evts, _Ctx) ->
         end
     end, Evts).
 
-handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
+handle_proxyio_request(SessionId, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
-    proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
+    proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
     FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, Offset, Data);
-
+    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, ByteSequences);
 
 handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
