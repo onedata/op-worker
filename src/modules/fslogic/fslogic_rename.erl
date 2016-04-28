@@ -267,11 +267,10 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalT
 %%--------------------------------------------------------------------
 -spec rename_interprovider(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> ok | logical_file_manager:error_reply().
-rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
+rename_interprovider(#fslogic_ctx{session_id = SessId}, SourceEntry, LogicalTargetPath) ->
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
     {ok, SourceParent} = file_meta:get_parent(SourceEntry),
-    CanonicalTargetPath = get_canonical_path(CTX, LogicalTargetPath),
-    {_, TargetParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
+    {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
     SourcePathTokens = filename:split(SourcePath),
     TargetPathTokens = filename:split(LogicalTargetPath),
 
