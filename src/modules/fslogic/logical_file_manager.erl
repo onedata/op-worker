@@ -381,14 +381,14 @@ stat(SessId, FileKey) ->
 %% Changes file timestamps.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(Handle :: handle(), ATime :: file_meta:time(),
-    MTime :: file_meta:time(), CTime :: file_meta:time()) ->
+-spec update_times(Handle :: handle(), ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
     ok | error_reply().
 update_times(Handle, ATime, MTime, CTime) ->
     ?run(fun() -> lfm_attrs:update_times(Handle, ATime, MTime, CTime) end).
 
--spec update_times(session:id(), file_key(), ATime :: file_meta:time(),
-    MTime :: file_meta:time(), CTime :: file_meta:time()) ->
+-spec update_times(session:id(), file_key(), ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
     ok | error_reply().
 update_times(SessId, FileKey, ATime, MTime, CTime) ->
     ?run(fun() -> lfm_attrs:update_times(SessId, FileKey, ATime, MTime, CTime) end).
