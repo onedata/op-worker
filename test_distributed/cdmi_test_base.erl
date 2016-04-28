@@ -1662,38 +1662,6 @@ accept_header(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    ConfigWithNodes.
-
-end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
-
-init_per_testcase(choose_adequate_handler, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    init_per_testcase(default, Config);
-init_per_testcase(_, Config) ->
-    application:start(ssl2),
-    hackney:start(),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:enable_grpca_based_communication(Config),
-%%    mock_user_auth(ConfigWithSessionInfo),
-    lfm_proxy:init(ConfigWithSessionInfo).
-
-end_per_testcase(choose_adequate_handler, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    end_per_testcase(default, Config);
-end_per_testcase(_, Config) ->
-    lfm_proxy:teardown(Config),
-%%    unmock_user_auth(Config),
-    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:disable_grpca_based_communication(Config),
-    hackney:stop(),
-    application:stop(ssl2).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1720,7 +1688,6 @@ do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
 
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
-    ct:print("CDMI: ~p", [cdmi_endpoint(Node) ++ RestSubpath]),
     http_client:request(
         Method,
         cdmi_endpoint(Node) ++ RestSubpath,

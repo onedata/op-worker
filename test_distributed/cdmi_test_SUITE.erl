@@ -171,14 +171,15 @@ accept_header_test(Config) ->
 
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
-    Config0 = proplists:delete(op_worker_nodes, ConfigWithNodes),
-    [{op_worker_nodes, [Worker, Worker]} | Config0].
+%%    [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
+%%    Config0 = proplists:delete(op_worker_nodes, ConfigWithNodes),
+%%    [{op_worker_nodes, [Worker, Worker]} | Config0].
+    ConfigWithNodes.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(choose_adequate_handler, Config) ->
+init_per_testcase(choose_adequate_handler_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
     init_per_testcase(default, Config);
@@ -188,7 +189,7 @@ init_per_testcase(_, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(choose_adequate_handler, Config) ->
+end_per_testcase(choose_adequate_handler_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);

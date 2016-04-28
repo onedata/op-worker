@@ -175,7 +175,7 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(choose_adequate_handler, Config) ->
+init_per_testcase(choose_adequate_handler_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
     init_per_testcase(default, Config);
@@ -186,7 +186,7 @@ init_per_testcase(_, Config) ->
     initializer:enable_grpca_based_communication(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(choose_adequate_handler, Config) ->
+end_per_testcase(choose_adequate_handler_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
