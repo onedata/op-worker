@@ -162,6 +162,11 @@
     block :: #file_block{}
 }).
 
+-record(synchronize_block_and_compute_checksum, {
+    uuid :: file_meta:uuid(),
+    block :: #file_block{}
+}).
+
 -record(create_storage_test_file, {
     storage_id :: storage:id(),
     file_uuid :: file_meta:uuid() | fslogic_worker:file_guid()
@@ -181,7 +186,8 @@
                         #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
                         #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
                         #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
-                        #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{}.
+                        #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{} |
+                        #synchronize_block_and_compute_checksum{}.
 
 
 -record(file_children, {
@@ -225,9 +231,14 @@
     file_content :: binary()
 }).
 
+-record(checksum, {
+    value :: binary()
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
-    #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{}.
+    #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
+    #checksum{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

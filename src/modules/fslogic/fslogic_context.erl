@@ -19,7 +19,7 @@
 
 %% API
 -export([gen_global_session_id/2, read_global_session_id/1, is_global_session_id/1]).
--export([get_user_id/1, new/1, set_space_id/2]).
+-export([get_user_id/1, get_session_id/1, new/1, set_space_id/2]).
 
 %%%===================================================================
 %%% API functions
@@ -88,3 +88,11 @@ is_global_session_id(GlobalSessionId) ->
 -spec get_user_id(Ctx :: fslogic_worker:ctx()) -> UserId :: onedata_user:id().
 get_user_id(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}}) ->
     UserId.
+
+%%--------------------------------------------------------------------
+%% @doc Retrieves SessionID from fslogic context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_session_id(Ctx :: fslogic_worker:ctx()) -> session:id().
+get_session_id(#fslogic_ctx{session_id = SessionId}) ->
+    SessionId.

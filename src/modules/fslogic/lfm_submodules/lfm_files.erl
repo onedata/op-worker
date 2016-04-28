@@ -192,7 +192,14 @@ open(SessId, FileKey, OpenType) ->
 %%--------------------------------------------------------------------
 -spec fsync(FileHandle :: logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
-fsync(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = ?ROOT_SESS_ID}}) ->
+    lists:foreach(fun({_, SFMHandle}) ->
+        ok = storage_file_manager:fsync(SFMHandle)
+    end, maps:values(SFMHandles));
+fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    lists:foreach(fun({_, SFMHandle}) ->
+            ok = storage_file_manager:fsync(SFMHandle)
+        end, maps:values(SFMHandles)),
     event:flush(?FSLOGIC_SUB_ID, self(), SessId),
     receive
         {handler_executed, Results} ->
