@@ -3,8 +3,8 @@ CXX ?= g++
 ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts-~s/include/\", [code:root_dir(), erlang:system_info(version)]).")
 
 LDFLAGS += $(shell pkg-config --libs botan-1.10) \
--Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L ../priv/helpers/lib -lhelpers -lrados \
--ls3 -shared
+-Wl,-rpath -Wl,$$ORIGIN/helpers/lib -L ../priv/helpers/lib -lhelpers \
+-lboost_filesystem -lrados -ls3 -lglog $(shell pkg-config --libs fuse) -shared
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall $(shell pkg-config --cflags botan-1.10) \
 -isystem ../priv/helpers/include -isystem $(ERTS_INCLUDE_DIR) \

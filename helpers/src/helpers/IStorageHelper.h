@@ -310,7 +310,10 @@ public:
         sync(&IStorageHelper::ash_release, std::move(ctx), p);
     }
 
-    virtual bool needsDataConsistencyCheck() { return false; }
+    virtual bool needsDataConsistencyCheck()
+    {
+        return false;
+    }
 
     static int getFlagsValue(FlagsSet flags)
     {
