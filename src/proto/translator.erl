@@ -157,7 +157,7 @@ translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
     #remote_write{offset = Offset, data = Data};
 translate_from_protobuf(#'GetXattr'{uuid = UUID, name = Name}) ->
     #get_xattr{uuid = UUID, name = Name};
-translate_from_protobuf(#'SetXattr'{uuid = UUID, xattr = {xattr, Xattr}}) ->
+translate_from_protobuf(#'SetXattr'{uuid = UUID, xattr = Xattr}) ->
     #set_xattr{uuid = UUID, xattr = translate_from_protobuf(Xattr)};
 translate_from_protobuf(#'RemoveXattr'{uuid = UUID, name = Name}) ->
     #remove_xattr{uuid = UUID, name = Name};
@@ -167,9 +167,6 @@ translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
     #xattr{name = Name, value = Value};
 translate_from_protobuf(#'XattrList'{names = Names}) ->
     #xattr_list{names = Names};
-
-
-
 
 translate_from_protobuf(#'ProtocolVersion'{major = Major, minor = Minor}) ->
     #protocol_version{major = Major, minor = Minor};
@@ -229,8 +226,6 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
                 translate_from_protobuf(Block)
             end, Record#'FileLocation'.blocks)
     };
-translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
-    #'file_block'{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_from_protobuf(#'ProxyIOResponse'{status = Status, proxyio_response = {_, ProxyIOResponse}}) ->
     #'proxyio_response'{
         status = translate_from_protobuf(Status),
@@ -243,31 +238,11 @@ translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
     #'proxyio_request'{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
-translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
-    #'remote_read'{offset = Offset, size = Size};
-translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
-    #'remote_write'{offset = Offset, data = Data};
-
-%% @todo
-translate_from_protobuf(#get_xattr{uuid = Uuid, name = Name}) ->
-    {get_xattr, #'GetXattr'{uuid = Uuid, name = Name}};
-translate_from_protobuf(#set_xattr{uuid = Uuid, xattr = Xattr}) ->
-    {set_xattr, #'SetXattr'{uuid = Uuid, xattr = translate_to_protobuf(Xattr)}};
-translate_from_protobuf(#remove_xattr{uuid = Uuid, name = Name}) ->
-    {remove_xattr, #'RemoveXattr'{uuid = Uuid, name = Name}};
-translate_from_protobuf(#list_xattr{uuid = Uuid}) ->
-    {list_xattr, #'ListXattr'{uuid = Uuid}};
-translate_from_protobuf(#xattr{name = Name, value = Value}) ->
-    {xattr, #'Xattr'{name = Name, value = Value}};
-translate_from_protobuf(#xattr_list{names = Names}) ->
-    {xattr_list, #'XattrList'{names = Names}};
-
 
 translate_from_protobuf(#'GetParent'{uuid = UUID}) ->
     #'get_parent'{uuid = UUID};
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
     #'dir'{uuid = UUID};
-
 
 translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileUuid}) ->
     #create_storage_test_file{storage_id = Id, file_uuid = FileUuid};
@@ -309,6 +284,33 @@ translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{uuid = Uuid,
     #synchronize_block_and_compute_checksum{uuid = Uuid, block = #file_block{offset = O, size = S}};
 translate_from_protobuf(#'Checksum'{value = Value}) ->
     #checksum{value = Value};
+
+%% CDMI
+translate_from_protobuf(#'Acl'{value = Value}) ->
+    #acl{value = Value};
+translate_from_protobuf(#'GetAcl'{uuid = UUID}) ->
+    #get_acl{uuid = UUID};
+translate_from_protobuf(#'SetAcl'{uuid = UUID, acl = Acl}) ->
+    #set_acl{uuid = UUID, acl = translate_from_protobuf(Acl)};
+translate_from_protobuf(#'GetTransferEncoding'{uuid = UUID}) ->
+    #get_transfer_encoding{uuid = UUID};
+translate_from_protobuf(#'SetTransferEncoding'{uuid = UUID, value = Value}) ->
+    #set_transfer_encoding{uuid = UUID, value = Value};
+translate_from_protobuf(#'GetCdmiCompletionStatus'{uuid = UUID}) ->
+    #get_cdmi_completion_status{uuid = UUID};
+translate_from_protobuf(#'SetCdmiCompletionStatus'{uuid = UUID, value = Value}) ->
+    #set_cdmi_completion_status{uuid = UUID, value = Value};
+translate_from_protobuf(#'GetMimetype'{uuid = UUID}) ->
+    #get_mimetype{uuid = UUID};
+translate_from_protobuf(#'SetMimetype'{uuid = UUID, value = Value}) ->
+    #set_mimetype{uuid = UUID, value = Value};
+
+translate_from_protobuf(#'TransferEncoding'{value = Value}) ->
+    #transfer_encoding{value = Value};
+translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
+    #cdmi_completion_status{value = Value};
+translate_from_protobuf(#'Mimetype'{value = Value}) ->
+    #mimetype{value = Value};
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -459,17 +461,10 @@ translate_to_protobuf(#proxyio_response{status = Status, proxyio_response = Prox
         status = StatProto,
         proxyio_response = translate_to_protobuf(ProxyIOResponse)
     }};
-translate_to_protobuf(#'proxyio_response'{status = Status, proxyio_response = ProxyIOResponse}) ->
-    {proxyio_response, #'ProxyIOResponse'{
-        status = translate_to_protobuf(Status),
-        proxyio_response = translate_to_protobuf(ProxyIOResponse)
-    }};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 translate_to_protobuf(#remote_data{data = Data}) ->
     {remote_data, #'RemoteData'{data = Data}};
-translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
-    {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 translate_to_protobuf(#get_xattr{uuid = Uuid, name = Name}) ->
     {get_xattr, #'GetXattr'{uuid = Uuid, name = Name}};
 translate_to_protobuf(#set_xattr{uuid = Uuid, xattr = Xattr}) ->
@@ -560,16 +555,6 @@ translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
     {remote_read, #'RemoteRead'{offset = Offset, size = Size}};
 translate_to_protobuf(#'remote_write'{offset = Offset, data = Data}) ->
     {remote_write, #'RemoteWrite'{offset = Offset, data = Data}};
-translate_to_protobuf(#'get_xattr'{uuid = UUID, name = Name}) ->
-    {get_xattr, #'GetXattr'{uuid = UUID, name = Name}};
-translate_to_protobuf(#'set_xattr'{uuid = UUID, xattr = Xattr}) ->
-    {set_xattr, #'SetXattr'{uuid = UUID, xattr = translate_to_protobuf(Xattr)}};
-translate_to_protobuf(#'remove_xattr'{uuid = UUID, name = Name}) ->
-    {remove_xattr, #'RemoveXattr'{uuid = UUID, name = Name}};
-translate_to_protobuf(#'list_xattr'{uuid = UUID}) ->
-    {list_xattr, #'ListXattr'{uuid = UUID}};
-translate_to_protobuf(#'xattr'{name = Name, value = Value}) ->
-    {xattr, #'Xattr'{name = Name, value = Value}};
 translate_to_protobuf(#'dir'{uuid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 translate_to_protobuf(#'get_parent'{uuid = UUID}) ->
@@ -585,6 +570,33 @@ translate_to_protobuf(#synchronize_block_and_compute_checksum{uuid = Uuid, block
         #'SynchronizeBlockAndComputeChecksum'{uuid = Uuid, block = Block}};
 translate_to_protobuf(#checksum{value = Value}) ->
     {checksum, #'Checksum'{value = Value}};
+
+%% CDMI
+translate_to_protobuf(#acl{value = Value}) ->
+    #'Acl'{value = Value};
+translate_to_protobuf(#get_acl{uuid = UUID}) ->
+    {get_acl, #'GetAcl'{uuid = UUID}};
+translate_to_protobuf(#set_acl{uuid = UUID, acl = Acl}) ->
+    {set_acl, #'SetAcl'{uuid = UUID, acl = translate_to_protobuf(Acl)}};
+translate_to_protobuf(#get_transfer_encoding{uuid = UUID}) ->
+    {get_transfer_encoding, #'GetTransferEncoding'{uuid = UUID}};
+translate_to_protobuf(#set_transfer_encoding{uuid = UUID, value = Value}) ->
+    {set_transfer_encoding, #'SetTransferEncoding'{uuid = UUID, value = Value}};
+translate_to_protobuf(#get_cdmi_completion_status{uuid = UUID}) ->
+    {get_cdmi_completion_status, #'GetCdmiCompletionStatus'{uuid = UUID}};
+translate_to_protobuf(#set_cdmi_completion_status{uuid = UUID, value = Value}) ->
+    {set_cdmi_completion_status, #'SetCdmiCompletionStatus'{uuid = UUID, value = Value}};
+translate_to_protobuf(#get_mimetype{uuid = UUID}) ->
+    {get_mimetype, #'GetMimetype'{uuid = UUID}};
+translate_to_protobuf(#set_mimetype{uuid = UUID, value = Value}) ->
+    {set_mimetype, #'SetMimetype'{uuid = UUID, value = Value}};
+
+translate_to_protobuf(#transfer_encoding{value = Value}) ->
+    {transfer_encoding, #'TransferEncoding'{value = Value}};
+translate_to_protobuf(#cdmi_completion_status{value = Value}) ->
+    {cdmi_completion_status, #'CdmiCompletionStatus'{value = Value}};
+translate_to_protobuf(#mimetype{value = Value}) ->
+    {mimetype, #'Mimetype'{value = Value}};
 
 translate_to_protobuf(undefined) ->
     undefined.

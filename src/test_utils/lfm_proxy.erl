@@ -41,7 +41,7 @@ init(Config) ->
                         exit -> ok
                     end
                 end)
-        end, ?config(op_worker_nodes, Config)),
+        end, lists:usort(?config(op_worker_nodes, Config))),
 
     lists:foreach(
         fun(Server) ->
