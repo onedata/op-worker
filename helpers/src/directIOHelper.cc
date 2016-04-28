@@ -550,7 +550,10 @@ DirectIOHelper::DirectIOHelper(
 {
 }
 
-bool DirectIOHelper::needsDataConsistencyCheck() { return true; }
+bool DirectIOHelper::needsDataConsistencyCheck()
+{
+    return true;
+}
 
 std::shared_ptr<PosixHelperCTX> DirectIOHelper::getCTX(CTXPtr rawCTX) const
 {
