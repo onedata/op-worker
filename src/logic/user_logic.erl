@@ -102,4 +102,5 @@ get_default_space({user, {Macaroon, DischMacaroons}}, UserId) ->
 -spec set_default_space(oz_endpoint:client(), SpaceId :: binary()) ->
     ok | {error, Reason :: term()}.
 set_default_space({user, {Macaroon, DischMacaroons}}, SpaceId) ->
-    oz_users:set_default_space({user, {Macaroon, DischMacaroons}}, SpaceId).
+    oz_users:set_default_space({user, {Macaroon, DischMacaroons}},
+        [{<<"spaceId">>, SpaceId}]).
