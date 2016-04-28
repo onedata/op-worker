@@ -494,7 +494,7 @@ rename(Entry, Op) ->
 -spec get_scope(Entry :: entry()) -> {ok, ScopeDoc :: datastore:document()} | datastore:generic_error().
 get_scope(#document{value = #file_meta{is_scope = true}} = Document) ->
     {ok, Document};
-get_scope(#document{value = #file_meta{is_scope = false, scope = Scope}} = Document) ->
+get_scope(#document{value = #file_meta{is_scope = false, scope = Scope}}) ->
     get(Scope);
 get_scope(Entry) ->
     ?run(begin
@@ -664,7 +664,6 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, 
              NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
              {ok, NewParent} = get({path, NewParentPath}),
 
-             set_link_context(OldParentUUID),
              ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
 
              {ok, NewScope} = get_scope(NewParent),
