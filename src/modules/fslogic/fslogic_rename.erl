@@ -83,7 +83,7 @@ rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
     ok | logical_file_manager:error_reply().
 -check_permissions([{?delete_subcontainer, {parent, 2}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
-    case check_dir_preconditions(CTX, SourceEntry, CanonicalTargetPath) of
+    case check_dir_preconditions(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
         ok ->
             rename_select(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath);
         Error ->
@@ -99,7 +99,7 @@ rename_dir(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
     ok | logical_file_manager:error_reply().
 -check_permissions([{?delete_object, {parent, 2}}, {?add_object, {parent, {path, 3}}}]).
 rename_file(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
-    case check_reg_preconditions(CTX, SourceEntry, CanonicalTargetPath) of
+    case check_reg_preconditions(CTX, LogicalTargetPath) of
         ok ->
             rename_select(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath);
         Error ->
@@ -110,19 +110,19 @@ rename_file(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
 %% @doc Checks preconditions for renaming directory.
 %%--------------------------------------------------------------------
 -spec check_dir_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
-    file_meta:path()) -> ok | logical_file_manager:error_reply().
-check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, CanonicalTargetPath) ->
+    file_meta:path(), file_meta:path()) -> ok | logical_file_manager:error_reply().
+check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
     case moving_into_itself(SourceEntry, CanonicalTargetPath) of
         true ->
             {error, ?EINVAL};
         false ->
-            case logical_file_manager:stat(SessId, {path, CanonicalTargetPath}) of
+            case logical_file_manager:stat(SessId, {path, LogicalTargetPath}) of
                 {error, ?ENOENT} ->
                     ok;
                 {ok, #file_attr{type = Type}} ->
                     case Type of
                         ?DIRECTORY_TYPE ->
-                            logical_file_manager:unlink(SessId, {path, CanonicalTargetPath});
+                            logical_file_manager:unlink(SessId, {path, LogicalTargetPath});
                         _ ->
                             {error, ?ENOTDIR}
                     end
@@ -133,10 +133,10 @@ check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, Canonica
 %%--------------------------------------------------------------------
 %% @doc Checks preconditions for renaming regular file.
 %%--------------------------------------------------------------------
--spec check_reg_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
+-spec check_reg_preconditions(fslogic_worker:ctx(),
     file_meta:path()) -> ok | logical_file_manager:error_reply().
-check_reg_preconditions(#fslogic_ctx{session_id = SessId}, _SourceEntry, CanonicalTargetPath) ->
-    case logical_file_manager:stat(SessId, {path, CanonicalTargetPath}) of
+check_reg_preconditions(#fslogic_ctx{session_id = SessId}, LogicalTargetPath) ->
+    case logical_file_manager:stat(SessId, {path, LogicalTargetPath}) of
         {error, ?ENOENT} ->
             ok;
         {ok, #file_attr{type = Type}} ->
@@ -144,7 +144,7 @@ check_reg_preconditions(#fslogic_ctx{session_id = SessId}, _SourceEntry, Canonic
                 ?DIRECTORY_TYPE ->
                     {error, ?EISDIR};
                 _ ->
-                    logical_file_manager:unlink(SessId, {path, CanonicalTargetPath})
+                    logical_file_manager:unlink(SessId, {path, LogicalTargetPath})
             end
     end.
 
@@ -258,8 +258,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalT
 
     CurrTime = erlang:system_time(seconds),
     ok = update_mtime_ctime(SourceParent, CurrTime),
-    ok = logical_file_manager:update_times(SessId, {path, CanonicalTargetPath}, undefined, undefined, CurrTime),
-    ok = logical_file_manager:update_times(SessId, {path, TargetParentPath}, undefined, CurrTime, CurrTime),
+    ok = update_ctime({path, CanonicalTargetPath}, CurrTime),
+    ok = update_mtime_ctime({path, TargetParentPath}, CurrTime),
     ok.
 
 %%--------------------------------------------------------------------
@@ -311,7 +311,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
 
     CurrTime = erlang:system_time(seconds),
     ok = update_mtime_ctime(SourceParent, CurrTime),
-    ok = logical_file_manager:update_times(SessId, {path, CanonicalTargetPath}, undefined, undefined, CurrTime),
+    ok = logical_file_manager:update_times(SessId, {path, LogicalTargetPath}, undefined, undefined, CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, TargetParentPath}, undefined, CurrTime, CurrTime),
     ok.
 
@@ -550,6 +550,21 @@ get_canonical_path(#fslogic_ctx{session_id = SessId} = CTX, Path) ->
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
     {ok, CanonicalPath} = fslogic_path:gen_path(CanonicalFileEntry, SessId),
     CanonicalPath.
+
+%%--------------------------------------------------------------------
+%% @doc Updates entry ctime
+%%--------------------------------------------------------------------
+-spec update_ctime(fslogic_worker:file(), Time :: file_meta:time()) -> ok.
+update_ctime(Entry, Time) ->
+    {ok, #document{value = Meta} = Doc} = file_meta:get(Entry),
+    {ok, _} = file_meta:update(Doc, #{ctime => Time}),
+
+    spawn(
+        fun() ->
+            fslogic_event:emit_file_sizeless_attrs_update(
+                Doc#document{value = Meta#file_meta{ctime = Time}})
+        end),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc Updates entry mtime and ctime
