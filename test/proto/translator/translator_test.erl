@@ -105,7 +105,7 @@ translate_proxyio_request_remote_write_from_protobuf_test() ->
         storage_id = <<"StorageID">>,
         file_id = <<"FileID">>,
         proxyio_request = #remote_write{byte_sequence =
-            [#byte_sequence{offset = 2, data = <<"data">>}]}},
+            [#byte_sequence{offset = 2, data = <<"data">>}]},
 
         translator:translate_from_protobuf(#'ProxyIORequest'{
             storage_id = <<"StorageID">>,
