@@ -1814,4 +1814,4 @@ mock_opening_file_without_perms(Config) ->
 
 unmock_opening_file_without_perms(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(WorkerP1, onedata_file_api).
+    test_utils:mock_unload(WorkerP1, onedata_file_api).

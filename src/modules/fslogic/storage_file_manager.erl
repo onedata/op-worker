@@ -367,6 +367,8 @@ unlink(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(handle()) -> ok | logical_file_manager:error_reply().
+fsync(#sfm_handle{is_local = false}) ->
+    ok;
 fsync(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),

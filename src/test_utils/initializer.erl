@@ -270,13 +270,14 @@ clear_models(Worker, Names) ->
 -spec setup_session(Worker :: node(), [#user_config{}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces, macaroon = Macaroon, groups = Groups}} | R], Config) ->
+setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
+    macaroon = Macaroon, groups = Groups, name = UserName}} | R], Config) ->
+
     Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
 
     SessId = Name("session_id", UserId),
     UserId = UserId,
     Iden = #identity{user_id = UserId},
-    UserName = Name("name", UserId),
 
     lists:foreach(fun({_, SpaceName}) ->
         case get(SpaceName) of
@@ -560,8 +561,10 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
         Macaroon = macaroon:create(<<"test">>, <<"key">>, UserId),
+        Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
         AccIn ++ [{Macaroon, #user_config{
                 id = UserId,
+                name = Name("name", UserId),
                 spaces = Spaces,
                 macaroon = Macaroon,
                 default_space = DefaultSpaceId,
