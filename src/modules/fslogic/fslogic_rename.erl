@@ -113,14 +113,14 @@ check_dir_preconditions(CTX, SourceEntry, CanonicalTargetPath) ->
         true ->
             #fuse_response{status = #status{code = ?EINVAL}};
         false ->
-            case file_meta:exists({path, CanonicalTargetPath}) of
-                false ->
+            case fslogic_req_generic:get_file_attr(CTX, {path, CanonicalTargetPath}) of
+                #fuse_response{status = #status{code = ?ENOENT}} ->
                     #fuse_response{status = #status{code = ?OK}};
-                true ->
-                    case file_meta:get({path, CanonicalTargetPath}) of
-                        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = TargetDoc} ->
-                            fslogic_req_generic:delete(CTX, TargetDoc);
-                        {ok, _TargetDoc} ->
+                #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{type = Type}} ->
+                    case Type of
+                        ?DIRECTORY_TYPE ->
+                            fslogic_req_generic:delete(CTX, {path, CanonicalTargetPath});
+                        _ ->
                             #fuse_response{status = #status{code = ?ENOTDIR}}
                     end
             end
@@ -133,15 +133,15 @@ check_dir_preconditions(CTX, SourceEntry, CanonicalTargetPath) ->
 -spec check_reg_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> #fuse_response{} | no_return().
 check_reg_preconditions(CTX, _SourceEntry, CanonicalTargetPath) ->
-    case file_meta:exists({path, CanonicalTargetPath}) of
-        false ->
+    case fslogic_req_generic:get_file_attr(CTX, {path, CanonicalTargetPath}) of
+        #fuse_response{status = #status{code = ?ENOENT}} ->
             #fuse_response{status = #status{code = ?OK}};
-        true ->
-            case file_meta:get({path, CanonicalTargetPath}) of
-                {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
+        #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{type = Type}} ->
+            case Type of
+                ?DIRECTORY_TYPE ->
                     #fuse_response{status = #status{code = ?EISDIR}};
-                {ok, TargetDoc} ->
-                    fslogic_req_generic:delete(CTX, TargetDoc)
+                _ ->
+                    fslogic_req_generic:delete(CTX, {path, CanonicalTargetPath})
             end
     end.
 
