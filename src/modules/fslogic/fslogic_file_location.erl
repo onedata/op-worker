@@ -128,13 +128,13 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
 
     LeafLess = fslogic_path:dirname(FileId),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
-    ?info("Storage create 1 ~p ~p", [Storage, LeafLess]),
+    ?debug("create_storage_file (dirs) ~p ~p", [Storage, LeafLess]),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
-    ?info("Storage create 2 ~p ~p", [Storage, FileId]),
+    ?debug("create_storage_file (file) ~p ~p", [Storage, FileId]),
     SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, Mode),

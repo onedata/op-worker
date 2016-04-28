@@ -136,9 +136,9 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?info("fuse_request: ~p", [FuseRequest]),
+    ?debug("fuse_request: ~p", [FuseRequest]),
     Response = run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request),
-    ?info("fuse_response: ~p", [Response]),
+    ?debug("fuse_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
     ?debug("proxyio_request: ~p", [ProxyIORequest]),

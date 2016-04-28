@@ -393,8 +393,6 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                 end, AccIn, Providers0)
             end, #{}, SpacesSetup),
 
-            ct:print("ProvMap ~p", [ProvMap]),
-
             {ok, maps:get(PID, ProvMap)}
         end),
 
@@ -429,13 +427,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         {SpaceId, proplists:get_value(<<"users">>, SpaceConfig)}
     end, SpacesSetup),
 
-%%    ct:print("SpaceUsers ~p", [SpaceUsers]),
-
     GroupUsers = lists:map(fun({GroupId, GroupConfig}) ->
         {GroupId, proplists:get_value(<<"users">>, GroupConfig)}
     end, proplists:get_value(<<"groups">>, GlobalSetup)),
-
-%%    ct:print("GroupUsers ~p", [GroupUsers]),
 
     UserToSpaces0 = lists:foldl(fun({SpaceId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
@@ -450,8 +444,6 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         [DefaultSpace | Spaces -- [DefaultSpace]]
     end, UserToSpaces0),
 
-%%    ct:print("UserToSpaces ~p", [UserToSpaces]),
-
     UserToGroups = lists:foldl(fun({GroupId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
             maps:put(UserId, maps:get(UserId, CAcc, []) ++ [{GroupId, proplists:get_value(GroupId, Groups)}], CAcc)
@@ -464,15 +456,11 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         {SpaceId, ProviderIds}
     end, SpacesSetup),
 
-%%    ct:print("UserToGroups ~p", [UserToGroups]),
-
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
         AccIn ++ [{UserId, Spaces, DefaultSpaceId, maps:get(UserId, UserToGroups, [])}]
     end, [], UserToSpaces),
-
-%%    ct:print("Users ~p", [Users]),
 
     file_meta_mock_setup(AllWorkers),
     oz_users_mock_setup(AllWorkers, Users),

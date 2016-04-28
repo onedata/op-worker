@@ -19,7 +19,7 @@
     helper_handle :: helpers:handle(),
     file :: helpers:file(),
     session_id :: session:id(),
-    file_uuid :: fslogic_worker:file_guid(),
+    file_uuid :: file_meta:uuid(),
     space_uuid :: file_meta:uuid(),
     storage :: datastore:document() | undefined,
     storage_id :: storage:id(),

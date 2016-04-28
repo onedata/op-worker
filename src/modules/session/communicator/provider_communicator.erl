@@ -87,7 +87,6 @@ send_async(Msg, Ref) ->
     {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 communicate(#client_message{} = ClientMsg, Ref) ->
     {ok, MsgId} = communicate_async(ClientMsg, Ref, self()),
-    ?info("Waiting for msg ~p ~p", [MsgId, self()]),
     receive
         #server_message{message_id = MsgId} = ServerMsg -> {ok, ServerMsg}
     after

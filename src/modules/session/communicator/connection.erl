@@ -414,8 +414,6 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
                 {Msg0, SessId}
         end,
 
-    ?debug("Handle message ~p ~p ~p ~p", [IsProvider, Msg, EffectiveSessionId, SessId]),
-
     case Msg of
         %% Remote proxy session has received message which is now to be routed as proxy message.
         #client_message{proxy_session_id = TargetSessionId} = Msg when TargetSessionId =/= EffectiveSessionId, is_binary(TargetSessionId) ->

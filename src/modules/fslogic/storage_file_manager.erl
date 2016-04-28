@@ -261,7 +261,6 @@ write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID
     ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_write{offset = Offset, data = Data}},
-    ?info("remote_write: ~p ~p", [FileGUID, SessionId]),
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
         #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_write_result{wrote = Wrote}} ->
             {ok, Wrote};
@@ -288,7 +287,6 @@ read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID,
     ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_read{offset = Offset, size = Size}},
-    ?info("remote_read: ~p ~p", [FileGUID, SessionId]),
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
         #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}} ->
             {ok, Data};

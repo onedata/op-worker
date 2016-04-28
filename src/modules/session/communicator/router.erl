@@ -187,6 +187,13 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     end),
     ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns session's ID that shall be used for given message.
+%% @end
+%%--------------------------------------------------------------------
+-spec effective_session_id(#client_message{}) ->
+    session:id().
 effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
     SessionId;
 effective_session_id(#client_message{session_id = _SessionId, proxy_session_id = ProxySessionId}) ->

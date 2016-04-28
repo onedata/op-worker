@@ -39,7 +39,6 @@
 truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(Entry),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     Results = lists:map(
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),

@@ -480,8 +480,8 @@ get_scope(Entry) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(oz_endpoint:client(), UserId :: onedata_user:id()) -> ok.
-setup_onedata_user(Client, UserId) ->
-    ?info("setup_onedata_user ~p", [UserId]),
+setup_onedata_user(_Client, UserId) ->
+    ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
     datastore:run_synchronized(onedata_user, UserId, fun() ->
         try
             {ok, #document{value = #onedata_user{spaces = Spaces}}} =

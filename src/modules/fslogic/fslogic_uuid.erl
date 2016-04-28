@@ -27,18 +27,33 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID and spaceId generates file's GUID.
+%% @end
+%%--------------------------------------------------------------------
 -spec to_file_guid(file_meta:uuid(), SpaceId :: binary() | undefined) ->
     fslogic_worker:file_guid().
 to_file_guid(FileUUID, SpaceId) ->
     http_utils:base64url_encode(term_to_binary({guid, FileUUID, SpaceId})).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID generates file's GUID. SpaceId is calculated in process.
+%% @end
+%%--------------------------------------------------------------------
 -spec to_file_guid(file_meta:uuid()) ->
     fslogic_worker:file_guid().
 to_file_guid(FileUUID) ->
     SpaceId = fslogic_spaces:get_space_id(FileUUID),
-    http_utils:base64url_encode(term_to_binary({guid, FileUUID, SpaceId})).
+    to_file_guid(FileUUID, SpaceId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's UUID and its SpaceId for given file's GUID.
+%% @end
+%%--------------------------------------------------------------------
 -spec unpack_file_guid(FileGUID :: fslogic_worker:file_guid()) ->
     {file_meta:uuid(), SpaceId :: binary() | undefined}.
 unpack_file_guid(FileGUID) ->
@@ -52,9 +67,17 @@ unpack_file_guid(FileGUID) ->
             {FileGUID, undefined}
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's UUID for given file's GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_guid_to_uuid(fslogic_worker:file_guid()) -> file_meta:uuid().
 file_guid_to_uuid(FileGUID) ->
     {FileUUID, _} = unpack_file_guid(FileGUID),
     FileUUID.
+
 
 %%--------------------------------------------------------------------
 %% @doc

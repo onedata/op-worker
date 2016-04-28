@@ -181,7 +181,7 @@ get(SpaceId, UserId) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(SessionId, SpaceId) ->
     Client = fslogic_utils:session_to_rest_client(SessionId),
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, UserId} = session:get_user_id(SessionId),
     get_or_fetch(Client, SpaceId, UserId).
 
 

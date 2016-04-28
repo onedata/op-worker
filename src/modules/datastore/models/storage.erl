@@ -23,7 +23,7 @@
 -define(STORAGE_LOCK_ID, <<"storage_res_id">>).
 
 
--type id() :: datastore:uuid() | undefined.
+-type id() :: datastore:uuid().
 -type name() :: binary().
 
 -export_type([id/0, name/0]).

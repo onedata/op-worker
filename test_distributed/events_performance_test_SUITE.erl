@@ -524,7 +524,6 @@ init_per_testcase(_, Config) ->
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
-    timer:sleep(timer:seconds(3)),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
