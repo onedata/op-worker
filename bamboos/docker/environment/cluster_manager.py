@@ -58,7 +58,8 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 EOF
 set -e
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/cluster_manager console'''
+/root/bin/node/bin/cluster_manager console
+sleep 5'''  # Add sleep so logs can be chowned
     command = command.format(
         gen_dev_args=json.dumps({'cluster_manager': config}),
         uid=os.geteuid(),
