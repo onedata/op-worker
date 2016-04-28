@@ -23,11 +23,11 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(SPACE_ID, <<"SpaceId">>).
+-define(BS(Offset, Data), [#byte_sequence{offset = Offset, data = Data}]).
 
 %%%===================================================================
 %%% Test generators
 %%%===================================================================
-
 
 proxyio_successful_write_test_() ->
     {foreach,
@@ -46,8 +46,8 @@ proxyio_successful_write_test_() ->
             fun write_should_write_data_when_given_file_uuid/1,
             fun successful_write_should_return_success_when_given_handle_id/1,
             fun successful_write_should_return_success_when_given_file_uuid/1,
-            fun write_should_accept_partial_write_when_given_handle_id/1,
-            fun write_should_accept_partial_write_when_given_file_uuid/1
+            fun write_should_handle_partial_writes_when_given_handle_id/1,
+            fun write_should_handle_partial_writes_when_given_file_uuid/1
         ]}.
 
 
@@ -94,34 +94,33 @@ proxyio_failed_read_test_() ->
             fun read_should_fail_on_failed_read_when_given_file_uuid/1
         ]}.
 
-
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
 write_should_get_session_when_given_handle_id(_) ->
     fslogic_proxyio:write(<<"SessionId">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-        <<"c">>, <<"d">>, 0, <<"f">>),
+        <<"c">>, <<"d">>, ?BS(0, <<"f">>)),
 
     ?_assert(meck:called(session, get, [<<"SessionId">>])).
 
 
 write_should_get_session_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"SessionId">>, #{?FILE_UUID_KEY => <<"b">>},
-        <<"c">>, <<"d">>, 0, <<"f">>),
+        <<"c">>, <<"d">>, ?BS(0, <<"f">>)),
 
     ?_assert(meck:called(session, get, [<<"SessionId">>])).
 
 write_should_not_get_space_id_when_given_handle_id(_) ->
     fslogic_proxyio:write(<<"a">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-        <<"c">>, <<"d">>, 0, <<"f">>),
+        <<"c">>, <<"d">>, ?BS(0, <<"f">>)),
 
     ?_assertEqual(0, meck:num_calls(fslogic_spaces, get_space, 2)).
 
 
 write_should_get_space_id_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"FileUuid">>},
-        <<"c">>, <<"d">>, 0, <<"f">>),
+        <<"c">>, <<"d">>, ?BS(0, <<"f">>)),
 
     ?_assert(meck:called(fslogic_spaces, get_space,
         [{uuid, <<"FileUuid">>}, <<"UserId">>])).
@@ -129,14 +128,14 @@ write_should_get_space_id_when_given_file_uuid(_) ->
 
 write_should_not_create_storage_file_manager_handle_when_given_handle_id(_) ->
     fslogic_proxyio:write(<<"SessionID">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-        <<"StorageId">>, <<"FileId">>, 12, <<"Data">>),
+        <<"StorageId">>, <<"FileId">>, ?BS(12, <<"Data">>)),
 
     ?_assertEqual(0, meck:num_calls(storage_file_manager, new_handle, 5)).
 
 
 write_should_create_storage_file_manager_handle_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"SessionID">>, #{?FILE_UUID_KEY => <<"FileUuid">>},
-        <<"StorageId">>, <<"FileId">>, 12, <<"Data">>),
+        <<"StorageId">>, <<"FileId">>, ?BS(12, <<"Data">>)),
 
     ?_assert(meck:called(storage_file_manager, new_handle,
         [<<"SessionID">>, ?SPACE_ID, <<"FileUuid">>, storage_mock, <<"FileId">>])).
@@ -144,21 +143,21 @@ write_should_create_storage_file_manager_handle_when_given_file_uuid(_) ->
 
 write_should_not_open_file_when_given_handle_id(_) ->
     fslogic_proxyio:write(<<"a">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-        <<"c">>, <<"d">>, 0, <<"e">>),
+        <<"c">>, <<"d">>, ?BS(0, <<"e">>)),
 
     ?_assertEqual(0, meck:num_calls(storage_file_manager, open, 2)).
 
 
 write_should_open_file_with_write_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"b">>}, <<"c">>,
-        <<"d">>, 0, <<"e">>),
+        <<"d">>, ?BS(0, <<"e">>)),
 
     ?_assert(meck:called(storage_file_manager, open, [sfm_handle_mock, write])).
 
 
 write_should_write_data_when_given_handle_id(_) ->
     fslogic_proxyio:write(<<"a">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-        <<"c">>, <<"d">>, 42, <<"Data">>),
+        <<"c">>, <<"d">>, ?BS(42, <<"Data">>)),
 
     ?_assert(meck:called(storage_file_manager, write,
         [file_handle_mock, 42, <<"Data">>])).
@@ -166,7 +165,7 @@ write_should_write_data_when_given_handle_id(_) ->
 
 write_should_write_data_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"b">>}, <<"c">>,
-        <<"d">>, 42, <<"Data">>),
+        <<"d">>, ?BS(42, <<"Data">>)),
 
     ?_assert(meck:called(storage_file_manager, write,
         [file_handle_mock, 42, <<"Data">>])).
@@ -181,7 +180,7 @@ successful_write_should_return_success_when_given_handle_id(_) ->
             proxyio_response = #remote_write_result{wrote = byte_size(Data)}
         },
         fslogic_proxyio:write(<<"a">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-            <<"c">>, <<"d">>, 42, Data)
+            <<"c">>, <<"d">>, ?BS(42, Data))
     ).
 
 
@@ -194,7 +193,7 @@ successful_write_should_return_success_when_given_file_uuid(_) ->
             proxyio_response = #remote_write_result{wrote = byte_size(Data)}
         },
         fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"b">>}, <<"c">>,
-            <<"d">>, 42, Data)
+            <<"d">>, ?BS(42, Data))
     ).
 
 
@@ -294,32 +293,38 @@ successful_read_should_return_success_when_given_file_uuid(_) ->
     ).
 
 
-write_should_accept_partial_write_when_given_handle_id(_) ->
+write_should_handle_partial_writes_when_given_handle_id(_) ->
     meck:delete(storage_file_manager, write, 3),
     meck:expect(storage_file_manager, write, 3, {ok, 1}),
 
-    ?_assertEqual(
-        #proxyio_response{
-            status = #status{code = ?OK},
-            proxyio_response = #remote_write_result{wrote = 1}
-        },
-        fslogic_proxyio:write(<<"a">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-            <<"c">>, <<"d">>, 4, <<"data">>)
-    ).
+    [
+      ?_assertEqual(
+          #proxyio_response{
+              status = #status{code = ?OK},
+              proxyio_response = #remote_write_result{wrote = 4}
+          },
+          fslogic_proxyio:write(<<"a">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
+              <<"c">>, <<"d">>, ?BS(4, <<"data">>))
+      ),
+      ?_assertEqual(4, meck:num_calls(storage_file_manager, write, 3))
+    ].
 
 
-write_should_accept_partial_write_when_given_file_uuid(_) ->
+write_should_handle_partial_writes_when_given_file_uuid(_) ->
     meck:delete(storage_file_manager, write, 3),
     meck:expect(storage_file_manager, write, 3, {ok, 1}),
 
-    ?_assertEqual(
-        #proxyio_response{
-            status = #status{code = ?OK},
-            proxyio_response = #remote_write_result{wrote = 1}
-        },
-        fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"b">>}, <<"c">>,
-            <<"d">>, 4, <<"data">>)
-    ).
+    [
+      ?_assertEqual(
+          #proxyio_response{
+              status = #status{code = ?OK},
+              proxyio_response = #remote_write_result{wrote = 4}
+          },
+          fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"b">>}, <<"c">>,
+              <<"d">>, ?BS(4, <<"data">>))
+      ),
+      ?_assertEqual(4, meck:num_calls(storage_file_manager, write, 3))
+    ].
 
 
 read_should_accept_partial_read_when_given_handle_id(_) ->
@@ -357,7 +362,7 @@ write_should_fail_on_failed_open_when_given_file_uuid(_) ->
     ?_assertEqual(
         #proxyio_response{status = #status{code = ?ENETDOWN}},
         fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"b">>}, <<"c">>,
-            <<"d">>, 42, <<"hi">>)
+            <<"d">>, ?BS(42, <<"hi">>))
     ).
 
 
@@ -368,7 +373,7 @@ write_should_fail_on_failed_write_when_given_handle_id(_) ->
     ?_assertEqual(
         #proxyio_response{status = #status{code = ?EMFILE}},
         fslogic_proxyio:write(<<"a">>, #{?HANDLE_ID_KEY => <<"HandleId">>},
-            <<"c">>, <<"d">>, 42, <<"hi">>)
+            <<"c">>, <<"d">>, ?BS(42, <<"hi">>))
     ).
 
 
@@ -379,7 +384,7 @@ write_should_fail_on_failed_write_when_given_file_uuid(_) ->
     ?_assertEqual(
         #proxyio_response{status = #status{code = ?EMFILE}},
         fslogic_proxyio:write(<<"a">>, #{?FILE_UUID_KEY => <<"b">>}, <<"c">>,
-            <<"d">>, 42, <<"hi">>)
+            <<"d">>, ?BS(42, <<"hi">>))
     ).
 
 
@@ -415,11 +420,9 @@ read_should_fail_on_failed_read_when_given_file_uuid(_) ->
             <<"d">>, 42, 5)
     ).
 
-
 %%%===================================================================
 %%% Test fixtures
 %%%===================================================================
-
 
 start() ->
     meck:new([storage_file_manager, storage, fslogic_spaces, session]),
@@ -448,6 +451,5 @@ start() ->
 stop(_) ->
     ?assert(meck:validate([storage_file_manager, storage, fslogic_spaces, session])),
     meck:unload().
-
 
 -endif.

@@ -20,14 +20,9 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
-%% Key under which default space is stored in session memory.
--define(DEFAULT_SPACE_KEY, default_space).
-
-%% API
--export([init/0]).
+-export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
-
 
 %%%===================================================================
 %%% API functions
@@ -40,13 +35,16 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    % Resolve default space and put it in session memory
-    SessionId = g_session:get_session_id(),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {ok, DefaultSpaceId} = oz_users:get_default_space({user, {Mac, DMacs}}),
-    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(DefaultSpaceId),
-    g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceDirId),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback terminate/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate() -> ok.
+terminate() ->
     ok.
 
 
@@ -57,18 +55,28 @@ init() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space">>, [SpaceDirId]) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+find(<<"data-space">>, [SpaceId]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserId = g_session:get_user_id(),
     {ok, #document{
         value = #space_info{
-            name = Name
-        }}} = space_info:get(SpaceId),
-    DefaultSpaceDirId = g_session:get_value(?DEFAULT_SPACE_KEY),
+            name = Name,
+            providers_supports = Providers
+        }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
+    % If current provider is not supported, return null rootDir which will
+    % cause the client to render a "space not supported" message.
+    RootDir = case Providers of
+        [] ->
+            null;
+        _ ->
+            fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
+    end,
     Res = [
-        {<<"id">>, SpaceDirId},
+        {<<"id">>, SpaceId},
         {<<"name">>, Name},
-        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
-        {<<"rootDir">>, SpaceDirId}
+        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
+        {<<"rootDir">>, RootDir}
     ],
     {ok, Res}.
 
@@ -81,15 +89,13 @@ find(<<"data-space">>, [SpaceDirId]) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
-    UserId = op_gui_utils:get_user_id(),
-    {ok, #document{
-        value = #onedata_user{
-            space_ids = SpaceIds}}} = onedata_user:get(UserId),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserId = g_session:get_user_id(),
+    SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
-            SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
-            SpaceData
+            {ok, Data} = find(<<"data-space">>, [SpaceId]),
+            Data
         end, SpaceIds),
     {ok, Res}.
 

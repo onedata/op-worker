@@ -15,6 +15,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/oz/oz_groups.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -23,7 +24,7 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
+-export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1,
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
@@ -55,7 +56,9 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
+    test_utils:mock_validate_and_unload(Workers, [
+        file_meta, oz_users, oz_spaces, oz_groups, space_storage
+    ]).
 
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -145,14 +148,13 @@ clear_models(Worker, Names) ->
 %% @doc Setup test users' sessions on server
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
-    [Spaces :: {binary(), binary()}], [Groups :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
+    [Spaces :: {binary(), binary()}], DefaultSpace :: binary(),
+    [Groups :: {binary(), binary()}]}], Config :: term()) ->
+    NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
+setup_session(Worker, [{UserNum, Spaces, _DefaultSpace, Groups} | R], Config) ->
     Self = self(),
-
-    {SpaceIds, SpaceNames} = lists:unzip(Spaces),
-    {GroupIds, _GroupNames} = lists:unzip(Groups),
 
     Name = fun(Text, Num) -> name(Text, Num) end,
 
@@ -161,22 +163,17 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     Iden = #identity{user_id = UserId},
     UserName = Name("username", UserNum),
 
-    lists:foreach(fun(SpaceName) ->
+    lists:foreach(fun({_, SpaceName}) ->
         case get(SpaceName) of
             undefined -> put(SpaceName, [SessId]);
             SessIds -> put(SpaceName, [SessId | SessIds])
         end
-    end, SpaceNames),
+    end, Spaces),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_fuse_session, [SessId, Iden, #auth{}, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, create, [
-        #document{key = UserId, value = #onedata_user{
-            name = UserName, space_ids = SpaceIds, group_ids = GroupIds
-        }}
-    ]),
-    [{ok, _} = rpc:call(Worker, onedata_group, get_or_fetch, [Id, #auth{}]) || Id <- GroupIds],
+    {ok, _} = rpc:call(Worker, onedata_user, fetch, [{user, UserNum}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserNum}, Spaces},
@@ -291,10 +288,15 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     SameDomainWorkers = get_same_domain_workers(Config, ?GET_DOMAIN(Worker)),
     initializer:space_storage_mock(SameDomainWorkers, StorageId),
 
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
+    SpaceId1 = <<"space_id1">>,
+    SpaceId2 = <<"space_id2">>,
+    SpaceId3 = <<"space_id3">>,
+    SpaceId4 = <<"space_id4">>,
+
+    Space1 = {SpaceId1, <<"space_name1">>},
+    Space2 = {SpaceId2, <<"space_name2">>},
+    Space3 = {SpaceId3, <<"space_name3">>},
+    Space4 = {SpaceId4, <<"space_name4">>},
     Spaces = [Space1, Space2, Space3, Space4],
 
     Group1 = {<<"group_id1">>, <<"group_name1">>},
@@ -303,10 +305,11 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     Group4 = {<<"group_id4">>, <<"group_name4">>},
     Groups = [Group1, Group2, Group3, Group4],
 
-    User1 = {1, [Space1, Space2, Space3, Space4], [Group1, Group2, Group3, Group4]},
-    User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
-    User3 = {3, [Space3, Space4], [Group3, Group4]},
-    User4 = {4, [Space4], [Group4]},
+    User1 = {1, [Space1, Space2, Space3, Space4], SpaceId1, [Group1, Group2, Group3, Group4]},
+    User2 = {2, [Space2, Space3, Space4], SpaceId2, [Group2, Group3, Group4]},
+    User3 = {3, [Space3, Space4], SpaceId3, [Group3, Group4]},
+    User4 = {4, [Space4], SpaceId4, [Group4]},
+    Users = [User1, User2, User3, User4],
 
     SpaceUsers = [
         {<<"space_id1">>, [<<"user_id1">>]},
@@ -328,11 +331,13 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
         end),
 
     file_meta_mock_setup(SameDomainWorkers),
+
+    oz_users_mock_setup(SameDomainWorkers, Users),
     oz_spaces_mock_setup(SameDomainWorkers, Spaces, SpaceUsers),
     oz_groups_mock_setup(SameDomainWorkers, Groups, GroupUsers),
 
     proplists:compact(
-        initializer:setup_session(Worker, [User1, User2, User3, User4], Config)
+        initializer:setup_session(Worker, Users, Config)
         ++ create_test_users_and_spaces(Rest, Config)
     ).
 
@@ -372,6 +377,37 @@ teardown_storage(Worker, Config) ->
 -spec name(Text :: string(), Num :: integer()) -> binary().
 name(Text, Num) ->
     list_to_binary(Text ++ integer_to_list(Num)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks oz_users module, so that it returns user details, spaces and groups.
+%% @end
+%%--------------------------------------------------------------------
+-spec oz_users_mock_setup(Workers :: node() | [node()],
+    [{UserNum :: integer(), Spaces :: [{binary(), binary()}],
+        DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
+    ok.
+oz_users_mock_setup(Workers, Users) ->
+    test_utils:mock_new(Workers, oz_users),
+    test_utils:mock_expect(Workers, oz_users, get_details, fun({user, UserNum}) ->
+        {ok, #user_details{
+            id = name("user_id", UserNum),
+            name = name("username", UserNum)
+        }}
+    end),
+
+    test_utils:mock_expect(Workers, oz_users, get_spaces, fun({user, UserNum}) ->
+        {_, Spaces, DefaultSpaceId, _} = lists:keyfind(UserNum, 1, Users),
+        {SpaceIds, _} = lists:unzip(Spaces),
+        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
+    end),
+
+    test_utils:mock_expect(Workers, oz_users, get_groups, fun({user, UserNum}) ->
+        {_, _, _, Groups} = lists:keyfind(UserNum, 1, Users),
+        {GroupIds, _} = lists:unzip(Groups),
+        {ok, GroupIds}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -444,5 +480,6 @@ file_meta_mock_setup(Workers) ->
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after', fun
         (onedata_user, create_or_update, _, _, {ok, UUID}) -> Handler(UUID);
-        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID)
+        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID);
+        (onedata_user, save, _, _, {ok, UUID}) -> Handler(UUID)
     end).

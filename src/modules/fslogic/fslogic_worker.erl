@@ -284,6 +284,8 @@ handle_fuse_request(Ctx, #set_mimetype{uuid = UUID, value = Value}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
 handle_fuse_request(Ctx, #synchronize_block{uuid = UUID, block = Block}) ->
     fslogic_req_regular:synchronize_block(Ctx, {uuid, UUID}, Block);
+handle_fuse_request(Ctx, #synchronize_block_and_compute_checksum{uuid = UUID, block = Block}) ->
+    fslogic_req_regular:synchronize_block_and_compute_checksum(Ctx, {uuid, UUID}, Block);
 handle_fuse_request(Ctx, #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}) ->
     fuse_config_manager:create_storage_test_file(Ctx, SID, FileUUID);
 handle_fuse_request(_Ctx, #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
@@ -342,9 +344,9 @@ handle_read_events(Evts, _Ctx) ->
 
 handle_proxyio_request(SessionId, #proxyio_request{
     parameters = Parameters, storage_id = SID, file_id = FID,
-    proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
+    proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
 
-    fslogic_proxyio:write(SessionId, Parameters, SID, FID, Offset, Data);
+    fslogic_proxyio:write(SessionId, Parameters, SID, FID, ByteSequences);
 
 handle_proxyio_request(SessionId, #proxyio_request{
     parameters = Parameters, storage_id = SID, file_id = FID,

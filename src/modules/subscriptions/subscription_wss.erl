@@ -82,6 +82,7 @@ start_link() ->
 -spec init([term()], websocket_req:req()) ->
     {ok, State :: term()} | {ok, State :: term(), Keepalive :: integer()}.
 init([], _ConnState) ->
+    subscriptions_worker:refresh_subscription(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------

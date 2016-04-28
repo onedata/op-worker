@@ -53,7 +53,8 @@ DirectIOHelper::LinuxUserCTX::LinuxUserCTX(PosixHelperCTXPtr helperCTX)
 
 bool DirectIOHelper::LinuxUserCTX::valid()
 {
-    return current_uid == uid && current_gid == gid;
+    return (uid == static_cast<uid_t>(-1) || current_uid == uid) &&
+        (gid == static_cast<gid_t>(-1) || current_gid == gid);
 }
 
 DirectIOHelper::LinuxUserCTX::~LinuxUserCTX()
@@ -547,6 +548,11 @@ DirectIOHelper::DirectIOHelper(
     , m_workerService{service}
     , m_userCTXFactory{userCTXFactory}
 {
+}
+
+bool DirectIOHelper::needsDataConsistencyCheck()
+{
+    return true;
 }
 
 std::shared_ptr<PosixHelperCTX> DirectIOHelper::getCTX(CTXPtr rawCTX) const

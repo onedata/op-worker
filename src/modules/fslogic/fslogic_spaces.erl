@@ -48,7 +48,7 @@ get_default_space_id(CTX = #fslogic_ctx{}) ->
 get_default_space_id(?ROOT_USER_ID) ->
     throw(no_default_space_for_root_user);
 get_default_space_id(UserId) ->
-    {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
+    {ok, #document{value = #onedata_user{default_space = DefaultSpaceId}}} =
         onedata_user:get(UserId),
     {ok, DefaultSpaceId}.
 
@@ -69,8 +69,8 @@ get_space(FileEntry, UserId) ->
     end,
     #document{key = SpaceUUID} = SpaceDoc,
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
-    case (is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds)) orelse UserId == ?ROOT_USER_ID of
+    {ok, Spaces} = user_logic:get_spaces(UserId),
+    case (is_list(Spaces) andalso lists:keymember(SpaceId, 1, Spaces)) orelse UserId == ?ROOT_USER_ID of
         true -> {ok, SpaceDoc};
         false -> throw({not_a_space, FileEntry})
     end.

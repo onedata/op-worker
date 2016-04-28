@@ -514,7 +514,7 @@ setup_onedata_user(UserId) ->
     ?info("setup_onedata_user ~p", [UserId]),
     datastore:run_synchronized(onedata_user, UserId, fun() ->
         try
-            {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
+            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
                 onedata_user:get(UserId),
 
                 CTime = erlang:system_time(seconds),
@@ -532,14 +532,13 @@ setup_onedata_user(UserId) ->
                                     }})
                     end,
 
-            lists:foreach(fun(SpaceId) ->
+            lists:foreach(fun({SpaceId, _}) ->
                 SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 case exists({uuid, SpaceDirUuid}) of
                     true ->
                         fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID},
                             {uuid, SpaceDirUuid});
                     false ->
-                        space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
                         {ok, _} = create({uuid, SpacesRootUUID},
                             #document{key = SpaceDirUuid,
                                 value = #file_meta{

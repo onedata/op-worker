@@ -50,12 +50,19 @@
 %% Local, cached version of OZ user
 -record(onedata_user, {
     name :: binary(),
-    space_ids :: [binary()],
+    spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
+    default_space :: binary() | undefined,
     group_ids :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],
     alias :: binary(),
     email_list :: [binary()],
-    revision_history = [] :: [subscriptions:rev()]
+    revision_history = [] :: [subscriptions:rev()],
+    % This field means that only public information is available about this
+    % user. This is the case when given user hasn't ever logged in to this
+    % provider, but basic information about him is required (e. g. he is a
+    % member of space or group together with user that is currently logged in).
+    % Public information contains id and name.
+    public_only = false :: boolean()
 }).
 
 %% Local, cached version of OZ group
