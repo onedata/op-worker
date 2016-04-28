@@ -236,8 +236,7 @@ lfm_write_test(Config) ->
     WriteAndTest(W, Handle11, 6, <<"qwerty">>),
     WriteAndTest(W, Handle12, 6, <<"qwerty">>),
 
-    WriteAndTest(W, Handle11, 10, crypto:rand_bytes(100)),
-    WriteAndTest(W, Handle12, 10, crypto:rand_bytes(100)).
+    WriteAndTest(W, Handle11, 10, crypto:rand_bytes(40)).
 
 lfm_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
