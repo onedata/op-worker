@@ -851,7 +851,7 @@ objectid(Config) ->
 
     %%--- /dir/file.txt objectid ---
     RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code3, _Headers3, Response3} = do_request(Workers, filename:join(TestDirName, TestFileName), get, RequestHeaders3, []),
+    {ok, Code3, _Headers3, Response3} = do_request(WorkerP2, filename:join(TestDirName, TestFileName), get, RequestHeaders3, []),
     ?assertEqual(200, Code3),
 
     CdmiResponse3 = json_utils:decode(Response3),
@@ -866,7 +866,7 @@ objectid(Config) ->
 
     %%---- get / by objectid -------
     RequestHeaders4 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code4, _Headers4, Response4} = do_request(Workers, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders4, []),
+    {ok, Code4, _Headers4, Response4} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders4, []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
     Meta1 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse1)),
@@ -878,7 +878,7 @@ objectid(Config) ->
 
     %%--- get /dir/ by objectid ----
     RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code5, _Headers5, Response5} = do_request(Workers, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/", get, RequestHeaders5, []),
+    {ok, Code5, _Headers5, Response5} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
     Meta2 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse2)),
@@ -893,7 +893,7 @@ objectid(Config) ->
 
     %% get /dir/file.txt by objectid
     RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code6, _Headers6, Response6} = do_request(Workers, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/file.txt", get, RequestHeaders6, []),
+    {ok, Code6, _Headers6, Response6} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/file.txt", get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
     CdmiResponse6 = json_utils:decode(Response6),
     Meta3 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse3)),
@@ -905,7 +905,7 @@ objectid(Config) ->
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6WithoutAtime))
     ),
 
-    {ok, Code7, _Headers7, Response7} = do_request(Workers, "cdmi_objectid/" ++ binary_to_list(FileId), get, RequestHeaders6, []),
+    {ok, Code7, _Headers7, Response7} = do_request(WorkerP1, "cdmi_objectid/" ++ binary_to_list(FileId), get, RequestHeaders6, []),
     ?assertEqual(200, Code7),
     CdmiResponse7 = json_utils:decode(Response7),
     Meta7 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse7)),
@@ -918,7 +918,7 @@ objectid(Config) ->
 
     %%---- unauthorized access to / by objectid -------
     RequestHeaders8 = [?CDMI_VERSION_HEADER],
-    {ok, Code8, _, _} = do_request(Workers, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders8, []),
+    {ok, Code8, _, _} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders8, []),
     ?assertEqual(401, Code8).
 %%------------------------------
 
