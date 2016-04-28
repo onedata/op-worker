@@ -42,7 +42,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec update_times(fslogic_worker:ctx(), File :: fslogic_worker:file(),
-                   ATime :: file_meta:time(), MTime :: file_meta:time(), CTime :: file_meta:time()) -> #fuse_response{} | no_return().
+    ATime :: file_meta:time() | undefined, 
+    MTime :: file_meta:time() | undefined,
+    CTime :: file_meta:time() | undefined) -> #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},

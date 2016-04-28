@@ -56,8 +56,10 @@ stat(SessId, FileEntry) ->
 %% Changes file timestamps.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(Handle :: logical_file_manager:handle(), ATime :: file_meta:time(),
-    MTime :: file_meta:time(), CTime :: file_meta:time()) ->
+-spec update_times(Handle :: logical_file_manager:handle(),
+    ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined,
+    CTime :: file_meta:time() | undefined) ->
     ok | logical_file_manager:error_reply().
 update_times(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, ATime, MTime, CTime) ->
     update_times(SessId, {uuid, UUID}, ATime, MTime, CTime).

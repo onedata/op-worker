@@ -5,14 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc 
-%%%
+%%% @doc Files renaming functions
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_rename).
 -author("Mateusz Paciorek").
 
--define(CHUNK_SIZE, 100).
+-define(CHUNK_SIZE, 102400).
 
 %% TODO future work:
 %% 1. If any provider supporting old path does not support new path -
@@ -37,7 +36,7 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Transforms target path to required forms.
+%% @doc Transforms target path to required forms and executes renaming.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
