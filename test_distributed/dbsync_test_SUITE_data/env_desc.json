@@ -11,7 +11,12 @@
     },
     "os_configs": {
         "cfg1": {
-            "storages": [],
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st"
+                }
+            ],
             "users": [],
             "groups": {}
         }
@@ -100,10 +105,14 @@
                 ],
                 "groups": [
                 ],
-                "providers": [
-                    "p1",
-                    "p2"
-                ]
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st"
+                    }
+                }
             },
             "space_id2": {
                 "displayed_name": "space_name2",
@@ -112,10 +121,14 @@
                 ],
                 "groups": [
                 ],
-                "providers": [
-                    "p1",
-                    "p2"
-                ]
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st"
+                    }
+                }
             }
         }
     }

@@ -14,7 +14,7 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st1"
+                    "name": "/mnt/st"
                 }
             ],
             "users": [],
@@ -67,6 +67,30 @@
                         ],
                         "oz_domain": "oz",
                         "verify_oz_cert": false
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "space1"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
                     }
                 }
             }

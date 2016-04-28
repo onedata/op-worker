@@ -79,7 +79,7 @@
                 {<<"groups">>, [<<"group1">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>}
+%%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
             ]},
@@ -89,7 +89,7 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>}
+%%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
             ]},
@@ -99,7 +99,7 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>}
+%%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
             ]},
@@ -109,7 +109,7 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>}
+%%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
             ]}
@@ -484,14 +484,17 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     lists:foreach(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
         lists:foreach(fun({PID, ProviderConfig}) ->
-            Domain = proplists:get_value(PID, DomainMappings),
-            [Worker | _] = get_same_domain_workers(Config, Domain),
-            StorageName = proplists:get_value(<<"storage">>, ProviderConfig),
-            {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
-                storage, get_by_name, [StorageName])),
-            StorageId = rpc:call(Worker, storage, id, [Storage]),
-            {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
-                space_storage, add, [SpaceId, StorageId]))
+            case proplists:get_value(<<"storage">>, ProviderConfig) of
+                undefined -> ok; %% Skip if not configured
+                StorageName ->
+                    Domain = proplists:get_value(PID, DomainMappings),
+                    [Worker | _] = get_same_domain_workers(Config, Domain),
+                    {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
+                        storage, get_by_name, [StorageName])),
+                    StorageId = rpc:call(Worker, storage, id, [Storage]),
+                    {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
+                        space_storage, add, [SpaceId, StorageId]))
+            end
         end, Providers0)
     end, SpacesSetup),
 

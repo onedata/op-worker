@@ -56,7 +56,7 @@
 
 all() ->
     ?ALL([
-%%        list_dir_test,
+        list_dir_test,
 %%        get_file_test,
 %%        metadata_test,
         delete_file_test,
