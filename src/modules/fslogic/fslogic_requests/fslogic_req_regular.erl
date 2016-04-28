@@ -146,16 +146,16 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         uid = fslogic_context:get_user_id(CTX)
     }},
 
-    {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
+    {ok, FileUUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    try fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode) of
+    try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         {StorageId, FileId} ->
             fslogic_times:update_mtime_ctime({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
 
             {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
                 false ->
                     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID,
+                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID,
                         Storage, FileId),
                     {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
                     save_handle(SessId, Handle);
@@ -165,14 +165,14 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-                    uuid = UUID, provider_id = oneprovider:get_provider_id(),
+                    uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
                     storage_id = StorageId, file_id = FileId, blocks = [],
-                    space_id = SpaceUUID, handle_id = HandleId})}
+                    space_uuid = SpaceUUID, handle_id = HandleId})}
     catch
         T:M ->
-            {ok, FileLocations} = file_meta:get_locations({uuid, UUID}),
+            {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
             lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
-            file_meta:delete({uuid, UUID}),
+            file_meta:delete({uuid, FileUUID}),
             ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
             throw(?EACCES)
     end.
@@ -211,8 +211,8 @@ get_parent(_CTX, File) ->
 %%--------------------------------------------------------------------
 -spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
     #fuse_response{}.
-synchronize_block(_CTX, {uuid, Uuid}, Block)  ->
-    ok = replica_synchronizer:synchronize(Uuid, Block),
+synchronize_block(_CTX, {uuid, FileUUID}, Block)  ->
+    ok = replica_synchronizer:synchronize(FileUUID, Block),
     #fuse_response{status = #status{code = ?OK}}.
 
 
@@ -224,9 +224,9 @@ synchronize_block(_CTX, {uuid, Uuid}, Block)  ->
 %%--------------------------------------------------------------------
 -spec synchronize_block_and_compute_checksum(fslogic_worker:ctx(),
     {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
-synchronize_block_and_compute_checksum(CTX, {uuid, Uuid},
+synchronize_block_and_compute_checksum(CTX, {uuid, FileUUID},
     #file_block{offset = Offset, size = Size})  ->
-    {ok, Handle} = lfm_files:open(fslogic_context:get_session_id(CTX), {uuid, Uuid}, read),
+    {ok, Handle} = lfm_files:open(fslogic_context:get_session_id(CTX), {guid, fslogic_uuid:to_file_guid(FileUUID)}, read),
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
     Checksum = crypto:hash(md4, Data),
     #fuse_response{status = #status{code = ?OK},
@@ -272,19 +272,19 @@ get_file_location_for_rdwr(CTX, File) ->
 -spec get_file_location_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(),
     helpers:open_mode()) ->
     no_return() | #fuse_response{}.
-get_file_location_impl(#fslogic_ctx{session_id = SessId} = CTX, File, Mode) ->
-    {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
+get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Mode) ->
+    {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(File),
 
     {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
-    FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
+    FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),
 
-    #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
+    #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
     {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
         false ->
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
             {ok, Handle} = storage_file_manager:open(SFMHandle, Mode),
             save_handle(SessId, Handle);
         true ->
@@ -293,9 +293,9 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId} = CTX, File, Mode) ->
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = UUID, provider_id = oneprovider:get_provider_id(),
+            uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_id = SpaceUUID, handle_id = HandleId})}.
+            space_uuid = SpaceUUID, handle_id = HandleId})}.
 
 %%--------------------------------------------------------------------
 %% @doc Saves file handle in user's session, returns id of saved handle

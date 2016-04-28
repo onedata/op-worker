@@ -113,9 +113,11 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, Inputs, 
 %% @doc Returns file that shall be the subject of permission validation instead given file.
 %%      E.g. for virtual "/" directory returns deafult space file.
 %%--------------------------------------------------------------------
--spec get_validation_subject(onedata_user:id(), fslogic_worker:file()) -> fslogic_worker:file() | no_return().
-get_validation_subject(UserId, #sfm_handle{file_uuid = FileUUID}) ->
-    get_validation_subject(UserId, {uuid, FileUUID});
+-spec get_validation_subject(onedata_user:id(), fslogic_worker:ext_file()) -> fslogic_worker:file() | no_return().
+get_validation_subject(UserId, #sfm_handle{file_uuid = FileGUID}) ->
+    get_validation_subject(UserId, {guid, FileGUID});
+get_validation_subject(UserId, {guid, FileGUID}) ->
+    get_validation_subject(UserId, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 get_validation_subject(UserId, FileEntry) ->
     {ok, #document{key = FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
     DefaultSpaceDirUuid = fslogic_uuid:default_space_uuid(UserId),

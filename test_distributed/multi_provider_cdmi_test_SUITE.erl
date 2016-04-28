@@ -1,15 +1,15 @@
-%-------------------------------------
+%%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%-------------------------------------
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% CDMI tests
 %%% @end
-%-------------------------------------
--module(cdmi_test_SUITE).
+%%%-------------------------------------------------------------------
+-module(multi_provider_cdmi_test_SUITE).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -57,34 +57,31 @@
 all() ->
     ?ALL([
         list_dir_test,
-        get_file_test,
-        metadata_test,
+%%        get_file_test,
+%%        metadata_test,
         delete_file_test,
         delete_dir_test,
-        create_file_test,
+%%        create_file_test,
         update_file_test,
-        create_dir_test,
+%%        create_dir_test,
         capabilities_test,
         choose_adequate_handler_test,
         use_supported_cdmi_version_test,
         use_unsupported_cdmi_version_test,
         moved_permanently_test,
-        objectid_test,
+%%        objectid_test,
         request_format_check_test,
-        mimetype_and_encoding_test,
-        out_of_range_test,
-        partial_upload_test,
-        acl_test,
-        errors_test,
+%%        mimetype_and_encoding_test,
+%%        out_of_range_test,
+%%        partial_upload_test,
+%%        acl_test,
+%%        errors_test,
         accept_header_test
 %%        copy_move_test %todo split into smaller tests and enable when copy/move will be working properly
     ]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
-user_1_token_header() ->
-    {ok, Srlzd} = macaroon:serialize(macaroon:create("a", "b", "c")),
-    {<<"X-Auth-Token">>, Srlzd}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
@@ -165,18 +162,17 @@ errors_test(Config) ->
 accept_header_test(Config) ->
     cdmi_test_base:accept_header(Config).
 
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-%%    [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
-%%    Config0 = proplists:delete(op_worker_nodes, ConfigWithNodes),
-%%    [{op_worker_nodes, [Worker, Worker]} | Config0].
-    ConfigWithNodes.
+    initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
+    initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(choose_adequate_handler_test, Config) ->
@@ -187,6 +183,7 @@ init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:enable_grpca_based_communication(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(choose_adequate_handler_test, Config) ->
@@ -197,9 +194,11 @@ end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
     application:stop(ssl2).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+

@@ -46,7 +46,7 @@ synchronize(Uuid, Block) ->
         fun({ProviderId, Blocks}) ->
             lists:foreach(
                 fun(BlockToSync = #file_block{offset = O, size = S}) ->
-                    Ref = rtransfer:prepare_request(ProviderId, Uuid, O, S),
+                    Ref = rtransfer:prepare_request(ProviderId, fslogic_uuid:to_file_guid(Uuid), O, S),
                     NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
                     {ok, Size} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT),
                     replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false)

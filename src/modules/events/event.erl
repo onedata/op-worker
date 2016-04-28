@@ -32,10 +32,10 @@
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
 -type manager_ref() :: pid() | session:id() | [pid() | session:id()] |
-                       % reference all event managers except one provided
-                       {exclude, pid() | session:id()} |
-                       % reference all event managers except those provided in list
-                       {exclude, [pid() | session:id()]}.
+% reference all event managers except one provided
+{exclude, pid() | session:id()} |
+% reference all event managers except those provided in list
+{exclude, [pid() | session:id()]}.
 
 %%%===================================================================
 %%% API
@@ -279,3 +279,4 @@ as_list(Object) when is_list(Object) ->
     Object;
 as_list(Object) ->
     [Object].
+

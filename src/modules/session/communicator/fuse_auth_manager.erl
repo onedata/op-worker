@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_handshake/2]).
+-export([handle_handshake/2, authenticate_using_token/1]).
 
 %%%===================================================================
 %%% API

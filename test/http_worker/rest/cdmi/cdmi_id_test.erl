@@ -36,12 +36,12 @@ build_without_enum_test() ->
     0:8, Length:8, Crc:16, CmpString/binary>>).
 
 build_with_badarg_test() ->
-    TooLong = <<"12345678901234567890123456789012345">>,
+    TooLong = <<"12345678901234567890123456789012345:12345678901234567890123456789012345:12345678901234567890123456789012345">>,
     ?assertEqual({error, badarg},
         cdmi_id:build_objectid(TooLong)).
 
 build_with_badarg2_test() ->
-    TooLong = <<"12345678901234567890123456789012345">>,
+    TooLong = <<"12345678901234567890123456789012345:12345678901234567890123456789012345:12345678901234567890123456789012345">>,
     ?assertEqual({error, badarg},
         cdmi_id:build_objectid(?ENTERPRISENUM, TooLong)).
 

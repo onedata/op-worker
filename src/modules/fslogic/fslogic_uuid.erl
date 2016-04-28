@@ -13,15 +13,112 @@
 -author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
-    spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2,
+    guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2,
     default_space_owner/1]).
+-export([file_uuid_to_space_id/1, gen_file_uuid/1, gen_file_uuid/0]).
+-export([to_file_guid/2, unpack_file_guid/1, file_guid_to_uuid/1, to_file_guid/1, ensure_guid/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID and spaceId generates file's GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_file_guid(file_meta:uuid(), SpaceId :: binary() | undefined) ->
+    fslogic_worker:file_guid().
+to_file_guid(FileUUID, SpaceId) ->
+    http_utils:base64url_encode(term_to_binary({guid, FileUUID, SpaceId})).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID generates file's GUID. SpaceId is calculated in process.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_file_guid(file_meta:uuid()) ->
+    fslogic_worker:file_guid().
+to_file_guid(FileUUID) ->
+    SpaceId = fslogic_spaces:get_space_id(FileUUID),
+    to_file_guid(FileUUID, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's UUID and its SpaceId for given file's GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec unpack_file_guid(FileGUID :: fslogic_worker:file_guid()) ->
+    {file_meta:uuid(), SpaceId :: binary() | undefined}.
+unpack_file_guid(FileGUID) ->
+    try binary_to_term(http_utils:base64url_decode(FileGUID)) of
+        {guid, FileUUID, SpaceId} ->
+            {FileUUID, SpaceId};
+        _ ->
+            {FileGUID, undefined}
+    catch
+        _:_ ->
+            {FileGUID, undefined}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's UUID for given file's GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_guid_to_uuid(fslogic_worker:file_guid()) -> file_meta:uuid().
+file_guid_to_uuid(FileGUID) ->
+    {FileUUID, _} = unpack_file_guid(FileGUID),
+    FileUUID.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file's UUID returns Space's ID that contains this file.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_uuid_to_space_id(file_meta:uuid()) ->
+    {ok, binary()} | {error, {not_in_space_scope, file_meta:uuid(), Reason :: term()}}.
+file_uuid_to_space_id(FileUUID) ->
+    BinParentUUID = http_utils:base64url_decode(FileUUID),
+    try binary_to_term(BinParentUUID) of
+        {space, SpaceId} ->
+            {ok, SpaceId};
+        {{s, SpaceId}, _} ->
+            {ok, SpaceId}
+    catch
+        _:Reason ->
+            ?error("Unable to decode file UUID ~p due to: ~p", [FileUUID, Reason]),
+            {error, {not_in_space_scope, FileUUID, Reason}}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates file's UUID that will be placed in given Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_file_uuid(SpaceId :: binary()) -> file_meta:uuid().
+gen_file_uuid(SpaceId) ->
+    http_utils:base64url_encode(term_to_binary({{s, SpaceId}, crypto:rand_bytes(10)})).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates generic file's UUID that will be not placed in any Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_file_uuid() -> file_meta:uuid().
+gen_file_uuid() ->
+    http_utils:base64url_encode(crypto:rand_bytes(16)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -40,14 +137,32 @@ path_to_uuid(CTX, Path) ->
 %% Converts given file entry to UUID.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:file()) ->
+-spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:ext_file()) ->
     {uuid, file_meta:uuid()}.
+ensure_uuid(_CTX, {guid, FileGUID}) ->
+    {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)};
 ensure_uuid(_CTX, {uuid, UUID}) ->
     {uuid, UUID};
 ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
     {uuid, path_to_uuid(CTX, Path)}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given file entry to FileGUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:file_guid_or_path()) ->
+    {guid, fslogic_worker:file_guid()}.
+ensure_guid(_CTX, {guid, FileGUID}) ->
+    {guid, FileGUID};
+ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
+    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, Path}}, fun
+        (#file_attr{uuid = GUID}) ->
+            {guid, GUID}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -63,6 +178,15 @@ uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
             {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets full file path.
+%% @end
+%%--------------------------------------------------------------------
+-spec guid_to_path(fslogic_worker:ctx(), fslogic_worker:file_guid()) -> file_meta:path().
+guid_to_path(CTX = #fslogic_ctx{}, FileGUID) ->
+    uuid_to_path(CTX, fslogic_uuid:file_guid_to_uuid(FileGUID)).
 
 %%--------------------------------------------------------------------
 %% @doc Convert SpaceId to uuid of file_meta document of this space directory.

@@ -639,7 +639,7 @@ init_per_testcase(_, Config) ->
     end),
 
     initializer:communicator_mock(Nodes),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     FinalConfig = lfm_proxy:init(ConfigWithSessionInfo),
 
     reset_state(Nodes),
@@ -663,7 +663,7 @@ end_per_testcase(_, Config) ->
 
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Nodes, [communicator]),
+    test_utils:mock_unload(Nodes, [communicator]),
 
     ok.
 

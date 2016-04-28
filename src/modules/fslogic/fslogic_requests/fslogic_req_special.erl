@@ -13,6 +13,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -55,7 +56,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         {ok, DirUUID} ->
             fslogic_times:update_mtime_ctime(NormalizedParentUUID, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-                #dir{uuid = DirUUID}
+                #dir{uuid = fslogic_uuid:to_file_guid(DirUUID)}
             };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
@@ -71,7 +72,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
-read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
+read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),
@@ -84,7 +85,7 @@ read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
     DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
     case Key of
         DefaultSpaceKey ->
-            {ok, DefaultSpace} = fslogic_spaces:get_default_space(CTX),
+            {ok, DefaultSpace = #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
             {ok, DefaultSpaceChildLinks} =
                 case Offset of
                     0 ->
@@ -95,7 +96,9 @@ read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
 
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_children{
-                    child_links = ChildLinks ++ DefaultSpaceChildLinks
+                    child_links = [
+                        CL#child_link{uuid = fslogic_uuid:to_file_guid(UUID, fslogic_uuid:space_dir_uuid_to_spaceid(DefaultSpaceUUID))}
+                        || CL = #child_link{uuid = UUID} <- ChildLinks ++ DefaultSpaceChildLinks]
                 }
             };
         SpacesKey ->
@@ -108,7 +111,7 @@ read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
                         SpacesChunk = lists:sublist(Spaces, Offset + 1, Size),
                         lists:map(fun({SpaceId, SpaceName}) ->
                             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                            #child_link{uuid = SpaceUUID, name = SpaceName}
+                            #child_link{uuid = fslogic_uuid:to_file_guid(SpaceUUID, SpaceId), name = SpaceName}
                         end, SpacesChunk);
                     false ->
                         []
@@ -121,7 +124,8 @@ read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
             };
         _ ->
             #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{child_links = ChildLinks}}
+                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:to_file_guid(UUID, SpaceId)}
+                    || CL = #child_link{uuid = UUID} <- ChildLinks]}}
     end.
 
 

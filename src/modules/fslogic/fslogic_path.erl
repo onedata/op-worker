@@ -13,6 +13,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
@@ -130,6 +131,9 @@ gen_storage_path(Entry) ->
 %%--------------------------------------------------------------------
 -spec get_canonical_file_entry(Ctx :: fslogic_worker:ctx(), Tokens :: [file_meta:path()]) ->
     FileEntry :: file_meta:entry() | no_return().
+get_canonical_file_entry(#fslogic_ctx{session_id = ?ROOT_SESS_ID}, Tokens) ->
+    Path = fslogic_path:join(Tokens),
+    {path, Path};
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {uuid, fslogic_uuid:default_space_uuid(UserId)};
@@ -137,7 +141,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
     UserId = fslogic_context:get_user_id(Ctx),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME]),
     {path, Path};
-get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
+get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
 

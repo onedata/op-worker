@@ -42,5 +42,6 @@ models() -> [
     s3_user,
     dbsync_state,
     files_to_chown,
-    posix_user
+    posix_user,
+    message_id
 ].

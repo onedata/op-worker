@@ -32,7 +32,9 @@
 -spec emit_file_attr_update(fslogic_worker:file(), [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_attr_update(FileEntry, ExcludedSessions) ->
-    case logical_file_manager:stat(?ROOT_SESS_ID, FileEntry) of
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
+    case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new attributes for file ~p to all sessions except ~p",
                 [FileEntry, ExcludedSessions]),
@@ -50,7 +52,9 @@ emit_file_attr_update(FileEntry, ExcludedSessions) ->
 -spec emit_file_sizeless_attrs_update(fslogic_worker:file()) ->
     ok | {error, Reason :: term()}.
 emit_file_sizeless_attrs_update(FileEntry) ->
-    case logical_file_manager:stat(?ROOT_SESS_ID, FileEntry) of
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
+    case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new times for file ~p to all subscribers", [FileEntry]),
             SizelessFileAttr = FileAttr#file_attr{size = undefined},
@@ -71,8 +75,8 @@ emit_file_sizeless_attrs_update(FileEntry) ->
 emit_file_location_update(FileEntry, ExcludedSessions) ->
     try
         {ok, #document{} = File} = file_meta:get(FileEntry),
-        #document{value = #file_location{} = FileLocation} = fslogic_utils:get_local_file_location(File),
-        event:emit(#event{object = #update_event{object = file_location:ensure_blocks_not_empty(FileLocation)}},
+        #document{value = #file_location{uuid = FileUuid} = FileLocation} = fslogic_utils:get_local_file_location(File),
+        event:emit(#event{object = #update_event{object = file_location:ensure_blocks_not_empty(FileLocation#file_location{uuid = fslogic_uuid:to_file_guid(FileUuid)})}},
             {exclude, ExcludedSessions})
     catch
         _:Reason ->
@@ -88,17 +92,17 @@ emit_file_location_update(FileEntry, ExcludedSessions) ->
 -spec emit_permission_changed(FileUuid :: file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
 emit_permission_changed(FileUuid) ->
-    event:emit(#event{object = #permission_changed_event{file_uuid = FileUuid}}).
+    event:emit(#event{object = #permission_changed_event{file_uuid = fslogic_uuid:to_file_guid(FileUuid)}}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Send event informing subscribed client about file removal.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_removal(FileUuid :: file_meta:uuid()) ->
+-spec emit_file_removal(FileGUID :: fslogic_worker:file_guid()) ->
     ok | {error, Reason :: term()}.
-emit_file_removal(FileUuid) ->
-    event:emit(#event{object = #file_removal_event{file_uuid = FileUuid}}).
+emit_file_removal(FileGUID) ->
+    event:emit(#event{object = #file_removal_event{file_uuid = FileGUID}}).
 
 %%%===================================================================
 %%% Internal functions

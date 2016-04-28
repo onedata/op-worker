@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
@@ -36,7 +37,7 @@
     [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
     try
-        {ok, ProviderIds} = oz_spaces:get_providers(provider, SpaceId),
+        {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
         ProviderIds
     catch
         _:{_, {error, 'No such file or directory'}} ->
@@ -109,7 +110,7 @@ decode_term(Data) ->
 %%--------------------------------------------------------------------
 -spec gen_request_id() -> binary().
 gen_request_id() ->
-    base64:encode(crypto:rand_bytes(32)).
+    http_utils:base64url_encode(crypto:rand_bytes(32)).
 
 
 %%--------------------------------------------------------------------

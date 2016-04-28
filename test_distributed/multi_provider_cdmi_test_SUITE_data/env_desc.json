@@ -50,7 +50,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "verify_gr_cert": false
+                        "oz_domain": "oz",
+                        "verify_oz_cert": false
                     }
                 }
             }
@@ -83,7 +84,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "verify_gr_cert": false
+                        "oz_domain": "oz",
+                        "verify_oz_cert": false
                     }
                 }
             }
@@ -98,8 +100,8 @@
         "groups": {
         },
         "spaces": {
-            "space_id1": {
-                "displayed_name": "space_name1",
+            "space1": {
+                "displayed_name": "space1",
                 "users": [
                     "user1"
                 ],
@@ -107,24 +109,18 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
-                    },
-                    "p2": {
                         "storage": "/mnt/st"
                     }
                 }
             },
-            "space_id2": {
-                "displayed_name": "space_name2",
+            "space2": {
+                "displayed_name": "space2",
                 "users": [
                     "user1"
                 ],
                 "groups": [
                 ],
                 "providers": {
-                    "p1": {
-                        "storage": "/mnt/st"
-                    },
                     "p2": {
                         "storage": "/mnt/st"
                     }

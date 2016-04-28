@@ -82,7 +82,11 @@ class ProviderWorkerConfigurator:
                 if not storages_dockers:
                     storages_dockers = {'posix': {}}
                 storages_dockers['posix'][s] = {"host_path": host_path, "docker_path": docker_path}
-                extra_volumes.append(v)
+            else:
+                d = storages_dockers['posix'][s]
+                v = (d['host_path'], d['docker_path'], 'rw')
+
+            extra_volumes.append(v)
 
         # Check if gui override is enabled in env and add required volumes
         if 'gui_override' in config and isinstance(config['gui_override'],

@@ -36,8 +36,8 @@ remove_acl/1, remove_acl/2]).
     ok | logical_file_manager:error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #change_mode{uuid = UUID, mode = NewPerms},
+    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #change_mode{uuid = GUID, mode = NewPerms},
         fun(_) -> ok end).
 
 
@@ -55,15 +55,15 @@ check_perms(_Path, _PermType) ->
 %%--------------------------------------------------------------------
 -spec get_acl(Handle :: logical_file_manager:handle()) ->
     {ok, [access_control_entity()]} | logical_file_manager:error_reply().
-get_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    get_acl(SessId, {uuid, UUID}).
+get_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    get_acl(SessId, {guid, GUID}).
 
--spec get_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, [access_control_entity()]} | logical_file_manager:error_reply().
 get_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #get_acl{uuid = UUID},
+    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #get_acl{uuid = GUID},
         fun(#acl{value = Json}) ->
             Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)), %todo store perms as integers
             {ok, Acl}
@@ -75,17 +75,17 @@ get_acl(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec set_acl(logical_file_manager:handle(), EntityList :: [access_control_entity()]) ->
     ok | logical_file_manager:error_reply().
-set_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, EntityList) ->
-    set_acl(SessId, {uuid, UUID}, EntityList).
+set_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, EntityList) ->
+    set_acl(SessId, {guid, GUID}, EntityList).
 
--spec set_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     EntityList :: [access_control_entity()]) ->
     ok | logical_file_manager:error_reply().
 set_acl(SessId, FileKey, Acl) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
-    lfm_utils:call_fslogic(SessId, #set_acl{uuid = UUID, acl = #acl{value = Json}},
+    lfm_utils:call_fslogic(SessId, #set_acl{uuid = GUID, acl = #acl{value = Json}},
         fun(_) -> ok end).
 
 
@@ -93,13 +93,13 @@ set_acl(SessId, FileKey, Acl) ->
 %% @doc Removes file's Access Control List.
 %%--------------------------------------------------------------------
 -spec remove_acl(logical_file_manager:handle()) -> ok | logical_file_manager:error_reply().
-remove_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    remove_acl(SessId, {uuid, UUID}).
+remove_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    remove_acl(SessId, {guid, GUID}).
 
--spec remove_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | logical_file_manager:error_reply().
 remove_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #remove_acl{uuid = UUID},
+    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #remove_acl{uuid = GUID},
         fun(_) -> ok end).

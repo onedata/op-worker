@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/sfm_handle.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/fslogic/helpers.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -22,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
--export([new_handle/5]).
+-export([new_handle/5, new_handle/6]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
     fsync/1]).
@@ -42,6 +43,7 @@
 %% Opens the file. To used opened descriptor, pass returned handle to other functions.
 %% File may and should be closed with release/1, but file will be closed automatically
 %% when handle goes out of scope (term will be released by Erlang's GC).
+%% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
@@ -53,7 +55,40 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
         space_uuid = SpaceUUID,
         file_uuid = FileUUID,
         file = FileId,
+        provider_id = oneprovider:get_provider_id(),
+        is_local = true,
         storage = Storage
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens the file. To used opened descriptor, pass returned handle to other functions.
+%% File may and should be closed with release/1, but file will be closed automatically
+%% when handle goes out of scope (term will be released by Erlang's GC).
+%% This function (not like new_handle/5) does not assume that given file is local.
+%% Therefore handle created with this function may be used for remote files.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+    StorageId :: storage:id(), FileId :: helpers:file(), oneprovider:id()) ->
+    handle().
+new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
+    {IsLocal, Storage} = case oneprovider:get_provider_id() of
+        ProviderId ->
+            {ok, S} = storage:get(StorageId),
+            {true, S};
+        _ ->
+            {false, undefined}
+    end,
+    #sfm_handle{
+        session_id = SessionId,
+        space_uuid = SpaceUUID,
+        file_uuid = FileUUID,
+        file = FileId,
+        provider_id = ProviderId,
+        is_local = IsLocal,
+        storage = Storage,
+        storage_id = StorageId
     }.
 
 %%--------------------------------------------------------------------
@@ -65,12 +100,14 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %%--------------------------------------------------------------------
 -spec open(handle(), OpenMode :: helpers:open_mode()) ->
     {ok, handle()} | logical_file_manager:error_reply().
-open(SFMHandle, read) ->
+open(#sfm_handle{is_local = true} = SFMHandle, read) ->
     open_for_read(SFMHandle);
-open(SFMHandle, write) ->
+open(#sfm_handle{is_local = true} = SFMHandle, write) ->
     open_for_write(SFMHandle);
-open(SFMHandle, rdwr) ->
-    open_for_rdwr(SFMHandle).
+open(#sfm_handle{is_local = true} = SFMHandle, rdwr) ->
+    open_for_rdwr(SFMHandle);
+open(#sfm_handle{is_local = false} = SFMHandle, _) ->
+    {ok, SFMHandle}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,7 +139,7 @@ mkdir(Handle, Mode) ->
 %%--------------------------------------------------------------------
 -spec mkdir(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | logical_file_manager:error_reply().
-mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
+mkdir(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
     Noop = fun(_) -> ok end,
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
@@ -150,7 +187,7 @@ mv(_FileHandleFrom, _PathOnStorageTo) ->
 %%--------------------------------------------------------------------
 -spec chmod(handle(), NewMode :: file_meta:posix_permissions()) ->
     ok | logical_file_manager:error_reply().
-chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Mode) ->
+chmod(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Mode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
@@ -215,10 +252,22 @@ stat(_FileHandle) ->
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
     {ok, non_neg_integer()} | logical_file_manager:error_reply().
-write(#sfm_handle{open_mode = undefined}, _, _) -> throw(?EPERM);
-write(#sfm_handle{open_mode = read}, _, _) -> throw(?EPERM);
-write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
-    helpers:write(HelperHandle, File, Offset, Buffer).
+write(#sfm_handle{is_local = true, open_mode = undefined}, _, _) -> throw(?EPERM);
+write(#sfm_handle{is_local = true, open_mode = read}, _, _) -> throw(?EPERM);
+write(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
+    helpers:write(HelperHandle, File, Offset, Buffer);
+
+write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Data) ->
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
+    ProxyIORequest = #proxyio_request{
+        parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
+        proxyio_request = #remote_write{byte_sequence = [#byte_sequence{offset = Offset, data = Data}]}},
+    case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
+        #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_write_result{wrote = Wrote}} ->
+            {ok, Wrote};
+        #proxyio_response{status = #status{code = Code}} ->
+            {error, Code}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -229,10 +278,22 @@ write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) ->
     {ok, binary()} | logical_file_manager:error_reply().
-read(#sfm_handle{open_mode = undefined}, _, _) -> throw(?EPERM);
-read(#sfm_handle{open_mode = write}, _, _) -> throw(?EPERM);
-read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
-    helpers:read(HelperHandle, File, Offset, MaxSize).
+read(#sfm_handle{is_local = true, open_mode = undefined}, _, _) -> throw(?EPERM);
+read(#sfm_handle{is_local = true, open_mode = write}, _, _) -> throw(?EPERM);
+read(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
+    helpers:read(HelperHandle, File, Offset, MaxSize);
+
+read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Size) ->
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
+    ProxyIORequest = #proxyio_request{
+        parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
+        proxyio_request = #remote_read{offset = Offset, size = Size}},
+    case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
+        #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}} ->
+            {ok, Data};
+        #proxyio_response{status = #status{code = Code}} ->
+            {error, Code}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -248,7 +309,7 @@ create(Handle, Mode) ->
 
 -spec create(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | logical_file_manager:error_reply().
-create(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
+create(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
@@ -278,9 +339,9 @@ create(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, ses
 %%--------------------------------------------------------------------
 -spec truncate(handle(), Size :: integer()) ->
     ok | logical_file_manager:error_reply().
-truncate(#sfm_handle{open_mode = undefined}, _) -> throw(?EPERM);
-truncate(#sfm_handle{open_mode = read}, _) -> throw(?EPERM);
-truncate(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Size) ->
+truncate(#sfm_handle{is_local = true, open_mode = undefined}, _) -> throw(?EPERM);
+truncate(#sfm_handle{is_local = true, open_mode = read}, _) -> throw(?EPERM);
+truncate(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Size) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
@@ -294,7 +355,7 @@ truncate(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, s
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(handle()) -> ok | logical_file_manager:error_reply().
-unlink(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
+unlink(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
@@ -306,6 +367,8 @@ unlink(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, ses
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(handle()) -> ok | logical_file_manager:error_reply().
+fsync(#sfm_handle{is_local = false}) ->
+    ok;
 fsync(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
@@ -350,7 +413,7 @@ open_for_rdwr(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_impl(handle(), OpenMode :: helpers:open_mode()) ->
     {ok, handle()} | logical_file_manager:error_reply().
-open_impl(#sfm_handle{storage = Storage, file = FileId, session_id = SessionId, space_uuid = SpaceUUID} = SFMHandle, OpenMode) ->
+open_impl(#sfm_handle{is_local = true, storage = Storage, file = FileId, session_id = SessionId, space_uuid = SpaceUUID} = SFMHandle, OpenMode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([get_default_space/1, get_default_space_id/1, get_space/2]).
+-export([get_default_space/1, get_default_space_id/1, get_space/2, get_space/1, get_space_id/1, get_space_id/2]).
 
 %%%===================================================================
 %%% API
@@ -52,27 +52,113 @@ get_default_space_id(UserId) ->
         onedata_user:get(UserId),
     {ok, DefaultSpaceId}.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space ID for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_id(FileUUID :: file_meta:uuid()) ->
+    SpaceId :: binary().
+get_space_id(FileUUID) ->
+    {ok, #document{key = SpaceUUID}} = get_space({uuid, FileUUID}),
+    fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space ID for given file path.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_id(CTX :: fslogic_worker:ctx(), FilePath :: file_meta:path()) ->
+    SpaceId :: binary().
+get_space_id(CTX, Path) ->
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    case fslogic_path:get_canonical_file_entry(CTX, Tokens) of
+        {path, P} = FileEntry ->
+            {ok, Tokens1} = fslogic_path:verify_file_path(P),
+            case Tokens1 of
+                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | _] ->
+                    SpaceId;
+                _ ->
+                    throw({not_in_space, FileEntry})
+            end;
+        OtherFileEntry ->
+            throw({not_in_space, OtherFileEntry})
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space document for given file. Note: This function works only with
+%% absolute, user independent paths (cannot be used with paths to default space).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}) ->
+    {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
+get_space({guid, FileGUID}) ->
+    case fslogic_uuid:unpack_file_guid(FileGUID) of
+        {FileUUID, undefined} -> get_space({uuid, FileUUID});
+        {_, SpaceId} ->
+            file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId))
+    end;
+get_space(FileEntry) ->
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+
+    case FileUUID of
+        <<"">> ->
+            throw({not_a_space, FileEntry});
+        _ ->
+            {ok, #document{key = SpaceUUID}} = Res = file_meta:get_scope({uuid, FileUUID}),
+            _ = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID), %% Crash if given UUID is not a space
+            Res
+
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file_meta space document for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space(FileEntry :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
+-spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}, UserId :: onedata_user:id()) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
+get_space({guid, FileGUID}, UserId) ->
+    case fslogic_uuid:unpack_file_guid(FileGUID) of
+        {FileUUID, undefined} -> get_space({uuid, FileUUID}, UserId);
+        {_, SpaceId} ->
+            file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId))
+    end;
 get_space(FileEntry, UserId) ->
     DefaultSpaceUUID = fslogic_uuid:default_space_uuid(UserId),
-    {ok, SpaceDoc} = case file_meta:get_scope(FileEntry) of
-        {ok, #document{key = DefaultSpaceUUID}} ->
-            get_default_space(UserId);
-        {ok, #document{} = Doc} ->
-            {ok, Doc}
+    SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+
+    SpaceDocument = case FileUUID of
+        <<"">> ->
+            throw({not_a_space, FileEntry});
+        SpacesDir ->
+            throw({not_a_space, FileEntry});
+        DefaultSpaceUUID ->
+            {ok, DefaultSpace} = get_default_space(UserId),
+            DefaultSpace;
+        _ ->
+            {ok, Doc} = file_meta:get_scope(FileEntry),
+            Doc
     end,
-    #document{key = SpaceUUID} = SpaceDoc,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, Spaces} = user_logic:get_spaces(UserId),
-    case (is_list(Spaces) andalso lists:keymember(SpaceId, 1, Spaces)) orelse UserId == ?ROOT_USER_ID of
-        true -> {ok, SpaceDoc};
-        false -> throw({not_a_space, FileEntry})
+
+    case UserId of
+        ?ROOT_USER_ID ->
+            {ok, SpaceDocument};
+        _ ->
+            {ok, Spaces} = user_logic:get_spaces(UserId),
+            #document{key = SpaceUUID} = SpaceDocument,
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+            case (is_list(Spaces) andalso lists:keymember(SpaceId, 1, Spaces)) of
+                true ->
+                    {ok, SpaceDocument};
+                false -> throw({not_a_space, FileEntry})
+            end
     end.
 
 %%%===================================================================
