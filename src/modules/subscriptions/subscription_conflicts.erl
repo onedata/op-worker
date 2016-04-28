@@ -123,6 +123,10 @@ get_revisions(_Model, _Record) ->
     Revs :: [term()]) -> Record2 :: subscriptions:record().
 set_revisions(space_info, Record, Revisions) ->
     Record#space_info{revision_history = Revisions};
+set_revisions(onedata_user, Record = #onedata_user{public_only = true}, _) ->
+    %% records with public data only do not have revisions
+    %% thus always are overridden by "full" records
+    Record#onedata_user{revision_history = []};
 set_revisions(onedata_user, Record, Revisions) ->
     Record#onedata_user{revision_history = Revisions};
 set_revisions(onedata_group, Record, Revisions) ->

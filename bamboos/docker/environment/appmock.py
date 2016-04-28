@@ -94,7 +94,8 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/appmock console'''
+/root/bin/node/bin/appmock console
+sleep 5'''  # Add sleep so logs can be chowned
     command = command.format(
         uid=os.geteuid(),
         gid=os.getegid(),

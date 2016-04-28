@@ -26,7 +26,7 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, get_spaces/1, create_or_update/2]).
+-export([fetch/1, get_or_fetch/2, create_or_update/2]).
 
 -export_type([id/0, connected_account/0]).
 
@@ -169,11 +169,12 @@ fetch(Client) ->
         {ok, #space_details{name = SpaceName}} =
             oz_spaces:get_details(Client, SpaceId),
         {SpaceId, SpaceName}
-    end, [DefaultSpaceId | lists:delete(DefaultSpaceId, SpaceIds)]),
+    end, SpaceIds),
 
     OnedataUser = #onedata_user{
         name = Name,
         spaces = Spaces,
+        default_space = DefaultSpaceId,
         group_ids = GroupIds,
         connected_accounts = ConnectedAccounts,
         alias = Alias,
@@ -210,20 +211,5 @@ get_or_fetch(Client, UserId) ->
         _:Reason ->
             ?error_stacktrace("Cannot get or fetch details of onedata user ~p due to: ~p",
                 [UserId, Reason]),
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of user spaces.
-%% @end
-%%--------------------------------------------------------------------
--spec get_spaces(UserId :: onedata_user:id()) ->
-    {ok, [{SpaceId :: binary(), SpaceName :: binary()}]} | {error, Reason :: term()}.
-get_spaces(UserId) ->
-    case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
-            {ok, Spaces};
-        {error, Reason} ->
             {error, Reason}
     end.
