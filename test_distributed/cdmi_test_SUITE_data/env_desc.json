@@ -29,27 +29,12 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 2
+                        "worker_num": 1
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "oz_domain": "oz",
-                        "verify_oz_cert": false
-                    }
-                },
-                "worker2": {
                     "vm.args": {
                         "setcookie": "test_cookie"
                     },

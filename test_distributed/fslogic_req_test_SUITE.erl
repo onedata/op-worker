@@ -59,7 +59,7 @@ all() ->
 %%%===================================================================
 
 fslogic_get_file_attr_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
@@ -86,7 +86,7 @@ fslogic_get_file_attr_test(Config) ->
     )).
 
 fslogic_mkdir_and_rmdir_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
 
@@ -143,7 +143,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     end, lists:reverse(tl(UUIDs2))).
 
 fslogic_read_dir_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
     {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
@@ -219,7 +219,7 @@ fslogic_read_dir_test(Config) ->
     ok.
 
 chmod_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
     {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
@@ -244,7 +244,7 @@ chmod_test(Config) ->
 
 
 default_permissions_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
     {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
@@ -385,7 +385,7 @@ default_permissions_test(Config) ->
 
 
 simple_rename_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
     {_SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
@@ -435,7 +435,7 @@ simple_rename_test(Config) ->
 
 
 update_times_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
     {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
