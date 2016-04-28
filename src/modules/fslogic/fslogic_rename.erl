@@ -214,7 +214,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalT
 
     case file_meta:get(SourceEntry) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
-            %% TODO: get all snapshots:
+            %% TODO: get all snapshots: TODO: VFS-1966
             SourceDirSnapshots = [SourceEntry],
             lists:foreach(
                 fun(Snapshot) ->
@@ -224,7 +224,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalT
             for_each_child_file(SourceEntry,
                 fun
                     (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File) ->
-                        %% TODO: get all snapshots:
+                        %% TODO: get all snapshots: VFS-1965
                         FileSnapshots = [File],
                         lists:foreach(
                             fun(Snapshot) ->
@@ -245,7 +245,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalT
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
 
-            %% TODO: get all snapshots:
+            %% TODO: get all snapshots: VFS-1965
             FileSnapshots = [File],
             lists:foreach(
                 fun(Snapshot) ->

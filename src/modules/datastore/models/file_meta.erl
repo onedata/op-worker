@@ -606,7 +606,7 @@ is_spaces_base_dir(#document{key = Key}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Internel helper function for rename/2.
+%% Internal helper function for rename/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename3(Subject :: datastore:document(), ParentUUID :: uuid(),
@@ -615,16 +615,7 @@ is_spaces_base_dir(#document{key = Key}) ->
 rename3(#document{value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
         {ok, FileUUID} = update(Subject, #{name => NewName}),
-        ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
-        ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {snapshot_name(NewName, V), {FileUUID, ?MODEL_NAME}}),
-        case get_current_snapshot(Subject) =:= Subject of
-            true ->
-                ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName),
-                ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, Subject});
-            false ->
-                ok
-        end,
-        ok
+        ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
     end);
 
 rename3(#document{value = #file_meta{name = OldName, version = V}} = Subject, OldParentUUID, {path, NewPath}) ->
@@ -632,24 +623,34 @@ rename3(#document{value = #file_meta{name = OldName, version = V}} = Subject, Ol
         NewTokens = fslogic_path:split(NewPath),
         [NewName | NewParentTokens] = lists:reverse(NewTokens),
         NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
-        {ok, NewParent} = get({path, NewParentPath}),
+        {ok, #document{key = NewParentUUID} = NewParent} = get({path, NewParentPath}),
         {ok, NewScope} = get_scope(NewParent),
         {ok, FileUUID} = update(Subject, #{name => NewName}),
-
-        ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
-        ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {snapshot_name(NewName, V), Subject}),
         ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
-        case get_current_snapshot(Subject) =:= Subject of
-            true ->
-                ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
-                ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject});
-            false ->
-                ok
-        end,
+        ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
 
-        ok = update_scopes(Subject, NewScope),
-        ok
+        ok = update_scopes(Subject, NewScope)
     end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Internel helper function for rename/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_links_in_parents(OldParentUUID :: uuid(), NewParentUUID :: uuid(),
+    OldName :: name(), NewName :: name(), Version :: non_neg_integer(),
+    Subject :: entry()) -> ok.
+update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, Version, Subject) ->
+    {ok, #document{key = SubjectUUID} = SubjectDoc} = get(Subject),
+    ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME, {snapshot_name(NewName, Version), {SubjectUUID, ?MODEL_NAME}}),
+    case get_current_snapshot(SubjectDoc) =:= SubjectDoc of
+        true ->
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME, {NewName, {SubjectUUID, ?MODEL_NAME}});
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -785,7 +786,8 @@ snapshot_name(FileName, Version) ->
 %%--------------------------------------------------------------------
 -spec get_current_snapshot(Entry :: entry()) -> entry().
 get_current_snapshot(Entry) ->
-    %% TODO: find actual current version
+    %% TODO: VFS-1965
+    %% TODO: VFS-1966
     {ok, CurrentSnapshot} = get(Entry),
     CurrentSnapshot.
 
