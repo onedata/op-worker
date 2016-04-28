@@ -501,21 +501,21 @@ get_guid(Worker, SessId, Path) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    Config0 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
+    initializer:setup_storage(Config0).
 
 end_per_suite(Config) ->
+    initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, luma_utils),
     test_utils:mock_expect(Workers, luma_utils, get_storage_type, fun(_) -> ?DIRECTIO_HELPER_NAME end),
-    Config0 = initializer:setup_storage(Config),
     initializer:communicator_mock(Workers),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config0).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:teardown_storage(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator, luma_utils]).
