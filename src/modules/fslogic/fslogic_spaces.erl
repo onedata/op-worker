@@ -68,21 +68,7 @@ get_space(FileEntry, UserId) ->
             {ok, Doc}
     end,
     #document{key = SpaceUUID} = SpaceDoc,
-    SpaceId = try
-        fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)
-    catch
-        _:_ ->
-            try
-                %% check if SpaceUUID is root space
-                OwnerId = fslogic_uuid:default_space_owner(SpaceUUID),
-                {ok, #document{key = UserDefaultSpaceUUID}} = get_default_space(OwnerId),
-                fslogic_uuid:space_dir_uuid_to_spaceid(UserDefaultSpaceUUID)
-            catch
-               _:_ ->
-                   %% SpaceUUID is neither space nor root space
-                   throw({not_a_space, FileEntry})
-            end
-    end,
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, Spaces} = onedata_user:get_spaces(UserId),
     case (is_list(Spaces) andalso lists:keymember(SpaceId, 1, Spaces)) orelse UserId == ?ROOT_USER_ID of
         true -> {ok, SpaceDoc};
