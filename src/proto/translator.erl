@@ -148,8 +148,10 @@ translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = 
         storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #remote_read{offset = Offset, size = Size};
-translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
-    #remote_write{offset = Offset, data = Data};
+translate_from_protobuf(#'RemoteWrite'{byte_sequence = ByteSequences}) ->
+    #remote_write{byte_sequence = [translate_from_protobuf(BS) || BS <- ByteSequences]};
+translate_from_protobuf(#'ByteSequence'{offset = Offset, data = Data}) ->
+    #byte_sequence{offset = Offset, data = Data};
 translate_from_protobuf(#'GetXattr'{uuid = UUID, name = Name}) ->
     #get_xattr{uuid = UUID, name = Name};
 translate_from_protobuf(#'SetXattr'{uuid = UUID, xattr = {xattr, Xattr}}) ->
@@ -324,6 +326,10 @@ translate_to_protobuf(#proxyio_response{status = Status, proxyio_response = Prox
         status = StatProto,
         proxyio_response = translate_to_protobuf(ProxyIOResponse)
     }};
+translate_to_protobuf(#remote_write{byte_sequence = ByteSequences}) ->
+    #'RemoteWrite'{byte_sequence = [translate_to_protobuf(BS) || BS <- ByteSequences]};
+translate_to_protobuf(#'byte_sequence'{offset = Offset, data = Data}) ->
+    #'ByteSequence'{offset = Offset, data = Data};
 translate_to_protobuf(#remote_data{data = Data}) ->
     {remote_data, #'RemoteData'{data = Data}};
 translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->

@@ -18,7 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% API
--export([write/6, read/6]).
+-export([write/5, read/6]).
 
 %%%===================================================================
 %%% API functions
@@ -32,29 +32,17 @@
 %%--------------------------------------------------------------------
 -spec write(SessId :: session:id(), Parameters :: #{binary() => binary()},
     StorageId :: storage:id(), FileId :: helpers:file(),
-    Offset :: non_neg_integer(), Data :: binary()) ->
+    ByteSequences :: [#byte_sequence{}]) ->
     #proxyio_response{}.
-write(SessionId, Parameters, StorageId, FileId, Offset, Data) ->
+write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
+    {ok, Handle} = get_handle(SessionId, Parameters, StorageId, FileId, write),
+    Wrote =
+        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
+            Acc + write_all(Handle, Offset, Data, 0)
+        end, 0, ByteSequences),
 
-    {Status, Response} =
-        case get_handle(SessionId, Parameters, StorageId, FileId, write) of
-            {ok, Handle} ->
-                case storage_file_manager:write(Handle, Offset, Data) of
-                    {ok, Wrote} ->
-                        {
-                            #status{code = ?OK},
-                            #remote_write_result{wrote = Wrote}
-                        };
-
-                    Error1 ->
-                        {fslogic_errors:gen_status_message(Error1), undefined}
-                end;
-
-            Error2 ->
-                {fslogic_errors:gen_status_message(Error2), undefined}
-        end,
-
-    #proxyio_response{status = Status, proxyio_response = Response}.
+    #proxyio_response{status = #status{code = ?OK},
+                      proxyio_response = #remote_write_result{wrote = Wrote}}.
 
 
 %%--------------------------------------------------------------------
@@ -93,6 +81,7 @@ read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns handle by either retrieving it from session or opening file
 %% @end
@@ -115,3 +104,20 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
         HandleId ->
             {ok, maps:get(HandleId, Handles)}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Writes all of the data to the storage or dies trying.
+%% @end
+%%--------------------------------------------------------------------
+-spec write_all(Handle :: storage_file_manager:handle(),
+                Offset :: non_neg_integer(), Data :: binary(),
+                Wrote :: non_neg_integer()) -> non_neg_integer().
+write_all(Handle, Offset, <<>>, Wrote) -> Wrote;
+write_all(Handle, Offset, Data, Wrote) ->
+    {ok, WroteNow} = storage_file_manager:write(Handle, Offset, Data),
+    write_all(Handle, Offset + WroteNow,
+              binary_part(Data, {byte_size(Data), WroteNow - byte_size(Data)}),
+              Wrote + WroteNow).
