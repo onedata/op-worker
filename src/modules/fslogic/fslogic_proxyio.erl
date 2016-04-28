@@ -35,14 +35,19 @@
     ByteSequences :: [#byte_sequence{}]) ->
     #proxyio_response{}.
 write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
-    {ok, Handle} = get_handle(SessionId, Parameters, StorageId, FileId, write),
-    Wrote =
-        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
-            Acc + write_all(Handle, Offset, Data, 0)
-        end, 0, ByteSequences),
+    try
+        {ok, Handle} = get_handle(SessionId, Parameters, StorageId, FileId, write),
+        Wrote =
+            lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
+                Acc + write_all(Handle, Offset, Data, 0)
+            end, 0, ByteSequences),
 
-    #proxyio_response{status = #status{code = ?OK},
-                      proxyio_response = #remote_write_result{wrote = Wrote}}.
+        #proxyio_response{status = #status{code = ?OK},
+                          proxyio_response = #remote_write_result{wrote = Wrote}}
+    catch
+      _:{badmatch, Error} ->
+          #proxyio_response{status = fslogic_errors:gen_status_message(Error)}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -115,7 +120,7 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
 -spec write_all(Handle :: storage_file_manager:handle(),
                 Offset :: non_neg_integer(), Data :: binary(),
                 Wrote :: non_neg_integer()) -> non_neg_integer().
-write_all(Handle, Offset, <<>>, Wrote) -> Wrote;
+write_all(_Handle, _Offset, <<>>, Wrote) -> Wrote;
 write_all(Handle, Offset, Data, Wrote) ->
     {ok, WroteNow} = storage_file_manager:write(Handle, Offset, Data),
     write_all(Handle, Offset + WroteNow,

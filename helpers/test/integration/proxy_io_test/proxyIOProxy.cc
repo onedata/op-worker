@@ -6,10 +6,8 @@
  * 'LICENSE.txt'
  */
 
-#include "proxyIOHelper.h"
-
 #include "communication/communicator.h"
-#include "proxyio/bufferAgent.h"
+#include "proxyIOHelper.h"
 
 #include <asio/buffer.hpp>
 #include <boost/make_shared.hpp>
@@ -38,11 +36,9 @@ public:
         std::string storageId, std::string host, const unsigned short port)
         : m_communicator{1, host, port, false,
               one::communication::createConnection}
-        , m_scheduler{std::make_shared<one::Scheduler>(1)}
-        , m_bufferAgent{{}, m_communicator, *m_scheduler}
-        , m_helper{{{"storage_id", storageId}}, m_bufferAgent}
+        , m_helper{{{"storage_id", storageId}}, m_communicator}
     {
-        m_communicator.setScheduler(m_scheduler);
+        m_communicator.setScheduler(std::make_shared<one::Scheduler>(1));
         m_communicator.connect();
     }
 
@@ -74,16 +70,8 @@ public:
         return buffer;
     }
 
-    void release(one::helpers::CTXPtr ctx, std::string fileId)
-    {
-        ReleaseGIL guard;
-        m_helper.sh_release(std::move(ctx), fileId);
-    }
-
 private:
     one::communication::Communicator m_communicator;
-    std::shared_ptr<one::Scheduler> m_scheduler;
-    one::helpers::proxyio::BufferAgent m_bufferAgent;
     one::helpers::ProxyIOHelper m_helper;
 };
 
@@ -120,6 +108,5 @@ BOOST_PYTHON_MODULE(proxy_io)
         .def("__init__", make_constructor(create))
         .def("open", raw_function(raw_open))
         .def("read", &ProxyIOProxy::read)
-        .def("write", &ProxyIOProxy::write)
-        .def("release", &ProxyIOProxy::release);
+        .def("write", &ProxyIOProxy::write);
 }

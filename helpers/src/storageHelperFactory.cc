@@ -10,21 +10,38 @@
 
 #include "cephHelper.h"
 #include "directIOHelper.h"
-#include "proxyIOHelper.h"
 #include "s3Helper.h"
+
+#ifdef BUILD_PROXY_IO
+
+#include "proxyIOHelper.h"
+
+#endif
 
 namespace one {
 namespace helpers {
 
+#ifdef BUILD_PROXY_IO
+
 StorageHelperFactory::StorageHelperFactory(asio::io_service &cephService,
     asio::io_service &dioService, asio::io_service &s3Service,
-    std::shared_ptr<proxyio::BufferAgent> bufferAgent)
+    communication::Communicator &communicator)
     : m_cephService{cephService}
     , m_dioService{dioService}
     , m_s3Service{s3Service}
-    , m_bufferAgent{std::move(bufferAgent)}
+    , m_communicator{communicator}
 {
 }
+
+#else
+StorageHelperFactory::StorageHelperFactory(asio::io_service &ceph_service,
+    asio::io_service &dio_service, asio::io_service &s3Service)
+    : m_cephService{ceph_service}
+    , m_dioService{dio_service}
+    , m_s3Service{s3Service}
+{
+}
+#endif
 
 std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(
     const std::string &sh_name,
@@ -43,8 +60,10 @@ std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(
             args, m_dioService, userCTXFactory);
     }
 
+#ifdef BUILD_PROXY_IO
     if (sh_name == PROXY_IO_HELPER_NAME)
-        return std::make_shared<ProxyIOHelper>(args, *m_bufferAgent);
+        return std::make_shared<ProxyIOHelper>(args, m_communicator);
+#endif
 
     if (sh_name == S3_HELPER_NAME)
         return std::make_shared<S3Helper>(args, m_s3Service);
