@@ -1808,7 +1808,7 @@ ensure_begins_with_slash(Path) ->
 
 mock_opening_file_without_perms(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(WorkerP1, onedata_file_api),
+    test_utils:mock_new(Workers, onedata_file_api),
     test_utils:mock_expect(
         Workers, onedata_file_api, open, fun (_, _ ,_) -> {error, ?EACCES} end).
 
