@@ -233,6 +233,10 @@ translate_from_protobuf(#'ProxyIOResponse'{status = Status, proxyio_response = {
         status = translate_from_protobuf(Status),
         proxyio_response = translate_from_protobuf(ProxyIOResponse)
     };
+translate_from_protobuf(#'ProxyIOResponse'{status = Status}) ->
+    #'proxyio_response'{
+        status = translate_from_protobuf(Status)
+    };
 translate_from_protobuf(#'RemoteData'{data = Data}) ->
     #'remote_data'{data = Data};
 translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
@@ -464,7 +468,7 @@ translate_to_protobuf(#proxyio_response{status = Status, proxyio_response = Prox
         proxyio_response = translate_to_protobuf(ProxyIOResponse)
     }};
 translate_to_protobuf(#remote_write{byte_sequence = ByteSequences}) ->
-    #'RemoteWrite'{byte_sequence = [translate_to_protobuf(BS) || BS <- ByteSequences]};
+    {remote_write, #'RemoteWrite'{byte_sequence = [translate_to_protobuf(BS) || BS <- ByteSequences]}};
 translate_to_protobuf(#'byte_sequence'{offset = Offset, data = Data}) ->
     #'ByteSequence'{offset = Offset, data = Data};
 translate_to_protobuf(#remote_data{data = Data}) ->

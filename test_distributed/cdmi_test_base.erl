@@ -1621,7 +1621,7 @@ errors(Config) ->
 
     mock_opening_file_without_perms(Config),
     {ok, Code8, _Headers8, _Response8} =
-        do_request(Workers, File8, get, RequestHeaders8),
+        do_request(WorkerP1, File8, get, RequestHeaders8),
     unmock_opening_file_without_perms(Config),
     ?assertEqual(403, Code8),
     %%------------------------------
@@ -1810,8 +1810,8 @@ mock_opening_file_without_perms(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(WorkerP1, onedata_file_api),
     test_utils:mock_expect(
-        WorkerP1, onedata_file_api, open, fun (_, _ ,_) -> {error, ?EACCES} end).
+        Workers, onedata_file_api, open, fun (_, _ ,_) -> {error, ?EACCES} end).
 
 unmock_opening_file_without_perms(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(WorkerP1, onedata_file_api).
+    test_utils:mock_unload(Workers, onedata_file_api).

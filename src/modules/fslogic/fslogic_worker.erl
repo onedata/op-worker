@@ -141,9 +141,9 @@ handle({fuse_request, SessId, FuseRequest}) ->
     ?info("fuse_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?debug("proxyio_request: ~p", [ProxyIORequest]),
+    ?info("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
     Response = run_and_catch_exceptions(fun handle_proxyio_request/2, fslogic_context:new(SessId), ProxyIORequest, proxyio_request),
-    ?debug("proxyio_response: ~p", [Response]),
+    ?info("proxyio_response: ~p", [Response]),
     Response;
 handle(_Request) ->
     ?log_bad_request(_Request),
@@ -406,7 +406,7 @@ handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
         fslogic_times:update_atime({uuid, FileUUID}, UserId)
     end, Evts).
 
-handle_proxyio_request(SessionId, #proxyio_request{
+handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
     FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
