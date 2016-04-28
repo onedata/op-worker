@@ -1536,7 +1536,7 @@ errors(Config) ->
 
     %%---- unauthorized access -----
     {ok, Code1, _Headers1, _Response1} =
-        do_request(Workers, TestDirName, get, [], []),
+        do_request(WorkerP2, TestDirName, get, [], []),
     ?assertEqual(401, Code1),
     %%------------------------------
 
