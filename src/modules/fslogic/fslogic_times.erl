@@ -17,7 +17,7 @@
 
 %% API
 -export([calculate_atime/1, update_atime/2, update_ctime/2,
-    update_mtime_ctime/2]).
+    update_mtime_ctime/2, update_times_and_emit/3]).
 
 %%%===================================================================
 %%% API
@@ -78,11 +78,6 @@ update_ctime(Entry, UserId) ->
 update_mtime_ctime(Entry, UserId) ->
     CurrentTime = erlang:system_time(seconds),
     ok = update_times_and_emit(Entry, #{mtime => CurrentTime, ctime => CurrentTime}, UserId).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc Updates entry with given map and emits times update event

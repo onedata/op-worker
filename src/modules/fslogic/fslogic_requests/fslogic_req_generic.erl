@@ -43,12 +43,10 @@
 -spec update_times(fslogic_worker:ctx(), File :: fslogic_worker:file(),
                    ATime :: file_meta:time(), MTime :: file_meta:time(), CTime :: file_meta:time()) -> #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) ->
+update_times(CTX, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:filter(fun(_Key, Value) -> is_integer(Value) end, UpdateMap),
-    {ok, _} = file_meta:update(FileEntry, UpdateMap1),
-
-    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, [SessId]) end),
+    fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, fslogic_context:get_user_id(CTX)),
 
     #fuse_response{status = #status{code = ?OK}}.
 
