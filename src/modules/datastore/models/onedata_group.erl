@@ -95,7 +95,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_group_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    % TODO migrate to GLOBALLY_CACHED_LEVEL
+    ?MODEL_CONFIG(onedata_group_bucket, [], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -138,13 +139,22 @@ create_or_update(Doc, Diff) ->
 %% Fetch group from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}, GroupId) ->
+-spec fetch(Client :: oz_endpoint:client(), GroupId :: id()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(Client, GroupId) ->
     try
         {ok, #group_details{id = Id, name = Name}} =
-            oz_groups:get_details({user, {Macaroon, DMacaroons}}, GroupId),
+            oz_groups:get_details(Client, GroupId),
+        {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
+        {ok, UserIds} = oz_groups:get_users(Client, Id),
+        UsersWithPrivileges = utils:pmap(fun(UID) ->
+            {ok, Privileges} = oz_groups:get_user_privileges(Client, Id, UID),
+            {UID, Privileges}
+        end, UserIds),
+
         %todo consider getting user_details for each group member and storing it as onedata_user
-        OnedataGroupDoc = #document{key = Id, value = #onedata_group{name = Name}},
+        OnedataGroupDoc = #document{key = Id, value = #onedata_group{
+            users = UsersWithPrivileges, spaces = SpaceIds, name = Name}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
         {ok, OnedataGroupDoc}
     catch
@@ -157,11 +167,11 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}, GroupId) ->
 %% Get group from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(datastore:key(), #auth{}) ->
+-spec get_or_fetch(Client :: oz_endpoint:client(), GroupId :: onedata_group:id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Key, Token) ->
-    case onedata_group:get(Key) of
+get_or_fetch(Client, GroupId) ->
+    case onedata_group:get(GroupId) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Token, Key);
+        {error, {not_found, _}} -> fetch(Client, GroupId);
         Error -> Error
     end.

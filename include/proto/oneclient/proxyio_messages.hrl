@@ -14,10 +14,15 @@
 -define(PROXYIO_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
--record(remote_write, {
+-record(byte_sequence, {
     offset :: non_neg_integer(),
     data :: binary()
+}).
+
+-record(remote_write, {
+    byte_sequence :: [#byte_sequence{}]
 }).
 
 -record(remote_read, {
@@ -37,7 +42,7 @@
 -type proxyio_response() :: #remote_data{} | #remote_write_result{}.
 
 -record(proxyio_request, {
-    file_uuid :: file_meta:uuid(),
+    parameters = #{} :: #{binary() => binary()},
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     proxyio_request :: proxyio_request()

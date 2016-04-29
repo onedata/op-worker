@@ -38,20 +38,15 @@ mkdir(SessId, Path) ->
     Mode :: file_meta:posix_permissions()) ->
     {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(SessId, Path, Mode) ->
-    CTX = fslogic_context:new(SessId),
-    {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalPath} = file_meta:gen_path(Entry),
-    {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
-    case file_meta:resolve_path(ParentPath) of
-        {ok, {#document{key = ParentUUID}, _}} ->
+    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, ParentPath}}, fun
+        (#file_attr{uuid = ParentGUID}) ->
             lfm_utils:call_fslogic(SessId,
-                #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode},
+                #create_dir{parent_uuid = ParentGUID, name = Name, mode = Mode},
                 fun(#dir{uuid = DirUUID}) ->
                     {ok, DirUUID}
-                end);
-        {error, Error} -> {error, Error}
-    end.
+                end)
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -61,14 +56,14 @@ mkdir(SessId, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec ls(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{file_meta:uuid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId,
-        #get_file_children{uuid = UUID, offset = Offset, size = Limit},
+        #get_file_children{uuid = FileGUID, offset = Offset, size = Limit},
         fun({file_children, List}) ->
             {ok, [{UUID_, FileName} || {_, UUID_, FileName} <- List]}
         end).
@@ -80,12 +75,12 @@ ls(SessId, FileKey, Offset, Limit) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(session:id(), FileKey :: file_meta:uuid_or_path())
+-spec get_children_count(session:id(), FileKey :: fslogic_worker:file_guid_or_path())
         -> {ok, integer()} | logical_file_manager:error_reply().
 get_children_count(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
-    case count_children(SessId, UUID, 0) of
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    case count_children(SessId, FileGUID, 0) of
         {error, Err} -> {error, Err};
         ChildrenNum -> {ok, ChildrenNum}
     end.
@@ -99,14 +94,14 @@ get_children_count(SessId, FileKey) ->
 %% as possible
 %% @end
 %%--------------------------------------------------------------------
--spec count_children(SessId :: session:id(), UUID :: file_meta:uuid(),
+-spec count_children(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid(),
     Acc :: non_neg_integer()) ->
     non_neg_integer() | logical_file_manager:error_reply().
-count_children(SessId, UUID, Acc) ->
+count_children(SessId, FileGUID, Acc) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    case ls(SessId, {uuid, UUID}, Acc, Chunk) of
+    case ls(SessId, {guid, FileGUID}, Acc, Chunk) of
         {ok, List} -> case length(List) of
-                          Chunk -> count_children(SessId, UUID, Acc + Chunk);
+                          Chunk -> count_children(SessId, FileGUID, Acc + Chunk);
                           N -> Acc + N
                       end;
         {error, Err} -> {error, Err}

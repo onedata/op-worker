@@ -37,6 +37,10 @@
                   "type": "s3",
                   "name": "s3",
                   "bucket": "onedata"
+                },
+                {
+                  "type": "nfs",
+                  "name": "/mnt/nfs"
                 }
             ],
             "users": [
@@ -95,7 +99,7 @@
                             "db_nodes": [
                                 "dbnode1"
                             ],
-                            "zone_domain": "oz1",
+                            "oz_domain": "oz1",
                             "verify_oz_cert": false
                         }
                     },
@@ -151,7 +155,7 @@
         }
     },
     "oneclient": {
-        "client_host_1": {
+        "client-host1": {
             "os_config": "cfg1",
             "clients": {
                 "client1": {
@@ -174,7 +178,7 @@
                 }
             }
         },
-        "client_host_2": {
+        "client-host2": {
             "os_config": "cfg1",
             "clients": {
                 "client1": {
@@ -218,7 +222,6 @@
         "spaces": {
             "s1": {
                 "displayed_name": "s1",
-                "storage": "ceph",
                 "users": [
                     "u1",
                     "u2"
@@ -226,16 +229,15 @@
                 "groups": [
                     "g1"
                 ],
-                "providers": [
-                    {
-                        "provider": "p1",
+                "providers": {
+                    "p1": {
+                        "storage": "ceph",
                         "supported_size": 1000000000
                     }
-                ]
+                }
             },
             "s2": {
                 "displayed_name": "s2",
-                "storage": "s3",
                 "users": [
                     "u1",
                     "u2"
@@ -243,16 +245,15 @@
                 "groups": [
                     "g1"
                 ],
-                "providers": [
-                    {
-                        "provider": "p1",
+                "providers": {
+                    "p1": {
+                        "storage": "s3",
                         "supported_size": 1000000000
                     }
-                ]
+                }
             },
             "s3": {
                 "displayed_name": "s3",
-                "storage": "/mnt/st1",
                 "users": [
                     "u1",
                     "u2"
@@ -260,12 +261,28 @@
                 "groups": [
                     "g1"
                 ],
-                "providers": [
-                    {
-                        "provider": "p1",
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
                         "supported_size": 1000000000
                     }
-                ]
+                }
+            },
+            "s4": {
+                "displayed_name": "s3",
+                "users": [
+                    "u1",
+                    "u2"
+                ],
+                "groups": [
+                    "g1"
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/nfs",
+                        "supported_size": 1000000000
+                    }
+                }
             }
         }
     }

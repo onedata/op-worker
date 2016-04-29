@@ -17,8 +17,10 @@
 
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -44,10 +46,10 @@
     transport :: module(),
     session_id :: session:id(),
     connection_type :: incoming | outgoing,
-    response_map = #{}
+    peer_type = fuse_client :: fuse_client | provider
 }).
 
--define(TIMEOUT, timer:minutes(1)).
+-define(TIMEOUT, timer:minutes(10)).
 -define(PACKET_VALUE, 4).
 
 %%%===================================================================
@@ -81,6 +83,11 @@ init(Ref, Socket, Transport, _Opts) ->
     {Ok, Closed, Error} = Transport:messages(),
     Certificate = get_cert(Socket),
 
+    PeerType = case provider_auth_manager:is_provider(Certificate) of
+        true -> provider;
+        false -> fuse_client
+    end,
+
     gen_server:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
@@ -88,7 +95,8 @@ init(Ref, Socket, Transport, _Opts) ->
         closed = Closed,
         error = Error,
         certificate = Certificate,
-        connection_type = incoming
+        connection_type = incoming,
+        peer_type = PeerType
     }, ?TIMEOUT).
 
 
@@ -101,7 +109,7 @@ init(Ref, Socket, Transport, _Opts) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [{certfile, oz_plugin:get_cert_path()}, {keyfile, oz_plugin:get_key_path()}],
-    ?info("Connecting to ~p ~p", [Hostname, Port]),
+    ?info("Connecting to ~p ~p ~p", [Hostname, Port, TLSSettings]),
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
@@ -119,7 +127,8 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
         closed = Closed,
         error = Error,
         certificate = Certificate,
-        connection_type = outgoing
+        connection_type = outgoing,
+        peer_type = provider
     }, ?TIMEOUT).
 
 %%--------------------------------------------------------------------
@@ -189,17 +198,21 @@ init([]) -> {ok, undefined}.
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection_type = incoming,
+handle_call({send, #server_message{} = ServerMsg}, _From, State = #state{socket = Socket, connection_type = incoming,
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {reply, ok, State};
-handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId}}},
-    _From, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) when is_pid(Pid) ->
+handle_call({send, #server_message{} = ServerMsg}, _From, State = #state{socket = Socket, connection_type = outgoing,
+    transport = Transport}) ->
+    send_client_message(Socket, Transport, to_client_message(ServerMsg)),
+    {reply, ok, State};
+handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId} = MID}},
+    _From, State = #state{socket = Socket, transport = Transport}) when is_pid(Pid) ->
+    {ok, _} = message_id:save(#document{key = MessageId, value = MID}),
     send_client_message(Socket, Transport, ClientMsg),
-    NewState = State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)},
-    {reply, ok, NewState};
+    {reply, ok, State};
 handle_call({send, ClientMsg = #client_message{}},
-    _From, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) ->
+    _From, State = #state{socket = Socket, transport = Transport}) ->
     send_client_message(Socket, Transport, ClientMsg),
     {reply, ok, State};
 
@@ -220,6 +233,10 @@ handle_call(_Request, _From, State) ->
 handle_cast({send, ServerMsg}, State = #state{socket = Socket, connection_type = incoming,
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
+    {noreply, State};
+handle_cast({send, ServerMsg}, State = #state{socket = Socket, connection_type = outgoing,
+    transport = Transport}) ->
+    send_client_message(Socket, Transport, to_client_message(ServerMsg)),
     {noreply, State};
 handle_cast({send, ClientMsg}, State = #state{socket = Socket, connection_type = outgoing,
     transport = Transport}) ->
@@ -338,7 +355,7 @@ handle_client_message(State = #state{session_id = SessId, certificate = Cert}, D
 -spec handle_server_message(#state{}, binary()) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_server_message(State = #state{session_id = SessId, certificate = Cert}, Data) ->
+handle_server_message(State = #state{session_id = SessId, certificate = _Cert}, Data) ->
     try serializator:deserialize_server_message(Data, SessId) of
         {ok, Msg} ->
             handle_normal_message(State, Msg)
@@ -374,24 +391,45 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handle nomal client_message
+%% Handle nomal incoming message.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_normal_message(#state{}, #client_message{} | #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
+handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, socket = Sock,
     transport = Transp}, Msg1) ->
-    {State, Msg} = update_message_id(State0, Msg1),
-    case router:preroute_message(Msg, SessId) of
-        ok ->
+    IsProvider = provider_auth_manager:is_provider(Cert),
+    {State, Msg0} = update_message_id(State0, Msg1),
+
+    {Msg, EffectiveSessionId} =
+        case {IsProvider, Msg0} of
+            %% If message comes from provider and proxy session is requested - proceed
+            %% with authorization and switch context to the proxy session.
+            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth = #auth{}}} when ProxySessionId =/= undefined ->
+                ProviderId = provider_auth_manager:get_provider_id(Cert),
+                {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
+                {Msg0#client_message{session_id = ProxySessionId}, ProxySessionId};
+            _ ->
+                {Msg0, SessId}
+        end,
+
+    case Msg of
+        %% Remote proxy session has received message which is now to be routed as proxy message.
+        #client_message{proxy_session_id = TargetSessionId} = Msg when TargetSessionId =/= EffectiveSessionId, is_binary(TargetSessionId) ->
+            router:route_proxy_message(Msg, TargetSessionId),
             {noreply, State, ?TIMEOUT};
-        {ok, ServerMsg} ->
-            send_server_message(Sock, Transp, ServerMsg),
-            {noreply, State, ?TIMEOUT};
-        {error, Reason} ->
-            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-            {stop, {error, Reason}, State}
+        _ -> %% Non-proxy case
+            case router:preroute_message(Msg, EffectiveSessionId) of
+                ok ->
+                    {noreply, State, ?TIMEOUT};
+                {ok, ServerMsg} ->
+                    send_server_message(Sock, Transp, ServerMsg),
+                    {noreply, State, ?TIMEOUT};
+                {error, Reason} ->
+                    ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+                    {stop, {error, Reason}, State}
+            end
     end.
 
 
@@ -402,12 +440,20 @@ handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
 %% @end
 %%--------------------------------------------------------------------
 -spec update_message_id(#state{}, #server_message{} | #client_message{}) ->
-    {NewState :: #state{}, NewMsg :: #server_message{}}.
-update_message_id(State = #state{connection_type = outgoing, response_map = RMap},
+    {NewState :: #state{}, NewMsg :: #server_message{} | #client_message{}}.
+update_message_id(State = #state{connection_type = outgoing},
     Msg = #server_message{message_id = #message_id{id = ID} = MID}) ->
-    NewMsg = Msg#server_message{message_id = MID#message_id{recipient = maps:get(ID, RMap, undefined)}},
-    NewState = State#state{response_map = maps:remove(ID, RMap)},
-    {NewState, NewMsg};
+
+    NewMID = case message_id:get(ID) of
+        {ok, #document{value = NewMID0}} ->
+            message_id:delete(ID),
+            NewMID0;
+        _ ->
+            MID
+    end,
+
+    NewMsg = Msg#server_message{message_id = NewMID},
+    {State, NewMsg};
 update_message_id(State, Msg) ->
     {State, Msg}.
 
@@ -430,7 +476,7 @@ activate_socket_once(Socket, Transport) ->
 %%--------------------------------------------------------------------
 -spec send_server_message(Socket :: ssl2:socket(), Transport :: module(),
     ServerMessage :: #server_message{}) -> ok.
-send_server_message(Socket, Transport, ServerMsg) ->
+send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     {ok, Data} = serializator:serialize_server_message(ServerMsg),
     ok = Transport:send(Socket, Data).
 
@@ -443,7 +489,7 @@ send_server_message(Socket, Transport, ServerMsg) ->
 %%--------------------------------------------------------------------
 -spec send_client_message(Socket :: ssl2:socket(), Transport :: module(),
     ServerMessage :: #client_message{}) -> ok.
-send_client_message(Socket, Transport, ClientMsg) ->
+send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
     {ok, Data} = serializator:serialize_client_message(ClientMsg),
     ok = Transport:send(Socket, Data).
 
@@ -461,3 +507,13 @@ get_cert(Socket) ->
         {error, _} -> undefined;
         {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given server_message to client_message if possible.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_client_message(Msg :: #server_message{}) ->
+    #client_message{}.
+to_client_message(#server_message{message_body = Body, message_id = Id, message_stream = Stream, proxy_session_id = SessId}) ->
+    #client_message{message_body = Body, message_id = Id, message_stream = Stream, proxy_session_id = SessId}.

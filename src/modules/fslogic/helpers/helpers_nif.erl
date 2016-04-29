@@ -290,7 +290,7 @@ fsync(_HelperInstance, _HelperCTX, _File, _IsDataSync) ->
 %% in application priv dir, and then under ../priv and ./priv .
 %% @end
 %%--------------------------------------------------------------------
--spec init() -> ok | {error, Reason :: atom()}.
+-spec init() -> ok | {error, Reason :: term()}.
 init() ->
     LibName = "helpers_nif",
     LibPath =
@@ -311,7 +311,7 @@ init() ->
         ok ->
             set_threads_number(),
             ok;
-        {error, {reload, "Reload not supported by this NIF library."}} ->
+        {error, {reload, _}} ->
             set_threads_number(),
             ok;
         {error, Reason} ->

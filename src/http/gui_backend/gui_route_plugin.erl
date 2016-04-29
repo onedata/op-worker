@@ -18,6 +18,9 @@
 -author("Lukasz Opiola").
 -behaviour(gui_route_plugin_behaviour).
 
+
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include_lib("gui/include/gui.hrl").
 
 -export([route/1, data_backend/2, private_rpc_backend/0, public_rpc_backend/0]).
@@ -78,7 +81,14 @@ route(<<"/index.html">>) -> ?INDEX.
 -spec data_backend(HasSession :: boolean(), Identifier :: binary()) ->
     HandlerModule :: module().
 data_backend(true, <<"file">>) -> file_data_backend;
-data_backend(true, <<"data-space">>) -> data_space_data_backend.
+data_backend(true, <<"file-distribution">>) -> file_data_backend;
+data_backend(true, <<"provider">>) -> provider_data_backend;
+data_backend(true, <<"data-space">>) -> data_space_data_backend;
+data_backend(true, <<"space">>) -> space_data_backend;
+data_backend(true, <<"space-user">>) -> space_data_backend;
+data_backend(true, <<"space-user-permission">>) -> space_data_backend;
+data_backend(true, <<"space-group">>) -> space_data_backend;
+data_backend(true, <<"space-group-permission">>) -> space_data_backend.
 
 
 %%--------------------------------------------------------------------
@@ -107,8 +117,12 @@ public_rpc_backend() -> public_rpc_backend.
 -spec session_details() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 session_details() ->
+    {ok, #document{
+        value = #onedata_user{
+            name = Name
+        }}} = onedata_user:get(g_session:get_user_id()),
     Res = [
-        {<<"userName">>, op_gui_utils:get_user_id()},
+        {<<"userName">>, Name},
         {<<"manageProvidersURL">>,
             str_utils:to_binary(oneprovider:get_oz_providers_page())}
     ],

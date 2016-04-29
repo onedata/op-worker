@@ -11,6 +11,7 @@
 -module(fslogic_utils).
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -19,11 +20,36 @@
 %% API
 -export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
+-export([session_to_rest_client/1]).
 -export([wait_for_links/2, wait_for_file_meta/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns most suitable rest client for onezone request for given session.
+%% @end
+%%--------------------------------------------------------------------
+-spec session_to_rest_client(session:id()) -> oz_endpoint:client().
+session_to_rest_client(?ROOT_SESS_ID) ->
+    provider;
+session_to_rest_client(SessId) ->
+    {ok, #document{value = #session{auth = Auth, type = Type}}} = session:get(SessId),
+    case Type of
+        provider_outgoing -> provider;
+        provider -> provider;
+        _ ->
+            case Auth of
+                #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc} ->
+                    {try_user, {Macaroon, MacaroonDsc}};
+                _ ->
+                    provider
+            end
+    end.
+
+
 
 %%--------------------------------------------------------------------
 %% @doc Create random sequence consisting of lowercase ASCII letters.
@@ -50,20 +76,22 @@ get_parent(File) ->
 -spec gen_storage_file_id(Entry :: fslogic_worker:file()) ->
     helpers:file() | no_return().
 gen_storage_file_id(Entry) ->
-    {ok, Path} = file_meta:gen_storage_path(Entry),
+    {ok, Path} = fslogic_path:gen_storage_path(Entry),
     {ok, #document{value = #file_meta{version = Version}}} = file_meta:get(Entry),
     file_meta:snapshot_name(Path, Version).
 
 
--spec get_local_file_location(fslogic_worker:file()) ->
+-spec get_local_file_location(fslogic_worker:ext_file()) ->
     datastore:document() | no_return().
 get_local_file_location(Entry) -> %todo get rid of single file location and use get_local_file_locations/1
     [LocalLocation] = get_local_file_locations(Entry),
     LocalLocation.
 
 
--spec get_local_file_locations(fslogic_worker:file()) ->
+-spec get_local_file_locations(fslogic_worker:ext_file()) ->
     [datastore:document()] | no_return().
+get_local_file_locations({guid, FileGUID}) ->
+    get_local_file_locations({uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 get_local_file_locations(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),

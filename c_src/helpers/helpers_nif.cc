@@ -1,23 +1,23 @@
+#include "../nifpp.h"
 #include "helpers/storageHelperFactory.h"
 
-#include <asio/executor_work.hpp>
 #include <asio.hpp>
+#include <asio/executor_work.hpp>
 
-#include <string>
-#include <memory>
-#include <vector>
-#include <random>
-#include <tuple>
 #include <map>
+#include <memory>
+#include <random>
 #include <sstream>
+#include <string>
 #include <system_error>
+#include <tuple>
 #include <unordered_map>
-#include "nifpp.h"
+#include <vector>
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <pwd.h>
 #include <grp.h>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 namespace {
 /**
@@ -524,7 +524,8 @@ ERL_NIF_TERM set_user_ctx(ErlNifEnv *env, helper_ctx_ptr ctx,
 
 ERL_NIF_TERM new_helper_ctx(ErlNifEnv *env, helper_ptr helperObj)
 {
-    auto ctx = helperObj->createCTX();
+    auto parameters = std::unordered_map<std::string, std::string>({});
+    auto ctx = helperObj->createCTX(std::move(parameters));
     auto ctx_resource = nifpp::construct_resource<helper_ctx_ptr>(ctx);
     return nifpp::make(env, std::make_tuple(ok, ctx_resource));
 }
@@ -649,7 +650,7 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
 {
     auto buf = std::make_shared<std::vector<char>>(size);
     ctx.helperObj->ash_read(ctx.helperCTX, file,
-        asio::mutable_buffer(buf->data(), size), offset, "",
+        asio::mutable_buffer(buf->data(), size), offset,
         [ctx, buf](asio::mutable_buffer mbuf, error_t e) {
             handle_result(ctx, e, mbuf);
         });
@@ -662,7 +663,7 @@ ERL_NIF_TERM write(
 {
     auto sData = std::make_shared<std::string>(std::move(data));
     ctx.helperObj->ash_write(ctx.helperCTX, file,
-        asio::const_buffer(sData->data(), sData->size()), offset, "",
+        asio::const_buffer(sData->data(), sData->size()), offset,
         [ctx, file, offset, sData](int size, error_t e) {
             handle_result(ctx, e, size);
         });

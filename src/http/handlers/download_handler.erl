@@ -19,7 +19,7 @@
 
 % Default buffer size used to send file to a client. It is used if env variable
 % gui_download_buffer cannot be found.
--define(DEFAULT_DOWNLOAD_BUFFER_SIZE, 4194304). % 1MB
+-define(DEFAULT_DOWNLOAD_BUFFER_SIZE, 4194304). % 4MB
 
 %% Cowboy API
 -export([init/3, handle/2, terminate/3]).
@@ -68,6 +68,7 @@ terminate(_Reason, _Req, _State) ->
 %% ====================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Asserts the validity of multipart POST request and proceeds with
 %% parsing or returns an error. Returns list of parsed filed values and
@@ -93,9 +94,9 @@ handle_http_download(Req, FileId) ->
             try
                 SessionId = g_session:get_session_id(),
                 {ok, FileHandle} = logical_file_manager:open(
-                    SessionId, {uuid, FileId}, read),
+                    SessionId, {guid, FileId}, read),
                 {ok, #file_attr{size = Size, name = FileName}} =
-                    logical_file_manager:stat(SessionId, {uuid, FileId}),
+                    logical_file_manager:stat(SessionId, {guid, FileId}),
                 StreamFun = cowboy_file_stream_fun(FileHandle, Size),
                 Headers = attachment_headers(FileName),
                 % Reply with attachment headers and a streaming function
@@ -111,6 +112,7 @@ handle_http_download(Req, FileId) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns a cowboy-compliant streaming function, that will be evaluated
 %% by cowboy to send data (file content) to receiving socket.
@@ -127,13 +129,14 @@ cowboy_file_stream_fun(FileHandle, Size) ->
             % Any exceptions that occur during file streaming must be caught
             % here for cowboy to close the connection cleanly.
             ?error_stacktrace("Error while streaming file '~p' - ~p:~p",
-                [FileHandle#lfm_handle.file_uuid, T, M]),
+                [FileHandle#lfm_handle.file_guid, T, M]),
             ok
         end
     end.
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Function that will be evaluated by cowboy to stream a file to client.
 %% NOTE! Filename must be a unicode string (not utf8)
@@ -146,6 +149,7 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Function that will be evaluated by cowboy to stream a file to client.
 %% NOTE! Filename must be a unicode string (not utf8)
@@ -156,7 +160,7 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
     Sent :: integer(), BufSize :: integer()) -> ok.
 stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
     {ok, NewHandle, BytesRead} = logical_file_manager:read(
-        FileHandle, BytesSent, BufSize),
+        FileHandle, BytesSent, min(Size - BytesSent, BufSize)),
     ok = Transport:send(Socket, BytesRead),
     NewSent = BytesSent + size(BytesRead),
     case NewSent >= Size of
@@ -168,6 +172,7 @@ stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns buffer size for file downloads, as specified in config,
 %% or a default value if not found in config.
@@ -175,12 +180,12 @@ stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
 %%--------------------------------------------------------------------
 -spec get_download_buffer_size() -> integer().
 get_download_buffer_size() ->
-    {ok, Value} = application:get_env(
-        ?APP_NAME, gui_download_buffer, ?DEFAULT_DOWNLOAD_BUFFER_SIZE),
-    Value.
+    application:get_env(
+        ?APP_NAME, gui_download_buffer, ?DEFAULT_DOWNLOAD_BUFFER_SIZE).
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc Returns attachment headers that will cause web browser to
 %% interpret received data as attachment (and save it to disk).
 %% Proper filename is set, both in utf8 encoding and legacy for older browsers,

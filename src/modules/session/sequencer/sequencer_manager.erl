@@ -175,8 +175,8 @@ handle_cast(#client_message{} = Msg, State) ->
     gen_fsm:send_event(SeqStm, Msg),
     {noreply, NewState};
 
-handle_cast(#server_message{} = Msg, State) ->
-    case get_sequencer_out_stream(Msg, State) of
+handle_cast(#server_message{} = Msg, #state{session_id = SessionId} = State) ->
+    case get_sequencer_out_stream(Msg#server_message{proxy_session_id = SessionId}, State) of
         {ok, SeqStm} -> gen_server:cast(SeqStm, Msg);
         {error, not_found} -> ok
     end,
