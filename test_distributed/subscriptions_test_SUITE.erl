@@ -662,7 +662,7 @@ end_per_testcase(_, Config) ->
     test_utils:mock_unload(Nodes, subscription_wss),
 
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Nodes, [communicator]),
 
     ok.

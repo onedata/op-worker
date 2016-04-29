@@ -476,7 +476,8 @@ translate_to_protobuf(#remote_data{data = Data}) ->
 translate_to_protobuf(#get_xattr{uuid = Uuid, name = Name}) ->
     {get_xattr, #'GetXattr'{uuid = Uuid, name = Name}};
 translate_to_protobuf(#set_xattr{uuid = Uuid, xattr = Xattr}) ->
-    {set_xattr, #'SetXattr'{uuid = Uuid, xattr = translate_to_protobuf(Xattr)}};
+    {_, XattrT} = translate_to_protobuf(Xattr),
+    {set_xattr, #'SetXattr'{uuid = Uuid, xattr = XattrT}};
 translate_to_protobuf(#remove_xattr{uuid = Uuid, name = Name}) ->
     {remove_xattr, #'RemoveXattr'{uuid = Uuid, name = Name}};
 translate_to_protobuf(#list_xattr{uuid = Uuid}) ->
