@@ -98,7 +98,7 @@ mkdir(SessId, Path) ->
 
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_meta:uuid()} | error_reply().
+    {ok, DirGUID :: fslogic_worker:file_guid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     ?run(fun() -> lfm_dirs:mkdir(SessId, Path, Mode) end).
 

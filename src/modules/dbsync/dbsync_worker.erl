@@ -27,7 +27,7 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, 1000).
+-define(FLUSH_QUEUE_INTERVAL, timer:seconds(2)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
 
 -type queue_id() :: binary().
@@ -45,6 +45,9 @@
     batch_map = #{} :: #{},
     removed = false :: boolean()
 }).
+
+%% Defines maximum size of changes buffer per space in bytes.
+-define(CHANGES_STASH_MAX_SIZE_BYTES, 10 * 1024 * 1024).
 
 
 %%%===================================================================
@@ -294,7 +297,8 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
         catch consume_batches(FromProvider, SpaceId),
-    do_apply_batch_changes(FromProvider, SpaceId, Batch, true).
+    NewChanges = lists:sort(lists:flatten(Changes)),
+    do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -312,7 +316,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
             stash_batch(FromProvider, SpaceId, Batch),
             case ShouldRequest of
                 true ->
-                    do_request_changes(FromProvider, CurrentUntil, Since);
+                    request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
                 false ->
                     ok
             end;
@@ -598,14 +602,42 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Request changes for specific provider.
+%% Request changes for specific provider with specific range.
 %% @end
 %%--------------------------------------------------------------------
 -spec do_request_changes(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 do_request_changes(ProviderId, Since, Until) ->
-    dbsync_proto:changes_request(ProviderId, Since, Until).
+    Now = erlang:system_time(seconds),
+    MaxWaitTime = timer:seconds(5) + 10 * (Until - Since), %% Wait for 5sec + 10ms per one document
+    case state_get({do_request_changes, ProviderId, Until}) of
+        undefined ->
+            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            dbsync_proto:changes_request(ProviderId, Since, Until);
+        OldTime when OldTime + MaxWaitTime < Now ->
+            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            dbsync_proto:changes_request(ProviderId, Since, Until);
+        _ ->
+            ok
+    end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requests changes since given sequence up to fist found cached (stashed) change or up to given 'Until' if
+%% there is no stashed changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_missing_changes(oneprovider:id(), SpaceId :: binary(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
+request_missing_changes(ProviderId, SpaceId, Since, Until) ->
+    case state_get({stash, ProviderId, SpaceId}) of
+        undefined ->
+            do_request_changes(ProviderId, Since, Until);
+        Batches ->
+            [#batch{since = FirstSince} | _] = lists:sort(Batches),
+            do_request_changes(ProviderId, Since, FirstSince)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -614,16 +646,22 @@ do_request_changes(ProviderId, Since, Until) ->
 %%--------------------------------------------------------------------
 -spec stash_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch()) ->
     ok | no_return().
-stash_batch(ProviderId, SpaceId, Batch) ->
+stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUntil, changes = NewChanges}) ->
     state_update({stash, ProviderId, SpaceId},
         fun
             (undefined) ->
                 [Batch];
             (Batches) ->
-                case size(term_to_binary(Batches)) > 20 * 1024 of
+                case size(term_to_binary(Batches)) > ?CHANGES_STASH_MAX_SIZE_BYTES of
                     true -> Batches;
                     false ->
-                        [Batch | Batches]
+                        [#batch{until = Until, since = Since, changes = Changes} | Tail] = Batches,
+                        case NewSince > Until + 1 orelse NewSince < Since of
+                            true ->
+                                [Batch | Batches];
+                            false ->
+                                [#batch{since = Since, until = NewUntil, changes = [Changes, NewChanges]} | Tail]
+                        end
                 end
         end).
 

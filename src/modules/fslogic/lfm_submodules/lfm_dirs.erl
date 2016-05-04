@@ -36,7 +36,7 @@ mkdir(SessId, Path) ->
 
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
+    {ok, DirGUID :: fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mkdir(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, ParentPath}}, fun
