@@ -241,6 +241,7 @@ stream_file(Req, FileHandle, Offset) ->
     case cowboy_req:part_body(Req) of
         {ok, Body, Req2} ->
             {ok, _, _} = logical_file_manager:write(FileHandle, Offset, Body),
+            logical_file_manager:release(FileHandle),
             % @todo VFS-1815 register_chunk?
             % or send a message from client that uuid has finished?
             Req2;

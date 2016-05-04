@@ -28,7 +28,7 @@
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
     read/3, read_without_events/3, truncate/2, truncate/3, get_block_map/1,
-    get_block_map/2, unlink/1, unlink/2]).
+    get_block_map/2, unlink/1, unlink/2, release/1]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -183,6 +183,20 @@ open(SessId, FileKey, OpenType) ->
                 {error, Reason} ->
                     {error, Reason}
             end
+        end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Releases previously opened  file.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(handle()) ->
+    ok | error_reply().
+release(#lfm_handle{fslogic_ctx = CTX, file_location = #file_location{handle_id = FSLogicHandle}}) ->
+    lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX), #release{handle_id = FSLogicHandle},
+        fun(_) ->
+            ok
         end).
 
 %%--------------------------------------------------------------------
