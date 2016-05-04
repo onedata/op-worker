@@ -44,7 +44,7 @@ create_ceph_user(_UserId, _MonHost, _ClusterName, _PoolName, _CephAdmin, _CephAd
 %% in application priv dir, and then under ../priv and ./priv .
 %% @end
 %%--------------------------------------------------------------------
--spec init() -> ok | {error, Reason :: atom()}.
+-spec init() -> ok | {error, Reason :: term()}.
 init() ->
     LibName = "luma_nif",
     LibPath =
@@ -61,4 +61,8 @@ init() ->
                 filename:join(Dir, LibName)
         end,
 
-    erlang:load_nif(LibPath, 0).
+    case erlang:load_nif(LibPath, 0) of
+        ok -> ok;
+        {error, {reload, _}} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.

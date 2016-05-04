@@ -39,8 +39,7 @@
 send_batch(_, _, #batch{since = X, until = X}) ->
     skip;
 send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?debug("[ DBSync ] Sending batch to all providers: ~p", [Batch]),
-    ?debug("Processing space ~p ~p", [SpaceId, Changes]),
+    ?debug("[ DBSync ] Sending batch from space ~p to all providers: ~p", [SpaceId, Batch]),
     ToSend = #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
         changes_encoded = dbsync_utils:encode_term(Changes)},
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
@@ -74,7 +73,7 @@ changes_request(ProviderId, Since, Until) ->
     ok | {error, Reason :: term()}.
 status_report(SpaceId, Providers, CurrentSeq) ->
     AllProviders = Providers,
-%%    ?info("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
+    ?debug("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
     send_tree_broadcast(SpaceId, AllProviders, #status_report{space_id = SpaceId, seq = dbsync_utils:encode_term(CurrentSeq)}, 3).
 
 

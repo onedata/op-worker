@@ -14,6 +14,8 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 -include("proto/oneclient/handshake_messages.hrl").
@@ -139,16 +141,18 @@ fetch(OtpCert = #'OTPCertificate'{}) ->
             {ok, Doc};
         Error_ -> Error_
     end;
-fetch(Auth = #auth{}) ->
-    case onedata_user:fetch(Auth) of
-        {ok, #document{key = Id}} ->
-            NewDoc = #document{key = Auth, value = #identity{user_id = Id}},
-            case identity:save(NewDoc) of
-                {ok, _} -> {ok, NewDoc};
-                Error_ -> Error_
-            end;
-        Error ->
-            Error
+fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
+    try
+        Client = {user, {Macaroon, DMacaroons}},
+        {ok, #user_details{id = UserId}} = oz_users:get_details(Client),
+        {ok, #document{key = Id}} = onedata_user:get_or_fetch(Client, UserId),
+        NewDoc = #document{key = Auth, value = #identity{user_id = Id}},
+        {ok, _} = identity:save(NewDoc),
+        {ok, NewDoc}
+    catch
+        _:Reason ->
+            ?error_stacktrace("Cannot establish onedata user identity due to: ~p", [Reason]),
+            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------

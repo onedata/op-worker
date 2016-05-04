@@ -50,7 +50,7 @@
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
 
 %% Allowed parameter keys
--define(HANDLE_ID_KEY, <<"handle_id">>).
--define(FILE_UUID_KEY, <<"file_uuid">>).
+-define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
+-define(PROXYIO_PARAMETER_FILE_UUID, <<"file_uuid">>).
 
 -endif.

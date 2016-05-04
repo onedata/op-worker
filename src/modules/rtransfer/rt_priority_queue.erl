@@ -335,7 +335,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Loads RTransfer priority queue NIF library.
 %% @end
 %%--------------------------------------------------------------------
--spec load_nif() -> ok | no_return().
+-spec load_nif() -> ok | {error, Reason :: term()}.
 load_nif() ->
     LibName = "rt_priority_queue_drv",
     LibPath =
@@ -354,10 +354,8 @@ load_nif() ->
 
     case erlang:load_nif(LibPath, 0) of
         ok -> ok;
-        {error, {reload, "Reload not supported by this NIF library."}} ->
-            ok;
-        {error, Reason} ->
-            {error, Reason}
+        {error, {reload, _}} -> ok;
+        {error, Reason} -> {error, Reason}
     end.
 
 

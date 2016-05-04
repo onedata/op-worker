@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec gen_storage_dir() -> string().
 gen_storage_dir() ->
-    filename:join([?TEMP_DIR, "/storage/", erlang:binary_to_list(gen_name())]).
+    filename:join([?TEMP_DIR, "storage", erlang:binary_to_list(gen_name())]).
 
 %%--------------------------------------------------------------------
 %% @doc

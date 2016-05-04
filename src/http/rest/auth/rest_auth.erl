@@ -31,7 +31,7 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+-spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
         {{ok, Auth}, NewReq} ->
@@ -77,10 +77,11 @@ authenticate(Req) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Athenticates user basing on provided token
+%% Authenticates user basing on provided token.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(req(), Token :: binary()) -> {{ok, session:id()} | {error, term()}, req()}.
+-spec authenticate_using_token(req(), Token :: binary()) ->
+    {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
     case macaroon:deserialize(Token) of
         {ok, Macaroon} ->
@@ -92,17 +93,17 @@ authenticate_using_token(Req, Token) ->
                 Error ->
                     {Error, Req}
             end;
-
         Error ->
             {Error, Req}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Athenticates user basing on onedata-internal certificate headers
+%% Authenticates user basing on onedata-internal certificate headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_cert(req()) -> {{ok, session:id()} | {error, term()}, req()}.
+-spec authenticate_using_cert(req()) ->
+    {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_cert(Req) ->
     Socket = cowboy_req:get(socket, Req),
     case ssl2:peercert(Socket) of

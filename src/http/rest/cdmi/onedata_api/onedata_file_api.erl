@@ -38,7 +38,7 @@
 
 %%--------------------------------------------------------------------
 %% IDs of entities
--type file_uuid() :: binary().
+-type file_guid() :: binary().
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
@@ -46,8 +46,8 @@
 -type file_path() :: binary().
 -type file_handle() :: logical_file_manager:handle().
 -type file_name() :: binary().
--type file_id_or_path() :: {uuid, file_uuid()} | {path, file_path()}.
--type file_key() :: {path, file_path()} | {uuid, file_uuid()} | {handle, file_handle()}.
+-type file_id_or_path() :: {guid, file_guid()} | {path, file_path()}.
+-type file_key() :: {path, file_path()} | {guid, file_guid()} | {handle, file_handle()}.
 -type open_mode() :: write | read | rdwr.
 -type perms_octal() :: non_neg_integer().
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
@@ -65,7 +65,7 @@
 -type error_reply() :: {error, term()}.
 %%--------------------------------------------------------------------
 
--export_type([file_handle/0, file_attributes/0, file_path/0, file_uuid/0, file_key/0]).
+-export_type([file_handle/0, file_attributes/0, file_path/0, file_guid/0, file_key/0]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -75,11 +75,11 @@
 %% @doc Creates a directory.
 %%--------------------------------------------------------------------
 -spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path()) ->
-    {ok, file_uuid()} | error_reply().
+    {ok, file_guid()} | error_reply().
 mkdir(Auth, Path) ->
     logical_file_manager:mkdir(Auth, Path).
 -spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    {ok, file_uuid()} | error_reply().
+    {ok, file_guid()} | error_reply().
 mkdir(Auth, Path, Mode) ->
     logical_file_manager:mkdir(Auth, Path, Mode).
 
@@ -91,7 +91,7 @@ mkdir(Auth, Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Offset :: integer(), Limit :: integer()) ->
-    {ok, [{file_uuid(), file_name()}]} | error_reply().
+    {ok, [{file_guid(), file_name()}]} | error_reply().
 ls(Auth, FileKey, Offset, Limit) ->
     logical_file_manager:ls(Auth, FileKey, Offset, Limit).
 
@@ -139,7 +139,7 @@ cp(Auth, FileEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Returns full path of file
 %%--------------------------------------------------------------------
--spec get_file_path(Auth :: onedata_auth_api:auth(), Uuid :: file_uuid()) ->
+-spec get_file_path(Auth :: onedata_auth_api:auth(), Uuid :: file_guid()) ->
     {ok, file_path()}.
 get_file_path(Auth, Uuid) ->
     logical_file_manager:get_file_path(Auth, Uuid).
@@ -165,7 +165,7 @@ fsync(Handle) ->
 %% @doc Creates a new file.
 %%--------------------------------------------------------------------
 -spec create(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    {ok, file_uuid()} | error_reply().
+    {ok, file_guid()} | error_reply().
 create(Auth, Path, Mode) ->
     logical_file_manager:create(Auth, Path, Mode).
 
@@ -374,7 +374,7 @@ set_mimetype(Auth, FileKey, Mimetype) ->
 %% @doc Creates a symbolic link.
 %%--------------------------------------------------------------------
 -spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) ->
-    {ok, file_uuid()} | error_reply().
+    {ok, file_guid()} | error_reply().
 create_symlink(Path, TargetFileKey) ->
     logical_file_manager:create_symlink(Path, TargetFileKey).
 
@@ -382,7 +382,7 @@ create_symlink(Path, TargetFileKey) ->
 %% @doc Returns the symbolic link's target file.
 %%--------------------------------------------------------------------
 -spec read_symlink(FileKey :: file_key()) ->
-    {ok, {file_uuid(), file_name()}} | error_reply().
+    {ok, {file_guid(), file_name()}} | error_reply().
 read_symlink(FileKey) ->
     logical_file_manager:read_symlink(FileKey).
 
@@ -408,7 +408,7 @@ create_share(Path, ShareWith) ->
 %% @doc Returns shared file by share_id.
 %%--------------------------------------------------------------------
 -spec get_share(ShareID :: share_id()) ->
-    {ok, {file_uuid(), file_name()}} | error_reply().
+    {ok, {file_guid(), file_name()}} | error_reply().
 get_share(ShareID) ->
     logical_file_manager:get_share(ShareID).
 

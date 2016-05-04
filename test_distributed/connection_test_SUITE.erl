@@ -67,7 +67,7 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 token_connection_test(Config) ->
     % given
-    [Worker1, _] = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
 
     % then
     {ok, {Sock, _}} = connect_via_token(Worker1),
@@ -77,7 +77,7 @@ token_connection_test(Config) ->
 cert_connection_test(_Config) ->
 %%     % given
 %%     remove_pending_messages(),
-%%     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
+%%     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
 %%     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
 %%         session_id = <<"session_id">>
 %%     }}},
@@ -117,7 +117,7 @@ cert_connection_test(_Config) ->
 
 protobuf_msg_test(Config) ->
     % given
-    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message, fun
         (#client_message{message_body = #events{events = [#event{
             object = #read_event{}
@@ -201,7 +201,7 @@ multi_message_test_base(Config) ->
 
 client_send_test(Config) ->
     % given
-    [Worker1, _] = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
     {ok, {Sock, SessionId}} = connect_via_token(Worker1),
     Code = ?OK,
     Description = <<"desc">>,
@@ -226,7 +226,7 @@ client_send_test(Config) ->
 
 client_communicate_test(Config) ->
     % given
-    [Worker1, _] = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
     Status = #status{code = ?OK, description = <<"desc">>},
     ServerMsgInternal = #server_message{message_body = Status},
 
@@ -241,7 +241,7 @@ client_communicate_test(Config) ->
 
 client_communicate_async_test(Config) ->
     % given
-    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     Status = #status{
         code = ?OK,
         description = <<"desc">>

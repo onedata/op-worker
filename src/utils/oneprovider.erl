@@ -38,7 +38,10 @@
 -export([get_provider_id/0, get_provider_domain/0]).
 -export([get_oz_domain/0, get_oz_url/0, get_oz_cert/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
--export([register_in_gr/3, register_in_oz_dev/3, save_file/2]).
+-export([register_in_gr/3, save_file/2]).
+
+% Developer function
+-export([register_in_oz_dev/3]).
 
 %%%===================================================================
 %%% API
@@ -190,8 +193,10 @@ register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
         {ok, Key} = file:read_file(OZPKeyPath),
         % Send signing request to OZ
         IPAddresses = get_all_nodes_ips(NodeList),
-        ProviderDomain = str_utils:to_binary(oneprovider:get_provider_domain()),
-        RedirectionPoint = <<"https://", ProviderDomain/binary>>,
+        %% Use IP address of first node as redirection point - this way
+        %% we don't need a DNS server to resolve provider domains in
+        %% developer environment.
+        RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
         Parameters = [
             {<<"urls">>, IPAddresses},
             {<<"csr">>, CSR},
