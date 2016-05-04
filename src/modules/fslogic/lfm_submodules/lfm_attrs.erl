@@ -61,18 +61,18 @@ stat(SessId, FileEntry) ->
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) ->
     ok | logical_file_manager:error_reply().
-update_times(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, ATime, MTime, CTime) ->
-    update_times(SessId, {uuid, UUID}, ATime, MTime, CTime).
+update_times(#lfm_handle{file_guid = FileGUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, ATime, MTime, CTime) ->
+    update_times(SessId, {guid, FileGUID}, ATime, MTime, CTime).
 
 -spec update_times(session:id(), logical_file_manager:file_key(), ATime :: file_meta:time(),
     MTime :: file_meta:time(), CTime :: file_meta:time()) ->
     ok | logical_file_manager:error_reply().
 update_times(SessId, FileKey, ATime, MTime, CTime) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, FileUuid} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(
         SessId,
-        #update_times{uuid = FileUuid, atime = ATime, mtime = MTime, ctime = CTime},
+        #update_times{uuid = FileGUID, atime = ATime, mtime = MTime, ctime = CTime},
         fun(_) ->
             ok
         end).
