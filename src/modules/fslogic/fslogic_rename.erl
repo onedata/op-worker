@@ -112,7 +112,7 @@ rename_file(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
 -spec check_dir_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path(), file_meta:path()) -> ok | logical_file_manager:error_reply().
 check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
-    case moving_into_itself(SourceEntry, CanonicalTargetPath) of
+    case moving_into_itself(SessId, SourceEntry, CanonicalTargetPath) of
         true ->
             {error, ?EINVAL};
         false ->
@@ -151,14 +151,14 @@ check_reg_preconditions(#fslogic_ctx{session_id = SessId}, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Checks if renamed entry is one of target path parents.
 %%--------------------------------------------------------------------
--spec moving_into_itself(SourceEntry :: fslogic_worker:file(),
-    CanonicalTargetPath :: file_meta:path()) ->
-    boolean().
-moving_into_itself(SourceEntry, CanonicalTargetPath) ->
-    {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
-    {_, ParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
-    {ok, {_, ParentUUIDs}} = file_meta:resolve_path(ParentPath),
-    lists:any(fun(ParentUUID) -> ParentUUID =:= SourceUUID end, ParentUUIDs).
+-spec moving_into_itself(SessId :: session:id(),
+    SourceEntry :: fslogic_worker:file(),
+    CanonicalTargetPath :: file_meta:path()) -> boolean().
+moving_into_itself(SessId, SourceEntry, CanonicalTargetPath) ->
+    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
+    SourceTokens = fslogic_path:split(SourcePath),
+    TargetTokens = fslogic_path:split(CanonicalTargetPath),
+    lists:prefix(SourceTokens, TargetTokens).
 
 %%--------------------------------------------------------------------
 %% @doc Selects proper rename function - trivial, inter-space or inter-provider.
