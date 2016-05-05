@@ -462,26 +462,26 @@ attributes_retaining_test(Config) ->
     ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir2Guid}, filename(2, TestDir, "/dir2_target"))),
     ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir3Guid}, filename(3, TestDir, "/dir3_target"))),
 
-    PostRenamePaths = [
-        filename(1, TestDir, "/dir1_target"),
-        filename(1, TestDir, "/dir1_target/file1"),
-        filename(2, TestDir, "/dir2_target"),
-        filename(2, TestDir, "/dir2_target/file2"),
-        filename(3, TestDir, "/dir3_target"),
-        filename(3, TestDir, "/dir3_target/file3")
+    PostRenamePathsAndWorkers = [
+        {filename(1, TestDir, "/dir1_target"), W1},
+        {filename(1, TestDir, "/dir1_target/file1"), W1},
+        {filename(2, TestDir, "/dir2_target"), W1},
+        {filename(2, TestDir, "/dir2_target/file2"), W1},
+        {filename(3, TestDir, "/dir3_target"), W2},
+        {filename(3, TestDir, "/dir3_target/file3"), W2}
     ],
 
     lists:foreach(
-        fun(Path) ->
-            ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(W1, SessId, {path, Path})),
-            ?assertEqual({ok, Mimetype}, lfm_proxy:get_mimetype(W1, SessId, {path, Path})),
-            ?assertEqual({ok, TransferEncoding}, lfm_proxy:get_transfer_encoding(W1, SessId, {path, Path})),
-            ?assertEqual({ok, CompletionStatus}, lfm_proxy:get_cdmi_completion_status(W1, SessId, {path, Path})),
+        fun({Path, Worker}) ->
+            ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(Worker, SessId, {path, Path})),
+            ?assertEqual({ok, Mimetype}, lfm_proxy:get_mimetype(Worker, SessId, {path, Path})),
+            ?assertEqual({ok, TransferEncoding}, lfm_proxy:get_transfer_encoding(Worker, SessId, {path, Path})),
+            ?assertEqual({ok, CompletionStatus}, lfm_proxy:get_cdmi_completion_status(Worker, SessId, {path, Path})),
             lists:foreach(
                 fun(#xattr{name = XattrName} = Xattr) ->
-                    ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(W1, SessId, {path, Path}, XattrName))
+                    ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(Worker, SessId, {path, Path}, XattrName))
                 end, Xattrs)
-        end, PostRenamePaths),
+        end, PostRenamePathsAndWorkers),
 
     ok.
 
