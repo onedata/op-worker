@@ -321,6 +321,8 @@ translate_from_protobuf(#'GetFilePath'{uuid = UUID}) ->
     #'get_file_path'{uuid = UUID};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #'file_path'{value = Value};
+translate_from_protobuf(#'FSync'{uuid = UUID}) ->
+    #'fsync'{uuid = UUID};
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -585,11 +587,12 @@ translate_to_protobuf(#checksum{value = Value}) ->
 
 %% CDMI
 translate_to_protobuf(#acl{value = Value}) ->
-    #'Acl'{value = Value};
+    {acl, #'Acl'{value = Value}};
 translate_to_protobuf(#get_acl{uuid = UUID}) ->
     {get_acl, #'GetAcl'{uuid = UUID}};
 translate_to_protobuf(#set_acl{uuid = UUID, acl = Acl}) ->
-    {set_acl, #'SetAcl'{uuid = UUID, acl = translate_to_protobuf(Acl)}};
+    {_, PAcl} = translate_to_protobuf(Acl),
+    {set_acl, #'SetAcl'{uuid = UUID, acl = PAcl}};
 translate_to_protobuf(#get_transfer_encoding{uuid = UUID}) ->
     {get_transfer_encoding, #'GetTransferEncoding'{uuid = UUID}};
 translate_to_protobuf(#set_transfer_encoding{uuid = UUID, value = Value}) ->
@@ -613,6 +616,8 @@ translate_to_protobuf(#get_file_path{uuid = UUID}) ->
     {get_file_path, #'GetFilePath'{uuid = UUID}};
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
+translate_to_protobuf(#fsync{uuid = UUID}) ->
+    {fsync, #'FSync'{uuid = UUID}};
 
 translate_to_protobuf(undefined) ->
     undefined.

@@ -150,7 +150,9 @@ write_body_to_file(Req, Offset, FileHandle) ->
         {ok, _NewHandle, Bytes} = onedata_file_api:write(FileHandle, Offset, Chunk),
         case Status of
             more -> Write(Req1, Offset + Bytes, FileHandle);
-            ok -> {ok, Req1}
+            ok ->
+                onedata_file_api:fsync(FileHandle),
+                {ok, Req1}
         end
     end,
 

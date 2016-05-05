@@ -1374,6 +1374,7 @@ partial_upload(Config) ->
     {ok, Code7, _Headers7, _Response7} = do_request(Workers, FileName2, put, RequestHeaders7, Chunk3),
     ?assertEqual(204, Code7),
 
+%%    timer:sleep(timer:seconds(5)),
     % get created file and check its consistency
     RequestHeaders8 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
     {ok, Code8, _Headers8, Response8} = do_request(WorkerP2, FileName2, get, RequestHeaders8, []),
