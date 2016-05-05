@@ -122,7 +122,7 @@ check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, Canonica
                 {ok, #file_attr{type = Type}} ->
                     case Type of
                         ?DIRECTORY_TYPE ->
-                            logical_file_manager:unlink(SessId, {path, LogicalTargetPath});
+                            ok;
                         _ ->
                             {error, ?ENOTDIR}
                     end
@@ -144,7 +144,7 @@ check_reg_preconditions(#fslogic_ctx{session_id = SessId}, LogicalTargetPath) ->
                 ?DIRECTORY_TYPE ->
                     {error, ?EISDIR};
                 _ ->
-                    logical_file_manager:unlink(SessId, {path, LogicalTargetPath})
+                    ok
             end
     end.
 
@@ -255,6 +255,8 @@ rename_dir_interspace(CTX, SourceEntry, LogicalTargetPath) ->
 -spec rename_interspace(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> ok | logical_file_manager:error_reply().
 rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
+    ok = ensure_deleted(SessId, LogicalTargetPath),
+
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
     {ok, SourceParent} = file_meta:get_parent(SourceEntry),
     CanonicalTargetPath = get_canonical_path(CTX, LogicalTargetPath),
@@ -317,6 +319,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalT
 -spec rename_interprovider(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> ok | logical_file_manager:error_reply().
 rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
+    ok = ensure_deleted(SessId, LogicalTargetPath),
+
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
     {ok, SourceParent} = file_meta:get_parent(SourceEntry),
     {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
@@ -436,6 +440,18 @@ update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
         blocks => UpdatedBlocks
     }),
     ok.
+
+%%--------------------------------------------------------------------
+%% @doc Unlinks file if it exists.
+%%--------------------------------------------------------------------
+-spec ensure_deleted(session:id(), file_meta:path()) -> ok.
+ensure_deleted(SessId, LogicalTargetPath) ->
+    case logical_file_manager:stat(SessId, {path, LogicalTargetPath}) of
+        {error, ?ENOENT} ->
+            ok;
+        {ok, #file_attr{}} ->
+            ok = logical_file_manager:unlink(SessId, {path, LogicalTargetPath})
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Traverses files tree depth first, executing Pre function before
