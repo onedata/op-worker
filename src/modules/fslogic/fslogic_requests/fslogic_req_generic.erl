@@ -43,7 +43,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_path(fslogic_worker:ctx(), file_meta:uuid()) ->
-    {ok, file_meta:path()}.
+    #fuse_response{} | no_return().
 get_file_path(Ctx, FileUUID) ->
     #fuse_response{
         status = #status{code = ?OK},
@@ -55,7 +55,7 @@ get_file_path(Ctx, FileUUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
-    {ok, file_meta:path()}.
+    #fuse_response{} | no_return().
 fsync(Ctx, _FileUUID) ->
 %%    timer:sleep(timer:seconds(5)),
     SessId = fslogic_context:get_session_id(Ctx),

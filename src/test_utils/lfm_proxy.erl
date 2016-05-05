@@ -123,6 +123,9 @@ open(Worker, SessId, FileKey, OpenMode) ->
 close(Worker, TestHandle) ->
     exec(Worker,
         fun(Host) ->
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            logical_file_manager:fsync(Handle),
+            logical_file_manager:release(Handle),
             ets:delete(lfm_handles, TestHandle),
             Host ! {self(), ok}
         end).
