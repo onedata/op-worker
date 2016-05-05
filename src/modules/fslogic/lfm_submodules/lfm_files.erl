@@ -100,8 +100,10 @@ get_parent(SessId, FileKey) ->
 -spec get_file_path(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGUID) ->
-    CTX = fslogic_context:new(SessId),
-    {ok, fslogic_uuid:guid_to_path(CTX, FileGUID)}.
+    lfm_utils:call_fslogic(SessId, #get_file_path{uuid = FileGUID},
+        fun(#file_path{value = Path}) ->
+            {ok, Path}
+        end).
 
 
 %%--------------------------------------------------------------------

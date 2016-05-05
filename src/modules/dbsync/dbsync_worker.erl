@@ -660,7 +660,7 @@ stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUnt
                             true ->
                                 [Batch | Batches];
                             false ->
-                                [#batch{since = Since, until = NewUntil, changes = [Changes, NewChanges]} | Tail]
+                                [#batch{since = Since, until = NewUntil, changes = lists:flatten([Changes, NewChanges])} | Tail]
                         end
                 end
         end).

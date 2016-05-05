@@ -115,7 +115,7 @@ init(_Args) ->
                 Counter > ReadCounterThreshold orelse Size > ReadSizeThreshold
             end,
             transition_rule =
-            fun({Counter, Size}, #event{counter = C, object = #write_event{size = S}}) ->
+            fun({Counter, Size}, #event{counter = C, object = #read_event{size = S}}) ->
                 {Counter + C, Size + S}
             end,
             init_handler = event_utils:send_subscription_handler(),
@@ -152,14 +152,14 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
+    ?info("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request),
-    ?debug("fuse_response: ~p", [Response]),
+    ?info("fuse_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?debug("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
+    ?info("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
     Response = run_and_catch_exceptions(fun handle_proxyio_request/2, fslogic_context:new(SessId), ProxyIORequest, proxyio_request),
-    ?debug("proxyio_response: ~p", [Response]),
+    ?info("proxyio_response: ~p", [Response]),
     Response;
 handle(_Request) ->
     ?log_bad_request(_Request),
@@ -383,6 +383,8 @@ handle_fuse_request(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file
     fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #release{handle_id = HandleId}}) ->
     fslogic_req_regular:release(Ctx, HandleId);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = FileGUID}}) ->
+    fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -518,6 +520,8 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #synchroniz
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #synchronize_block_and_compute_checksum{uuid = UUID}}) ->
     {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_path{uuid = UUID}}) ->
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->
@@ -526,6 +530,7 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_sto
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}}) ->
     {file, {guid, FileGUID}};
+
 request_to_file_entry_or_provider(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

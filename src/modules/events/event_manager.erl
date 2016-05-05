@@ -269,7 +269,7 @@ request_to_file_entry_or_provider(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_or_reroute(RequestMessage :: term(), RequestContext :: {file, file_meta:entry()} | not_file_context, SessId :: session:id(),
-    HandleLocallyFun :: fun((IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
+    HandleLocallyFun :: fun((NewProvMap :: #{}, IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
 handle_or_reroute(_, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(ProvMap, false);
 handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
