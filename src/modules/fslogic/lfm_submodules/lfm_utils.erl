@@ -54,7 +54,6 @@ rm(SessId, FileKey) ->
                 ok ->
                     lfm_files:unlink(SessId, {guid, GUID});
                 Error ->
-                    lfm_files:unlink(SessId, {guid, GUID}),
                     Error
             end;
         false ->
