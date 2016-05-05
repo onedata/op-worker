@@ -66,8 +66,16 @@ init(_Args) ->
             size_threshold = WriteSizeThreshold
         },
         event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-            metadata = 0,
-            emission_rule = fun(_) -> true end,
+            metadata = {0, 0}, %% {Counter, Size}
+            emission_time = WriteTimeThreshold,
+            emission_rule =
+                fun({Counter, Size}) ->
+                    Counter > WriteCounterThreshold orelse Size > WriteSizeThreshold
+                end,
+            transition_rule =
+                fun({Counter, Size}, #event{counter = C, object = #write_event{size = S}}) ->
+                    {Counter + C, Size + S}
+                end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
                 handle_write_events(Evts, Ctx)
@@ -100,8 +108,16 @@ init(_Args) ->
             size_threshold = ReadSizeThreshold
         },
         event_stream = ?READ_EVENT_STREAM#event_stream_definition{
-            metadata = 0,
-            emission_rule = fun(_) -> true end,
+            metadata = {0, 0}, %% {Counter, Size}
+            emission_time = ReadTimeThreshold,
+            emission_rule =
+            fun({Counter, Size}) ->
+                Counter > ReadCounterThreshold orelse Size > ReadSizeThreshold
+            end,
+            transition_rule =
+            fun({Counter, Size}, #event{counter = C, object = #write_event{size = S}}) ->
+                {Counter + C, Size + S}
+            end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
                 handle_read_events(Evts, Ctx)
@@ -219,16 +235,15 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                 apply(Function, [NextCTX, Request]);
             false ->
                 PrePostProcessResponse =
-                    try
-                        case fslogic_remote:prerouting(NextCTX, Request, Providers) of
-                            {ok, {reroute, Self, Request1}} ->  %% Request should be handled locally for some reason
-                                {ok, apply(Function, [NextCTX, Request1])};
-                            {ok, {reroute, RerouteToProvider, Request1}} ->
-                                {ok, fslogic_remote:reroute(NextCTX, RerouteToProvider, Request1)};
-                            {error, PreRouteError} ->
-                                ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [Request, PreRouteError]),
-                                throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
-                        end
+                    try fslogic_remote:prerouting(NextCTX, Request, Providers) of
+                        {ok, {reroute, Self, Request1}} ->  %% Request should be handled locally for some reason
+                            {ok, apply(Function, [NextCTX, Request1])};
+                        {ok, {reroute, RerouteToProvider, Request1}} ->
+                            {ok, fslogic_remote:reroute(NextCTX, RerouteToProvider, Request1)};
+                        {error, PreRouteError} ->
+                            ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [Request, PreRouteError]),
+                            throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
+
                     catch
                         Type:Reason0 ->
                             ?error_stacktrace("Unable to process remote fslogic request due to: ~p", [{Type, Reason0}]),

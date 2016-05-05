@@ -191,8 +191,8 @@ open(SessId, FileKey, OpenType) ->
 %% Releases previously opened  file.
 %% @end
 %%--------------------------------------------------------------------
--spec release(handle()) ->
-    ok | error_reply().
+-spec release(logical_file_manager:handle()) ->
+    ok | logical_file_manager:error_reply().
 release(#lfm_handle{fslogic_ctx = CTX, file_location = #file_location{handle_id = FSLogicHandle}}) ->
     lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX), #release{handle_id = FSLogicHandle},
         fun(_) ->
