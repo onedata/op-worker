@@ -409,7 +409,7 @@ set_mimetype(CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
 %%--------------------------------------------------------------------
 -spec delete_dir(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}]).
+-check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {?list_container, 2}]).
 delete_dir(CTX, File) ->
     delete_impl(CTX, File).
 
