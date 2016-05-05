@@ -18,9 +18,13 @@
 -author("Lukasz Opiola").
 -behaviour(gui_route_plugin_behaviour).
 
+
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include_lib("gui/include/gui.hrl").
 
--export([route/1, data_backend/1, callback_backend/1]).
+-export([route/1, data_backend/2, private_rpc_backend/0, public_rpc_backend/0]).
+-export([session_details/0]).
 -export([login_page_path/0, default_page_path/0]).
 -export([error_404_html_file/0, error_500_html_file/0]).
 
@@ -45,6 +49,7 @@
 
 -define(INDEX, #gui_route{
     requires_session = ?SESSION_LOGGED_IN,
+    websocket = ?SESSION_LOGGED_IN,
     html_file = <<"index.html">>,
     page_backend = undefined
 }).
@@ -54,10 +59,10 @@
 %% ====================================================================
 
 %%--------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
 %% @doc
-%% Should return a gui_route record per every page that a user can visit.
-%% If the Path is not valid, error_404_html_file/0 function will be used
-%% to retrieve .html file to serve that will display the error.
+%% {@link gui_route_plugin_behaviour} callback route/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec route(Path :: binary()) -> #gui_route{}.
@@ -70,29 +75,63 @@ route(<<"/index.html">>) -> ?INDEX.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a module that implements data_backend_behaviour and
-%% will be called for models synchronization over websocket.
+%% {@link gui_route_plugin_behaviour} callback data_backend/2
 %% @end
 %%--------------------------------------------------------------------
--spec data_backend(Identifier :: binary()) -> HandlerModule :: module().
-data_backend(<<"file">>) -> file_data_backend;
-data_backend(<<"fileContent">>) -> file_data_backend.
+-spec data_backend(HasSession :: boolean(), Identifier :: binary()) ->
+    HandlerModule :: module().
+data_backend(true, <<"file">>) -> file_data_backend;
+data_backend(true, <<"file-distribution">>) -> file_data_backend;
+data_backend(true, <<"provider">>) -> provider_data_backend;
+data_backend(true, <<"data-space">>) -> data_space_data_backend;
+data_backend(true, <<"space">>) -> space_data_backend;
+data_backend(true, <<"space-user">>) -> space_data_backend;
+data_backend(true, <<"space-user-permission">>) -> space_data_backend;
+data_backend(true, <<"space-group">>) -> space_data_backend;
+data_backend(true, <<"space-group-permission">>) -> space_data_backend.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a module that implements callback_backend_behaviour and
-%% will be called to handle calls from the GUI that do not regard models.
+%% {@link gui_route_plugin_behaviour} callback private_rpc_backend/0
 %% @end
 %%--------------------------------------------------------------------
--spec callback_backend(Identifier :: binary()) -> HandlerModule :: module().
-callback_backend(<<"global">>) -> global_callback_backend.
+-spec private_rpc_backend() -> HandlerModule :: module().
+private_rpc_backend() -> private_rpc_backend.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return login page where the user will be redirected if he requests
-%% a page that can only be visited when logged in.
+%% {@link gui_route_plugin_behaviour} callback public_rpc_backend/0
+%% @end
+%%--------------------------------------------------------------------
+-spec public_rpc_backend() -> HandlerModule :: module().
+public_rpc_backend() -> public_rpc_backend.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gui_route_plugin_behaviour} callback get_session_details/0
+%% @end
+%%--------------------------------------------------------------------
+-spec session_details() ->
+    {ok, proplists:proplist()} | gui_error:error_result().
+session_details() ->
+    {ok, #document{
+        value = #onedata_user{
+            name = Name
+        }}} = onedata_user:get(g_session:get_user_id()),
+    Res = [
+        {<<"userName">>, Name},
+        {<<"manageProvidersURL">>,
+            str_utils:to_binary(oneprovider:get_oz_providers_page())}
+    ],
+    {ok, Res}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gui_route_plugin_behaviour} callback login_page_path/0
 %% @end
 %%--------------------------------------------------------------------
 -spec login_page_path() -> Path :: binary().
@@ -102,9 +141,7 @@ login_page_path() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a default page where the user will be redirected if
-%% he requests a page that he cannot currently visit (for example login page
-%% when the user is already logged in).
+%% {@link gui_route_plugin_behaviour} callback default_page_path/0
 %% @end
 %%--------------------------------------------------------------------
 -spec default_page_path() -> Path :: binary().
@@ -114,7 +151,7 @@ default_page_path() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a file name of the HTML file that displays error 404 page.
+%% {@link gui_route_plugin_behaviour} callback error_404_html_file/0
 %% @end
 %%--------------------------------------------------------------------
 -spec error_404_html_file() -> FileName :: binary().
@@ -124,7 +161,7 @@ error_404_html_file() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Should return a file name of the HTML file that displays error 500 page.
+%% {@link gui_route_plugin_behaviour} callback error_500_html_file/0
 %% @end
 %%--------------------------------------------------------------------
 -spec error_500_html_file() -> FileName :: binary().

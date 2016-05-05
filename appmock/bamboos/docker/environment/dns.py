@@ -6,7 +6,7 @@ This software is released under the MIT license cited in 'LICENSE.txt'
 Brings up a DNS server based on dnsmasq that allow sdifferent dockers
 to see each other by hostnames. In addition, it allows for specifying
 root servers for given domains, which is indispensable in distributed
-providers <-> gr environment.
+providers <-> oz environment.
 """
 
 import subprocess

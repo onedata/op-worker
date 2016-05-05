@@ -4,6 +4,92 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta3
+
+* VFS-1932 Create StorageHelperFactory with unset BufferAgent.
+* VFS-1770 dissallow spaces with empty name
+* VFS-1953 Extracting times updating to functions, handling root space
+* VFS-1770 improve gui injection script
+* VFS-1747 Change checksum algorithm to md4.
+* VFS-1770 add polling mechainsm before onedata user is synced
+* VFS-1747 Add missing status to fuse_response.
+* VFS-1747 Add checksum computing during sync.
+* VFS-1521 File GUID to UUID translation
+* VFS-1862 Integrate move implementation with cdmi. Add copy_move_test to cdmi_test_SUITE.
+* VFS-1798, enable cover
+* VFS-1521: Get providers for space from cache instead of OZ
+* VFS-1521: Fetch all space_info data in space_info:fetch
+* Adjust luma for chown operation.
+* VFS-1749 Use proper types in LUMA config
+* VFS-1751 Allow specifying request method in IAM calls
+* VFS-1596 Ceph permissions adjustment
+* VFS-1596 Refactor luma nif, use hex_utils
+* VFS-1596 More readable LUMA tests
+* VFS-1596 Move LUMA internals to module
+* VFS-1596 Move app initialization to function
+* VFS-1596 Use dedicated credentials caches instead of luma response
+* VFS-1747 Fsync files after transfer.
+* VFS-1703 Add remove file event
+* VFS-1507 Omitting handle saving for root session
+* VFS-1596 Multi storage LUMA tests
+* VFS-1596 LUMA nif entry in Makefile
+* VFS-1507 Sending file handle in get_file_location
+* VFS-1596 Accessing Amazon IAM API from provider
+* VFS-1596 Python LUMA API description
+* VFS-1507 Sending file handle in get_new_file_location, using handles in read and write
+* VFS-1596 Python LUMA implementation
+* VFS-1596 Update getting user details
+* VFS-1596 Ceph credentials mapping in provider
+* VFS-1596 Move LUMA logic to separate modules.
+* VFS-1596 LUMA and in-provider credentials mapping with switch
+* VFS-1596 Getting credentials from LUMA
+* Fix GUI download handler.
+* VFS-1768: Permissions table sorting
+* VFS-1768: Resetting old tokens after token modal close
+* VFS-1768: Sorting provider names in blocks table
+* VFS-1770 fix wrong size calculation
+* VFS-1768: Fixing token copy with selectjs - to not copy newline on start; 
+
+
+### 3.0.0-beta1
+
+* VFS-1802 Improve proxyio performance.
+* VFS-1521: Get providers for space from cache instead of OZ
+* VFS-1521: Resolve issues with too long document.key in dbsync's state
+* VFS-1768: BS Tooltip component; style improvements in file chunks modal
+* VFS-1768: Prevent opening space page when clicking on space settings icon; blocking Groups page with generic info message
+* VFS-1553: Improvements in permissions table; add users/groups action stub
+* VFS-1770 first reactive GUI for files
+* VFS-1553: Create and join space buttons/modals
+* VFS-1757 Change application ports availability checking procedure.
+* VFS-1549: Uploaded file name in upload widget
+* VFS-1549: Modification time display
+* VFS-1549: Dragging file on file browser initial support
+* VFS-1728-increase timeouts, timeouts definitions in separate file
+* VFS-1549: Added ember-notify
+* VFS-1745 Improve handling pending files.
+* VFS-1549: Permissions modal
+* VFS-1745 Use fslogic_storage:new_user_ctx to generate uid and gid in chown function.
+* VFS-1746, Adjust db_sync to new cluster_worker
+* VFS-1549: Modals for create dir and file
+* VFS-1549: First modal for file browser
+* VFS-1549: File browser toolbar, with previous functions
+* VFS-1734 fix a bug in unique filename resolver
+* VFS-1734 server side file upload
+* VFS-1521 Enable cross-provider subscriptions
+* VFS-1629 added delete messages handling
+* VFS-1629 user included in subscription when gets session
+* VFS-1629 propagating updates to the datastore
+* VFS-1629 connected provider to the OZ (over websocket)
+* VFS-1629 registering connection under name
+* VFS-1521 Enable file_location update in lfm
+* VFS-1629 simple user subscriptions
+* VFS-1521 Proxy read and write events
+* VFS-1521 Implement remote ProxyIO
+* VFS-1521 Improve logging
+* VFS-1521 Fixup provider proxy communication
+
+
 ### 3.0.0-alpha3
 
 * VFS-1598 Fix oz_plugin module.

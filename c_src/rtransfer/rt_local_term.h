@@ -9,7 +9,7 @@
 #ifndef RT_LOCAL_TERM_H
 #define RT_LOCAL_TERM_H
 
-#include "nifpp.h"
+#include "../nifpp.h"
 
 #include <memory>
 

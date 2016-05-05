@@ -63,6 +63,7 @@ init(_Args) ->
     Since = 0,
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -81,11 +82,11 @@ init_stream(Since, Until, Queue) ->
                 fun(SpaceId) ->
                     {SpaceId, #batch{since = Since, until = Since}}
                 end, dbsync_utils:get_spaces_for_provider())),
+            timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
             state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
         _ -> ok
     end,
 
-    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
     couchdb_datastore_driver:changes_start_link(
         fun
             (_, stream_ended, _) ->
@@ -165,8 +166,8 @@ handle({flush_queue, QueueKey}) ->
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
-                        catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
-                    update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    spawn(fun() -> dbsync_proto:send_batch(QueueKey, SpaceId, B) end),
+                    set_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
                     case QueueKey of
                         global -> state_put(global_resume_seq, Until);
                         _ -> ok
@@ -196,6 +197,7 @@ handle({dbsync_request, SessId, DBSyncRequest}) ->
     dbsync_proto:handle(SessId, DBSyncRequest);
 
 %% Handle stream crashes
+%% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
 handle({'EXIT', Stream, Reason}) ->
     case state_get(changes_stream) of
         Stream ->
@@ -214,7 +216,7 @@ handle({async_init_stream, Since, Until, Queue}) ->
     state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
-                catch exit(OldStream, shutdown),
+                    catch exit(OldStream, shutdown),
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
@@ -291,7 +293,7 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
-    catch consume_batches(FromProvider, SpaceId),
+        catch consume_batches(FromProvider, SpaceId),
     do_apply_batch_changes(FromProvider, SpaceId, Batch, true).
 
 %%--------------------------------------------------------------------
@@ -333,18 +335,19 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
+
+        %todo add cache manipulation functions and activate GLOBALLY_CACHED levels of datastore for file_meta and file_location
         MainDocKey = case Value of
             #links{} ->
-                couchdb_datastore_driver:links_key_to_doc_key(Key);
+                Value#links.doc_key;
             _ -> Key
         end,
-
         datastore:run_synchronized(ModelName, MainDocKey, fun() ->
-            caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
-            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key, all)
+            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
+
+
+
         spawn(
             fun() ->
                 dbsync_events:change_replicated(SpaceId, Change),
@@ -435,9 +438,9 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     datastore:key().
 get_sync_context(#document{key = Key, value = #file_meta{}}) ->
     Key;
-get_sync_context(#document{value = #links{key = DocKey, model = file_meta}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
-get_sync_context(#document{value = #links{key = DocKey, model = file_location}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_location}}) ->
     #model_config{store_level = StoreLevel} = file_location:model_init(),
     {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
     get_sync_context(Doc);
@@ -454,11 +457,15 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
 -spec get_space_id(datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id(#document{key = Key} = Doc) ->
-    case state_get({space_id, Key}) of
+    try state_get({sid, Key}) of
         undefined ->
             get_space_id_not_cached(Key, Doc);
         SpaceId ->
             {ok, SpaceId}
+    catch
+        _:Reason ->
+            ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Key, Reason]),
+            get_space_id_not_cached(Key, Doc)
     end.
 
 
@@ -474,12 +481,12 @@ get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
     FileUUID = get_sync_context(Doc),
     case file_meta:get_scope({uuid, FileUUID}) of
         {ok, #document{key = <<"">> = Root}} ->
-            state_put({space_id, KeyToCache}, Root),
+            state_put({sid, KeyToCache}, Root),
             {ok, Root};
         {ok, #document{key = ScopeUUID}} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-                state_put({space_id, KeyToCache}, SpaceId),
+                state_put({sid, KeyToCache}, SpaceId),
                 {ok, SpaceId}
             catch
                 _:_ -> {error, not_a_space}
@@ -506,6 +513,26 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
         end,
 
     state_update(Key, OP).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets sequence number for given Provider and Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_current_seq(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
+    ok.
+set_current_seq(ProviderId, SpaceId, SeqNum) ->
+    Key = {current_seq, ProviderId, SpaceId},
+    OldValue = state_get(Key),
+    OP =
+        fun(undefined) ->
+            SeqNum;
+            (CurrentSeq) ->
+                max(SeqNum, CurrentSeq)
+        end,
+
+    state_put(Key, OP(OldValue)).
 
 
 %%--------------------------------------------------------------------
@@ -544,7 +571,7 @@ bcast_status() ->
     lists:foreach(
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
-            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
+            ?debug("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
             {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
@@ -560,7 +587,7 @@ bcast_status() ->
     ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
-%%    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
+    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);
@@ -623,7 +650,8 @@ consume_batches(ProviderId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec is_valid_stream(term()) -> boolean().
 is_valid_stream(Stream) when is_pid(Stream) ->
-    erlang:process_info(Stream) =/= undefined;
+    try erlang:process_info(Stream) =/= undefined
+    catch _:_ -> node(Stream) =/= node() end;
 is_valid_stream(_) ->
     false.
 

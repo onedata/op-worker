@@ -13,6 +13,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -53,17 +54,9 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     }},
     case file_meta:create(NormalizedParentUUID, File) of
         {ok, DirUUID} ->
-            {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
-            #document{value = ParentMeta} = ParentDoc,
-            {ok, _} = file_meta:update(ParentDoc, #{mtime => CTime, ctime => CTime}),
-
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
-                ParentDoc#document{value = ParentMeta#file_meta{
-                    mtime = CTime, ctime = CTime
-                }}
-            ) end),
+            fslogic_times:update_mtime_ctime(NormalizedParentUUID, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-                #dir{uuid = DirUUID}
+                #dir{uuid = fslogic_uuid:to_file_guid(DirUUID)}
             };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
@@ -79,29 +72,20 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
-read_dir(CTX, File, Offset, Size) ->
+read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
-    case fslogic_times:calculate_atime(FileDoc) of
-        actual ->
-            ok;
-        NewATime ->
-            #document{value = FileMeta} = FileDoc,
-            {ok, _} = file_meta:update(FileDoc, #{atime => NewATime}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
-                FileDoc#document{value = FileMeta#file_meta{atime = NewATime}}
-            ) end)
-    end,
+    fslogic_times:update_atime(FileDoc, fslogic_context:get_user_id(CTX)),
 
     SpacesKey = fslogic_uuid:spaces_uuid(UserId),
     DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
     case Key of
         DefaultSpaceKey ->
-            {ok, DefaultSpace} = fslogic_spaces:get_default_space(CTX),
+            {ok, DefaultSpace = #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
             {ok, DefaultSpaceChildLinks} =
                 case Offset of
                     0 ->
@@ -112,41 +96,23 @@ read_dir(CTX, File, Offset, Size) ->
 
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_children{
-                    child_links = ChildLinks ++ DefaultSpaceChildLinks
+                    child_links = [
+                        CL#child_link{uuid = fslogic_uuid:to_file_guid(UUID, fslogic_uuid:space_dir_uuid_to_spaceid(DefaultSpaceUUID))}
+                        || CL = #child_link{uuid = UUID} <- ChildLinks ++ DefaultSpaceChildLinks]
                 }
             };
         SpacesKey ->
-            {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
+            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
                 onedata_user:get(UserId),
 
             Children =
-                case Offset < length(SpacesIds) of
+                case Offset < length(Spaces) of
                     true ->
-                        SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
-                        Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:fetch(provider, SpaceId),
-                            Space
-                        end, SpacesIdsChunk),
-
-                        SpaceUuidByName = lists:foldl(fun(Space, Map) ->
-                            #document{value = #space_info{id = Id, name = Name}} = Space,
-                            maps:put(Name, [Id | maps:get(Name, Map, [])], Map)
-                        end, #{}, Spaces),
-
-                        MinDiffPrefLenByName = maps:map(fun
-                            (_, [_]) -> 0;
-                            (_, UUIDs) -> binary:longest_common_prefix(UUIDs) + 1
-                        end, SpaceUuidByName),
-
-                        lists:map(fun(#document{key = UUID, value = #space_info{id = Id, name = Name}}) ->
-                            case maps:find(Name, MinDiffPrefLenByName) of
-                                {ok, 0} ->
-                                    #child_link{uuid = UUID, name = Name};
-                                {ok, Len} ->
-                                    #child_link{uuid = UUID,name = <<Name/binary,
-                                        ?SPACE_NAME_ID_SEPARATOR, Id:Len/binary>>}
-                            end
-                        end, Spaces);
+                        SpacesChunk = lists:sublist(Spaces, Offset + 1, Size),
+                        lists:map(fun({SpaceId, SpaceName}) ->
+                            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                            #child_link{uuid = fslogic_uuid:to_file_guid(SpaceUUID, SpaceId), name = SpaceName}
+                        end, SpacesChunk);
                     false ->
                         []
                 end,
@@ -158,7 +124,8 @@ read_dir(CTX, File, Offset, Size) ->
             };
         _ ->
             #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{child_links = ChildLinks}}
+                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:to_file_guid(UUID, SpaceId)}
+                    || CL = #child_link{uuid = UUID} <- ChildLinks]}}
     end.
 
 

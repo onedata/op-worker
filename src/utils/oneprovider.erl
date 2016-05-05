@@ -37,8 +37,11 @@
 -export([get_node_hostname/0, get_node_ip/0]).
 -export([get_provider_id/0, get_provider_domain/0]).
 -export([get_oz_domain/0, get_oz_url/0, get_oz_cert/0]).
--export([get_oz_login_page/0, get_oz_logout_page/0]).
--export([register_in_gr/3, register_in_oz_dev/3, save_file/2]).
+-export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
+-export([register_in_gr/3, save_file/2]).
+
+% Developer function
+-export([register_in_oz_dev/3]).
 
 %%%===================================================================
 %%% API
@@ -84,7 +87,7 @@ get_provider_domain() ->
 %%--------------------------------------------------------------------
 -spec get_oz_domain() -> string().
 get_oz_domain() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, zone_domain),
+    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
     str_utils:to_list(Hostname).
 
 
@@ -118,6 +121,18 @@ get_oz_login_page() ->
 -spec get_oz_logout_page() -> string().
 get_oz_logout_page() ->
     {ok, Page} = application:get_env(?APP_NAME, oz_logout_page),
+    % Page is in format '/page_name.html'
+    str_utils:format("https://~s~s", [get_oz_domain(), Page]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the URL to OZ logout page.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_providers_page() -> string().
+get_oz_providers_page() ->
+    {ok, Page} = application:get_env(?APP_NAME, oz_providers_page),
     % Page is in format '/page_name.html'
     str_utils:format("https://~s~s", [get_oz_domain(), Page]).
 
@@ -178,8 +193,10 @@ register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
         {ok, Key} = file:read_file(OZPKeyPath),
         % Send signing request to OZ
         IPAddresses = get_all_nodes_ips(NodeList),
-        ProviderDomain = str_utils:to_binary(oneprovider:get_provider_domain()),
-        RedirectionPoint = <<"https://", ProviderDomain/binary>>,
+        %% Use IP address of first node as redirection point - this way
+        %% we don't need a DNS server to resolve provider domains in
+        %% developer environment.
+        RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
         Parameters = [
             {<<"urls">>, IPAddresses},
             {<<"csr">>, CSR},

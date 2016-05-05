@@ -34,8 +34,7 @@
 -spec inject_event_stream_definition(Sub :: event:subscription()) ->
     NewSub :: event:subscription().
 inject_event_stream_definition(#subscription{object = #file_attr_subscription{
-    file_uuid = FileUuid, counter_threshold = CtrThr,
-    time_threshold = TimeThr}} = Sub) ->
+    file_uuid = FileUuid, counter_threshold = CtrThr, time_threshold = TimeThr}} = Sub) ->
     Sub#subscription{event_stream = ?FILE_ATTR_EVENT_STREAM#event_stream_definition{
         admission_rule = fun
             (#event{object = #update_event{object = #file_attr{uuid = Uuid}}})
@@ -50,8 +49,7 @@ inject_event_stream_definition(#subscription{object = #file_attr_subscription{
     }};
 
 inject_event_stream_definition(#subscription{object = #file_location_subscription{
-    file_uuid = FileUuid, counter_threshold = CtrThr,
-    time_threshold = TimeThr}} = Sub) ->
+    file_uuid = FileUuid, counter_threshold = CtrThr, time_threshold = TimeThr}} = Sub) ->
     Sub#subscription{event_stream = ?FILE_LOCATION_EVENT_STREAM#event_stream_definition{
         admission_rule = fun
             (#event{object = #update_event{object = #file_location{uuid = Uuid}}})
@@ -65,23 +63,36 @@ inject_event_stream_definition(#subscription{object = #file_location_subscriptio
         event_handler = send_events_handler()
     }};
 
-inject_event_stream_definition(#subscription{object = #permission_changed_subscription{
-    file_uuid = FileUuid}} = Sub) ->
+inject_event_stream_definition(#subscription{
+    object = #permission_changed_subscription{file_uuid = FileUuid}} = Sub) ->
     Sub#subscription{event_stream = ?PERMISSION_CHANGED_EVENT_STREAM#event_stream_definition{
         admission_rule = fun
             (#event{object = #permission_changed_event{file_uuid = Uuid}})
                 when Uuid =:= FileUuid -> true;
             (_) -> false
-                         end,
-        emission_rule = fun(_) -> true end,
-        init_handler = fun
-                           (_, SessId, _) ->
-                               #{session_id => SessId}
-                       end,
-        event_handler = fun
-                            (Events, #{session_id := SessId}) ->
-                                communicator:send(#server_message{message_body = #events{events = Events}}, SessId)
-                        end
+        end,
+        init_handler = fun(_, SessId, _) -> #{session_id => SessId} end,
+        event_handler = fun(Events, #{session_id := SessId}) ->
+            communicator:send(#server_message{
+                message_body = #events{events = Events}
+            }, SessId)
+        end
+    }};
+
+inject_event_stream_definition(#subscription{
+    object = #file_removal_subscription{file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{event_stream = ?FILE_REMOVAL_EVENT_STREAM#event_stream_definition{
+        admission_rule = fun
+            (#event{object = #file_removal_event{file_uuid = Uuid}})
+                when Uuid =:= FileUuid -> true;
+            (_) -> false
+        end,
+        init_handler = fun(_, SessId, _) -> #{session_id => SessId} end,
+        event_handler = fun(Events, #{session_id := SessId}) ->
+            communicator:send(#server_message{
+                message_body = #events{events = Events}
+            }, SessId)
+        end
     }}.
 
 %%--------------------------------------------------------------------
@@ -163,7 +174,7 @@ send_events_handler() ->
         ([], _) ->
             ok;
         (Evts, #{stream_id := StmId, session_id := SessId}) ->
-            sequencer:send_message(#events{events = Evts}, StmId, SessId);
+            sequencer:send_message(#server_message{message_body = #events{events = Evts}, proxy_session_id = SessId}, StmId, SessId);
         (_, _) ->
             ok
     end.

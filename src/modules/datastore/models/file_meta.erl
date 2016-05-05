@@ -26,9 +26,6 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--define(ROOT_DIR_UUID, <<"">>).
--define(ROOT_DIR_NAME, <<"">>).
-
 %% Separator used in filename for specifying snapshot version.
 -define(SNAPSHOT_SEPARATOR, "::").
 
@@ -40,7 +37,7 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    gen_path/1, gen_storage_path/1, rename/2, setup_onedata_user/1]).
+    rename/2, setup_onedata_user/2]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
     is_spaces_dir/2]).
@@ -60,7 +57,7 @@
 -type posix_permissions() :: non_neg_integer().
 
 -export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
-    size/0, mode/0, time/0, posix_permissions/0]).
+    size/0, mode/0, time/0, posix_permissions/0, file_meta/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -128,8 +125,16 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc0) ->
     ?run(begin
+             FileDoc =
+                 case FileDoc0 of
+                     #document{key = undefined} = Doc ->
+                         NewUUID = fslogic_uuid:gen_file_uuid(),
+                         Doc#document{key = NewUUID};
+                     _ ->
+                         FileDoc0
+                 end,
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->
@@ -267,8 +272,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+        ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -280,11 +285,13 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(onedata_user, create, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
+'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
+    setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -393,33 +400,6 @@ get_ancestors2(Key, Acc) ->
     {ok, {ParentKey, ?MODEL_NAME}} = datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
     get_ancestors2(ParentKey, [ParentKey | Acc]).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Generate file_meta:path() for given file_meta:entry()
-%% @end
-%%--------------------------------------------------------------------
--spec gen_path(entry()) -> {ok, path()} | datastore:generic_error().
-gen_path({path, Path}) when is_binary(Path) ->
-    {ok, Path};
-gen_path(Entry) ->
-    ?run(begin
-             gen_path2(Entry, [])
-         end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Generate storage file_meta:path() for given file_meta:entry()
-%% @end
-%%--------------------------------------------------------------------
--spec gen_storage_path(entry()) -> {ok, path()} | datastore:generic_error().
-gen_storage_path({path, Path}) when is_binary(Path) ->
-    {ok, Path};
-gen_storage_path(Entry) ->
-    ?run(begin
-        gen_storage_path2(Entry, [])
-    end).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Resolves given file_meta:path() and returns file_meta:entry() along with list of
@@ -499,65 +479,67 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.
-setup_onedata_user(UUID) ->
-    ?info("setup_onedata_user ~p", [UUID]),
-    try
-        {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
-            onedata_user:get(UUID),
+-spec setup_onedata_user(oz_endpoint:client(), UserId :: onedata_user:id()) -> ok.
+setup_onedata_user(_Client, UserId) ->
+    ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
+    datastore:run_synchronized(onedata_user, UserId, fun() ->
+        try
+            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
+                onedata_user:get(UserId),
 
-        CTime = erlang:system_time(seconds),
+                CTime = erlang:system_time(seconds),
 
-        {ok, SpacesRootUUID} =
-            case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
-                {ok, #document{key = Key}} -> {ok, Key};
-                {error, {not_found, _}} ->
-                    create({uuid, ?ROOT_DIR_UUID},
-                        #document{key = ?SPACES_BASE_DIR_UUID,
-                            value = #file_meta{
-                                name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
-                                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                                is_scope = true
-                            }})
-            end,
+                {ok, SpacesRootUUID} =
+                    case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
+                        {ok, #document{key = Key}} -> {ok, Key};
+                        {error, {not_found, _}} ->
+                            create({uuid, ?ROOT_DIR_UUID},
+                                #document{key = ?SPACES_BASE_DIR_UUID,
+                                    value = #file_meta{
+                                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
+                                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                                        is_scope = true
+                                    }})
+                    end,
 
-        lists:foreach(fun(SpaceId) ->
-            SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            case exists({uuid, SpaceDirUuid}) of
-                true ->
-                    fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
-                false ->
-                    space_info:fetch(provider, SpaceId),
-                    {ok, _} = create({uuid, SpacesRootUUID},
-                        #document{key = SpaceDirUuid,
-                            value = #file_meta{
-                                name = SpaceId, type = ?DIRECTORY_TYPE,
-                                mode = 8#1770, mtime = CTime, atime = CTime,
-                                ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
-                            }})
-            end
-                      end, Spaces),
+            lists:foreach(fun({SpaceId, _}) ->
+                SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                case exists({uuid, SpaceDirUuid}) of
+                    true ->
+                        fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID},
+                            {uuid, SpaceDirUuid});
+                    false ->
+                        {ok, _} = create({uuid, SpacesRootUUID},
+                            #document{key = SpaceDirUuid,
+                                value = #file_meta{
+                                    name = SpaceId, type = ?DIRECTORY_TYPE,
+                                    mode = 8#1770, mtime = CTime, atime = CTime,
+                                    ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
+                                }})
+                end
+            end, Spaces),
 
-        {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
-            #document{key = fslogic_uuid:default_space_uuid(UUID),
-                value = #file_meta{
-                    name = UUID, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                    is_scope = true
-                }
-            }),
-        {ok, _SpacesUUID} = create({uuid, RootUUID},
-            #document{key = fslogic_uuid:spaces_uuid(UUID),
-                value = #file_meta{
-                    name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                    is_scope = true
-                }
-            })
-    catch
-        Error:Reason ->
-            ?error_stacktrace("Cannot initialize onedata user files metadata due to: ~p:~p", [Error, Reason])
-    end.
+            {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
+                #document{key = fslogic_uuid:default_space_uuid(UserId),
+                    value = #file_meta{
+                        name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1770,
+                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                        is_scope = true
+                    }
+                }),
+            {ok, _SpacesUUID} = create({uuid, RootUUID},
+                #document{key = fslogic_uuid:spaces_uuid(UserId),
+                    value = #file_meta{
+                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                        is_scope = true
+                    }
+                })
+        catch
+            Error:Reason ->
+                ?error_stacktrace("Cannot initialize onedata user files metadata due to: ~p:~p", [Error, Reason])
+        end
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -587,9 +569,11 @@ get_space_dir(SpaceId) ->
 %% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
 %% @end
 %%--------------------------------------------------------------------
--spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
+-spec to_uuid(entry() | {guid, fslogic_worker:file_guid()}) -> {ok, uuid()} | datastore:generic_error().
 to_uuid({uuid, UUID}) ->
     {ok, UUID};
+to_uuid({guid, FileGUID}) ->
+    {ok, fslogic_uuid:file_guid_to_uuid(FileGUID)};
 to_uuid(#document{key = UUID}) ->
     {ok, UUID};
 to_uuid({path, Path}) ->
@@ -749,42 +733,6 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
             ok = set_scopes6(Entry, NewScopeUUID, Setters, [Setter | SettersBak], Offset + BatchSize, BatchSize)
     end,
     ok = set_scopes6([{uuid, UUID} || #child_link{uuid = UUID} <- ChildLinks], NewScopeUUID, Setters, [Setter | SettersBak], 0, BatchSize).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Internal helper for gen_path/1. Accumulates all file meta names
-%% and concatenates them into path().
-%% @end
-%%--------------------------------------------------------------------
--spec gen_path2(entry(), [name()]) -> {ok, path()} | datastore:generic_error() | no_return().
-gen_path2(Entry, Tokens) ->
-    SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
-    {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = get(Entry),
-    case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
-        {ok, {?ROOT_DIR_UUID, _}} ->
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
-        {ok, {SpaceBaseDirUUID, _}} ->
-            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
-            gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
-        {ok, {ParentUUID, _}} ->
-            gen_path2({uuid, ParentUUID}, [Name | Tokens])
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Internal helper for gen_storage_path/1. Accumulates all file meta names
-%% and concatenates them into storage path().
-%% @end
-%%--------------------------------------------------------------------
--spec gen_storage_path2(entry(), [name()]) -> {ok, path()} | datastore:generic_error() | no_return().
-gen_storage_path2(Entry, Tokens) ->
-    {ok, #document{value = #file_meta{name = Name}} = Doc} = get(Entry),
-    case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
-        {ok, {?ROOT_DIR_UUID, _}} ->
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
-        {ok, {ParentUUID, _}} ->
-            gen_storage_path2({uuid, ParentUUID}, [Name | Tokens])
-    end.
 
 
 %%--------------------------------------------------------------------

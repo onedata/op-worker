@@ -35,7 +35,7 @@
 %% blocks    - list of offset, size pairs that describes bytes segments read
 -record(read_event, {
     file_uuid :: file_meta:uuid(),
-    size :: file_meta:size(),
+    size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
@@ -53,13 +53,19 @@
 -record(write_event, {
     file_uuid :: file_meta:uuid(),
     file_size :: file_meta:size(),
-    size :: file_meta:size(),
+    size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
 %% definition of an event triggered when file permission gets changed
 %% file_uuid - UUID of a file
 -record(permission_changed_event, {
+    file_uuid :: file_meta:uuid()
+}).
+
+%% definition of an event triggered when file is removed
+%% file_uuid - UUID of a file
+-record(file_removal_event, {
     file_uuid :: file_meta:uuid()
 }).
 

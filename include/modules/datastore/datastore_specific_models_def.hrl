@@ -15,6 +15,21 @@
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+%% Message ID containing recipient for remote response.
+-record(message_id, {
+    issuer :: client | server,
+    id :: binary(),
+    recipient :: pid() | undefined
+}).
+
+% State of subscription tracking.
+-record(subscriptions_state, {
+    refreshing_node :: node(),
+    largest :: subscriptions:seq(),
+    missing :: [subscriptions:seq()],
+    users :: sets:set(onedata_user:id())
+}).
+
 %% Identity containing user_id
 -record(identity, {
     user_id :: onedata_user:id(),
@@ -30,24 +45,41 @@
     auth :: session:auth(),
     node :: node(),
     supervisor :: pid(),
-    watcher :: pid(),
     event_manager :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
+    proxy_via :: session:id() | undefined,
+    response_map = #{} :: #{},
     % Key-value in-session memory
-    memory = [] :: [{Key :: term(), Value :: term()}]
+    memory = [] :: [{Key :: term(), Value :: term()}],
+    % Handles for opened files
+    handles = #{} :: #{binary() => storage_file_manager:handle()}
 }).
 
 %% Local, cached version of OZ user
 -record(onedata_user, {
     name :: binary(),
-    space_ids :: [binary()],
-    group_ids :: [binary()]
+    spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
+    default_space :: binary() | undefined,
+    group_ids :: [binary()],
+    connected_accounts :: [onedata_user:connected_account()],
+    alias :: binary(),
+    email_list :: [binary()],
+    revision_history = [] :: [subscriptions:rev()],
+    % This field means that only public information is available about this
+    % user. This is the case when given user hasn't ever logged in to this
+    % provider, but basic information about him is required (e. g. he is a
+    % member of space or group together with user that is currently logged in).
+    % Public information contains id and name.
+    public_only = false :: boolean()
 }).
 
 %% Local, cached version of OZ group
 -record(onedata_group, {
-    name :: binary()
+    name :: binary(),
+    users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    spaces = [] :: [SpaceId :: binary()],
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 -record(file_meta, {
@@ -59,7 +91,7 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
-    version = 1, %% Snaphot version
+    version = 1, %% Snapshot version
     is_scope = false :: boolean()
 }).
 
@@ -79,24 +111,35 @@
 
 %% Model for storing file's location data
 -record(file_location, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     provider_id :: oneprovider:id(),
-    space_id :: file_meta:uuid(),
+    space_uuid :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
+    handle_id :: binary() | undefined,
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
     }
 }).
 
-%% Model for caching space details fetched from Global Registry
+%% Model for caching provider details fetched from OZ
+-record(provider_info, {
+    client_name :: binary(),
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+%% Model for caching space details fetched from OZ
 -record(space_info, {
-    id :: binary(),
-    name :: binary()
+    name :: binary(),
+    providers = [],
+    providers_supports = [] :: [{ProviderId :: binary(), Size :: pos_integer()}],
+    users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
+    groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 %% Model that maps space to storage
@@ -117,6 +160,18 @@
 %% Model that holds state entries for DBSync worker
 -record(dbsync_state, {
     entry :: term()
+}).
+
+%% Model that holds files created by root, whose owner needs to be changed when
+%% the user will be present in current provider.
+%% The Key of this document is UserId.
+-record(files_to_chown, {
+    file_uuids = [] :: [file_meta:uuid()]
+}).
+
+%% Model that maps onedata user to POSIX user
+-record(posix_user, {
+    credentials :: #{storage:id() => posix_user:credentials()}
 }).
 
 -endif.

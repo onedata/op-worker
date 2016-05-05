@@ -14,9 +14,10 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_change/2, get_changes/2, create_storage_file_if_not_exists/4,
+-export([add_change/2, get_changes/2, create_storage_file_if_not_exists/2,
     create_storage_file/4, get_merged_changes/2]).
 
 -define(MAX_CHANGES, 20).
@@ -87,15 +88,25 @@ get_merged_changes(Doc, N) ->
 %% Create storage file and file_location if there is no file_location defined
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(binary(), file_meta:uuid(), session:id(), file_meta:posix_permissions()) -> ok.
-create_storage_file_if_not_exists(SpaceId, FileUuid, SessId, Mode) ->
-    case fslogic_utils:get_local_file_locations({uuid, FileUuid}) of
-        [] ->
-            create_storage_file(SpaceId, FileUuid, SessId, Mode),
-            ok;
-        _ ->
-            ok
-    end.
+-spec create_storage_file_if_not_exists(space_info:id(), datastore:document()) -> ok.
+create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
+    value = #file_meta{mode = Mode, uid = UserId}}) ->
+    file_location:run_synchronized(FileUuid,
+        fun() ->
+            case fslogic_utils:get_local_file_locations(FileDoc) of
+                [] ->
+                    create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
+                    case onedata_user:exists(UserId) of
+                        true ->
+                            files_to_chown:chown_file(FileUuid, UserId, SpaceId);
+                        false ->
+                            files_to_chown:add(UserId, FileUuid)
+                    end,
+                    ok;
+                _ ->
+                    ok
+            end
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -111,18 +122,19 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
-        space_id = SpaceDirUuid},
+        space_uuid = SpaceDirUuid},
     {ok, LocId} = file_location:create(#document{value = Location}),
     file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
 
     LeafLess = fslogic_path:dirname(FileId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, undefined, Storage, LeafLess),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
+    ?debug("create_storage_file (dirs) ~p ~p", [Storage, LeafLess]),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
-
+    ?debug("create_storage_file (file) ~p ~p", [Storage, FileId]),
     SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, Mode),

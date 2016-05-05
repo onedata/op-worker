@@ -157,4 +157,4 @@ verify_storage_test_file_loop(Handle, FileContent, _, Attempts) ->
 %%--------------------------------------------------------------------
 -spec random_alphanumeric_sequence(Size :: non_neg_integer()) -> Seq :: binary().
 random_alphanumeric_sequence(Size) ->
-    re:replace(base64:encode(crypto:rand_bytes(Size)), "\\W", "", [global, {return, binary}]).
+    re:replace(http_utils:base64url_encode(crypto:rand_bytes(Size)), "\\W", "", [global, {return, binary}]).

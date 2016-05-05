@@ -24,6 +24,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 %% API
 -export([start_link/2]).
@@ -51,7 +52,6 @@
     sequencer_out_streams = #{} :: streams()
 }).
 
--define(SEND_RETRY_DELAY, timer:seconds(5)).
 
 %%%===================================================================
 %%% API
@@ -175,8 +175,8 @@ handle_cast(#client_message{} = Msg, State) ->
     gen_fsm:send_event(SeqStm, Msg),
     {noreply, NewState};
 
-handle_cast(#server_message{} = Msg, State) ->
-    case get_sequencer_out_stream(Msg, State) of
+handle_cast(#server_message{} = Msg, #state{session_id = SessionId} = State) ->
+    case get_sequencer_out_stream(Msg#server_message{proxy_session_id = SessionId}, State) of
         {ok, SeqStm} -> gen_server:cast(SeqStm, Msg);
         {error, not_found} -> ok
     end,

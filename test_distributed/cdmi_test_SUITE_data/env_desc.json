@@ -11,7 +11,12 @@
     },
     "os_configs": {
         "cfg1": {
-            "storages": [],
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st"
+                }
+            ],
             "users": [],
             "groups": {}
         }
@@ -45,7 +50,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "zone_domain": "oz",
+                        "oz_domain": "oz",
                         "verify_oz_cert": false
                     }
                 },
@@ -60,8 +65,32 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "zone_domain": "oz",
+                        "oz_domain": "oz",
                         "verify_oz_cert": false
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "space1"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
                     }
                 }
             }

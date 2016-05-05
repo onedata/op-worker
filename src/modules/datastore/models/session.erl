@@ -18,6 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -26,15 +27,17 @@
 %% API
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
-    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1]).
+    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1,
+    all_with_user/0, get_user_id/1]).
 
 -type id() :: binary().
+-type ttl() :: non_neg_integer().
 -type auth() :: #auth{}.
 -type type() :: fuse | rest | gui | provider_outgoing | provider.
--type status() :: active | inactive | phantom.
+-type status() :: active | inactive.
 -type identity() :: #identity{}.
 
--export_type([id/0, auth/0, type/0, status/0, identity/0]).
+-export_type([id/0, ttl/0, auth/0, type/0, status/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -179,6 +182,41 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns session supervisor and node on which supervisor is running.
+%% @end
+%%--------------------------------------------------------------------
+-spec all_with_user() ->
+    {ok, [datastore:document()]} | {error, Reason :: term()}.
+
+all_with_user() ->
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (#document{
+            value = #session{identity = #identity{user_id = UserID}}
+        } = Doc, Acc) when is_binary(UserID) ->
+            {next, [Doc | Acc]};
+        (_X, Acc) ->
+            {next, Acc}
+    end,
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, Filter, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns ID of user associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_id(SessId :: id()) ->
+    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+get_user_id(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} ->
+            {ok, UserId};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -274,6 +312,10 @@ get_random_connection(SessId) ->
     {ok, Comm :: pid()} | {error, Reason :: term()}.
 get_connections(SessId) ->
     case session:get(SessId) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
+            ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
+            provider_communicator:ensure_connected(ProxyViaSession),
+            get_connections(ProxyViaSession);
         {ok, #document{value = #session{connections = Cons}}} ->
             {ok, Cons};
         {error, Reason} ->
@@ -289,12 +331,8 @@ get_connections(SessId) ->
 -spec remove_connection(SessId :: session:id(), Con :: pid()) ->
     ok | datastore:update_error().
 remove_connection(SessId, Con) ->
-    Diff = fun(#session{watcher = Watcher, connections = Cons} = Sess) ->
+    Diff = fun(#session{connections = Cons} = Sess) ->
         NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
-        case NewCons of
-            [] -> gen_server:cast(Watcher, schedule_session_status_checkup);
-            _ -> ok
-        end,
         {ok, Sess#session{connections = NewCons}}
     end,
     case session:update(SessId, Diff) of
@@ -308,7 +346,7 @@ remove_connection(SessId, Con) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(SessId :: id()) ->
-    {ok, Auth :: #auth{}} | {error, Reason :: term()}.
+    {ok, Auth :: #auth{}} | {ok, undefined} | {error, Reason :: term()}.
 get_auth(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} ->

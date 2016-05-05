@@ -35,14 +35,14 @@
 -type metadata() :: term().
 -type init_handler() :: fun((#subscription{}, session:id(), session:type()) -> ctx()).
 -type terminate_handler() :: fun((ctx()) -> term()).
--type event_handler() :: fun(([#event{}], ctx()) -> ok).
--type admission_rule() :: fun((#event{}) -> true | false).
--type aggregation_rule() :: fun((#event{}, #event{}) -> #event{}).
--type transition_rule() :: fun((metadata(), #event{}) -> metadata()).
+-type event_handler() :: fun(([event:event()], ctx()) -> ok).
+-type admission_rule() :: fun((event:event()) -> true | false).
+-type aggregation_rule() :: fun((event:event(), event:event()) -> event:event()).
+-type transition_rule() :: fun((metadata(), event:event()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
 
--type events() :: #{event:key() => #event{}}.
+-type events() :: #{event:key() => event:event()}.
 
 %% event stream state:
 %% subscription_id - ID of an event subscription
@@ -139,7 +139,7 @@ handle_cast(#event{} = Evt, #state{subscription_id = SubId, session_id = SessId,
     definition = StmDef} = State) ->
     case apply_admission_rule(Evt, StmDef) of
         true ->
-            ?debug("Handling event ~p in event stream for subscription ~p and "
+            ?info("Handling event ~p in event stream for subscription ~p and "
             "session ~p", [Evt, SubId, SessId]),
             {noreply, process_event(Evt, State)};
         false -> {noreply, State}
@@ -291,7 +291,7 @@ get_initial_metadata(#event_stream_definition{metadata = Meta}) ->
 %% Processes event on the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec process_event(Evt :: #event{}, State :: #state{}) -> NewState :: #state{}.
+-spec process_event(Evt :: event:event(), State :: #state{}) -> NewState :: #state{}.
 process_event(Evt, #state{events = Evts, metadata = Meta,
     definition = StmDef} = State) ->
     NewEvts = apply_aggregation_rule(Evt, Evts, StmDef),
@@ -329,7 +329,7 @@ schedule_event_handler_execution(#event_stream_definition{}) ->
 %% Applies admission rule.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_admission_rule(Evt :: #event{}, StmDef :: definition()) -> true | false.
+-spec apply_admission_rule(Evt :: event:event(), StmDef :: definition()) -> true | false.
 apply_admission_rule(Evt, #event_stream_definition{admission_rule = Rule}) ->
     Rule(Evt).
 
@@ -350,7 +350,7 @@ apply_emission_rule(Meta, #event_stream_definition{emission_rule = Rule}) ->
 %% given key inserts new event into event map.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_aggregation_rule(Evt :: #event{}, Evts :: events(), StmDef :: definition()) ->
+-spec apply_aggregation_rule(Evt :: event:event(), Evts :: events(), StmDef :: definition()) ->
     NewEvts :: events().
 apply_aggregation_rule(#event{key = Key} = Evt, Evts, #event_stream_definition{
     aggregation_rule = Rule}) ->
@@ -366,7 +366,7 @@ apply_aggregation_rule(#event{key = Key} = Evt, Evts, #event_stream_definition{
 %% new metadata associated with the stream.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_transition_rule(Evt :: #event{}, Meta :: metadata(), StmDef :: definition()) ->
+-spec apply_transition_rule(Evt :: event:event(), Meta :: metadata(), StmDef :: definition()) ->
     NewMeta :: metadata().
 apply_transition_rule(Evt, Meta, #event_stream_definition{transition_rule = Rule}) ->
     Rule(Meta, Evt).

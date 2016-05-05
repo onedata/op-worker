@@ -40,6 +40,8 @@
     catch
         _:{badmatch, {error, {not_found, file_meta}}} ->
             {error, ?ENOENT};
+        _:{badmatch, {error, enoent}} ->
+            {error, ?ENOENT};
         _:___Reason ->
             ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason]),
             {error, ___Reason}
@@ -53,7 +55,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 -type handle() :: #lfm_handle{}.
--type file_key() :: fslogic_worker:file() | {handle, handle()}.
+-type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
 -type error_reply() :: {error, term()}.
 
 -export_type([handle/0, file_key/0, error_reply/0]).
@@ -61,10 +63,10 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, rmdir/2, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, get_file_path/2]).
+-export([exists/1, mv/3, cp/3, get_file_path/2]).
 %% Functions operating on files
--export([create/3, open/3, fsync/1, write/3, read/3, truncate/2, truncate/3,
-    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
+-export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
+    truncate/3, get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
@@ -105,7 +107,7 @@ mkdir(SessId, Path, Mode) ->
 %% Deletes a directory with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rmdir(session:id(), file_key()) -> ok | error_reply().
+-spec rmdir(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
 rmdir(SessId, FileKey) ->
     ?run(fun() -> lfm_utils:rm(SessId, FileKey) end).
 
@@ -115,9 +117,9 @@ rmdir(SessId, FileKey) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
-    {ok, [{file_meta:uuid(), file_meta:name()}]} | error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
     ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit) end).
 
@@ -127,7 +129,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_count(SessId :: session:id(),
-    FileKey :: file_meta:uuid_or_path()) ->
+    FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
     ?run(fun() -> lfm_dirs:get_children_count(SessId, FileKey) end).
@@ -137,8 +139,8 @@ get_children_count(SessId, FileKey) ->
 %% Returns uuid of parent for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
-    {ok, file_meta:uuid()} | error_reply().
+-spec get_parent(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
 get_parent(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_parent(SessId, FileKey) end).
 
@@ -157,30 +159,30 @@ exists(FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileKeyFrom :: file_key(), PathTo :: file_meta:path()) ->
+-spec mv(session:id(), fslogic_worker:file(), file_meta:path()) ->
     ok | error_reply().
-mv(FileKeyFrom, PathTo) ->
-    ?run(fun() -> lfm_files:mv(FileKeyFrom, PathTo) end).
+mv(SessId, FileEntry, TargetPath) ->
+    ?run(fun() -> lfm_files:mv(SessId, FileEntry, TargetPath) end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
--spec cp(FileKeyFrom :: file_key(), PathTo :: file_meta:path()) ->
+-spec cp(session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
     ok | error_reply().
-cp(PathFrom, PathTo) ->
-    ?run(fun() -> lfm_files:cp(PathFrom, PathTo) end).
+cp(Auth, FileEntry, TargetPath) ->
+    ?run(fun() -> lfm_files:cp(Auth, FileEntry, TargetPath) end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns full path of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(SessId :: session:id(), Uuid :: file_meta:uuid()) ->
+-spec get_file_path(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
-get_file_path(SessId, Uuid) ->
-    ?run(fun() -> lfm_files:get_file_path(SessId, Uuid) end).
+get_file_path(SessId, FileGUID) ->
+    ?run(fun() -> lfm_files:get_file_path(SessId, FileGUID) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -191,9 +193,21 @@ get_file_path(SessId, Uuid) ->
 unlink(Handle) ->
     ?run(fun() -> lfm_files:unlink(Handle) end).
 
--spec unlink(session:id(), fslogic_worker:file()) -> ok | error_reply().
+-spec unlink(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
 unlink(SessId, FileEntry) ->
     ?run(fun() -> lfm_files:unlink(SessId, FileEntry) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new file with default mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(SessId :: session:id(), Path :: file_meta:path()) ->
+    {ok, file_meta:uuid()} | error_reply().
+create(SessId, Path) ->
+    ?run(fun() -> lfm_files:create(SessId, Path) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -202,16 +216,16 @@ unlink(SessId, FileEntry) ->
 %%--------------------------------------------------------------------
 -spec create(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, file_meta:uuid()} | error_reply().
+    {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path, Mode) ->
-    ?run(fun() -> lfm_files:create(SessId, Path, Mode) end ).
+    ?run(fun() -> lfm_files:create(SessId, Path, Mode) end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Opens a file in selected mode and returns a file handle used to read or write.
 %% @end
 %%--------------------------------------------------------------------
--spec open(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec open(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     OpenType :: helpers:open_mode()) ->
     {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
@@ -256,7 +270,7 @@ read(FileHandle, Offset, MaxSize) ->
 truncate(Handle, Size) ->
     ?run(fun() -> lfm_files:truncate(Handle, Size) end).
 
--spec truncate(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec truncate(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Size :: non_neg_integer()) ->
     ok | error_reply().
 truncate(SessId, FileKey, Size) ->
@@ -272,7 +286,7 @@ truncate(SessId, FileKey, Size) ->
 get_block_map(Handle) ->
     ?run(fun() -> lfm_files:get_block_map(Handle) end).
 
--spec get_block_map(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec get_block_map(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, fslogic_blocks:blocks()} | error_reply().
 get_block_map(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_block_map(SessId, FileKey) end).
@@ -311,7 +325,7 @@ check_perms(Path, PermType) ->
 get_acl(Handle) ->
     ?run(fun() -> lfm_perms:get_acl(Handle) end).
 
--spec get_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, [lfm_perms:access_control_entity()]} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
@@ -327,7 +341,7 @@ get_acl(SessId, FileKey) ->
 set_acl(Handle, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(Handle, EntityList) end).
 
--spec set_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(), EntityList :: [lfm_perms:access_control_entity()]) ->
+-spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), EntityList :: [lfm_perms:access_control_entity()]) ->
     ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
@@ -342,7 +356,7 @@ set_acl(SessId, FileKey, EntityList) ->
 remove_acl(Handle) ->
     ?run(fun() -> lfm_perms:remove_acl(Handle) end).
 
--spec remove_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | error_reply().
 remove_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:remove_acl(SessId, FileKey) end).
@@ -434,7 +448,8 @@ get_transfer_encoding(SessId, FileKey) ->
 -spec set_transfer_encoding(session:id(), file_key(), xattr:transfer_encoding()) ->
     ok | error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
-    ?run(fun() -> lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding) end).
+    ?run(fun() ->
+        lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -456,7 +471,8 @@ get_cdmi_completion_status(SessId, FileKey) ->
 -spec set_cdmi_completion_status(session:id(), file_key(), xattr:cdmi_completion_status()) ->
     ok | error_reply().
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    ?run(fun() -> lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
+    ?run(fun() ->
+        lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
 
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.

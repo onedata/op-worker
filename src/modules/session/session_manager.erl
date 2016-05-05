@@ -20,10 +20,11 @@
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
--export([create_gui_session/1]).
+-export([reuse_or_create_session/5]).
+-export([create_gui_session/2]).
 -export([remove_session/1]).
 -export([get_provider_session_id/2, session_id_to_provider_id/1]).
--export([reuse_or_create_provider_session/4]).
+-export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
 
 %%%===================================================================
 %%% API
@@ -35,7 +36,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_fuse_session(SessId :: session:id(), Iden :: session:identity(),
-    Con :: pid()) -> {ok, reused | created} | {error, Reason :: term()}.
+    Con :: pid()) -> {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_fuse_session(SessId, Iden, Con) ->
     reuse_or_create_fuse_session(SessId, Iden, undefined, Con).
 
@@ -46,75 +47,21 @@ reuse_or_create_fuse_session(SessId, Iden, Con) ->
 %%--------------------------------------------------------------------
 -spec reuse_or_create_fuse_session(SessId :: session:id(), Iden :: session:identity(),
     Auth :: session:auth() | undefined, Con :: pid()) ->
-    {ok, reused | created} | {error, Reason :: term()}.
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_fuse_session(SessId, Iden, Auth, Con) ->
-    Sess = #session{status = active, identity = Iden, auth = Auth,
-        connections = [Con], type = fuse},
-    Diff = fun
-        (#session{status = phantom}) ->
-            {error, {not_found, session}};
-        (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
-            case Iden of
-                ValidIden ->
-                    {ok, ExistingSess#session{status = active, connections = [Con | Cons]}};
-                _ ->
-                    {error, {invalid_identity, Iden}}
-            end
-    end,
-    case session:update(SessId, Diff) of
-        {ok, SessId} ->
-            {ok, reused};
-        {error, {not_found, _}} ->
-            case session:create(#document{key = SessId, value = Sess}) of
-                {ok, SessId} ->
-                    supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, fuse]),
-                    {ok, created};
-                {error, already_exists} ->
-                    reuse_or_create_fuse_session(SessId, Iden, Auth, Con);
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    reuse_or_create_session(SessId, fuse
+        , Iden, Auth, [Con]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates provider's session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_provider_session(SessId :: session:id(), SessionType :: session:type(), Iden :: session:identity(), Con :: pid()) ->
-    {ok, reused | created} | {error, Reason :: term()}.
+-spec reuse_or_create_provider_session(SessId :: session:id(),
+    SessionType :: session:type(), Iden :: session:identity(), Con :: pid()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_provider_session(SessId, SessionType, Iden, Con) ->
-    Sess = #session{status = active, identity = Iden,
-        connections = [Con], type = SessionType},
-    Diff = fun
-               (#session{status = phantom}) ->
-                   {error, {not_found, session}};
-               (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
-                   case Iden of
-                       ValidIden ->
-                           {ok, ExistingSess#session{status = active, connections = [Con | Cons]}};
-                       _ ->
-                           {error, {invalid_identity, Iden}}
-                   end
-           end,
-    case session:update(SessId, Diff) of
-        {ok, SessId} ->
-            {ok, reused};
-        {error, {not_found, _}} ->
-            case session:create(#document{key = SessId, value = Sess}) of
-                {ok, SessId} ->
-                    supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, provider]),
-                    {ok, created};
-                {error, already_exists} ->
-                    reuse_or_create_provider_session(SessId, SessionType, Iden, Con);
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    reuse_or_create_session(SessId, SessionType, Iden, undefined, [Con]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -136,49 +83,35 @@ reuse_or_create_rest_session(Iden) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_rest_session(Iden, Auth) ->
     SessId = session:get_rest_session_id(Iden),
-    Sess = #session{status = active, identity = Iden, auth = Auth, type = rest},
-    Diff = fun
-        (#session{status = phantom}) ->
-            {error, {not_found, session}};
-        (#session{identity = ValidIden} = ExistingSess) ->
-            case Iden of
-                ValidIden ->
-                    {ok, ExistingSess#session{status = active}};
-                _ ->
-                    {error, {invalid_identity, Iden}}
-            end
-    end,
-    case session:update(SessId, Diff) of
-        {ok, SessId} ->
-            {ok, SessId};
-        {error, {not_found, _}} ->
-            case session:create(#document{key = SessId, value = Sess}) of
-                {ok, SessId} ->
-                    supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, rest]),
-                    {ok, SessId};
-                {error, already_exists} ->
-                    reuse_or_create_rest_session(Iden);
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    reuse_or_create_session(SessId, rest, Iden, Auth, []).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates or reuses proxy session and starts session supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(), Auth :: session:auth(), SessionType :: atom()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
+    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
+    reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates GUI session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_gui_session(Auth :: session:auth()) ->
+-spec create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
-create_gui_session(Auth) ->
+create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_uuid(),
-    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
-    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui},
+    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui, connections = []},
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
+            subscribe_user(Iden),
             {ok, SessId};
         {error, Reason} ->
             {error, Reason}
@@ -202,7 +135,7 @@ remove_session(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
 get_provider_session_id(Type, ProviderId) ->
-    base64:encode(term_to_binary({Type, provider, ProviderId})).
+    http_utils:base64url_encode(term_to_binary({Type, provider, ProviderId})).
 
 
 %%--------------------------------------------------------------------
@@ -212,9 +145,79 @@ get_provider_session_id(Type, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec session_id_to_provider_id(session:id()) -> oneprovider:id().
 session_id_to_provider_id(SessId) ->
-    {_, provider, ProviderId} = binary_to_term(base64:decode(SessId)),
+    {_, _, ProviderId} = binary_to_term(http_utils:base64url_decode(SessId)),
     ProviderId.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Creates session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
+    Iden :: session:identity(), Auth :: session:auth() | undefined,
+    NewCons :: list()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons) ->
+    reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, undefined).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Creates session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
+    Iden :: session:identity(), Auth :: session:auth() | undefined,
+    NewCons :: list(), ProxyVia :: session:id() | undefined) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
+    Sess = #session{status = active, identity = Iden, auth = Auth,
+        connections = NewCons, type = SessType, proxy_via = ProxyVia},
+    Diff = fun
+        (#session{status = inactive}) ->
+            {error, {not_found, session}};
+        (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
+            case Iden of
+                ValidIden ->
+                    {ok, ExistingSess#session{connections = NewCons ++ Cons}};
+                _ ->
+                    {error, {invalid_identity, Iden}}
+            end
+    end,
+    case session:update(SessId, Diff) of
+        {ok, SessId} ->
+            subscribe_user(Iden),
+            {ok, SessId};
+        {error, {not_found, _}} ->
+            case session:create(#document{key = SessId, value = Sess}) of
+                {ok, SessId} ->
+                    supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
+                    subscribe_user(Iden),
+                    {ok, SessId};
+                {error, already_exists} ->
+                    reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Includes user in subscription (if identity belongs to an user).
+%% @end
+%%--------------------------------------------------------------------
+-spec subscribe_user(Iden :: session:identity()) -> ok.
+subscribe_user(Iden) ->
+    UID = Iden#identity.user_id,
+    case UID of
+        undefined -> ok;
+        _ ->
+            subscriptions:put_user(UID),
+            subscriptions_worker:refresh_subscription()
+    end.
