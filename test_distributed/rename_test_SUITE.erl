@@ -211,7 +211,7 @@ move_file_interprovider_test(Config) ->
     TestDir = ?config(test_dir, Config),
     SessId = ?config({session_id, <<"user1">>}, Config),
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(3, TestDir, ""))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, filename(3, TestDir, ""))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, filename(3, TestDir, "/target_dir"))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(1, TestDir, ""))),
     {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, filename(1, TestDir, "/moved_file1"), 8#770)),
@@ -588,6 +588,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(CaseName, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:enable_grpca_based_communication(Config),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
     Workers = ?config(op_worker_nodes, NewConfig),
 
@@ -626,7 +627,8 @@ end_per_testcase(CaseName, Config) ->
     end,
 
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config).
+    initializer:clean_test_users_and_spaces(Config),
+    initializer:disable_grpca_based_communication(Config).
 
 %%%===================================================================
 %%% Internal functions
