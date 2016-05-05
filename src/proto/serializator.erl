@@ -65,7 +65,6 @@ deserialize_server_message(Message, _SessionId) ->
         message_body = {_, MsgBody},
         proxy_session_id = SessionId
     } = messages:decode_msg(Message, 'ServerMessage'),
-    ?info("Receiving ~p", [translator:translate_from_protobuf(MsgBody)]),
     {ok, DecodedId} = message_id:decode(MsgId),
     {ok, #server_message{
         message_id = DecodedId,
@@ -100,7 +99,6 @@ serialize_server_message(#server_message{message_id = MsgId, message_stream = Ms
 -spec serialize_client_message(#client_message{}) -> {ok, binary()} | no_return().
 serialize_client_message(#client_message{message_id = MsgId, message_stream = MsgStm, proxy_session_id = PSessID,
     proxy_session_auth = Auth, message_body = MsgBody}) ->
-    ?info("Sending ~p", [MsgBody]),
     {ok, EncodedId} = message_id:encode(MsgId),
     ClientMessage = #'ClientMessage'{
         message_id = EncodedId,

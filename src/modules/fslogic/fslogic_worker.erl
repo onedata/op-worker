@@ -152,14 +152,14 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?info("fuse_request(~p): ~p", [SessId, FuseRequest]),
+    ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request),
-    ?info("fuse_response: ~p", [Response]),
+    ?debug("fuse_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?info("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
+    ?debug("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
     Response = run_and_catch_exceptions(fun handle_proxyio_request/2, fslogic_context:new(SessId), ProxyIORequest, proxyio_request),
-    ?info("proxyio_response: ~p", [Response]),
+    ?debug("proxyio_response: ~p", [Response]),
     Response;
 handle(_Request) ->
     ?log_bad_request(_Request),
