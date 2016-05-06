@@ -890,7 +890,7 @@ acl_delete_user_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
     ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, FileGUID})),
 
-    Ace2 = ?allow_user(UserId1, ?delete_mask),
+    Ace2 = ?allow_user(UserId1, ?delete_mask bor ?list_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
     ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, DirGUID})),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
@@ -913,7 +913,7 @@ acl_delete_group_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace1])),
     ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, FileGUID})),
 
-    Ace2 = ?allow_group(GroupId1, ?delete_mask),
+    Ace2 = ?allow_group(GroupId1, ?delete_mask  bor ?list_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, DirGUID}, [?acl_all(UserId2), Ace2])),
     ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, DirGUID})),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
