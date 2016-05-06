@@ -36,7 +36,8 @@
     lfm_stat_test/1,
     lfm_synch_stat_test/1,
     lfm_truncate_test/1,
-    lfm_acl_test/1
+    lfm_acl_test/1,
+    rm_recursive_test/1
 ]).
 
 all() ->
@@ -48,7 +49,8 @@ all() ->
         lfm_stat_test,
         lfm_synch_stat_test,
         lfm_truncate_test,
-        lfm_acl_test
+        lfm_acl_test,
+        rm_recursive_test
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -339,6 +341,49 @@ lfm_acl_test(Config) ->
     ?assertEqual(ok, Ans1),
     Ans2 = lfm_proxy:get_acl(W, SessId1, {guid, FileGUID}),
     ?assertEqual({ok, Acl}, Ans2).
+
+rm_recursive_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, <<"user1">>}, Config),
+    DirA =  <<"/a">>,
+    DirB =    <<"/a/b">>,
+    DirC =    <<"/a/c">>,
+    FileG =     <<"/a/c/g">>,
+    FileH =     <<"/a/c/h">>,
+    DirD =    <<"/a/d">>,
+    FileI =     <<"/a/d/i">>,
+    DirE =      <<"/a/d/e">>,
+    FileF =   <<"/a/f">>,
+    DirX =    <<"/a/x">>,
+    FileJ =     <<"/a/x/j">>,
+    {ok, DirAGuid} = lfm_proxy:mkdir(W, SessId, DirA, 8#700),
+    {ok, DirBGuid} = lfm_proxy:mkdir(W, SessId, DirB, 8#300),
+    {ok, DirCGuid} = lfm_proxy:mkdir(W, SessId, DirC, 8#700),
+    {ok, DirDGuid} = lfm_proxy:mkdir(W, SessId, DirD, 8#700),
+    {ok, DirEGuid} = lfm_proxy:mkdir(W, SessId, DirE, 8#000),
+    {ok, DirXGuid} = lfm_proxy:mkdir(W, SessId, DirX, 8#700),
+    {ok, FileFGuid} = lfm_proxy:create(W, SessId, FileF, 8#000),
+    {ok, FileGGuid} = lfm_proxy:create(W, SessId, FileG, 8#000),
+    {ok, FileHGuid} = lfm_proxy:create(W, SessId, FileH, 8#000),
+    {ok, FileIGuid} = lfm_proxy:create(W, SessId, FileI, 8#000),
+    {ok, FileJGuid} = lfm_proxy:create(W, SessId, FileJ, 8#000),
+    ok = lfm_proxy:set_perms(W, SessId, {guid, DirXGuid}, 8#500),
+
+    % when
+    ?assertEqual({error, ?EACCES}, lfm_proxy:rm_recursive(W, SessId, {guid, DirAGuid})),
+
+    % then
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirAGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirBGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, DirCGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirDGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirEGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, DirXGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileFGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileGGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileHGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileIGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, FileJGuid})).
 
 
 %%%===================================================================
