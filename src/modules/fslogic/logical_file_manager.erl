@@ -98,7 +98,7 @@ mkdir(SessId, Path) ->
 
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_meta:uuid()} | error_reply().
+    {ok, DirGUID :: fslogic_worker:file_guid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     ?run(fun() -> lfm_dirs:mkdir(SessId, Path, Mode) end).
 
@@ -107,8 +107,8 @@ mkdir(SessId, Path, Mode) ->
 %% Deletes a directory with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rmdir(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
-rmdir(SessId, FileKey) ->
+-spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
+rm_recursive(SessId, FileKey) ->
     ?run(fun() -> lfm_utils:rm(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
@@ -275,6 +275,16 @@ truncate(Handle, Size) ->
     ok | error_reply().
 truncate(SessId, FileKey, Size) ->
     ?run(fun() -> lfm_files:truncate(SessId, FileKey, Size) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Releases previously opened  file.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(handle()) ->
+    ok | error_reply().
+release(FileHandle) ->
+    ?run(fun() -> lfm_files:release(FileHandle) end).
 
 %%--------------------------------------------------------------------
 %% @doc
