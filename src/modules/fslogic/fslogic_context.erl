@@ -41,6 +41,12 @@ new(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_space_id(CTX :: #fslogic_ctx{}, Entry :: file_meta:entry() | {guid, fslogic_worker:file_guid()}) -> NewCTX :: #fslogic_ctx{}.
+set_space_id(#fslogic_ctx{} = CTX, {guid, FileGUID}) ->
+    case fslogic_uuid:unpack_file_guid(FileGUID) of
+        {FileUUID, undefined} -> set_space_id(CTX, {uuid, FileUUID});
+        {_, SpaceId} ->
+            CTX#fslogic_ctx{space_id = SpaceId}
+    end;
 set_space_id(#fslogic_ctx{} = CTX, Entry) ->
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)),
     CTX#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}.

@@ -198,10 +198,22 @@ release(#fslogic_ctx{session_id = SessId}, HandleId) ->
 -spec get_parent(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-get_parent(_CTX, File) ->
+get_parent(CTX, File) ->
+    SpacesBaseDirUUID = ?SPACES_BASE_DIR_UUID,
     {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
-    #fuse_response{status = #status{code = ?OK}, fuse_response =
-    #dir{uuid = ParentUUID}}.
+    case ParentUUID of
+        SpacesBaseDirUUID ->
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = #dir{uuid =
+                    fslogic_uuid:to_file_guid(fslogic_uuid:spaces_uuid(fslogic_context:get_user_id(CTX)), undefined)}
+            };
+        _ ->
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = #dir{uuid = fslogic_uuid:to_file_guid(ParentUUID)}
+            }
+    end.
 
 
 %%--------------------------------------------------------------------
