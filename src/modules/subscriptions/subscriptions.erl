@@ -34,6 +34,7 @@
 %%--------------------------------------------------------------------
 -spec account_updates(SequenceNumbers :: ordsets:ordset(seq())) -> ok.
 account_updates(SequenceNumbers) ->
+    ensure_initialised(),
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         #subscriptions_state{missing = Missing, largest = Largest} = State,
         NewLargest = max(Largest, lists:last(SequenceNumbers)),
@@ -54,6 +55,7 @@ account_updates(SequenceNumbers) ->
 %%--------------------------------------------------------------------
 -spec get_missing() -> {Missing :: ordsets:ordset(seq()), Largest :: seq()}.
 get_missing() ->
+    ensure_initialised(),
     {ok, #document{value = #subscriptions_state{missing = Missing,
         largest = Largest}}} = subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
     {Missing, Largest}.
@@ -65,6 +67,7 @@ get_missing() ->
 %%--------------------------------------------------------------------
 -spec get_users() -> [UserID :: onedata_user:id()].
 get_users() ->
+    ensure_initialised(),
     {ok, #document{value = #subscriptions_state{users = UserIDs}}}
         = subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
     lists:usort(sets:to_list(UserIDs)).
@@ -77,6 +80,7 @@ get_users() ->
 %%--------------------------------------------------------------------
 -spec put_user(UserID :: onedata_user:id()) -> ok.
 put_user(UserID) ->
+    ensure_initialised(),
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         Users = sets:add_element(UserID, State#subscriptions_state.users),
         {ok, State#subscriptions_state{users = Users}}
@@ -91,6 +95,7 @@ put_user(UserID) ->
 %%--------------------------------------------------------------------
 -spec reevaluate_users() -> ok.
 reevaluate_users() ->
+    ensure_initialised(),
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         Users = get_users_with_session(),
         {ok, State#subscriptions_state{users = sets:from_list(Users)}}
@@ -110,7 +115,7 @@ ensure_initialised() ->
             % as retrieving users is costly, first we've checked for existence
             Users = get_users_with_session(),
             %todo add create_or_update operation to all levels of datastore and use it here
-            subscriptions_state:save(#document{
+            {ok, _} = subscriptions_state:save(#document{
                 key = ?SUBSCRIPTIONS_STATE_KEY,
                 value = #subscriptions_state{
                     largest = 0,
@@ -130,6 +135,7 @@ ensure_initialised() ->
 %%--------------------------------------------------------------------
 -spec get_refreshing_node() -> {ok, node()}.
 get_refreshing_node() ->
+    ensure_initialised(),
     {ok, #document{value = #subscriptions_state{refreshing_node = Node}}} =
         subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
     {ok, Nodes} = request_dispatcher:get_worker_nodes(?MODULE),

@@ -174,7 +174,7 @@ send_events_handler() ->
         ([], _) ->
             ok;
         (Evts, #{stream_id := StmId, session_id := SessId}) ->
-            sequencer:send_message(#events{events = Evts}, StmId, SessId);
+            sequencer:send_message(#server_message{message_body = #events{events = Evts}, proxy_session_id = SessId}, StmId, SessId);
         (_, _) ->
             ok
     end.

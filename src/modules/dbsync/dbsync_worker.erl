@@ -63,6 +63,7 @@ init(_Args) ->
     Since = 0,
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -81,11 +82,11 @@ init_stream(Since, Until, Queue) ->
                 fun(SpaceId) ->
                     {SpaceId, #batch{since = Since, until = Since}}
                 end, dbsync_utils:get_spaces_for_provider())),
+            timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
             state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
         _ -> ok
     end,
 
-    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
     couchdb_datastore_driver:changes_start_link(
         fun
             (_, stream_ended, _) ->
@@ -165,8 +166,8 @@ handle({flush_queue, QueueKey}) ->
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
-                        catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
-                    update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    spawn(fun() -> dbsync_proto:send_batch(QueueKey, SpaceId, B) end),
+                    set_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
                     case QueueKey of
                         global -> state_put(global_resume_seq, Until);
                         _ -> ok
@@ -456,11 +457,15 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
 -spec get_space_id(datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id(#document{key = Key} = Doc) ->
-    case state_get({space_id, Key}) of
+    try state_get({sid, Key}) of
         undefined ->
             get_space_id_not_cached(Key, Doc);
         SpaceId ->
             {ok, SpaceId}
+    catch
+        _:Reason ->
+            ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Key, Reason]),
+            get_space_id_not_cached(Key, Doc)
     end.
 
 
@@ -476,12 +481,12 @@ get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
     FileUUID = get_sync_context(Doc),
     case file_meta:get_scope({uuid, FileUUID}) of
         {ok, #document{key = <<"">> = Root}} ->
-            state_put({space_id, KeyToCache}, Root),
+            state_put({sid, KeyToCache}, Root),
             {ok, Root};
         {ok, #document{key = ScopeUUID}} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-                state_put({space_id, KeyToCache}, SpaceId),
+                state_put({sid, KeyToCache}, SpaceId),
                 {ok, SpaceId}
             catch
                 _:_ -> {error, not_a_space}
@@ -508,6 +513,26 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
         end,
 
     state_update(Key, OP).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets sequence number for given Provider and Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_current_seq(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
+    ok.
+set_current_seq(ProviderId, SpaceId, SeqNum) ->
+    Key = {current_seq, ProviderId, SpaceId},
+    OldValue = state_get(Key),
+    OP =
+        fun(undefined) ->
+            SeqNum;
+            (CurrentSeq) ->
+                max(SeqNum, CurrentSeq)
+        end,
+
+    state_put(Key, OP(OldValue)).
 
 
 %%--------------------------------------------------------------------
@@ -562,7 +587,7 @@ bcast_status() ->
     ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
-%%    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
+    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);

@@ -41,7 +41,6 @@
         "p1": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
-            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -80,7 +79,6 @@
     },
     "zone_domains": {
         "oz": {
-            "gui_livereload": "none",
             "db_driver": "couchdb",
             "cluster_manager": {
                 "cm": {
@@ -166,7 +164,6 @@
             "space2": {
                 "displayed_name": "space2",
                 "users": [
-                    "user1",
                     "user2"
                 ],
                 "groups": [

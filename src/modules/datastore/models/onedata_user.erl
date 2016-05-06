@@ -17,14 +17,16 @@
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, get_spaces/1, create_or_update/2]).
+-export([fetch/1, get_or_fetch/2, create_or_update/2]).
 
 -export_type([id/0, connected_account/0]).
 
@@ -152,60 +154,62 @@ create_or_update(Doc, Diff) ->
 %% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
-    try
-        Client = {user, {Macaroon, DMacaroons}},
-        {ok, #user_details{
-            id = UserId, name = Name, connected_accounts = ConnectedAccounts,
-            alias = Alias, email_list = EmailList}
-        } = oz_users:get_details(Client),
-        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            oz_users:get_spaces(Client),
-        {ok, GroupIds} = oz_users:get_groups(Client),
-        [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
-        OnedataUser = #onedata_user{
-            name = Name,
-            space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
-            group_ids = GroupIds,
-            connected_accounts = ConnectedAccounts,
-            alias = Alias,
-            email_list = EmailList
-        },
-        [(catch space_info:get_or_fetch(Client, SpaceId, UserId)) || SpaceId <- SpaceIds],
-        OnedataUserDoc = #document{key = UserId, value = OnedataUser},
-        {ok, _} = onedata_user:save(OnedataUserDoc),
-        {ok, OnedataUserDoc}
-    catch
-        _:Reason ->
-            {error, Reason}
-    end.
+-spec fetch(Client :: oz_endpoint:client()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(Client) ->
+    {ok, #user_details{
+        id = UserId, name = Name, connected_accounts = ConnectedAccounts,
+        alias = Alias, email_list = EmailList}
+    } = oz_users:get_details(Client),
+    {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
+        oz_users:get_spaces(Client),
+    {ok, GroupIds} = oz_users:get_groups(Client),
+
+    Spaces = utils:pmap(fun(SpaceId) ->
+        {ok, #space_details{name = SpaceName}} =
+            oz_spaces:get_details(Client, SpaceId),
+        {SpaceId, SpaceName}
+    end, SpaceIds),
+
+    OnedataUser = #onedata_user{
+        name = Name,
+        spaces = Spaces,
+        default_space = DefaultSpaceId,
+        group_ids = GroupIds,
+        connected_accounts = ConnectedAccounts,
+        alias = Alias,
+        email_list = EmailList
+    },
+    OnedataUserDoc = #document{key = UserId, value = OnedataUser},
+    {ok, _} = onedata_user:save(OnedataUserDoc),
+
+    utils:pforeach(fun(SpaceId) ->
+        space_info:get_or_fetch(Client, SpaceId, UserId)
+    end, SpaceIds),
+
+    utils:pforeach(fun(GroupId) ->
+        onedata_group:get_or_fetch(Client, GroupId)
+    end, GroupIds),
+
+    {ok, OnedataUserDoc}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Get user from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(datastore:key(), #auth{}) ->
+-spec get_or_fetch(Client :: oz_endpoint:client(), UserId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Key, Token) ->
-    case onedata_user:get(Key) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Token);
-        Error -> Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of user space IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_spaces(UserId :: onedata_user:id()) ->
-    {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
-get_spaces(UserId) ->
-    case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->
-            {ok, SpaceIds};
-        {error, Reason} ->
+get_or_fetch(Client, UserId) ->
+    try
+        case onedata_user:get(UserId) of
+            {ok, Doc} -> {ok, Doc};
+            {error, {not_found, _}} -> fetch(Client);
+            Error -> Error
+        end
+    catch
+        _:Reason ->
+            ?error_stacktrace("Cannot get or fetch details of onedata user ~p due to: ~p",
+                [UserId, Reason]),
             {error, Reason}
     end.

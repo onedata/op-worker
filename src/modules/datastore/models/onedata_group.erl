@@ -139,10 +139,10 @@ create_or_update(Doc, Diff) ->
 %% Fetch group from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}, GroupId) ->
+-spec fetch(Client :: oz_endpoint:client(), GroupId :: id()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(Client, GroupId) ->
     try
-        Client = {user, {Macaroon, DMacaroons}},
         {ok, #group_details{id = Id, name = Name}} =
             oz_groups:get_details(Client, GroupId),
         {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
@@ -167,11 +167,11 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}, GroupId) ->
 %% Get group from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(datastore:key(), #auth{}) ->
+-spec get_or_fetch(Client :: oz_endpoint:client(), GroupId :: onedata_group:id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Key, Token) ->
-    case onedata_group:get(Key) of
+get_or_fetch(Client, GroupId) ->
+    case onedata_group:get(GroupId) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Token, Key);
+        {error, {not_found, _}} -> fetch(Client, GroupId);
         Error -> Error
     end.

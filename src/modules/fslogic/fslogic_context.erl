@@ -19,7 +19,7 @@
 
 %% API
 -export([gen_global_session_id/2, read_global_session_id/1, is_global_session_id/1]).
--export([get_user_id/1, new/1, set_space_id/2]).
+-export([get_user_id/1, get_session_id/1, new/1, set_space_id/2]).
 
 %%%===================================================================
 %%% API functions
@@ -37,10 +37,10 @@ new(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets space ID in fslogic context.
+%% Sets space ID in fslogic context based on given file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_space_id(CTX :: #fslogic_ctx{}, Entry :: file_meta:entry()) -> NewCTX :: #fslogic_ctx{}.
+-spec set_space_id(CTX :: #fslogic_ctx{}, Entry :: file_meta:entry() | {guid, fslogic_worker:file_guid()}) -> NewCTX :: #fslogic_ctx{}.
 set_space_id(#fslogic_ctx{} = CTX, Entry) ->
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)),
     CTX#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}.
@@ -88,3 +88,11 @@ is_global_session_id(GlobalSessionId) ->
 -spec get_user_id(Ctx :: fslogic_worker:ctx()) -> UserId :: onedata_user:id().
 get_user_id(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}}) ->
     UserId.
+
+%%--------------------------------------------------------------------
+%% @doc Retrieves SessionID from fslogic context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_session_id(Ctx :: fslogic_worker:ctx()) -> session:id().
+get_session_id(#fslogic_ctx{session_id = SessionId}) ->
+    SessionId.

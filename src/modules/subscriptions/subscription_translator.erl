@@ -73,22 +73,27 @@ json_to_updates(Raw) ->
     Value :: subscriptions:record().
 props_to_value(onedata_user, Props) ->
     #onedata_user{
+        default_space = case proplists:get_value(<<"default_space">>, Props) of
+            <<"undefined">> -> undefined;
+            Value -> Value
+        end,
+        public_only = proplists:get_value(<<"public_only">>, Props),
         name = proplists:get_value(<<"name">>, Props),
-        group_ids = proplists:get_value(<<"group_ids">>, Props),
-        space_ids = proplists:get_value(<<"space_ids">>, Props)
+        group_ids = proplists:get_value(<<"group_ids">>, Props, []),
+        spaces = proplists:get_value(<<"space_names">>, Props, [])
     };
 props_to_value(onedata_group, Props) ->
     #onedata_group{
         name = proplists:get_value(<<"name">>, Props),
-        spaces = proplists:get_value(<<"spaces">>, Props),
-        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props))
+        spaces = proplists:get_value(<<"spaces">>, Props, []),
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, []))
     };
 props_to_value(space_info, Props) ->
     #space_info{
         name = proplists:get_value(<<"name">>, Props),
         providers_supports = proplists:get_value(<<"providers_supports">>, Props),
-        groups = process_ids_with_privileges(proplists:get_value(<<"groups">>, Props)),
-        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props))
+        groups = process_ids_with_privileges(proplists:get_value(<<"groups">>, Props, [])),
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, []))
     };
 props_to_value(provider_info, Props) ->
     #provider_info{
