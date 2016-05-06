@@ -115,7 +115,7 @@
         },
         "spaces": {
             "space1": {
-                "displayed_name": "space1",
+                "displayed_name": "space_name1",
                 "users": [
                     "user1"
                 ],
@@ -128,7 +128,7 @@
                 }
             },
             "space2": {
-                "displayed_name": "space2",
+                "displayed_name": "space_name2",
                 "users": [
                     "user1"
                 ],
@@ -141,7 +141,7 @@
                 }
             },
             "space3": {
-                "displayed_name": "space3",
+                "displayed_name": "space_name3",
                 "users": [
                     "user1"
                 ],

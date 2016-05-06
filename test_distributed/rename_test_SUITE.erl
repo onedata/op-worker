@@ -659,7 +659,7 @@ end_per_testcase(CaseName, Config) ->
 filename(SpaceNo, TestDir, Suffix) ->
     SpaceNoBinary = integer_to_binary(SpaceNo),
     SuffixBinary = list_to_binary(Suffix),
-    <<"/spaces/space", SpaceNoBinary/binary, "/", TestDir/binary, SuffixBinary/binary>>.
+    <<"/spaces/space_name", SpaceNoBinary/binary, "/", TestDir/binary, SuffixBinary/binary>>.
 
 get_times(W, SessId, IdType, Ids) ->
     lists:map(
