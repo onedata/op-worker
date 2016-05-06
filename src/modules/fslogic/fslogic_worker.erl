@@ -344,6 +344,8 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_location{uuid = 
     fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Flags);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #truncate{uuid = UUID, size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Size);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #release{handle_id = HandleId}}) ->
+    fslogic_req_regular:release(Ctx, HandleId);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID, name = XattrName}}) ->

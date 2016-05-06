@@ -22,7 +22,7 @@
     set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
-    set_mimetype/4, fsync/2]).
+    set_mimetype/4, fsync/2, rm_recursive/3]).
 
 %%%===================================================================
 %%% API
@@ -357,6 +357,15 @@ fsync(Worker, TestHandle) ->
             Host ! {self(), Result}
         end).
 
+-spec rm_recursive(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+    ok | logical_file_manager:error_reply().
+rm_recursive(Worker, SessId, FileKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:rm_recursive(SessId, uuid_to_guid(Worker, FileKey)),
+            Host ! {self(), Result}
+        end).
 
 %%%===================================================================
 %%% Internal functions

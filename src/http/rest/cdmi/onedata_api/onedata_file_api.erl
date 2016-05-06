@@ -17,9 +17,9 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2, rmdir/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2]).
+-export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2, fsync/1, release/1]).
@@ -106,12 +106,12 @@ get_children_count(Auth, FileKey) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Deletes a directory with all its children.
+%% @doc Deletes a file or directory recursively.
 %%--------------------------------------------------------------------
--spec rmdir(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path())
+-spec rm_recursive(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path())
         -> ok | error_reply().
-rmdir(Auth, FileKey) ->
-    logical_file_manager:rmdir(Auth, FileKey).
+rm_recursive(Auth, FileKey) ->
+    logical_file_manager:rm_recursive(Auth, FileKey).
 
 
 %%--------------------------------------------------------------------

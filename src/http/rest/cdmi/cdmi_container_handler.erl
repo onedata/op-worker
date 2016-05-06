@@ -106,7 +106,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, State = #{auth := Auth, path := Path}) ->
-    ok = onedata_file_api:rmdir(Auth, {path, Path}),
+    ok = onedata_file_api:rm_recursive(Auth, {path, Path}),
     {true, Req, State}.
 
 %%%===================================================================
