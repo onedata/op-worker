@@ -216,6 +216,8 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
             {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
             {ok, Req1} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
+            onedata_file_api:fsync(FileHandle),
+            onedata_file_api:release(FileHandle),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                 Auth, {path, Path}, CdmiPartialFlag
             ),
@@ -230,6 +232,8 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
                     ok = onedata_file_api:truncate(FileHandle, 0),
                     {ok, Req2} = cdmi_streamer:write_body_to_file(Req1, 0, FileHandle),
+                    onedata_file_api:fsync(FileHandle),
+                    onedata_file_api:release(FileHandle),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                         Auth, {guid, FileGUID}, CdmiPartialFlag
                     ),
@@ -241,6 +245,8 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                             {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGUID}, write),
                             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
                             {ok, Req3} = cdmi_streamer:write_body_to_file(Req2, From, FileHandle),
+                            onedata_file_api:fsync(FileHandle),
+                            onedata_file_api:release(FileHandle),
                             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                                 Auth, {guid, FileGUID}, CdmiPartialFlag
                             ),
@@ -299,6 +305,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_cdmi_completion_status(Auth, {path, Path}, <<"Processing">>),
             {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
             onedata_file_api:fsync(FileHandler),
+            onedata_file_api:release(FileHandler),
 
             % return response
             {ok, NewAttrs = #file_attr{uuid = FileGUID}} = onedata_file_api:stat(Auth, {path, Path}),
@@ -329,6 +336,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                     cdmi_metadata:update_cdmi_completion_status(Auth, {path, Path}, <<"Processing">>),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, From, RawValue),
                     onedata_file_api:fsync(FileHandler),
+                    onedata_file_api:release(FileHandler),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 undefined when is_binary(Value) ->
@@ -337,6 +345,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                     ok = onedata_file_api:truncate(FileHandler, 0),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
                     onedata_file_api:fsync(FileHandler),
+                    onedata_file_api:release(FileHandler),
                     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 undefined ->

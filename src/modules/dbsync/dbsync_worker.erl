@@ -27,7 +27,9 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, timer:seconds(2)).
+-define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
+-define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
+-define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
 
 -type queue_id() :: binary().
@@ -608,8 +610,9 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
 -spec do_request_changes(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 do_request_changes(ProviderId, Since, Until) ->
-    Now = erlang:system_time(seconds),
-    MaxWaitTime = timer:seconds(5) + 10 * (Until - Since), %% Wait for 5sec + 10ms per one document
+    Now = erlang:system_time(milli_seconds),
+    %% Wait for {X}ms + {Y}ms per one document
+    MaxWaitTime = ?DIRECT_REQUEST_BASE_TIMEOUT + ?DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT * (Until - Since),
     case state_get({do_request_changes, ProviderId, Until}) of
         undefined ->
             state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
