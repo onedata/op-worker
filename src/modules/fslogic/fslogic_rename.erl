@@ -417,7 +417,11 @@ rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, SourceEntry) ->
             ok = update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId)
 
         end, fslogic_utils:get_local_file_locations(SourceEntry)),
-    ok = fslogic_req_generic:chmod_storage_files(CTX, SourceEntry, Mode),
+    ok = fslogic_req_generic:chmod_storage_files(
+        CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
+        SourceEntry,
+        Mode
+    ),
     ok.
 
 %%--------------------------------------------------------------------
