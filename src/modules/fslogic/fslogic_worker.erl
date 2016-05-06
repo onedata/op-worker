@@ -454,7 +454,7 @@ handle_proxyio_request(_CTX, Req) ->
 %%--------------------------------------------------------------------
 -spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{} | #proxyio_request{}) ->
     {file, file_meta:entry() | {guid, fslogic_worker:file_guid()}} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
-request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {path, Path} = FileEntry}}) ->
+request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {path, Path}}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     case fslogic_path:get_canonical_file_entry(Ctx, Tokens) of
         {path, P} = FileEntry ->
