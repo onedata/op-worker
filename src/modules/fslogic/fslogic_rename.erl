@@ -83,7 +83,7 @@ rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
     ok | logical_file_manager:error_reply().
 -check_permissions([{?delete_subcontainer, {parent, 2}}]).
 rename_dir(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
-    case check_dir_preconditions(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
+    case check_dir_preconditions(CTX, SourceEntry, LogicalTargetPath) of
         ok ->
             rename_select(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath, ?DIRECTORY_TYPE);
         Error ->
@@ -110,9 +110,9 @@ rename_file(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
 %% @doc Checks preconditions for renaming directory.
 %%--------------------------------------------------------------------
 -spec check_dir_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
-    file_meta:path(), file_meta:path()) -> ok | logical_file_manager:error_reply().
-check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
-    case moving_into_itself(SessId, SourceEntry, CanonicalTargetPath) of
+    file_meta:path()) -> ok | logical_file_manager:error_reply().
+check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, LogicalTargetPath) ->
+    case moving_into_itself(SessId, SourceEntry, LogicalTargetPath) of
         true ->
             {error, ?EINVAL};
         false ->
@@ -153,11 +153,11 @@ check_reg_preconditions(#fslogic_ctx{session_id = SessId}, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 -spec moving_into_itself(SessId :: session:id(),
     SourceEntry :: fslogic_worker:file(),
-    CanonicalTargetPath :: file_meta:path()) -> boolean().
-moving_into_itself(SessId, SourceEntry, CanonicalTargetPath) ->
+    LogicalTargetPath :: file_meta:path()) -> boolean().
+moving_into_itself(SessId, SourceEntry, LogicalTargetPath) ->
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
     SourceTokens = fslogic_path:split(SourcePath),
-    TargetTokens = fslogic_path:split(CanonicalTargetPath),
+    TargetTokens = fslogic_path:split(LogicalTargetPath),
     lists:prefix(SourceTokens, TargetTokens).
 
 %%--------------------------------------------------------------------
