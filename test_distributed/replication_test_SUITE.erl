@@ -777,7 +777,7 @@ init_per_testcase(_, Config) ->
 
     %% Turn off event aggregation
     test_utils:mock_new(Workers, [event_stream]),
-    test_utils:mock_expect(Workers, event_stream, apply_emission_rule, fun(_) -> true end),
+    test_utils:mock_expect(Workers, event_stream, apply_emission_rule, fun(_, _) -> true end),
 
     lfm_proxy:init(ConfigWithSessionInfo).
 
