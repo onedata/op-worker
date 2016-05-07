@@ -1682,8 +1682,8 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
             end, Responses)
     end,
     FRes;
-do_request([_ | _] = [_, W] = Nodes, RestSubpath, Method, Headers, Body) ->
-    do_request_impl(W, RestSubpath, Method, Headers, Body);
+do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->
+    do_request_impl(lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes), RestSubpath, Method, Headers, Body);
 do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
     do_request_impl(Node, RestSubpath, Method, Headers, Body).
 
