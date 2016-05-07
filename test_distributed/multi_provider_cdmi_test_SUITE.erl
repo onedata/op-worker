@@ -32,7 +32,7 @@
 -export([
     list_dir_test/1,
     get_file_test/1,
-    metadata_test/1,
+%%    metadata_test/1,
     delete_file_test/1,
     delete_dir_test/1,
     create_file_test/1,
@@ -45,7 +45,7 @@
     moved_permanently_test/1,
     objectid_test/1,
     request_format_check_test/1,
-    mimetype_and_encoding_test/1,
+%%    mimetype_and_encoding_test/1,
     out_of_range_test/1,
     partial_upload_test/1,
     acl_test/1,
