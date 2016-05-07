@@ -172,9 +172,12 @@ ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
 -spec uuid_to_path(fslogic_worker:ctx(), file_meta:uuid()) -> file_meta:path().
 uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
     identity = #identity{user_id = UserId}}}, FileUuid) ->
-    case default_space_uuid(UserId) =:= FileUuid of
-        true -> <<"/">>;
-        false ->
+    UserRoot = default_space_uuid(UserId),
+    UserSpacesRoot = spaces_uuid(UserId),
+    case FileUuid of
+        UserRoot -> <<"/">>;
+        UserSpacesRoot -> <<"/", ?SPACES_BASE_DIR_NAME/binary>>;
+        _ ->
             {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
     end.

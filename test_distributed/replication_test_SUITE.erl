@@ -280,9 +280,13 @@ update_should_bump_replica_version(Config) ->
 
     %when
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"01">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 2, <<"23">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 4, <<"45">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 6, <<"67">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 8, <<"78">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -294,8 +298,11 @@ update_should_bump_replica_version(Config) ->
 
     %when
     ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGUID}, 2)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGUID}, 0)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -402,9 +409,13 @@ update_should_save_recent_changes(Config) ->
 
     %when
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"01">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 2, <<"23">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 4, <<"45">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 6, <<"67">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 8, <<"78">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -415,8 +426,11 @@ update_should_save_recent_changes(Config) ->
 
     %when
     ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGUID}, 2)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGUID}, 0)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -770,6 +784,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     application:start(ssl2),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),

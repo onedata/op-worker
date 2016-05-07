@@ -22,7 +22,7 @@
 -export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
-    get_block_map/1, get_block_map/2, unlink/1, unlink/2, fsync/1]).
+    get_block_map/1, get_block_map/2, unlink/1, unlink/2, fsync/1, release/1]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -207,6 +207,14 @@ truncate(Handle, Size) ->
     ok | error_reply().
 truncate(Auth, FileKey, Size) ->
     logical_file_manager:truncate(Auth, FileKey, Size).
+
+%%--------------------------------------------------------------------
+%% @doc Releases previously opened file.
+%%--------------------------------------------------------------------
+-spec release(FileHandle :: file_handle()) ->
+    ok | error_reply().
+release(FileHandle) ->
+    logical_file_manager:release(FileHandle).
 
 
 %%--------------------------------------------------------------------

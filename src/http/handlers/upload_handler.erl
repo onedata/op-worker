@@ -14,6 +14,7 @@
 -author("Lukasz Opiola").
 -behaviour(cowboy_http_handler).
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % Key of in-memory mapping of uploads kept in session.
@@ -203,6 +204,10 @@ handle_http_upload(Req) ->
 -spec multipart(Req :: cowboy_req:req(), Params :: proplists:proplist()) ->
     cowboy_req:req().
 multipart(Req, Params) ->
+    {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
+    {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
+    {ok, UploadReadSize} = application:get_env(?APP_NAME, upload_read_size),
+
     case cowboy_req:part(Req) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
@@ -220,14 +225,25 @@ multipart(Req, Params) ->
                         <<"resumableChunkSize">>, Params),
                     % First chunk number in resumable is 1
                     Offset = ChunkSize * (ChunkNumber - 1),
-                    Req3 = stream_file(Req2, FileHandle, Offset),
+                    % Set options for reading from socket
+                    Opts = [
+                        % length is chunk size - how much the cowboy read
+                        % function returns at once.
+                        {length, UploadWriteSize},
+                        % read_length means how much will be read from socket
+                        % at once - cowboy will repeat reading until it
+                        % accumulates a chunk, then it returns it.
+                        {read_length, UploadReadSize},
+                        % read timeout - the read will fail if read_length
+                        % is not satisfied within this time.
+                        {read_timeout, UploadReadTimeout}
+                    ],
+                    Req3 = stream_file(Req2, FileHandle, Offset, Opts),
                     multipart(Req3, Params)
             end;
         {done, Req2} ->
             Req2
     end.
-
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -235,10 +251,10 @@ multipart(Req, Params) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_file(Req :: cowboy_req:req(),
-    FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer()) ->
-    cowboy_req:req().
-stream_file(Req, FileHandle, Offset) ->
-    case cowboy_req:part_body(Req) of
+    FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
+    Opts :: proplists:proplist()) -> cowboy_req:req().
+stream_file(Req, FileHandle, Offset, Opts) ->
+    case cowboy_req:part_body(Req, Opts) of
         {ok, Body, Req2} ->
             {ok, _, _} = logical_file_manager:write(FileHandle, Offset, Body),
             % @todo VFS-1815 register_chunk?
@@ -247,7 +263,7 @@ stream_file(Req, FileHandle, Offset) ->
         {more, Body, Req2} ->
             {ok, NewHandle, Written} =
                 logical_file_manager:write(FileHandle, Offset, Body),
-            stream_file(Req2, NewHandle, Offset + Written)
+            stream_file(Req2, NewHandle, Offset + Written, Opts)
     end.
 
 

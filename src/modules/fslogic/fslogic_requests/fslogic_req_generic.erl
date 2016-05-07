@@ -15,6 +15,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/events/types.hrl").
+-include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -29,11 +30,48 @@
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
-    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
+    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
+    get_file_path/2, fsync/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc Translates given file's UUID to absolute path.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_path(fslogic_worker:ctx(), file_meta:uuid()) ->
+    #fuse_response{} | no_return().
+get_file_path(Ctx, FileUUID) ->
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc Synchronizes file's metadata.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
+    #fuse_response{} | no_return().
+fsync(Ctx, _FileUUID) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    event:flush(?FSLOGIC_SUB_ID, self(), SessId),
+    receive
+        {handler_executed, Results} ->
+            Errors = lists:filter(
+                fun
+                    ({error, _}) -> true;
+                    (_) -> false
+                end, Results),
+            [] = Errors,
+            #fuse_response{status = #status{code = ?OK}}
+    after
+        ?FSYNC_TIMEOUT ->
+            #fuse_response{status = #status{code = ?EAGAIN, description = <<"fsync_timeout">>}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Changes file's access times.
