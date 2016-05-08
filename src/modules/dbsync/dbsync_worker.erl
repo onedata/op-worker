@@ -138,6 +138,9 @@ handle(requested_bcast_status) ->
 handle({QueueKey, {cleanup, Until}}) ->
     queue_remove(QueueKey, Until);
 
+handle({clear_temp, Key}) ->
+    dbsync_utils:temp_clear(Key);
+
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),

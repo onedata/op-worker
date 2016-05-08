@@ -23,7 +23,7 @@
 -export([get_spaces_for_provider/0, get_spaces_for_provider/1]).
 -export([get_provider_url/1, encode_term/1, decode_term/1, gen_request_id/0]).
 -export([communicate/2]).
--export([temp_get/1, temp_put/3]).
+-export([temp_get/1, temp_put/3, temp_clear/1]).
 
 %%%===================================================================
 %%% API
@@ -37,12 +37,18 @@
 %%--------------------------------------------------------------------
 -spec temp_put(Key :: term(), Value :: term(), Timeout :: non_neg_integer()) -> ok.
 temp_put(Key, Value, Timeout) ->
-    spawn(
-        fun() ->
-            timer:sleep(Timeout),
-            worker_host:state_put(dbsync_worker, Key, undefined)
-        end),
+    timer:send_after(Timeout, whereis(dbsync_worker), {timer, {clear_temp, Key}}),
     worker_host:state_put(dbsync_worker, Key, Value).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears given Key in datastore worker's temporary state
+%% @end
+%%--------------------------------------------------------------------
+-spec temp_clear(Key :: term()) -> ok.
+temp_clear(Key) ->
+    worker_host:state_put(dbsync_worker, Key, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
