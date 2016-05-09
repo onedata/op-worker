@@ -138,11 +138,15 @@ handle(requested_bcast_status) ->
 handle({QueueKey, {cleanup, Until}}) ->
     queue_remove(QueueKey, Until);
 
+handle({clear_temp, Key}) ->
+    dbsync_utils:temp_clear(Key);
+
 %% Append change to given queue
-handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}) ->
+handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
-    case has_sync_context(Doc) of
-        true ->
+    Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
+    case {has_sync_context(Doc), Rereplication} of
+        {true, false} ->
             case get_space_id(Doc) of
                 {ok, <<"spaces">>} ->
                     ?debug("Skipping doc ~p", [Doc]),
@@ -158,7 +162,10 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
             end;
-        false ->
+        {true, true} ->
+            ?debug("Rereplication detected, skipping ~p", [Doc]),
+            ok;
+        {false, _} ->
             ?debug("Skipping doc ~p", [Doc]),
             ok
     end;
@@ -338,7 +345,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc, model = ModelName} = Change | T]) ->
+apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
 
@@ -352,7 +359,7 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
 
-
+        dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
         spawn(
             fun() ->

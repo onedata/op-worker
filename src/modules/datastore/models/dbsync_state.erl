@@ -6,8 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session management model, frequently invoked by incoming tcp
-%%% connections in connection
+%%% Persistent state of DBSync worker.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_state).
