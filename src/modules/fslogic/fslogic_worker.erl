@@ -526,8 +526,8 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_p
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #fsync{uuid = UUID}}) ->
     {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{}}) ->
-    {provider, oneprovider:get_provider_id()};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{uuid = UUID}}) ->
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{}}) ->

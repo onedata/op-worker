@@ -91,6 +91,7 @@
 }).
 
 -record(release, {
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     handle_id :: binary()
 }).
 

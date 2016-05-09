@@ -146,8 +146,8 @@ translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = Fo
     #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
-translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
-    #release{handle_id = HandleId};
+translate_from_protobuf(#'Release'{uuid = UUID, handle_id = HandleId}) ->
+    #release{uuid = UUID, handle_id = HandleId};
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
     #proxyio_request{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
@@ -527,8 +527,8 @@ translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = Forc
     {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
 translate_to_protobuf(#truncate{uuid = UUID, size = Size}) ->
     {truncate, #'Truncate'{uuid = UUID, size = Size}};
-translate_to_protobuf(#release{handle_id = HandleId}) ->
-    {release, #'Release'{handle_id = HandleId}};
+translate_to_protobuf(#release{uuid = UUID, handle_id = HandleId}) ->
+    {release, #'Release'{uuid = UUID, handle_id = HandleId}};
 
 translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}) ->
