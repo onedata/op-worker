@@ -250,7 +250,7 @@ group_record(GroupId) ->
 %%            groups = GroupsAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
     %% @todo wait for groups from zbyszek
-    GroupsAndPerms = [],
+    GroupsAndPerms = UsersAndPerms,
 
     UserPermissions = lists:map(
         fun({UsId, _UsPerms}) ->
@@ -258,8 +258,8 @@ group_record(GroupId) ->
         end, UsersAndPerms),
 
     GroupPermissions = lists:map(
-        fun({GroupId, _GroupPerms}) ->
-            op_gui_utils:ids_to_association(GroupId, GroupId)
+        fun({GrId, _GroupPerms}) ->
+            op_gui_utils:ids_to_association(GrId, GroupId)
         end, GroupsAndPerms),
     [
         {<<"id">>, GroupId},
@@ -292,7 +292,7 @@ group_user_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, GroupId},
-        {<<"user">>, UserId}
+        {<<"system-user">>, UserId}
     ].
 
 
@@ -306,13 +306,14 @@ group_user_permission_record(AssocId) ->
     proplists:proplist().
 group_group_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {GroupId, GroupId} = op_gui_utils:association_to_ids(AssocId),
+    {GroupId, PrivGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #onedata_group{
+            users = UsersAndPerms
 %%            groups = GroupsAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
     %% @todo wait for groups from zbyszek
-    GroupsAndPerms = [],
+    GroupsAndPerms = UsersAndPerms,
     GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(GroupPerm) ->
@@ -322,7 +323,7 @@ group_group_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, GroupId},
-        {<<"group">>, GroupId}
+        {<<"system-group">>, PrivGroupId}
     ].
 
 
