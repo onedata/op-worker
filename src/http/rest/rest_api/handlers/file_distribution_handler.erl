@@ -20,11 +20,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_accepted/2, resource_exists/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
+    is_authorized/2, resource_exists/2, content_types_provided/2]).
 
-%% Content type routing functions
--export([handle_json_data/2]).
+%% resource functions
+-export([get_file_distribution/2]).
 
 %%%===================================================================
 %%% API
@@ -52,6 +52,13 @@ allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:malformed_request/2
+%%--------------------------------------------------------------------
+-spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
+malformed_request(Req, State) ->
+    rest_arg_parser:malformed_request(Req, State).
+
+%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
@@ -59,30 +66,32 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
-%%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
-content_types_accepted(Req, State) ->
-    {[
-        {<<"application/json">>, handle_json_data}
-    ], Req, State}.
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {term(), req(), #{}}.
+-spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
 resource_exists(Req, State) ->
-    {false, Req, State}.
+    rest_existence_checker:resource_exists(Req, State).
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:content_types_provided/2
+%%--------------------------------------------------------------------
+-spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+content_types_provided(Req, State) ->
+    {[
+        {<<"application/json">>, get_file_distribution}
+    ], Req, State}.
+
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Handles PUT with "application/json" content-type
-%% @end
+%% @doc Handles GET with "application/json" content-type
 %%--------------------------------------------------------------------
--spec handle_json_data(req(), #{}) -> {term(), req(), #{}}.
-handle_json_data(Req, State = #{auth := _Auth}) ->
-    {true, Req, State}.
+-spec get_file_distribution(req(), #{}) -> {term(), req(), #{}}.
+get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth, path := Path} = State) ->
+    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, Guid}),
+    Response = json_utils:encode(Distribution),
+    {Response, Req, State}.
+

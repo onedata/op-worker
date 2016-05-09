@@ -27,8 +27,8 @@
 -export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, truncate/2, truncate/3, get_block_map/1,
-    get_block_map/2, unlink/1, unlink/2, release/1]).
+    read/3, read_without_events/3, truncate/2, truncate/3, get_file_distribution/1,
+    get_file_distribution/2, unlink/1, unlink/2, release/1]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -280,19 +280,39 @@ truncate(SessId, FileKey, Size) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_block_map(FileHandle :: logical_file_manager:handle()) ->
-    {ok, fslogic_blocks:blocks()} | logical_file_manager:error_reply().
-get_block_map(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    get_block_map(SessId, {guid, GUID}).
+-spec get_file_distribution(FileHandle :: logical_file_manager:handle()) ->
+    {ok, list()} | logical_file_manager:error_reply().
+get_file_distribution(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    get_file_distribution(SessId, {guid, GUID}).
 
--spec get_block_map(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, fslogic_blocks:blocks()} | logical_file_manager:error_reply().
-get_block_map(SessId, FileKey) ->
+-spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, list()} | logical_file_manager:error_reply().
+get_file_distribution(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
-    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    #document{value = LocalLocation} = fslogic_utils:get_local_file_location({guid, GUID}),
-    #file_location{blocks = Blocks} = LocalLocation,
-    {ok, Blocks}.
+    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+
+    {ok, Locations} = file_meta:get_locations(UUID),
+    Res = lists:map(
+        fun(LocationId) ->
+            {ok, #document{value = #file_location{
+                provider_id = ProviderId,
+                blocks = Blocks
+            }}} = file_location:get(LocationId),
+            BlocksList = case Blocks of
+                [] ->
+                    [0, 0];
+                _ ->
+                    lists:foldl(
+                        fun(#file_block{offset = Offset, size = Size}, Acc) ->
+                            Acc ++ [Offset, Offset + Size]
+                        end, [], Blocks)
+            end,
+            [
+                {<<"provider">>, ProviderId},
+                {<<"blocks">>, BlocksList}
+            ]
+        end, Locations),
+    {ok, Res}.
 
 %%%===================================================================
 %%% Internal functions

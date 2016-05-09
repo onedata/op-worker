@@ -46,7 +46,20 @@ all() ->
 %%%===================================================================
 
 file_distribution(Config) ->
-    [_WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config).
+    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/file">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP2, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP2, Handle),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"file_distribution/file">>, get, [user_1_token_header(Config)], []),
+
+    % then
+    ct:print("~p", Body).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -79,3 +92,22 @@ end_per_testcase(_, Config) ->
 %%% Internal functions
 %%%===================================================================
 
+do_request(Node, URL, Method, Headers, Body) ->
+    http_client:request(Method, <<(rest_endpoint(Node))/binary,  URL/binary>>, Headers, Body, [insecure]).
+
+rest_endpoint(Node) ->
+    Port =
+        case get(port) of
+            undefined ->
+                {ok, P} = test_utils:get_env(Node, ?APP_NAME, rest_port),
+                PStr = integer_to_binary(P),
+                PStr;
+            P -> P
+        end,
+    <<"https://", (list_to_binary(utils:get_host(Node)))/binary, ":", Port/binary, "/rest/latest/">>.
+
+
+user_1_token_header(Config) ->
+    #auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
+    {ok, Srlzd} = macaroon:serialize(Macaroon),
+    {<<"X-Auth-Token">>, Srlzd}.
