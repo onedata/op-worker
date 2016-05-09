@@ -30,6 +30,8 @@
 -spec gen_status_message(Error :: term()) -> #status{}.
 gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
+gen_status_message({not_a_space, _}) ->
+    #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message({not_found, file_meta}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
@@ -46,7 +48,7 @@ gen_status_message({ErrorCode, ErrorDescription}) when
         false -> #status{code = ?EAGAIN, description = ErrorDescription}
     end;
 gen_status_message(Reason) ->
-    ?error_stacktrace("Unknown error occured: ~p", [Reason]),
+    ?error("Unknown error occured: ~p", [Reason]),
     #status{code = ?EAGAIN, description = <<"An unknown error occured.">>}.
 
 %%%===================================================================

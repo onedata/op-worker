@@ -194,7 +194,7 @@ unmock_oz_spaces(Config) ->
     test_utils:mock_validate_and_unload(Workers, oz_spaces).
 
 mock_oz_certificates(Config) ->
-    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, oz_plugin, get_oz_url, []),
 
     % save key and cert files on the workers

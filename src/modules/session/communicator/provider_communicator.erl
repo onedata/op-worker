@@ -22,7 +22,7 @@
 
 %% API
 -export([send/2, send/3, send_async/2, communicate/2, communicate_async/2,
-    communicate_async/3]).
+    communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
 %%% API
@@ -121,8 +121,8 @@ communicate_async(Msg, Ref) ->
 -spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref(),
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
 communicate_async(#client_message{} = Msg, Ref, Recipient) ->
-    {ok, MsgId} = message_id:generate(Recipient),
-    case send(Msg#client_message{message_id = MsgId#message_id{issuer = client}}, Ref) of
+    {ok, MsgId} = message_id:generate(Recipient, client),
+    case send(Msg#client_message{message_id = MsgId}, Ref) of
         ok -> {ok, MsgId};
         {error, Reason} -> {error, Reason}
     end;

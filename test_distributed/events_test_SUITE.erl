@@ -18,6 +18,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -179,13 +180,19 @@ init_per_testcase(Case, Config) when
         SessId
     end, lists:seq(0, 4)),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
-    [{session_ids, SessIds}, {subscription_id, SubId} | Config];
+    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
 
 init_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
-    [{session_id, SessId} | Config].
+    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    test_utils:mock_new(Workers, space_info),
+    test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
+        {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
+    end),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
 
 end_per_testcase(Case, Config) when
     Case =:= emit_read_event_should_execute_handler;
@@ -210,11 +217,16 @@ end_per_testcase(Case, Config) when
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:clear_assume_all_files_in_space(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:clear_assume_all_files_in_space(Config),
+    test_utils:mock_unload(Workers, space_info),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================
@@ -241,9 +253,9 @@ session_setup(Worker) ->
     {ok, SessId :: session:id()}.
 session_setup(Worker, SessId) ->
     Self = self(),
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #identity{user_id = <<"user1">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self]
+        reuse_or_create_session, [SessId, fuse, Iden, #auth{}, [Self]]
     )),
     {ok, SessId}.
 

@@ -19,27 +19,27 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -record(child_link, {
-    uuid :: binary(),
+    uuid :: binary() | fslogic_worker:file_guid(),
     name :: binary()
 }).
 
 -record(get_file_attr, {
-    entry :: file_meta:entry()
+    entry :: fslogic_worker:ext_file()
 }).
 
 -record(get_file_children, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     offset :: file_meta:offset(),
     size :: file_meta:size()
 }).
 
 -record(get_parent, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(create_dir, {
     name :: file_meta:name(),
-    parent_uuid :: file_meta:uuid(),
+    parent_uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     mode :: file_meta:mode()
 }).
 
@@ -48,36 +48,36 @@
 }).
 
 -record(update_times, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     atime :: file_meta:time(),
     mtime :: file_meta:time(),
     ctime :: file_meta:time()
 }).
 
 -record(change_mode, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     mode :: file_meta:mode()
 }).
 
 -record(rename, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     target_path :: file_meta:path()
 }).
 
 -record(get_new_file_location, {
     name :: file_meta:name(),
-    parent_uuid :: file_meta:uuid(),
+    parent_uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     flags :: atom(),
     mode = 8#644 :: file_meta:posix_permissions()
 }).
 
 -record(get_file_location, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     flags :: fslogic_worker:open_flags()
 }).
 
 -record(unlink, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(get_helper_params, {
@@ -86,7 +86,7 @@
 }).
 
 -record(truncate, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     size :: non_neg_integer()
 }).
 
@@ -95,22 +95,22 @@
 }).
 
 -record(get_xattr, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     name :: xattr:name()
 }).
 
 -record(set_xattr, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     xattr :: #xattr{}
 }).
 
 -record(remove_xattr, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     name :: xattr:name()
 }).
 
 -record(list_xattr, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(acl, {
@@ -118,47 +118,47 @@
 }).
 
 -record(get_acl, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_acl, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     acl :: #acl{}
 }).
 
 -record(remove_acl, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(get_transfer_encoding, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_transfer_encoding, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     value :: binary()
 }).
 
 -record(get_cdmi_completion_status, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_cdmi_completion_status, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     value :: binary()
 }).
 
 -record(get_mimetype, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_mimetype, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     value :: binary()
 }).
 
 -record(synchronize_block, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     block :: #file_block{}
 }).
 
@@ -169,7 +169,7 @@
 
 -record(create_storage_test_file, {
     storage_id :: storage:id(),
-    file_uuid :: file_meta:uuid()
+    file_uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(verify_storage_test_file, {
@@ -177,6 +177,14 @@
     space_uuid :: file_meta:uuid(),
     file_id :: helpers:file(),
     file_content :: binary()
+}).
+
+-record(get_file_path, {
+    uuid :: fslogic_worker:file_guid()
+}).
+
+-record(fsync, {
+    uuid :: fslogic_worker:file_guid()
 }).
 
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
@@ -187,7 +195,7 @@
                         #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
                         #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
                         #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{} |
-                        #synchronize_block_and_compute_checksum{}.
+                        #synchronize_block_and_compute_checksum{} | #get_file_path{} | #fsync{}.
 
 
 -record(file_children, {
@@ -195,7 +203,7 @@
 }).
 
 -record(dir, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(helper_arg, {
@@ -235,10 +243,14 @@
     value :: binary()
 }).
 
+-record(file_path, {
+    value :: binary()
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
     #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
-    #checksum{}.
+    #checksum{} | #acl{} | #file_path{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

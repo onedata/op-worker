@@ -20,10 +20,11 @@
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
+-export([reuse_or_create_session/5]).
 -export([create_gui_session/2]).
 -export([remove_session/1]).
 -export([get_provider_session_id/2, session_id_to_provider_id/1]).
--export([reuse_or_create_provider_session/4]).
+-export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
 
 %%%===================================================================
 %%% API
@@ -84,6 +85,19 @@ reuse_or_create_rest_session(Iden, Auth) ->
     SessId = session:get_rest_session_id(Iden),
     reuse_or_create_session(SessId, rest, Iden, Auth, []).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates or reuses proxy session and starts session supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(), Auth :: session:auth(), SessionType :: atom()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
+    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
+    reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates GUI session and starts session supervisor.
@@ -93,7 +107,7 @@ reuse_or_create_rest_session(Iden, Auth) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_uuid(),
-    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui},
+    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui, connections = []},
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
@@ -121,7 +135,7 @@ remove_session(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
 get_provider_session_id(Type, ProviderId) ->
-    base64:encode(term_to_binary({Type, provider, ProviderId})).
+    http_utils:base64url_encode(term_to_binary({Type, provider, ProviderId})).
 
 
 %%--------------------------------------------------------------------
@@ -131,7 +145,7 @@ get_provider_session_id(Type, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec session_id_to_provider_id(session:id()) -> oneprovider:id().
 session_id_to_provider_id(SessId) ->
-    {_, provider, ProviderId} = binary_to_term(base64:decode(SessId)),
+    {_, _, ProviderId} = binary_to_term(http_utils:base64url_decode(SessId)),
     ProviderId.
 
 %%%===================================================================
@@ -145,10 +159,24 @@ session_id_to_provider_id(SessId) ->
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
     Iden :: session:identity(), Auth :: session:auth() | undefined,
-    NewCons :: list()) -> {ok, SessId :: session:id()} | {error, Reason :: term()}.
+    NewCons :: list()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons) ->
+    reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, undefined).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Creates session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
+    Iden :: session:identity(), Auth :: session:auth() | undefined,
+    NewCons :: list(), ProxyVia :: session:id() | undefined) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
     Sess = #session{status = active, identity = Iden, auth = Auth,
-        connections = NewCons, type = SessType},
+        connections = NewCons, type = SessType, proxy_via = ProxyVia},
     Diff = fun
         (#session{status = inactive}) ->
             {error, {not_found, session}};

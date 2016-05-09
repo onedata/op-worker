@@ -125,7 +125,10 @@ EOF
                 if not storages_dockers:
                     storages_dockers = {'posix': {}}
                 storages_dockers['posix'][s] = {"host_path": host_path, "docker_path": docker_path}
-                volumes.append(v)
+            else:
+                d = storages_dockers['posix'][s]
+                v = (d['host_path'], d['docker_path'], 'rw')
+            volumes.append(v)
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)

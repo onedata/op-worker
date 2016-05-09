@@ -15,6 +15,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/events/types.hrl").
+-include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -29,11 +30,48 @@
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
-    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
+    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
+    get_file_path/2, fsync/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc Translates given file's UUID to absolute path.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_path(fslogic_worker:ctx(), file_meta:uuid()) ->
+    #fuse_response{} | no_return().
+get_file_path(Ctx, FileUUID) ->
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc Synchronizes file's metadata.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
+    #fuse_response{} | no_return().
+fsync(Ctx, _FileUUID) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    event:flush(?FSLOGIC_SUB_ID, self(), SessId),
+    receive
+        {handler_executed, Results} ->
+            Errors = lists:filter(
+                fun
+                    ({error, _}) -> true;
+                    (_) -> false
+                end, Results),
+            [] = Errors,
+            #fuse_response{status = #status{code = ?OK}}
+    after
+        ?FSYNC_TIMEOUT ->
+            #fuse_response{status = #status{code = ?EAGAIN, description = <<"fsync_timeout">>}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Changes file's access times.
@@ -105,14 +143,15 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
-            #posix_user_ctx{gid = GID, uid = UID} = try
+            {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+                SId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
                 StorageId = luma_utils:get_storage_id(SpaceUUID),
                 StorageType = luma_utils:get_storage_type(StorageId),
-                fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
+                {fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID), SId}
             catch
                 % TODO - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
-                _:_ -> ?ROOT_POSIX_CTX
+                _:_ -> {?ROOT_POSIX_CTX, undefined}
             end,
             FinalUID = case  session:get(SessId) of
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
@@ -122,7 +161,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
-                uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
+                uuid = fslogic_uuid:to_file_guid(UUID, SpaceId),
+                type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};
         {error, {not_found, _}} ->
@@ -138,7 +178,9 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-delete(CTX, File) ->
+delete(#fslogic_ctx{space_id = SpaceId} = CTX, File) ->
+    {ok, FileUUID} = file_meta:to_uuid(File),
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID, SpaceId),
     FuseResponse = case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
             delete_dir(CTX, FileDoc);
@@ -147,8 +189,7 @@ delete(CTX, File) ->
     end,
     case FuseResponse of
         #fuse_response{status = #status{code = ?OK}} ->
-            {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, File),
-            fslogic_event:emit_file_removal(UUID);
+            fslogic_event:emit_file_removal(FileGUID);
         _ ->
             ok
     end,
@@ -407,7 +448,7 @@ set_mimetype(CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
 %%--------------------------------------------------------------------
 -spec delete_dir(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}]).
+-check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {?list_container, 2}]).
 delete_dir(CTX, File) ->
     delete_impl(CTX, File).
 

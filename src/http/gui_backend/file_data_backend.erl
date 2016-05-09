@@ -129,9 +129,9 @@ create_record(<<"file">>, Data) ->
         SessionId = g_session:get_session_id(),
         Name = proplists:get_value(<<"name">>, Data),
         Type = proplists:get_value(<<"type">>, Data),
-        ParentUUID = proplists:get_value(<<"parent">>, Data, null),
+        ParentGUID = proplists:get_value(<<"parent">>, Data, null),
         {ok, ParentPath} = logical_file_manager:get_file_path(
-            SessionId, ParentUUID),
+            SessionId, ParentGUID),
         Path = filename:join([ParentPath, Name]),
         FileId = case Type of
             <<"file">> ->
@@ -148,7 +148,7 @@ create_record(<<"file">>, Data) ->
             size = SizeAttr,
             mtime = ModificationTime,
             mode = PermissionsAttr}} =
-            logical_file_manager:stat(SessionId, {uuid, FileId}),
+            logical_file_manager:stat(SessionId, {guid, FileId}),
         Size = case Type of
             <<"dir">> -> null;
             _ -> SizeAttr
@@ -161,7 +161,7 @@ create_record(<<"file">>, Data) ->
             {<<"permissions">>, Permissions},
             {<<"modificationTime">>, ModificationTime},
             {<<"size">>, Size},
-            {<<"parent">>, ParentUUID},
+            {<<"parent">>, ParentGUID},
             {<<"children">>, []}
         ],
         {ok, Res}
@@ -199,7 +199,7 @@ update_record(<<"file">>, FileId, Data) ->
                 case Perms >= 0 andalso Perms =< 8#777 of
                     true ->
                         ok = logical_file_manager:set_perms(
-                            SessionId, {uuid, FileId}, Perms);
+                            SessionId, {guid, FileId}, Perms);
                     false ->
                         gui_error:report_warning(<<"Cannot change permissions, "
                         "invalid octal value.">>)
@@ -236,15 +236,10 @@ delete_record(<<"file">>, Id) ->
 %% spaces dir has two different UUIDs, should be removed when this is fixed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessionId :: binary(), UUID :: binary()) -> binary().
-get_parent(SessionId, UUID) ->
-    {ok, ParentUUID} = logical_file_manager:get_parent(SessionId, {uuid, UUID}),
-    case logical_file_manager:get_file_path(SessionId, ParentUUID) of
-        {ok, <<"/spaces">>} ->
-            get_spaces_dir_uuid(SessionId);
-        _ ->
-            ParentUUID
-    end.
+-spec get_parent(SessionId :: binary(), FileGUID :: binary()) -> binary().
+get_parent(SessionId, FileGUID) ->
+    {ok, ParentGUID} = logical_file_manager:get_parent(SessionId, {guid, FileGUID}),
+    ParentGUID.
 
 
 %%--------------------------------------------------------------------
@@ -271,11 +266,11 @@ rm_rf(FileId) ->
     SessionId = g_session:get_session_id(),
     {ok, #file_attr{
         type = Type
-    }} = logical_file_manager:stat(SessionId, {uuid, FileId}),
+    }} = logical_file_manager:stat(SessionId, {guid, FileId}),
     case Type of
         ?DIRECTORY_TYPE ->
             {ok, Children} = logical_file_manager:ls(
-                SessionId, {uuid, FileId}, 0, 1000),
+                SessionId, {guid, FileId}, 0, 1000),
             lists:foreach(
                 fun({ChId, _}) ->
                     ok = rm_rf(ChId)
@@ -283,7 +278,7 @@ rm_rf(FileId) ->
         _ ->
             ok
     end,
-    ok = logical_file_manager:unlink(SessionId, {uuid, FileId}).
+    ok = logical_file_manager:unlink(SessionId, {guid, FileId}).
 
 
 %%--------------------------------------------------------------------
@@ -308,7 +303,7 @@ file_record(SessionId, FileId) ->
         size = SizeAttr,
         mtime = ModificationTime,
         mode = PermissionsAttr}} =
-        logical_file_manager:stat(SessionId, {uuid, FileId}),
+        logical_file_manager:stat(SessionId, {guid, FileId}),
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE -> {<<"dir">>, null};
         _ -> {<<"file">>, SizeAttr}
@@ -319,7 +314,7 @@ file_record(SessionId, FileId) ->
             [];
         <<"dir">> ->
             case logical_file_manager:ls(
-                SessionId, {uuid, FileId}, 0, 1000) of
+                SessionId, {guid, FileId}, 0, 1000) of
                 {ok, Chldrn} ->
                     Chldrn;
                 _ ->

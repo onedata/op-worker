@@ -37,7 +37,7 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    rename/2, setup_onedata_user/1]).
+    rename/2, setup_onedata_user/2]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
     is_spaces_dir/2]).
@@ -125,8 +125,16 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc0) ->
     ?run(begin
+             FileDoc =
+                 case FileDoc0 of
+                     #document{key = undefined} = Doc ->
+                         NewUUID = fslogic_uuid:gen_file_uuid(),
+                         Doc#document{key = NewUUID};
+                     _ ->
+                         FileDoc0
+                 end,
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->
@@ -291,13 +299,13 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(onedata_user, create, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -509,9 +517,9 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(UserId :: onedata_user:id()) -> ok.
-setup_onedata_user(UserId) ->
-    ?info("setup_onedata_user ~p", [UserId]),
+-spec setup_onedata_user(oz_endpoint:client(), UserId :: onedata_user:id()) -> ok.
+setup_onedata_user(_Client, UserId) ->
+    ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
     datastore:run_synchronized(onedata_user, UserId, fun() ->
         try
             {ok, #document{value = #onedata_user{spaces = Spaces}}} =
@@ -600,9 +608,11 @@ get_space_dir(SpaceId) ->
 %% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
 %% @end
 %%--------------------------------------------------------------------
--spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
+-spec to_uuid(entry() | {guid, fslogic_worker:file_guid()}) -> {ok, uuid()} | datastore:generic_error().
 to_uuid({uuid, UUID}) ->
     {ok, UUID};
+to_uuid({guid, FileGUID}) ->
+    {ok, fslogic_uuid:file_guid_to_uuid(FileGUID)};
 to_uuid(#document{key = UUID}) ->
     {ok, UUID};
 to_uuid({path, Path}) ->

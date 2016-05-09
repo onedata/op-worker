@@ -97,9 +97,9 @@ read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}, handles = Handles}}} =
         session:get(SessionId),
-    case maps:get(?HANDLE_ID_KEY, Parameters, undefined) of
+    case maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined) of
         undefined ->
-            FileUuid = maps:get(?FILE_UUID_KEY, Parameters),
+            FileUuid = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
             {ok, #document{key = SpaceUUID}} =
                 fslogic_spaces:get_space({uuid, FileUuid}, UserId),
             {ok, Storage} = storage:get(StorageId),

@@ -29,7 +29,7 @@
 -spec call_fslogic(SessId :: session:id(), Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
 call_fslogic(SessId, Request, OKHandle) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, Request}) of
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = Request}}) of
         #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
             OKHandle(Response);
         #fuse_response{status = #status{code = Code}} ->
@@ -42,22 +42,22 @@ call_fslogic(SessId, Request, OKHandle) ->
 %% Deletes an object with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rm(SessId :: session:id(), FileKey :: logical_file_manager:file_key()) ->
+-spec rm(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | logical_file_manager:error_reply().
 rm(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    try
-        case isdir(CTX, UUID) of
-            true -> ok = rm_children(CTX, UUID, Chunk);
-            false -> ok
-        end,
-        %% delete an object
-        logical_file_manager:unlink(SessId, {uuid, UUID})
-    catch
-        error:{badmatch, Error2} -> Error2;
-        error:Error -> {error, Error}
+    case isdir(CTX, GUID) of
+        true ->
+            case rm_children(CTX, GUID, 0, Chunk, ok) of
+                ok ->
+                    lfm_files:unlink(SessId, {guid, GUID});
+                Error ->
+                    Error
+            end;
+        false ->
+            lfm_files:unlink(SessId, {guid, GUID})
     end.
 
 %%--------------------------------------------------------------------
@@ -65,13 +65,13 @@ rm(SessId, FileKey) ->
 %% Checks if a file is directory.
 %% @end
 %%--------------------------------------------------------------------
--spec isdir(CTX :: #fslogic_ctx{}, UUID :: file_meta:uuid()) ->
+-spec isdir(CTX :: #fslogic_ctx{}, GUID :: fslogic_worker:file_guid()) ->
     true | false | logical_file_manager:error_reply().
-isdir(#fslogic_ctx{session_id = SessId}, UUID) ->
-    case logical_file_manager:stat(SessId, {uuid, UUID}) of
+isdir(#fslogic_ctx{session_id = SessId}, GUID) ->
+    case lfm_attrs:stat(SessId, {guid, GUID}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
         {ok, _} -> false;
-        X -> X
+        Error -> Error
     end.
 
 %% ====================================================================
@@ -83,19 +83,31 @@ isdir(#fslogic_ctx{session_id = SessId}, UUID) ->
 %% Deletes all children of directory with given UUID.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_children(CTX :: #fslogic_ctx{}, UUID :: file_meta:uuid(), Chunk :: non_neg_integer())
-        -> ok | logical_file_manager:error_reply().
-rm_children(#fslogic_ctx{session_id = SessId} = CTX, UUID, Chunk) ->
-    RemoveChild = fun({ChildUUID, _ChildName}) -> ok = rm(SessId, {uuid, ChildUUID}) end,
-    case logical_file_manager:ls(SessId, {uuid, UUID}, 0, Chunk) of
+-spec rm_children(CTX :: #fslogic_ctx{}, GUID :: fslogic_worker:file_guid(),
+    Offset :: non_neg_integer(), Chunk :: non_neg_integer(), ok | {error, term()}) ->
+    ok | logical_file_manager:error_reply().
+rm_children(#fslogic_ctx{session_id = SessId} = CTX, GUID, Offset, Chunk, Answer) ->
+    case lfm_dirs:ls(SessId, {guid, GUID}, Offset, Chunk) of
         {ok, Children} ->
+            Answers = lists:map(fun
+                ({ChildGUID, _ChildName}) ->
+                    rm(SessId, {guid, ChildGUID})
+            end, Children),
+            {FirstError, ErrorCount} = lists:foldl(fun
+                (ok, {Ans, ErrorCount}) -> {Ans, ErrorCount};
+                (Error, {ok, ErrorCount}) -> {Error, ErrorCount + 1};
+                (Error, {OldError, ErrorCount}) -> {OldError, ErrorCount + 1}
+            end, {Answer, 0}, Answers),
+
             case length(Children) of
                 Chunk ->
-                    lists:foreach(RemoveChild, Children),
-                    rm_children(CTX, UUID, Chunk);
-                _ -> %length of Children list is smaller than ls_chunk so there are no more children
-                    lists:foreach(RemoveChild, Children),
-                    ok
+                    rm_children(CTX, GUID, ErrorCount, Chunk, FirstError);
+                _ -> % no more children
+                    FirstError
             end;
-        {error, Error} -> {error, Error}
+        Error ->
+            case Answer of
+                ok -> Error;
+                Other -> Other
+            end
     end.

@@ -106,7 +106,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, State = #{auth := Auth, path := Path}) ->
-    ok = onedata_file_api:rmdir(Auth, {path, Path}),
+    ok = onedata_file_api:rm_recursive(Auth, {path, Path}),
     {true, Req, State}.
 
 %%%===================================================================
@@ -159,8 +159,8 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
             ok = cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
         _ ->
-            {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
-            ok = cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
+            {ok, NewAttrs = #file_attr{uuid = FileGUID}} = onedata_file_api:stat(Auth, {path, Path}),
+            ok = cdmi_metadata:update_user_metadata(Auth, {guid, FileGUID}, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, options => ?DEFAULT_GET_DIR_OPTS}),
             Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),

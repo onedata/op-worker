@@ -14,6 +14,7 @@
 -define(PROXYIO_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 -record(byte_sequence, {
     offset :: non_neg_integer(),
