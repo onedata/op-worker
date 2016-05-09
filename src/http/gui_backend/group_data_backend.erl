@@ -12,7 +12,6 @@
 %%%-------------------------------------------------------------------
 -module(group_data_backend).
 -author("Lukasz Opiola").
--author("Jakub Liput").
 
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -243,12 +242,11 @@ delete_record(<<"group">>, GroupId) ->
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary()) -> proplists:proplist().
 group_record(GroupId) ->
-    CurrentUser = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, #document{
         value = #onedata_group{
             name = Name,
-            users = UsersAndPerms,
+            users = UsersAndPerms%,
 %%            groups = GroupsAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
     %% @todo wait for groups from zbyszek
