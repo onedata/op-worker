@@ -7,10 +7,18 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the provider model used in Ember application.
+%%% the couple of models for ember app:
+%%%     - system-user
+%%%     - system-group
+%%%     - system-provider
+%%%
+%%% The 'system' prefix means that the models holds only informational data
+%%% about given entity, mainly human-readable names. The provider might not have
+%%% rights to view full data or modify it. They are used for displaying info
+%%% on certain pages, for example a list of users of given space.
 %%% @end
 %%%-------------------------------------------------------------------
--module(provider_data_backend).
+-module(system_data_backend).
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
@@ -54,17 +62,33 @@ terminate() ->
 %% {@link data_backend_behaviour} callback find/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Ids :: [binary()]) ->
+-spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"provider">>, [ProviderId]) ->
+find(<<"system-provider">>, ProviderId) ->
     {ok, #provider_details{
         name = Name
     }} = oz_providers:get_details(provider, ProviderId),
-    Res = [
+    {ok, [
         {<<"id">>, ProviderId},
         {<<"name">>, Name}
-    ],
-    {ok, Res}.
+    ]};
+
+find(<<"system-user">>, UserId) ->
+    CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
+    {ok, #document{value = #onedata_user{name = UserName}}} =
+        user_logic:get(CurrentUserAuth, UserId),
+    {ok, [
+        {<<"id">>, UserId},
+        {<<"name">>, UserName}
+    ]};
+
+find(<<"system-group">>, GroupId) ->
+    {ok, #document{value = #onedata_group{name = GroupName}}} =
+        onedata_group:get(GroupId),
+    {ok, [
+        {<<"id">>, GroupId},
+        {<<"name">>, GroupName}
+    ]}.
 
 
 %%--------------------------------------------------------------------
@@ -74,7 +98,7 @@ find(<<"provider">>, [ProviderId]) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_all(<<"data-space">>) ->
+find_all(_ResourceType) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -85,7 +109,7 @@ find_all(<<"data-space">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"data-space">>, _Data) ->
+find_query(_ResourceType, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -96,7 +120,7 @@ find_query(<<"data-space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"data-space">>, _Data) ->
+create_record(_ResourceType, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -108,7 +132,7 @@ create_record(<<"data-space">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"data-space">>, _Id, _Data) ->
+update_record(_ResourceType, _Id, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -119,6 +143,6 @@ update_record(<<"data-space">>, _Id, _Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"data-space">>, _Id) ->
+delete_record(_ResourceType, _Id) ->
     gui_error:report_error(<<"Not iplemented">>).
 

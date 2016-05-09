@@ -82,13 +82,13 @@ route(<<"/index.html">>) -> ?INDEX.
     HandlerModule :: module().
 data_backend(true, <<"file">>) -> file_data_backend;
 data_backend(true, <<"file-distribution">>) -> file_data_backend;
-data_backend(true, <<"provider">>) -> provider_data_backend;
 data_backend(true, <<"data-space">>) -> data_space_data_backend;
 data_backend(true, <<"space">>) -> space_data_backend;
-data_backend(true, <<"space-user">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
-data_backend(true, <<"space-group">>) -> space_data_backend;
-data_backend(true, <<"space-group-permission">>) -> space_data_backend.
+data_backend(true, <<"space-group-permission">>) -> space_data_backend;
+data_backend(true, <<"system-provider">>) -> system_data_backend;
+data_backend(true, <<"system-user">>) -> system_data_backend;
+data_backend(true, <<"system-group">>) -> system_data_backend.
 
 
 %%--------------------------------------------------------------------

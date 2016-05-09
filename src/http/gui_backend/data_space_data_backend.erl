@@ -53,9 +53,9 @@ terminate() ->
 %% {@link data_backend_behaviour} callback find/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Ids :: [binary()]) ->
+-spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space">>, [SpaceId]) ->
+find(<<"data-space">>, SpaceId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
     {ok, #document{
@@ -94,7 +94,7 @@ find_all(<<"data-space">>) ->
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
-            {ok, Data} = find(<<"data-space">>, [SpaceId]),
+            {ok, Data} = find(<<"data-space">>, SpaceId),
             Data
         end, SpaceIds),
     {ok, Res}.

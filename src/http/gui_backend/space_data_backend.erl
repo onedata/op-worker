@@ -54,42 +54,16 @@ terminate() ->
 %% {@link data_backend_behaviour} callback find/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Ids :: [binary()]) ->
+-spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"space">>, SpaceIds) ->
-    Res = lists:map(
-        fun(SpaceId) ->
-            space_record(SpaceId)
-        end, SpaceIds),
-    {ok, Res};
+find(<<"space">>, SpaceId) ->
+    {ok, space_record(SpaceId)};
 
-find(<<"space-user-permission">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_user_permission_record(AssocId)
-        end, AssocIds),
-    {ok, Res};
+find(<<"space-user-permission">>, AssocId) ->
+    {ok, space_user_permission_record(AssocId)};
 
-find(<<"space-user">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_user_record(AssocId)
-        end, AssocIds),
-    {ok, Res};
-
-find(<<"space-group-permission">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_group_permission_record(AssocId)
-        end, AssocIds),
-    {ok, Res};
-
-find(<<"space-group">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_group_record(AssocId)
-        end, AssocIds),
-    {ok, Res}.
+find(<<"space-group-permission">>, AssocId) ->
+    {ok, space_group_permission_record(AssocId)}.
 
 
 %%--------------------------------------------------------------------
@@ -105,7 +79,7 @@ find_all(<<"space">>) ->
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
-            {ok, [SpaceData]} = find(<<"space">>, [SpaceId]),
+            {ok, SpaceData} = find(<<"space">>, SpaceId),
             SpaceData
         end, SpaceIds),
     {ok, Res}.
@@ -347,23 +321,6 @@ space_user_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant space_user record based on its id.
-%% @end
-%%--------------------------------------------------------------------
--spec space_user_record(UserId :: binary()) -> proplists:proplist().
-space_user_record(UserId) ->
-    CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, #document{value = #onedata_user{name = UserName}}} =
-        user_logic:get(CurrentUserAuth, UserId),
-    [
-        {<<"id">>, UserId},
-        {<<"name">>, UserName}
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Returns a client-compliant space_group_permission record based on its id.
 %% @end
 %%--------------------------------------------------------------------
@@ -387,22 +344,6 @@ space_group_permission_record(AssocId) ->
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
         {<<"group">>, GroupId}
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a client-compliant space_group record based on its id.
-%% @end
-%%--------------------------------------------------------------------
--spec space_group_record(GroupId :: binary()) -> proplists:proplist().
-space_group_record(GroupId) ->
-    {ok, #document{value = #onedata_group{name = GroupName}}} =
-        onedata_group:get(GroupId),
-    [
-        {<<"id">>, GroupId},
-        {<<"name">>, GroupName}
     ].
 
 
