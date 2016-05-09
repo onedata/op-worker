@@ -18,7 +18,8 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
--export([get/2, create/2, set_name/3, delete/2, leave_group/2, leave_space/3]).
+-export([get/2, create/2, set_name/3, delete/2, leave_group/2]).
+-export([leave_space/3, join_space/3]).
 -export([set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_create_space_token/2]).
@@ -72,6 +73,26 @@ delete(Client, GroupId) ->
     ok | {error, Reason :: term()}.
 leave_group(Client, GroupId) ->
     oz_users:leave_group(Client, GroupId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Joins a group to a space based on token.
+%% @end
+%%--------------------------------------------------------------------
+-spec join_space(oz_endpoint:client(), GroupId :: binary(),
+    Token :: binary()) -> ok | {error, Reason :: term()}.
+join_space(Client, GroupId, Token) ->
+    case oz_groups:join_space(Client, GroupId, [{<<"token">>, Token}]) of
+        {ok, SpaceId} ->
+            {ok, SpaceId};
+        {error, {
+            400,
+            <<"invalid_request">>,
+            <<"invalid 'token' value: ", _/binary>>
+        }} ->
+            {error, invalid_token_value}
+    end.
 
 
 %%--------------------------------------------------------------------

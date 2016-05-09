@@ -36,20 +36,15 @@ handle(<<"fileUploadComplete">>, [{<<"fileId">>, FileId}]) ->
     upload_handler:upload_map_delete(FileId),
     ok;
 
-handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
+handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    % @TODO VFS-1860 should use space_info join!
-    case oz_users:join_space(UserAuth, [{<<"token">>, Token}]) of
-        {ok, SpaceID} ->
+    case space_logic:join_space(UserAuth, Token) of
+        {ok, SpaceId} ->
             {ok, #space_details{
                 name = SpaceName
-            }} = oz_spaces:get_details(UserAuth, SpaceID),
+            }} = oz_spaces:get_details(UserAuth, SpaceId),
             {ok, SpaceName};
-        {error, {
-            400,
-            <<"invalid_request">>,
-            <<"invalid 'token' value: ", _/binary>>
-        }} ->
+        {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
 
@@ -133,7 +128,23 @@ handle(<<"createSpaceToken">>, [{<<"groupId">>, GroupId}]) ->
                 <<"Cannot get invite provider token due to unknown error.">>)
     end;
 
-handle(<<"groupLeaveSpace">>, [{<<"spaceId">>, GroupId}]) ->
+handle(<<"groupJoinSpace">>, Props) ->
+    GroupId = proplists:get_value(<<"groupId">>, Props),
+    Token = proplists:get_value(<<"token">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:join_space(UserAuth, GroupId, Token) of
+        {ok, SpaceId} ->
+            {ok, #space_details{
+                name = SpaceName
+            }} = oz_spaces:get_details(UserAuth, SpaceId),
+            {ok, SpaceName};
+        {error, invalid_token_value} ->
+            gui_error:report_warning(<<"Invalid token value.">>)
+    end;
+
+handle(<<"groupLeaveSpace">>, Props) ->
+    GroupId = proplists:get_value(<<"groupId">>, Props),
+    SpaceId = proplists:get_value(<<"spaceId">>, Props),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:leave_space(UserAuth, GroupId, SpaceId) of
         ok ->

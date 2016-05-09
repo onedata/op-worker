@@ -18,7 +18,8 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
--export([get/3, create_user_space/2, delete/2, leave_space/2]).
+-export([get/3, create_user_space/2, delete/2]).
+-export([join_space/2, leave_space/2]).
 -export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_invite_provider_token/2]).
@@ -68,6 +69,37 @@ delete(Client, SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Removes a user (owner of auth) from space users list.
+%% @end
+%%--------------------------------------------------------------------
+-spec leave_space(oz_endpoint:client(), SpaceId :: binary()) ->
+    ok | {error, Reason :: term()}.
+leave_space(Client, SpaceId) ->
+    oz_users:leave_space(Client, SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Joins a user to a space based on token.
+%% @end
+%%--------------------------------------------------------------------
+-spec join_space(oz_endpoint:client(), Token :: binary()) ->
+    ok | {error, Reason :: term()}.
+join_space(Client, Token) ->
+    case oz_users:join_space(Client, [{<<"token">>, Token}]) of
+        {ok, SpaceId} ->
+            {ok, SpaceId};
+        {error, {
+            400,
+            <<"invalid_request">>,
+            <<"invalid 'token' value: ", _/binary>>
+        }} ->
+            {error, invalid_token_value}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Sets name for an user.
 %% User identity is determined using provided client.
 %% @end
@@ -112,17 +144,6 @@ set_group_privileges(Client, SpaceId, GroupId, PrivilegesAtoms) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a user (owner of auth) from space users list.
-%% @end
-%%--------------------------------------------------------------------
--spec leave_space(oz_endpoint:client(), SpaceId :: binary()) ->
-    ok | {error, Reason :: term()}.
-leave_space(Client, SpaceId) ->
-    oz_users:leave_space(Client, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns a user invitation token for given space.
 %% @end
 %%--------------------------------------------------------------------
@@ -152,5 +173,3 @@ get_invite_group_token(Client, SpaceId) ->
     {ok, binary()} | {error, Reason :: term()}.
 get_invite_provider_token(Client, SpaceId) ->
     oz_spaces:get_invite_provider_token(Client, SpaceId).
-
-
