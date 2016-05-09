@@ -621,24 +621,28 @@ is_spaces_base_dir(#document{key = Key}) ->
 -spec rename3(Subject :: datastore:document(), ParentUUID :: uuid(),
     {name, NewName :: name()} | {path, NewPath :: path()}) ->
     ok | datastore:generic_error().
-rename3(#document{value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
+rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-        {ok, FileUUID} = update(Subject, #{name => NewName}),
-        ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
+        datastore:run_synchronized(?MODEL_NAME, <<"rename_", FileUUID/binary>>, fun() ->
+            {ok, FileUUID} = update(Subject, #{name => NewName}),
+            ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
+        end)
     end);
 
-rename3(#document{value = #file_meta{name = OldName, version = V}} = Subject, OldParentUUID, {path, NewPath}) ->
+rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, OldParentUUID, {path, NewPath}) ->
     ?run(begin
-        NewTokens = fslogic_path:split(NewPath),
-        [NewName | NewParentTokens] = lists:reverse(NewTokens),
-        NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
-        {ok, #document{key = NewParentUUID} = NewParent} = get({path, NewParentPath}),
-        {ok, NewScope} = get_scope(NewParent),
-        {ok, FileUUID} = update(Subject, #{name => NewName}),
-        ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
-        ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
+        datastore:run_synchronized(?MODEL_NAME, <<"rename_", FileUUID/binary>>, fun() ->
+            NewTokens = fslogic_path:split(NewPath),
+            [NewName | NewParentTokens] = lists:reverse(NewTokens),
+            NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
+            {ok, #document{key = NewParentUUID} = NewParent} = get({path, NewParentPath}),
+            {ok, NewScope} = get_scope(NewParent),
+            {ok, FileUUID} = update(Subject, #{name => NewName}),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
+            ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
 
-        ok = update_scopes(Subject, NewScope)
+            ok = update_scopes(Subject, NewScope)
+        end)
     end).
 
 %%--------------------------------------------------------------------
