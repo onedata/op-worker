@@ -19,8 +19,9 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
--export([get/2, get_spaces/2, get_spaces/1]).
--export([get_default_space/2, set_default_space/2]).
+-export([get/2]).
+-export([get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
+-export([get_groups/2]).
 
 %%%===================================================================
 %%% API
@@ -104,3 +105,19 @@ get_default_space({user, {Macaroon, DischMacaroons}}, UserId) ->
 set_default_space({user, {Macaroon, DischMacaroons}}, SpaceId) ->
     oz_users:set_default_space({user, {Macaroon, DischMacaroons}},
         [{<<"spaceId">>, SpaceId}]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of user space IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_groups(oz_endpoint:client(), UserId :: onedata_user:id()) ->
+    {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
+get_groups({user, {Macaroon, DischMacaroons}}, UserId) ->
+    case get({user, {Macaroon, DischMacaroons}}, UserId) of
+        {ok, #document{value = #onedata_user{group_ids = GroupsIds}}} ->
+            {ok, GroupsIds};
+        {error, Reason} ->
+            {error, Reason}
+    end.
