@@ -18,9 +18,9 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
--export([get/3, create_user_space/2, delete/2]).
+-export([get/3, create_user_space/2, delete/2, leave_space/2]).
 -export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
--export([leave_space/2, get_invite_user_token/2, get_invite_group_token/2,
+-export([get_invite_user_token/2, get_invite_group_token/2,
     get_invite_provider_token/2]).
 
 

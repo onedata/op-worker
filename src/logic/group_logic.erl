@@ -18,8 +18,10 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
--export([get/2, create/2, set_name/3, delete/2]).
+-export([get/2, create/2, set_name/3, delete/2, leave_group/2, leave_space/3]).
 -export([set_user_privileges/4, set_group_privileges/4]).
+-export([get_invite_user_token/2, get_invite_group_token/2,
+    get_create_space_token/2]).
 
 %%%===================================================================
 %%% API
@@ -59,6 +61,28 @@ create(Client = {user, _}, Record) ->
     ok | {error, Reason :: term()}.
 delete(Client, GroupId) ->
     oz_groups:remove(Client, GroupId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a user (owner of auth) from space users list.
+%% @end
+%%--------------------------------------------------------------------
+-spec leave_group(oz_endpoint:client(), GroupId :: binary()) ->
+    ok | {error, Reason :: term()}.
+leave_group(Client, GroupId) ->
+    oz_users:leave_group(Client, GroupId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a user (owner of auth) from space users list.
+%% @end
+%%--------------------------------------------------------------------
+-spec leave_space(oz_endpoint:client(), GroupId :: binary(),
+    SpaceId :: binary()) -> ok | {error, Reason :: term()}.
+leave_space(Client, GroupId, SpaceId) ->
+    oz_groups:leave_space(Client, GroupId, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -106,5 +130,36 @@ set_group_privileges(Client, GroupId, PrivsGroupId, PrivilegesAtoms) ->
 %%    ]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a user invitation token for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_invite_user_token(oz_endpoint:client(), GroupId :: binary()) ->
+    {ok, binary()} | {error, Reason :: term()}.
+get_invite_user_token(Client, GroupId) ->
+    oz_groups:get_invite_user_token(Client, GroupId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a group invitation token for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_invite_group_token(oz_endpoint:client(), GroupId :: binary()) ->
+    {ok, binary()} | {error, Reason :: term()}.
+get_invite_group_token(Client, GroupId) ->
+    oz_groups:get_invite_user_token(Client, GroupId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a provider invitation token (to get support) for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_create_space_token(oz_endpoint:client(), GroupId :: binary()) ->
+    {ok, binary()} | {error, Reason :: term()}.
+get_create_space_token(Client, GroupId) ->
+    oz_groups:get_create_space_token(Client, GroupId).
 
 

@@ -53,7 +53,7 @@ handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
 
-handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:leave_space(UserAuth, SpaceId) of
         ok ->
@@ -91,4 +91,54 @@ handle(<<"supportToken">>, [{<<"spaceId">>, SpaceId}]) ->
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite provider token due to unknown error.">>)
+    end;
+
+handle(<<"leaveGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:leave_group(UserAuth, GroupId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave space due to unknown error.">>)
+    end;
+
+handle(<<"userToken">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_invite_user_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite user token due to unknown error.">>)
+    end;
+
+handle(<<"groupToken">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_invite_group_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite group token due to unknown error.">>)
+    end;
+
+handle(<<"createSpaceToken">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_create_space_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite provider token due to unknown error.">>)
+    end;
+
+handle(<<"groupLeaveSpace">>, [{<<"spaceId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:leave_space(UserAuth, GroupId, SpaceId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave space due to unknown error.">>)
     end.
