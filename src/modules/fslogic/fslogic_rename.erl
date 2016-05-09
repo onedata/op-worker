@@ -13,12 +13,14 @@
 
 -define(CHUNK_SIZE, 102400).
 
-%% TODO future work:
-%% 1. If any provider supporting old path does not support new path -
-%%    get his changes, other providers should update their locations
-%% 2. Add 'hint' for fslogic_storage:select_storage, to suggest using
-%%    source storage if possible to avoid copying
-%% 3. Add rollback or any other means of rescuing from failed renaming
+%% TODO: VFS-2008
+%% Add 'hint' for fslogic_storage:select_storage, to suggest using
+%% source storage if possible to avoid copying
+%% TODO: VFS-2009
+%% Add rollback or any other means of rescuing from failed renaming
+%% TODO: VFS-2010
+%% If any provider supporting old path does not support new path -
+%% get his changes, other providers should update their locations
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
