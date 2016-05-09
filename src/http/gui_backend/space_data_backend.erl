@@ -109,7 +109,7 @@ create_record(<<"space">>, Data) ->
     case Name of
         <<"">> ->
             gui_error:report_warning(
-                <<"Cannot create space with emty name.">>);
+                <<"Cannot create space with empty name.">>);
         _ ->
             case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
                 {ok, SpaceId} ->
