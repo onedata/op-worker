@@ -55,6 +55,8 @@ preroute_message(#client_message{message_body = #message_acknowledgement{}} = Ms
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
     sequencer:route_message(Msg, SessId);
+preroute_message(#client_message{message_body = #message_stream_reset{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->

@@ -50,7 +50,8 @@
     stream_id :: stream_id(),
     sequence_number = 0 :: sequence_number(),
     sequence_number_ack = -1 :: -1 | sequence_number(),
-    messages = #{} :: #{sequence_number() => #client_message{}}
+    messages = #{} :: #{sequence_number() => #client_message{}},
+    is_proxy :: boolean()
 }).
 
 -define(MSG_ACK_THRESHOLD, application:get_env(?APP_NAME,
@@ -92,11 +93,14 @@ init([SeqMan, StmId, SessId]) ->
     ?debug("Initializing sequencer in stream for session ~p", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
-    send_message_stream_reset(StmId, SessId),
+    {ok, #document{value = #session{type = SessionType}}} = session:get(SessId),
+    IsProxy = SessionType =:= provider orelse SessionType =:= provider_outgoing,
+    send_message_stream_reset(StmId, SessId, IsProxy),
     {ok, receiving, #state{
         sequencer_manager = SeqMan,
         session_id = SessId,
-        stream_id = StmId
+        stream_id = StmId,
+        is_proxy = IsProxy
     }, ?RECEIVING_TIMEOUT}.
 
 %%--------------------------------------------------------------------
@@ -173,10 +177,11 @@ handle_info(Info, StateName, State) ->
 -spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
 | term(), StateName :: atom(), StateData :: term()) -> term()).
 terminate(Reason, StateName, #state{stream_id = StmId, sequence_number = SeqNum,
-    session_id = SessId, sequencer_manager = SeqMan} = State) ->
+    session_id = SessId, sequencer_manager = SeqMan, is_proxy = IsProxy} = State) ->
     ?log_terminate(Reason, {StateName, State}),
     Msg = #message_acknowledgement{stream_id = StmId, sequence_number = SeqNum - 1},
-    case communicator:send(Msg, SessId) of
+    CommunicatorModule = communicator_module(IsProxy),
+    case CommunicatorModule:send(Msg, SessId) of
         ok -> ok;
         {error, Reason} -> SeqMan ! {send, Msg, SessId}
     end,
@@ -318,9 +323,10 @@ unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_message_stream_reset(StmId :: stream_id(),
-    SessId :: session:id()) -> ok.
-send_message_stream_reset(StmId, SessId) ->
-    communicator:send(#message_stream_reset{stream_id = StmId}, SessId, infinity).
+    SessId :: session:id(), IsProxy :: boolean()) -> ok.
+send_message_stream_reset(StmId, SessId, IsProxy) ->
+    CommunicatorModule = communicator_module(IsProxy),
+    CommunicatorModule:send(#message_stream_reset{stream_id = StmId}, SessId, infinity).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -335,8 +341,9 @@ send_message_acknowledgement(#state{sequence_number = SeqNum,
     State;
 
 send_message_acknowledgement(#state{stream_id = StmId, sequence_number = SeqNum,
-    session_id = SessId} = State) ->
-    communicator:send(#message_acknowledgement{
+    session_id = SessId, is_proxy = IsProxy} = State) ->
+    CommunicatorModule = communicator_module(IsProxy),
+    CommunicatorModule:send(#message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum - 1
     }, SessId, infinity),
     State#state{sequence_number_ack = SeqNum - 1}.
@@ -367,8 +374,9 @@ maybe_send_message_acknowledgement(#state{sequence_number = SeqNum,
 -spec send_message_request(UpperSeqNum :: sequence_number(),
     State :: #state{}) -> ok.
 send_message_request(UpperSeqNum, #state{stream_id = StmId,
-    sequence_number = LowerSeqNum, session_id = SessId}) ->
-    communicator:send(#message_request{
+    sequence_number = LowerSeqNum, session_id = SessId, is_proxy = IsProxy}) ->
+    CommunicatorModule = communicator_module(IsProxy),
+    CommunicatorModule:send(#message_request{
         stream_id = StmId,
         lower_sequence_number = LowerSeqNum,
         upper_sequence_number = UpperSeqNum
@@ -420,3 +428,9 @@ forward_message(#client_message{message_body = #end_of_message_stream{}},
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
     router:route_message(Msg),
     State#state{sequence_number = SeqNum + 1}.
+
+
+communicator_module(false) ->
+    communicator;
+communicator_module(true) ->
+    provider_communicator.

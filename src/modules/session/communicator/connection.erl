@@ -406,7 +406,8 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
         case {IsProvider, Msg0} of
             %% If message comes from provider and proxy session is requested - proceed
             %% with authorization and switch context to the proxy session.
-            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth = #auth{}}} when ProxySessionId =/= undefined ->
+            {true, #client_message{proxy_session_id = ProxySessionId0, proxy_session_auth = Auth = #auth{}}} when ProxySessionId0 =/= undefined ->
+                ProxySessionId = ProxySessionId0,
                 ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
                 {Msg0#client_message{session_id = ProxySessionId}, ProxySessionId};
@@ -477,8 +478,14 @@ activate_socket_once(Socket, Transport) ->
 -spec send_server_message(Socket :: ssl2:socket(), Transport :: module(),
     ServerMessage :: #server_message{}) -> ok.
 send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
-    {ok, Data} = serializator:serialize_server_message(ServerMsg),
-    ok = Transport:send(Socket, Data).
+    try serializator:serialize_server_message(ServerMsg) of
+        {ok, Data} ->
+            ok = Transport:send(Socket, Data)
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to serialize server_message due to: ~p", [Reason]),
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -490,8 +497,14 @@ send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
 -spec send_client_message(Socket :: ssl2:socket(), Transport :: module(),
     ServerMessage :: #client_message{}) -> ok.
 send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
-    {ok, Data} = serializator:serialize_client_message(ClientMsg),
-    ok = Transport:send(Socket, Data).
+    try serializator:serialize_client_message(ClientMsg) of
+        {ok, Data} ->
+            ok = Transport:send(Socket, Data)
+    catch
+       _:Reason ->
+           ?error_stacktrace("Unable to serialize client_message due to: ~p", [Reason]),
+           ok
+    end.
 
 
 %%--------------------------------------------------------------------

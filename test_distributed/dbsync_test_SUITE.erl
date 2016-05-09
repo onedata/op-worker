@@ -55,8 +55,8 @@ global_stream_test(MultiConfig) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
-    {SessId1P1, _} = {?config({session_id, <<"user1">>}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
-    {SessId1P2, _} = {?config({session_id, <<"user1">>}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
+    {SessId1P1, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
+    {SessId1P2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
@@ -151,8 +151,8 @@ global_stream_document_remove_test(MultiConfig) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
-    {SessId1P1, _} = {?config({session_id, <<"user1">>}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
-    {SessId1P2, _} = {?config({session_id, <<"user1">>}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
+    {SessId1P1, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
+    {SessId1P2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
@@ -271,8 +271,8 @@ global_stream_with_proto_test(MultiConfig) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
-    {SessId1P1, _} = {?config({session_id, <<"user1">>}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
-    {SessId1P2, _} = {?config({session_id, <<"user1">>}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
+    {SessId1P1, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
+    {SessId1P2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
 
     Dirs = lists:map(

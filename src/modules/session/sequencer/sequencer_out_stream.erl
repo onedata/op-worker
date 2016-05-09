@@ -129,6 +129,9 @@ handle_cast(#message_acknowledgement{} = Request, #state{} = State) ->
 handle_cast(#server_message{} = Request, State) ->
     {noreply, handle_request(Request, State)};
 
+handle_cast(#client_message{} = Request, State) ->
+    {noreply, handle_request(Request, State)};
+
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -286,6 +289,14 @@ process_request(#server_message{message_stream = MsgStm} = Msg, #state{
         sequence_number = SeqNum
     }},
     ok = communicator:send(NewMsg, SessId),
+    State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)};
+
+process_request(#client_message{message_stream = MsgStm} = Msg, #state{
+    sequence_number = SeqNum, session_id = SessId, outbox = Msgs} = State) ->
+    NewMsg = Msg#client_message{message_stream = MsgStm#message_stream{
+        sequence_number = SeqNum
+    }},
+    ok = provider_communicator:send(NewMsg, SessId),
     State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
@@ -338,6 +349,12 @@ resend_all_messages(Msgs, Con, SeqNum, MsgsAcc) ->
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
             ok = communicator:send(NewMsg, Con),
+            resend_all_messages(queue:drop(Msgs), Con, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
+        {value, #client_message{message_stream = MsgStm} = Msg} ->
+            NewMsg = Msg#client_message{
+                message_stream = MsgStm#message_stream{sequence_number = SeqNum}
+            },
+            ok = provider_communicator:send(NewMsg, Con),
             resend_all_messages(queue:drop(Msgs), Con, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         empty ->
             {SeqNum, MsgsAcc}

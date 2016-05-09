@@ -21,7 +21,7 @@
 -include("timeouts.hrl").
 
 %% API
--export([send/2, send/3, send_async/2, communicate/2, communicate_async/2,
+-export([send/2, send/3, send/4, send_async/2, communicate/2, communicate_async/2,
     communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
@@ -67,6 +67,33 @@ send(Msg, Ref, Retry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sends a message to the server using connection pool associated with server's
+%% session or chosen connection. No reply is expected. Waits until message is
+%% sent. If an error occurs retries specified number of attempts unless session
+%% has been deleted in the meantime or connection does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(StmId :: sequencer:stream_id(), Msg :: #client_message{} | term(), Ref :: session:id(),
+    Retry :: non_neg_integer() | infinity) -> ok | {error, Reason :: term()}.
+send(StmId, #client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
+    ensure_connected(Ref),
+    case sequencer:send_message(Msg, StmId, Ref) of
+        ok -> ok;
+        {error, _} ->
+            timer:sleep(?SEND_RETRY_DELAY),
+            case Retry of
+                infinity -> communicator:send(Msg, Ref, Retry);
+                _ -> communicator:send(Msg, Ref, Retry - 1)
+            end
+    end;
+send(StmId, #client_message{} = Msg, Ref, 1) ->
+    ensure_connected(Ref),
+    sequencer:send_message(Msg, StmId, Ref);
+send(StmId, Msg, Ref, Retry) ->
+    provider_communicator:send(StmId, #client_message{message_body = Msg}, Ref, Retry).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Similar to communicator:send/2, but does not wait until message is sent.
 %% Always returns 'ok' for non-empty connection pool or existing connection.
 %% @end
@@ -83,7 +110,7 @@ send_async(Msg, Ref) ->
 %% Sends a message to the provider and waits for a reply.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
+-spec communicate(Msg :: #client_message{} | term(), Ref :: session:id()) ->
     {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 communicate(#client_message{} = ClientMsg, Ref) ->
     {ok, MsgId} = communicate_async(ClientMsg, Ref, self()),

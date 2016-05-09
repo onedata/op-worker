@@ -44,7 +44,7 @@ all() ->
 
 empty_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/t1_file">>,
     Name1 = <<"t1_name1">>,
     {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
@@ -54,7 +54,7 @@ empty_xattr_test(Config) ->
 
 crud_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/t2_file">>,
     Name1 = <<"t2_name1">>,
     Value1 = <<"t2_value1">>,
@@ -76,7 +76,7 @@ crud_xattr_test(Config) ->
 
 list_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/t3_file">>,
     Name1 = <<"t3_name1">>,
     Value1 = <<"t3_value1">>,
@@ -94,7 +94,7 @@ list_xattr_test(Config) ->
 
 remove_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/t4_file">>,
     Name1 = <<"t4_name1">>,
     Value1 = <<"t4_value1">>,
@@ -111,7 +111,7 @@ remove_file_test(Config) ->
 
 modify_cdmi_attrs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId, _UserId} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Path = <<"/t5_file">>,
     Name1 = <<"cdmi_attr">>,
     Value1 = <<"t5_value1">>,

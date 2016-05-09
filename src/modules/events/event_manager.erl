@@ -278,7 +278,7 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
     case file_meta:to_uuid(Entry) of
         {ok, SpacesDir} ->
             HandleLocallyFun(ProvMap, false);
-        _ ->
+        {ok, FileUUID} ->
             CurrentTime = erlang:system_time(seconds),
             {NewProvMap, ProviderIdsFinal} =
                     case maps:get(Entry, ProvMap, undefined) of
@@ -295,11 +295,11 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
                 {_, true} ->
                     HandleLocallyFun(NewProvMap, false);
                 {[H | _], false} ->
-                    provider_communicator:send(#client_message{
+                    provider_communicator:send(sequencer:term_to_stream_id(FileUUID), #client_message{
                         message_body = RequestMessage,
                         proxy_session_id = SessId,
                         proxy_session_auth = Auth
-                    }, session_manager:get_provider_session_id(outgoing, H)),
+                    }, session_manager:get_provider_session_id(outgoing, H), 1),
                     HandleLocallyFun(NewProvMap, true);
                 {[], _} ->
                     throw(unsupported_space)

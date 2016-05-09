@@ -107,7 +107,8 @@ init([SeqManSup, SessId]) ->
 handle_call(open_stream, _From, #state{session_id = SessId} = State) ->
     StmId = generate_stream_id(),
     ?debug("Opening stream ~p in sequencer manager for session ~p", [StmId, SessId]),
-    {reply, {ok, StmId}, create_sequencer_out_stream(StmId, State)};
+    {ok, _, NewState} = create_sequencer_out_stream(StmId, State),
+    {reply, {ok, StmId}, NewState};
 
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
@@ -170,6 +171,13 @@ handle_cast(#client_message{message_body = #message_acknowledgement{
     forward_to_sequencer_out_stream(Msg, StmId, State),
     {noreply, State};
 
+%% Handle outgoing messages
+handle_cast(#client_message{message_stream = #message_stream{sequence_number = undefined}} = Msg, State) ->
+    {ok, SeqStm, NewState} = get_or_create_sequencer_out_stream(Msg, State),
+    gen_server:cast(SeqStm, Msg),
+    {noreply, NewState};
+
+%% Handle incoming messages
 handle_cast(#client_message{} = Msg, State) ->
     {ok, SeqStm, NewState} = get_or_create_sequencer_in_stream(Msg, State),
     gen_fsm:send_event(SeqStm, Msg),
@@ -293,17 +301,35 @@ get_sequencer_out_stream(StmId, #state{session_id = SessId,
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Returns sequencer stream for outgoing messages associated with provided
+%% stream ID. If stream does not exist creates one.
+%% @see create_sequencer_out_stream/2
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_create_sequencer_out_stream(Msg :: #client_message{},
+    State :: #state{}) -> {ok, SeqStm :: pid(), NewState :: #state{}}.
+get_or_create_sequencer_out_stream(#client_message{message_stream = #message_stream{
+    stream_id = StmId}}, #state{sequencer_in_streams = Stms} = State) ->
+    case maps:find(StmId, Stms) of
+        {ok, SeqStm} -> {ok, SeqStm, State};
+        error -> create_sequencer_out_stream(StmId, State)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Creates sequencer stream for outgoing messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_sequencer_out_stream(StmId :: stream_id(), State :: #state{}) ->
-    NewState :: #state{}.
+    {ok, SeqStm :: pid(), NewState :: #state{}}.
 create_sequencer_out_stream(StmId, #state{sequencer_out_stream_sup = SeqStmSup,
     sequencer_out_streams = Stms, session_id = SessId} = State) ->
     {ok, SeqStm} = sequencer_stream_sup:start_sequencer_stream(
         SeqStmSup, self(), StmId, SessId
     ),
-    State#state{sequencer_out_streams = maps:put(StmId, SeqStm, Stms)}.
+    {ok, SeqStm, State#state{sequencer_out_streams = maps:put(StmId, SeqStm, Stms)}}.
 
 %%--------------------------------------------------------------------
 %% @private
