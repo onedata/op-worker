@@ -29,6 +29,7 @@
 -spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
 routes() ->
     [
+        {"/rest/:version/file_distribution/[...]", #{handler => file_distribution_handler}},
         {"/rest/:version/[...]", #{handler => rest_handler}}
     ].
 
