@@ -310,9 +310,10 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
     end,
 
     UserId = fslogic_context:get_user_id(CTX),
-    ok = fslogic_times:update_mtime_ctime(SourceParent, UserId),
-    ok = fslogic_times:update_ctime({path, CanonicalTargetPath}, UserId),
-    ok = fslogic_times:update_mtime_ctime({path, CanonicalTargetParentPath}, UserId),
+    CurrTime = erlang:system_time(seconds),
+    ok = fslogic_times:update_mtime_ctime(SourceParent, UserId, CurrTime),
+    ok = fslogic_times:update_ctime({path, CanonicalTargetPath}, UserId, CurrTime),
+    ok = fslogic_times:update_mtime_ctime({path, CanonicalTargetParentPath}, UserId, CurrTime),
     ok.
 
 %%--------------------------------------------------------------------
@@ -363,7 +364,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
         end),
 
     CurrTime = erlang:system_time(seconds),
-    ok = fslogic_times:update_mtime_ctime(SourceParent, fslogic_context:get_user_id(CTX)),
+    ok = fslogic_times:update_mtime_ctime(SourceParent, fslogic_context:get_user_id(CTX), CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, LogicalTargetPath}, undefined, undefined, CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, TargetParentPath}, undefined, CurrTime, CurrTime),
     ok.
