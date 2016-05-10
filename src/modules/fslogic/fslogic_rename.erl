@@ -356,18 +356,12 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
             {guid, TargetGuid}
         end,
         fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
-            mtime = MTime, ctime = CTime, mode = Mode}} = Doc, Target) ->
+            mtime = MTime, ctime = CTime, mode = Mode}}, Target) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, Target, Mode),
             ok = logical_file_manager:update_times(SessId, Target, ATime, MTime, CTime),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, Target),
-            case Doc of
-                #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} ->
-                    ok = logical_file_manager:unlink(SessId, {guid, SourceGuid});
-
-                #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
-                    ok = logical_file_manager:rmdir(SessId, {guid, SourceGuid})
-            end
+            ok = logical_file_manager:unlink(SessId, {guid, SourceGuid})
         end),
 
     CurrTime = erlang:system_time(seconds),
