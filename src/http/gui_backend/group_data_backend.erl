@@ -307,8 +307,8 @@ group_user_permission_record(AssocId) ->
     proplists:proplist().
 group_group_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {GroupIdWithPrefix, PrivGroupId} = op_gui_utils:association_to_ids(AssocId),
-    <<"group-", GroupId/binary>> = GroupIdWithPrefix,
+    {PrivGroupIdWithPrefix, GroupId} = op_gui_utils:association_to_ids(AssocId),
+    <<"group-", PrivGroupId/binary>> = PrivGroupIdWithPrefix,
     {ok, #document{
         value = #onedata_group{
             users = UsersAndPerms
