@@ -314,7 +314,7 @@ space_user_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
-        {<<"user">>, UserId}
+        {<<"systemUser">>, UserId}
     ].
 
 
@@ -343,7 +343,7 @@ space_group_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
-        {<<"group">>, GroupId}
+        {<<"systemGroup">>, GroupId}
     ].
 
 

@@ -293,7 +293,7 @@ group_user_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, GroupId},
-        {<<"system-user">>, UserId}
+        {<<"systemUser">>, UserId}
     ].
 
 
@@ -325,7 +325,7 @@ group_group_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, GroupId},
-        {<<"system-group">>, PrivGroupId}
+        {<<"systemGroup">>, PrivGroupId}
     ].
 
 
