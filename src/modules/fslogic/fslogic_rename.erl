@@ -492,7 +492,8 @@ for_each_child_file(Entry, PreFun, PostFun) ->
 -spec list_all_children(Entry :: fslogic_worker:file()) ->
     {ok, [#child_link{}]}.
 list_all_children(Entry) ->
-    list_all_children(Entry, 0, application:get_env(?APP_NAME, ls_chunk_size), []).
+    {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
+    list_all_children(Entry, 0, ChunkSize, []).
 
 -spec list_all_children(Entry :: fslogic_worker:file(),
     Offset :: non_neg_integer(), Count :: non_neg_integer(),
@@ -561,7 +562,7 @@ copy_file_attributes(SessId, From, To) ->
 copy_file_contents(SessId, From, To) ->
     {ok, FromHandle} = logical_file_manager:open(SessId, From, read),
     {ok, ToHandle} = logical_file_manager:open(SessId, To, write),
-    ChunkSize = application:get_env(?APP_NAME, ?CHUNK_SIZE_ENV_KEY),
+    {ok, ChunkSize} = application:get_env(?APP_NAME, ?CHUNK_SIZE_ENV_KEY),
     copy_file_contents(SessId, FromHandle, ToHandle, 0, ChunkSize).
 
 -spec copy_file_contents(session:id(), FromHandle :: logical_file_manager:handle(),
@@ -586,7 +587,7 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
 copy_file_contents_sfm(FromHandle, ToHandle) ->
     {ok, OpenFromHandle} = storage_file_manager:open(FromHandle, read),
     {ok, OpenToHandle} = storage_file_manager:open(ToHandle, write),
-    ChunkSize = application:get_env(?APP_NAME, ?CHUNK_SIZE_ENV_KEY),
+    {ok, ChunkSize} = application:get_env(?APP_NAME, ?CHUNK_SIZE_ENV_KEY),
     copy_file_contents_sfm(OpenFromHandle, OpenToHandle, 0, ChunkSize).
 
 -spec copy_file_contents_sfm(HandleFrom :: storage_file_manager:handle(),
