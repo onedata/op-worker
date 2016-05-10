@@ -32,22 +32,30 @@ all() ->
         db_sync_test, proxy_test
     ]).
 
+-define(match(Expect, Expr, Attempts),
+    case Attempts of
+        0 ->
+            ?assertMatch(Expect, Expr);
+        _ ->
+            ?assertMatch(Expect, Expr, Attempts)
+    end
+).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, true).
+    synchronization_test_base(Config, <<"user1">>, true, 15).
 
 proxy_test(Config) ->
-    synchronization_test_base(Config, <<"user2">>, false),
-    synchronization_test_base(Config, <<"user3">>, false).
+    synchronization_test_base(Config, <<"user2">>, false, 0),
+    synchronization_test_base(Config, <<"user3">>, false, 0).
 
-synchronization_test_base(Config, User, Multisupport) ->
+synchronization_test_base(Config, User, Multisupport, Attempts) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, User}, Config),
-
+ct:print("w1 ~p", [Worker1]),
     Prov1ID = rpc:call(Worker1, oneprovider, get_provider_id, []),
     Prov2ID = lists:foldl(fun(Worker, Acc) ->
         case rpc:call(Worker, oneprovider, get_provider_id, []) of
@@ -82,10 +90,37 @@ synchronization_test_base(Config, User, Multisupport) ->
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Dir, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Level2Dir, 8#755)),
-    Verify(fun(W) -> ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-        lfm_proxy:stat(W, SessId, {path, Dir}), 10) end),
-    Verify(fun(W) -> ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-        lfm_proxy:stat(W, SessId, {path, Level2Dir}), 10) end),
+
+    VerifyStats = fun(File, IsDir) ->
+        VerAns = Verify(fun(W) ->
+            case IsDir of
+                true ->
+                    ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
+                        lfm_proxy:stat(W, SessId, {path, File}), Attempts);
+                _ ->
+                    ?match({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
+                        lfm_proxy:stat(W, SessId, {path, File}), Attempts)
+            end,
+            StatAns = lfm_proxy:stat(W, SessId, {path, File}),
+            {ok, #file_attr{uuid = FileGUID}} = StatAns,
+            FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+            rpc:call(W, file_meta, get, [FileUUID])
+        end),
+        ct:print("ccc ~p", [{File, IsDir, VerAns, length(Workers)}]),
+        NotFoundList = lists:filter(fun({error, {not_found, _}}) -> true; (_) -> false end, VerAns),
+        OKList = lists:filter(fun({ok, _}) -> true; (_) -> false end, VerAns),
+
+        case Multisupport of
+            true ->
+                ?assertEqual(0, length(NotFoundList)),
+                ?assertEqual(length(Workers), length(OKList));
+            _ ->
+                ?assertEqual(length(Workers) div 2, length(NotFoundList)),
+                ?assertEqual(length(Workers) div 2, length(OKList))
+        end
+    end,
+    VerifyStats(Dir, true),
+    VerifyStats(Level2Dir, true),
 
     FileBeg = <<"1234567890abcd">>,
     CreateFile = fun({Offset, File}) ->
@@ -105,8 +140,7 @@ synchronization_test_base(Config, User, Multisupport) ->
     VerifyFile = fun({Offset, File}) ->
         Offset2 = Offset rem 5 + 1,
         Size = 2*Offset2,
-        Verify(fun(W) -> ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = Size}},
-            lfm_proxy:stat(W, SessId, {path, File}), 10) end),
+        VerifyStats(File, false),
 
         Beg = binary:part(FileBeg, 0, Offset2),
         End = binary:part(File, 0, Offset2),
@@ -140,17 +174,18 @@ synchronization_test_base(Config, User, Multisupport) ->
         ct:print("bbb ~p", [{Offset, File, VerAns, Flattened, length(Workers)}]),
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
-
+%TODO what if locations will not appear with file_meta?
         case Multisupport of
             true ->
-                ?assertEqual(length(Workers), length(ZerosList)),
-                ?assertEqual(length(Workers), length(LocationsList));
+                ?assertEqual(2*length(Workers), length(ZerosList) + length(LocationsList)),
+                ?assert(length(Workers) * 3 div 2 =< length(LocationsList));
             _ ->
                 ?assertEqual(length(Workers) * 3 div 2, length(ZerosList)),
                 ?assertEqual(length(Workers) div 2, length(LocationsList))
         end,
 
         Verify(fun(W) ->
+            ct:print("xxx ~p", [W]),
             OpenAns = lfm_proxy:open(W, SessId, {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -164,8 +199,7 @@ synchronization_test_base(Config, User, Multisupport) ->
     end, Level3Dirs),
 
     lists:map(fun(D) ->
-        Verify(fun(W) -> ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-            lfm_proxy:stat(W, SessId, {path, D}), 10) end)
+        VerifyStats(D, true)
     end, Level3Dirs),
 
     lists:map(fun(D) ->
@@ -185,7 +219,7 @@ synchronization_test_base(Config, User, Multisupport) ->
                 {ok, ListerDirs} = LSAns,
                 length(ListerDirs)
             end,
-            ?assertMatch(DSize, CountChilden(), 10),
+            ?match(DSize, CountChilden(), Attempts),
 
             StatAns = lfm_proxy:stat(W, SessId, {path, DirToCheck}),
             ?assertMatch({ok, #file_attr{}}, StatAns),
@@ -226,8 +260,7 @@ synchronization_test_base(Config, User, Multisupport) ->
     VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
 
     lists:map(fun(D) ->
-        Verify(fun(W) -> ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-            lfm_proxy:stat(W, SessId, {path, D})) end)
+        VerifyStats(D, true)
     end, Level3Dirs2),
 
     lists:map(fun(F) ->
@@ -243,10 +276,10 @@ synchronization_test_base(Config, User, Multisupport) ->
     end, Level3Dirs2),
 
     lists:map(fun({_, F}) ->
-        Verify(fun(W) -> ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {path, F}), 10) end)
+        Verify(fun(W) -> ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {path, F}), Attempts) end)
     end, Level4Files),
     lists:map(fun(D) ->
-        Verify(fun(W) -> ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {path, D}), 10) end)
+        Verify(fun(W) -> ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {path, D}), Attempts) end)
     end, Level3Dirs2),
     VerifyDirSize(Level3Dir, 0, length(Level4Files)),
     VerifyDirSize(Level2Dir, length(Level3Dirs) + 1, length(Level3Dirs2)),
