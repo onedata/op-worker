@@ -623,7 +623,7 @@ is_spaces_base_dir(#document{key = Key}) ->
     ok | datastore:generic_error().
 rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-        datastore:run_synchronized(?MODEL_NAME, <<"rename_", FileUUID/binary>>, fun() ->
+        datastore:run_synchronized(?MODEL_NAME, ParentUUID, fun() ->
             {ok, FileUUID} = update(Subject, #{name => NewName}),
             ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
         end)
@@ -631,23 +631,33 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
 
 rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, OldParentUUID, {path, NewPath}) ->
     ?run(begin
-        datastore:run_synchronized(?MODEL_NAME, <<"rename_", FileUUID/binary>>, fun() ->
-            NewTokens = fslogic_path:split(NewPath),
-            [NewName | NewParentTokens] = lists:reverse(NewTokens),
-            NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
-            {ok, #document{key = NewParentUUID} = NewParent} = get({path, NewParentPath}),
-            {ok, NewScope} = get_scope(NewParent),
-            {ok, FileUUID} = update(Subject, #{name => NewName}),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
-            ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
+        NewTokens = fslogic_path:split(NewPath),
+        [NewName | NewParentTokens] = lists:reverse(NewTokens),
+        NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
+        {ok, #document{key = NewParentUUID} = NewParent} = get({path, NewParentPath}),
+        case NewParentUUID =:= OldParentUUID of
+            true ->
+                rename3(Subject, OldParentUUID, {name, NewName});
+            false ->
+                datastore:run_synchronized(?MODEL_NAME, OldParentUUID, fun() ->
+                    datastore:run_synchronized(?MODEL_NAME, NewParentUUID, fun() ->
+                        {ok, NewScope} = get_scope(NewParent),
+                        {ok, FileUUID} = update(Subject, #{name => NewName}),
+                        ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
+                        ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
 
-            ok = update_scopes(Subject, NewScope)
-        end)
+                        ok = update_scopes(Subject, NewScope)
+                    end)
+                end)
+        end
     end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Internel helper function for rename/2.
+%% Remove snapshot child links from old parent to entry and
+%% create snapshot child links from new parent to entry using new name.
+%% If entry is current snapshot of the file, do the same for non-snapshot
+%% child links.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_links_in_parents(OldParentUUID :: uuid(), NewParentUUID :: uuid(),
