@@ -1,5 +1,5 @@
 # bamboos
-*bamboos* is a set of python scripts that are used for starting components in dockerized environment. Eenvironment description files (JSON format) are used to configure how components should be started.
+*bamboos* is a set of python scripts that are used for starting components in dockerized environment. Environment description files (JSON format) are used to configure how components should be started.
 
 # User Guide
 *bamboos* scripts can be used in two ways:
@@ -174,9 +174,9 @@ Section **os_configs** defines named configurations of Operating System, i.e. us
 
 Section **provider_domains** defines a list of *oneprovider* instances. Each instance must get its unique identifier (e.g. `p1`), which will be transformed to domain name like this: `p1.1465312143.dev`. Inside provider configuration, you can specify which database driver and predefined *os_config* it should use, as well as how many nodes should be set up into a cluster. Each node can have its own configuration.
 
-Section **zone_domains** defines a list of onezone instances. The configuration is simillar to *oneprovider* config, excluding *os_config* which is not used in onezone.
+Section **zone_domains** defines a list of *onezone* instances. The configuration is simillar to *oneprovider* config, excluding *os_config* which is not used in onezone.
 
-Section **global_setup** defines what entities should be initialized in onezone. This enables automatic creation of users, spaces, groups and provider supports. They will be all running and ready to use when script finishes.
+Section **global_setup** defines what entities should be initialized in *onezone*. This enables automatic creation of users, spaces, groups and provider supports. They will be all running and ready to use when script finishes.
 
 # bamboos in Onedata
 **bamboos** is used for test automation by setting up testing environments. It is used in [bamboo](https://www.atlassian.com/software/bamboo) builds, as well as in standaalone tests on developer machines. In addition, it allows for easy setup of dockerized environment which is useful during manual testing and code development.
