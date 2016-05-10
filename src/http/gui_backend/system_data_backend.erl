@@ -97,7 +97,7 @@ find(<<"system-group">>, GroupId) ->
             CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
             {ok, #document{value = #onedata_user{name = UserName}}} =
                 user_logic:get(CurrentUserAuth, GroupId),
-            <<UserName, "-group">>
+            <<UserName/binary, "-group">>
     end,
     {ok, [
         {<<"id">>, GroupId},
