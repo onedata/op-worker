@@ -639,8 +639,16 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
             true ->
                 rename3(Subject, OldParentUUID, {name, NewName});
             false ->
-                datastore:run_synchronized(?MODEL_NAME, OldParentUUID, fun() ->
-                    datastore:run_synchronized(?MODEL_NAME, NewParentUUID, fun() ->
+                %% Sort keys to avoid deadlock with rename from target to source
+                {Key1, Key2} = case OldParentUUID < NewParentUUID of
+                    true ->
+                        {OldParentUUID, NewParentUUID};
+                    false ->
+                        {NewParentUUID, OldParentUUID}
+                end,
+
+                datastore:run_synchronized(?MODEL_NAME, Key1, fun() ->
+                    datastore:run_synchronized(?MODEL_NAME, Key2, fun() ->
                         {ok, NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName}),
                         ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
