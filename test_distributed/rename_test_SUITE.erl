@@ -58,6 +58,7 @@
     attributes_retaining_test_with_failing_link_and_mv/1,
     times_update_test/1,
     moving_dir_into_itself_test/1,
+    moving_file_onto_itself_test/1,
     rename_in_default_space_test/1,
     reading_from_open_file_after_rename_test/1]).
 
@@ -88,6 +89,7 @@ all() ->
         attributes_retaining_test_with_failing_link_and_mv,
         times_update_test,
         moving_dir_into_itself_test,
+        moving_file_onto_itself_test,
         rename_in_default_space_test,
         reading_from_open_file_after_rename_test
     ]).
@@ -598,6 +600,17 @@ moving_dir_into_itself_test(Config) ->
     {_, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
 
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {guid, DirGuid}, filename(1, TestDir, "/dir/dir_target"))),
+    ok.
+
+moving_file_onto_itself_test(Config) ->
+    [W | _] = sorted_workers(Config),
+    TestDir = ?config(test_dir, Config),
+    SessId = ?config({session_id, <<"user1">>}, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
+    {_, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/file"), 8#770)),
+
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, FileGuid}, filename(1, TestDir, "/file"))),
     ok.
 
 rename_in_default_space_test(Config) ->

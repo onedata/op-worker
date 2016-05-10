@@ -46,12 +46,18 @@
     LogicalTargetPath :: file_meta:path()) ->
     #fuse_response{} | no_return().
 rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
-    {ok, Tokens} = fslogic_path:verify_file_path(LogicalTargetPath),
-    CanonicalTargetEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalTargetEntry, SessId),
-    case rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
-        ok -> #fuse_response{status = #status{code = ?OK}};
-        {error, Code} -> #fuse_response{status = #status{code = Code}}
+    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
+    case SourcePath =:= LogicalTargetPath of
+        true ->
+            #fuse_response{status = #status{code = ?OK}};
+        false ->
+            {ok, Tokens} = fslogic_path:verify_file_path(LogicalTargetPath),
+            CanonicalTargetEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+            {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalTargetEntry, SessId),
+            case rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
+                ok -> #fuse_response{status = #status{code = ?OK}};
+                {error, Code} -> #fuse_response{status = #status{code = Code}}
+            end
     end.
 
 %%--------------------------------------------------------------------
