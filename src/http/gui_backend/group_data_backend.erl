@@ -259,7 +259,8 @@ group_record(GroupId) ->
 
     GroupPermissions = lists:map(
         fun({GrId, _GroupPerms}) ->
-            op_gui_utils:ids_to_association(GrId, GroupId)
+            Id = op_gui_utils:ids_to_association(GrId, GroupId),
+            <<"group-", Id/binary>>
         end, GroupsAndPerms),
     [
         {<<"id">>, GroupId},
@@ -306,7 +307,8 @@ group_user_permission_record(AssocId) ->
     proplists:proplist().
 group_group_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {GroupId, PrivGroupId} = op_gui_utils:association_to_ids(AssocId),
+    {GroupIdWithPrefix, PrivGroupId} = op_gui_utils:association_to_ids(AssocId),
+    <<"group-", GroupId/binary>> = GroupIdWithPrefix,
     {ok, #document{
         value = #onedata_group{
             users = UsersAndPerms
