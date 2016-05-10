@@ -316,7 +316,7 @@ group_group_permission_record(AssocId) ->
         }}} = group_logic:get(UserAuth, GroupId),
     %% @todo wait for groups from zbyszek
     GroupsAndPerms = UsersAndPerms,
-    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+    GroupPerms = proplists:get_value(PrivGroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(GroupPerm) ->
             HasPerm = lists:member(GroupPerm, GroupPerms),
