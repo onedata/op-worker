@@ -239,12 +239,7 @@ delete_record(<<"file">>, Id) ->
 -spec get_parent(SessionId :: binary(), FileGUID :: binary()) -> binary().
 get_parent(SessionId, FileGUID) ->
     {ok, ParentGUID} = logical_file_manager:get_parent(SessionId, {guid, FileGUID}),
-    case logical_file_manager:get_file_path(SessionId, ParentGUID) of
-        {ok, <<"/spaces">>} ->
-            get_spaces_dir_uuid(SessionId);
-        _ ->
-            ParentGUID
-    end.
+    ParentGUID.
 
 
 %%--------------------------------------------------------------------

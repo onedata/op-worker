@@ -1674,10 +1674,11 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
         {error, _} ->
             ok;
         {ok, RCode, _, RResponse} ->
-
+            RResponseJSON = remove_times_metadata(json_utils:decode(RResponse)),
             lists:foreach(fun({ok, LCode, _, LResponse}) ->
-%%                ct:print("~p ~p ~p ~p", [RCode, RResponse, LCode, LResponse]),
-                ?assertMatch({RCode, RResponse}, {LCode, LResponse})
+                LResponseJSON = remove_times_metadata(json_utils:decode(LResponse)),
+%%                ct:print("~p ~p ~p ~p", [RCode, RResponseJSON, LCode, LResponseJSON]), %% Usefull log for debugging
+                ?assertMatch({RCode, RResponseJSON}, {LCode, LResponseJSON})
             end, Responses)
     end,
     FRes;
@@ -1685,6 +1686,17 @@ do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->
     do_request_impl(lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes), RestSubpath, Method, Headers, Body);
 do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
     do_request_impl(Node, RestSubpath, Method, Headers, Body).
+
+remove_times_metadata(ResponseJSON) ->
+    Metadata0 = proplists:get_value(<<"metadata">>, ResponseJSON),
+    case Metadata0 of
+        undefined -> ResponseJSON;
+        _ ->
+            Metadata1 = proplists:delete(<<"cdmi_ctime">>, Metadata0),
+            Metadata2 = proplists:delete(<<"cdmi_atime">>, Metadata1),
+            Metadata3 = proplists:delete(<<"cdmi_mtime">>, Metadata2),
+            [{<<"metadata">>, Metadata3} | proplists:delete(<<"metadata">>, ResponseJSON)]
+    end.
 
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->

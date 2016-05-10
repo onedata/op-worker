@@ -61,12 +61,12 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, rmdir/2, ls/4, get_children_count/2, get_parent/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2]).
+-export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/1, unlink/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
-    truncate/3, get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
+    truncate/3, get_block_map/1, get_block_map/2, release/1]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
@@ -99,7 +99,7 @@ mkdir(SessId, Path) ->
 
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_meta:uuid()} | error_reply().
+    {ok, DirGUID :: fslogic_worker:file_guid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     ?run(fun() -> lfm_dirs:mkdir(SessId, Path, Mode) end).
 
@@ -108,8 +108,8 @@ mkdir(SessId, Path, Mode) ->
 %% Deletes a directory with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rmdir(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
-rmdir(SessId, FileKey) ->
+-spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
+rm_recursive(SessId, FileKey) ->
     ?run(fun() -> lfm_utils:rm(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
@@ -276,6 +276,16 @@ truncate(Handle, Size) ->
     ok | error_reply().
 truncate(SessId, FileKey, Size) ->
     ?run(fun() -> lfm_files:truncate(SessId, FileKey, Size) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Releases previously opened  file.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(handle()) ->
+    ok | error_reply().
+release(FileHandle) ->
+    ?run(fun() -> lfm_files:release(FileHandle) end).
 
 %%--------------------------------------------------------------------
 %% @doc

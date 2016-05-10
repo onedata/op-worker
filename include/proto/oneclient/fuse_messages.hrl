@@ -179,6 +179,14 @@
     file_content :: binary()
 }).
 
+-record(get_file_path, {
+    uuid :: fslogic_worker:file_guid()
+}).
+
+-record(fsync, {
+    uuid :: fslogic_worker:file_guid()
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #release{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
@@ -187,7 +195,7 @@
                         #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
                         #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
                         #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{} |
-                        #synchronize_block_and_compute_checksum{}.
+                        #synchronize_block_and_compute_checksum{} | #get_file_path{} | #fsync{}.
 
 
 -record(file_children, {
@@ -235,10 +243,14 @@
     value :: binary()
 }).
 
+-record(file_path, {
+    value :: binary()
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
     #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
-    #checksum{}.
+    #checksum{} | #acl{} | #file_path{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

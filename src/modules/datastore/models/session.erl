@@ -311,7 +311,7 @@ get_random_connection(SessId) ->
 -spec get_connections(SessId :: id()) ->
     {ok, Comm :: pid()} | {error, Reason :: term()}.
 get_connections(SessId) ->
-    case session:get(SessId) of
+    case session:const_get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
             ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),

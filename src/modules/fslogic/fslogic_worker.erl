@@ -66,8 +66,16 @@ init(_Args) ->
             size_threshold = WriteSizeThreshold
         },
         event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-            metadata = 0,
-            emission_rule = fun(_) -> true end,
+            metadata = {0, 0}, %% {Counter, Size}
+            emission_time = WriteTimeThreshold,
+            emission_rule =
+                fun({Counter, Size}) ->
+                    Counter > WriteCounterThreshold orelse Size > WriteSizeThreshold
+                end,
+            transition_rule =
+                fun({Counter, Size}, #event{counter = C, object = #write_event{size = S}}) ->
+                    {Counter + C, Size + S}
+                end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
                 handle_write_events(Evts, Ctx)
@@ -100,8 +108,16 @@ init(_Args) ->
             size_threshold = ReadSizeThreshold
         },
         event_stream = ?READ_EVENT_STREAM#event_stream_definition{
-            metadata = 0,
-            emission_rule = fun(_) -> true end,
+            metadata = {0, 0}, %% {Counter, Size}
+            emission_time = ReadTimeThreshold,
+            emission_rule =
+            fun({Counter, Size}) ->
+                Counter > ReadCounterThreshold orelse Size > ReadSizeThreshold
+            end,
+            transition_rule =
+            fun({Counter, Size}, #event{counter = C, object = #read_event{size = S}}) ->
+                {Counter + C, Size + S}
+            end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
                 handle_read_events(Evts, Ctx)
@@ -219,16 +235,15 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                 apply(Function, [NextCTX, Request]);
             false ->
                 PrePostProcessResponse =
-                    try
-                        case fslogic_remote:prerouting(NextCTX, Request, Providers) of
-                            {ok, {reroute, Self, Request1}} ->  %% Request should be handled locally for some reason
-                                {ok, apply(Function, [NextCTX, Request1])};
-                            {ok, {reroute, RerouteToProvider, Request1}} ->
-                                {ok, fslogic_remote:reroute(NextCTX, RerouteToProvider, Request1)};
-                            {error, PreRouteError} ->
-                                ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [Request, PreRouteError]),
-                                throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
-                        end
+                    try fslogic_remote:prerouting(NextCTX, Request, Providers) of
+                        {ok, {reroute, Self, Request1}} ->  %% Request should be handled locally for some reason
+                            {ok, apply(Function, [NextCTX, Request1])};
+                        {ok, {reroute, RerouteToProvider, Request1}} ->
+                            {ok, fslogic_remote:reroute(NextCTX, RerouteToProvider, Request1)};
+                        {error, PreRouteError} ->
+                            ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [Request, PreRouteError]),
+                            throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
+
                     catch
                         Type:Reason0 ->
                             ?error_stacktrace("Unable to process remote fslogic request due to: ~p", [{Type, Reason0}]),
@@ -325,6 +340,8 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_location{uuid = 
     fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Flags);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #truncate{uuid = UUID, size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Size);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #release{handle_id = HandleId}}) ->
+    fslogic_req_regular:release(Ctx, HandleId);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID, name = XattrName}}) ->
@@ -362,6 +379,10 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{
 handle_fuse_request(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
     file_id = FileId, file_content = FileContent}}) ->
     fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = FileGUID}}) ->
+    fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
+    fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -497,6 +518,10 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #synchroniz
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #synchronize_block_and_compute_checksum{uuid = UUID}}) ->
     {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_path{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #fsync{uuid = UUID}}) ->
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->
@@ -505,6 +530,7 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_sto
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}}) ->
     {file, {guid, FileGUID}};
+
 request_to_file_entry_or_provider(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

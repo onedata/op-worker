@@ -139,7 +139,7 @@ handle_cast(#event{} = Evt, #state{subscription_id = SubId, session_id = SessId,
     definition = StmDef} = State) ->
     case apply_admission_rule(Evt, StmDef) of
         true ->
-            ?info("Handling event ~p in event stream for subscription ~p and "
+            ?debug("Handling event ~p in event stream for subscription ~p and "
             "session ~p", [Evt, SubId, SessId]),
             {noreply, process_event(Evt, State)};
         false -> {noreply, State}

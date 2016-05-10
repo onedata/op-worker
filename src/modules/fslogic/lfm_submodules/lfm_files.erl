@@ -28,7 +28,7 @@
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
     read/3, read_without_events/3, truncate/2, truncate/3, get_block_map/1,
-    get_block_map/2, unlink/1, unlink/2]).
+    get_block_map/2, unlink/1, unlink/2, release/1]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -101,8 +101,10 @@ get_parent(SessId, FileKey) ->
 -spec get_file_path(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGUID) ->
-    CTX = fslogic_context:new(SessId),
-    {ok, fslogic_uuid:guid_to_path(CTX, FileGUID)}.
+    lfm_utils:call_fslogic(SessId, #get_file_path{uuid = FileGUID},
+        fun(#file_path{value = Path}) ->
+            {ok, Path}
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -186,6 +188,20 @@ open(SessId, FileKey, OpenType) ->
             end
         end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Releases previously opened  file.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(logical_file_manager:handle()) ->
+    ok | logical_file_manager:error_reply().
+release(#lfm_handle{fslogic_ctx = CTX, file_location = #file_location{handle_id = FSLogicHandle}}) ->
+    lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX), #release{handle_id = FSLogicHandle},
+        fun(_) ->
+            ok
+        end).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Flushes waiting events for session connected with handler.
@@ -197,25 +213,14 @@ fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_i
     lists:foreach(fun({_, SFMHandle}) ->
         ok = storage_file_manager:fsync(SFMHandle)
     end, maps:values(SFMHandles));
-fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+fsync(#lfm_handle{file_guid = FileGUID, sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     lists:foreach(fun({_, SFMHandle}) ->
             ok = storage_file_manager:fsync(SFMHandle)
         end, maps:values(SFMHandles)),
-    event:flush(?FSLOGIC_SUB_ID, self(), SessId),
-    receive
-        {handler_executed, Results} ->
-            Errors = lists:filter(fun
-                ({error, _}) -> true;
-                (_) -> false
-            end, Results),
-            case Errors of
-                [] -> ok;
-                _ -> {error, {handler_error, Errors}}
-            end
-    after
-        ?FSYNC_TIMEOUT ->
-            {error, handler_timeout}
-    end.
+    lfm_utils:call_fslogic(SessId, #fsync{uuid = FileGUID},
+        fun(_) ->
+            ok
+        end).
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)

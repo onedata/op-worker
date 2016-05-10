@@ -27,7 +27,9 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, 1000).
+-define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
+-define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
+-define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
 
 -type queue_id() :: binary().
@@ -45,6 +47,9 @@
     batch_map = #{} :: #{},
     removed = false :: boolean()
 }).
+
+%% Defines maximum size of changes buffer per space in bytes.
+-define(CHANGES_STASH_MAX_SIZE_BYTES, 10 * 1024 * 1024).
 
 
 %%%===================================================================
@@ -133,11 +138,15 @@ handle(requested_bcast_status) ->
 handle({QueueKey, {cleanup, Until}}) ->
     queue_remove(QueueKey, Until);
 
+handle({clear_temp, Key}) ->
+    dbsync_utils:temp_clear(Key);
+
 %% Append change to given queue
-handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}) ->
+handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
-    case has_sync_context(Doc) of
-        true ->
+    Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
+    case {has_sync_context(Doc), Rereplication} of
+        {true, false} ->
             case get_space_id(Doc) of
                 {ok, <<"spaces">>} ->
                     ?debug("Skipping doc ~p", [Doc]),
@@ -153,7 +162,10 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
             end;
-        false ->
+        {true, true} ->
+            ?debug("Rereplication detected, skipping ~p", [Doc]),
+            ok;
+        {false, _} ->
             ?debug("Skipping doc ~p", [Doc]),
             ok
     end;
@@ -294,7 +306,8 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
         catch consume_batches(FromProvider, SpaceId),
-    do_apply_batch_changes(FromProvider, SpaceId, Batch, true).
+    NewChanges = lists:sort(lists:flatten(Changes)),
+    do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -312,7 +325,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
             stash_batch(FromProvider, SpaceId, Batch),
             case ShouldRequest of
                 true ->
-                    do_request_changes(FromProvider, CurrentUntil, Since);
+                    request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
                 false ->
                     ok
             end;
@@ -332,7 +345,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc, model = ModelName} = Change | T]) ->
+apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
 
@@ -346,7 +359,7 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
 
-
+        dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
         spawn(
             fun() ->
@@ -598,14 +611,43 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Request changes for specific provider.
+%% Request changes for specific provider with specific range.
 %% @end
 %%--------------------------------------------------------------------
 -spec do_request_changes(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 do_request_changes(ProviderId, Since, Until) ->
-    dbsync_proto:changes_request(ProviderId, Since, Until).
+    Now = erlang:system_time(milli_seconds),
+    %% Wait for {X}ms + {Y}ms per one document
+    MaxWaitTime = ?DIRECT_REQUEST_BASE_TIMEOUT + ?DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT * (Until - Since),
+    case state_get({do_request_changes, ProviderId, Until}) of
+        undefined ->
+            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            dbsync_proto:changes_request(ProviderId, Since, Until);
+        OldTime when OldTime + MaxWaitTime < Now ->
+            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            dbsync_proto:changes_request(ProviderId, Since, Until);
+        _ ->
+            ok
+    end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Requests changes since given sequence up to fist found cached (stashed) change or up to given 'Until' if
+%% there is no stashed changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_missing_changes(oneprovider:id(), SpaceId :: binary(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
+request_missing_changes(ProviderId, SpaceId, Since, Until) ->
+    case state_get({stash, ProviderId, SpaceId}) of
+        undefined ->
+            do_request_changes(ProviderId, Since, Until);
+        Batches ->
+            [#batch{since = FirstSince} | _] = lists:sort(Batches),
+            do_request_changes(ProviderId, Since, FirstSince)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -614,16 +656,22 @@ do_request_changes(ProviderId, Since, Until) ->
 %%--------------------------------------------------------------------
 -spec stash_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch()) ->
     ok | no_return().
-stash_batch(ProviderId, SpaceId, Batch) ->
+stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUntil, changes = NewChanges}) ->
     state_update({stash, ProviderId, SpaceId},
         fun
             (undefined) ->
                 [Batch];
             (Batches) ->
-                case size(term_to_binary(Batches)) > 20 * 1024 of
+                case size(term_to_binary(Batches)) > ?CHANGES_STASH_MAX_SIZE_BYTES of
                     true -> Batches;
                     false ->
-                        [Batch | Batches]
+                        [#batch{until = Until, since = Since, changes = Changes} | Tail] = Batches,
+                        case NewSince > Until + 1 orelse NewSince < Since of
+                            true ->
+                                [Batch | Batches];
+                            false ->
+                                [#batch{since = Since, until = NewUntil, changes = lists:flatten([Changes, NewChanges])} | Tail]
+                        end
                 end
         end).
 
