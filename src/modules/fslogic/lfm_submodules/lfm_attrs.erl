@@ -22,7 +22,8 @@
 
 %% API
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
+    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2, update_times/4,
+    update_times/5]).
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
     set_mimetype/3]).
@@ -47,6 +48,33 @@ stat(SessId, FileEntry) ->
     lfm_utils:call_fslogic(SessId, #get_file_attr{entry = FileEntry},
         fun(#file_attr{} = Attrs) ->
             {ok, Attrs}
+        end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Changes file timestamps.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_times(Handle :: logical_file_manager:handle(),
+    ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined,
+    CTime :: file_meta:time() | undefined) ->
+    ok | logical_file_manager:error_reply().
+update_times(#lfm_handle{file_guid = FileGUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, ATime, MTime, CTime) ->
+    update_times(SessId, {guid, FileGUID}, ATime, MTime, CTime).
+
+-spec update_times(session:id(), logical_file_manager:file_key(), ATime :: file_meta:time(),
+    MTime :: file_meta:time(), CTime :: file_meta:time()) ->
+    ok | logical_file_manager:error_reply().
+update_times(SessId, FileKey, ATime, MTime, CTime) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(
+        SessId,
+        #update_times{uuid = FileGUID, atime = ATime, mtime = MTime, ctime = CTime},
+        fun(_) ->
+            ok
         end).
 
 
