@@ -358,6 +358,8 @@ translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
     {permission_changed_event, #'PermissionChangedEvent'{file_uuid = FileUuid}};
 translate_to_protobuf(#file_removal_event{file_uuid = FileUuid}) ->
     {file_removal_event, #'FileRemovalEvent'{file_uuid = FileUuid}};
+translate_to_protobuf(#file_renamed_event{old_uuid = OldUuid, new_uuid = NewUuid}) ->
+    {file_removal_event, #'FileRenamedEvent'{old_uuid = OldUuid, new_uuid = NewUuid}};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->

@@ -47,6 +47,8 @@
     #fuse_response{} | no_return().
 rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
+    {ok, #document{key = OldUUID}} = file_meta:get(SourceEntry),
+    OldGUID = fslogic_uuid:to_file_guid(OldUUID),
     case SourcePath =:= LogicalTargetPath of
         true ->
             #fuse_response{status = #status{code = ?OK}};
@@ -55,8 +57,12 @@ rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) 
             CanonicalTargetEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
             {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalTargetEntry, SessId),
             case rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
-                ok -> #fuse_response{status = #status{code = ?OK}};
-                {error, Code} -> #fuse_response{status = #status{code = Code}}
+                ok ->
+                    {guid, NewGUID} = fslogic_uuid:ensure_guid(CTX, {path, LogicalTargetPath}),
+                    spawn(fun() -> fslogic_event:emit_file_renamed(OldGUID, NewGUID) end),
+                    #fuse_response{status = #status{code = ?OK}};
+                {error, Code} ->
+                    #fuse_response{status = #status{code = Code}}
             end
     end.
 

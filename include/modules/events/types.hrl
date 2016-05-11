@@ -69,4 +69,12 @@
     file_uuid :: file_meta:uuid()
 }).
 
+%% definition of an event triggered when file is renamed
+%% old_uuid - old UUID of renamed file
+%% new_uuid - new UUID of renamed file
+-record(file_renamed_event, {
+    old_uuid :: file_meta:uuid(),
+    new_uuid :: file_meta:uuid()
+}).
+
 -endif.
