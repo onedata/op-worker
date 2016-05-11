@@ -65,8 +65,7 @@ chmod 777 /tmp
 mkdir /tmp/certs
 mkdir /tmp/keys
 {mount_commands}
-echo 'while ((1)); do chown -R {uid}:{gid} /tmp; sleep 1; done' > /root/bin/chown_logs.sh
-bash /root/bin/chown_logs.sh &
+bindfs --create-for-user={uid} --create-for-group={gid} /tmp /tmp
 '''
 
     for client in node['clients']:
@@ -144,7 +143,7 @@ EOF
         workdir='/root/bin',
         volumes=volumes,
         dns_list=dns_servers,
-        run_params=["--privileged"],
+        privileged=True,
         command=command)
 
     # create system users and groups

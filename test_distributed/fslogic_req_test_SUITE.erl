@@ -391,6 +391,14 @@ simple_rename_test(Config) ->
     {_SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
     {_SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
+    test_utils:mock_expect(Worker, oz_spaces, get_providers,
+        fun
+            (provider, _SpaceId) ->
+                {ok, [oneprovider:get_provider_id()]};
+            (_Client, _SpaceId) ->
+                meck:passthrough([_Client, _SpaceId])
+        end),
+
     RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
     RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),

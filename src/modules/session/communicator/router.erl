@@ -110,8 +110,12 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription{} = Sub}) ->
-    event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId),
-    ok;
+    case session_manager:is_provider_session_id(SessId) of
+        true -> ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
+        false ->
+            event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId),
+            ok
+    end;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription_cancellation{} = SubCan}) ->
     event:unsubscribe(SubCan, SessId),

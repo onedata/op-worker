@@ -54,7 +54,8 @@ exists(_FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), TargetPath :: file_meta:path()) ->
+-spec mv(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    TargetPath :: file_meta:path()) ->
     ok | logical_file_manager:error_reply().
 mv(SessId, FileKey, TargetPath) ->
     CTX = fslogic_context:new(SessId),
