@@ -30,6 +30,7 @@
 routes() ->
     [
         {"/rest/:version/file_distribution/[...]", #{handler => file_distribution_handler}},
+        {"/rest/:version/replicate_file/[...]", #{handler => replicate_file_handler}},
         {"/rest/:version/[...]", #{handler => rest_handler}}
     ].
 

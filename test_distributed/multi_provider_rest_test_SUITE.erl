@@ -30,22 +30,21 @@
     end_per_testcase/2]).
 
 -export([
-    file_distribution/1
+    get_simple_file_distribution/1,
+    replicate_file/1
 ]).
 
 all() ->
     ?ALL([
-        file_distribution
+        get_simple_file_distribution,
+        replicate_file
     ]).
-
--define(TIMEOUT, timer:seconds(5)).
-
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-file_distribution(Config) ->
+get_simple_file_distribution(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     File = <<"/file">>,
@@ -59,7 +58,30 @@ file_distribution(Config) ->
 
     % then
     DecodedBody = json_utils:decode(Body),
-    ?assertEqual([[{<<"provider">>, ?GET_DOMAIN(WorkerP1)}, {<<"blocks">>, [[0,4]]}]], DecodedBody).
+    ?assertEqual([[{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]], DecodedBody).
+
+replicate_file(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/spaces/space3/file">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    timer:sleep(timer:seconds(5)),
+    {ok, 200, _, _} = do_request(WorkerP1, <<"replicate_file/spaces/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+
+    % then
+    timer:sleep(timer:seconds(5)),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"file_distribution/spaces/space3/file">>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [
+            [{<<"provider">>, ?GET_DOMAIN(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"provider">>, ?GET_DOMAIN(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
+        ], DecodedBody).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -111,3 +133,6 @@ user_1_token_header(Config) ->
     #auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
     {ok, Srlzd} = macaroon:serialize(Macaroon),
     {<<"X-Auth-Token">>, Srlzd}.
+
+domain(Node) ->
+    atom_to_binary(?GET_DOMAIN(Node), utf8).

@@ -293,9 +293,9 @@ translate_from_protobuf(#'Checksum'{value = Value}) ->
 translate_from_protobuf(#'GetFileDistribution'{uuid = Uuid}) ->
     #get_file_distribution{uuid = Uuid};
 translate_from_protobuf(#'ReplicateFile'{uuid = Uuid, provider_id = ProviderId,
-    block = #'FileBlock'{offset = O, size = S}}) ->
+    block = Block}) ->
     #replicate_file{uuid = Uuid, provider_id = ProviderId,
-        block = #file_block{offset = O, size = S}};
+        block = translate_from_protobuf(Block)};
 translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, blocks = Blocks}) ->
     TranslatedBlocks = lists:map(fun translate_from_protobuf/1, Blocks),
     #provider_file_distribution{provider_id = ProviderId, blocks = TranslatedBlocks};
@@ -599,9 +599,9 @@ translate_to_protobuf(#checksum{value = Value}) ->
 translate_to_protobuf(#get_file_distribution{uuid = Uuid}) ->
     {get_file_distribution, #'GetFileDistribution'{uuid = Uuid}};
 translate_to_protobuf(#replicate_file{uuid = Uuid, provider_id = ProviderId,
-    block = #file_block{offset = O, size = S}}) ->
+    block = Block}) ->
     {replicate_file, #'ReplicateFile'{uuid = Uuid, provider_id = ProviderId,
-        block = #'FileBlock'{offset = O, size = S}}};
+        block = translate_to_protobuf(Block)}};
 translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
     TranslatedBlocks = lists:map(fun translate_to_protobuf/1, Blocks),
     #'ProviderFileDistribution'{provider_id = ProviderId, blocks = TranslatedBlocks};

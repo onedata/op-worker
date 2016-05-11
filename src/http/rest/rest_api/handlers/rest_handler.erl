@@ -20,7 +20,7 @@
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_accepted/2, delete_resource/2, resource_exists/2]).
+    content_types_accepted/2, resource_exists/2]).
 
 %% Content type routing functions
 -export([handle_json_data/2]).
@@ -48,7 +48,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-    {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
+    {[<<"PUT">>, <<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -74,13 +74,6 @@ content_types_accepted(Req, State) ->
 -spec resource_exists(req(), #{}) -> {term(), req(), #{}}.
 resource_exists(Req, State) ->
     {false, Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:delete_resource/2
-%%--------------------------------------------------------------------
--spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
-delete_resource(Req, State) ->
-    {true, Req, State}.
 
 %%%===================================================================
 %%% Content type handler functions

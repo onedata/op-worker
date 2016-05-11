@@ -27,8 +27,8 @@
 -export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, truncate/2, truncate/3,
-    get_file_distribution/2, unlink/1, unlink/2, release/1]).
+    read/3, read_without_events/3, truncate/2, truncate/3, unlink/1,
+    unlink/2, release/1, get_file_distribution/2, replicate_file/3]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -294,6 +294,19 @@ get_file_distribution(SessId, FileKey) ->
                 end, Distributions),
             {ok, Distribution}
         end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns block map for a file.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
+    {ok, list()} | logical_file_manager:error_reply().
+replicate_file(SessId, FileKey, ProviderId) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #replicate_file{uuid = FileGUID, provider_id = ProviderId},
+        fun(_) -> ok end).
 
 %%%===================================================================
 %%% Internal functions

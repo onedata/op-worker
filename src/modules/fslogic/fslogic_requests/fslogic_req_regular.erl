@@ -224,6 +224,9 @@ get_parent(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
     #fuse_response{}.
+synchronize_block(CTX, {uuid, FileUUID}, undefined)  ->
+    {ok, #file_attr{size = Size}} = fslogic_req_generic:get_file_attr(CTX, {uuid, FileUUID}),
+    synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size});
 synchronize_block(_CTX, {uuid, FileUUID}, Block)  ->
     ok = replica_synchronizer:synchronize(FileUUID, Block),
     #fuse_response{status = #status{code = ?OK}}.
