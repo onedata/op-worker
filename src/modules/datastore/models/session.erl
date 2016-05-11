@@ -28,7 +28,7 @@
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
-    all_with_user/0, get_user_id/1]).
+    all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
@@ -132,6 +132,15 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
+    case session:get(Key) of
+        {ok, #document{value = #session{open_files = OpenFiles}}} ->
+            lists:foreach(
+                fun(FileUUID) ->
+                    open_file:invalidate_session_entry(FileUUID, Key)
+                end, sets:to_list(OpenFiles));
+        _ -> ok
+    end,
+
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -407,6 +416,42 @@ get_auth(SessId) ->
 -spec get_rest_session_id(session:identity()) -> id().
 get_rest_session_id(#identity{user_id = Uid}) ->
     <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds open file UUID to session.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_open_file(session:id(), file_meta:uuid()) ->
+    ok | {error, Reason :: term()}.
+add_open_file(SessionId, FileUUID) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
+            UpdatedOpenFiles= sets:add_element(FileUUID, OpenFiles),
+            {ok, _} = session:save(Doc#document{value = Session#session{
+                open_files = UpdatedOpenFiles}}),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes open file UUID from session.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_open_file(session:id(), file_meta:uuid()) ->
+    ok | {error, Reason :: term()}.
+remove_open_file(SessionId, FileUUID) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
+            UpdatedOpenFiles= sets:del_element(FileUUID, OpenFiles),
+            {ok, _} = session:save(Doc#document{value = Session#session{
+                open_files = UpdatedOpenFiles}}),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% Internal functions

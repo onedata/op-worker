@@ -55,7 +55,8 @@
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
     % Handles for opened files
-    handles = #{} :: #{binary() => storage_file_manager:handle()}
+    handles = #{} :: #{binary() => storage_file_manager:handle()},
+    open_files = sets:new() :: sets:set(file_meta:uuid())
 }).
 
 %% Local, cached version of OZ user
@@ -195,6 +196,12 @@
     rrd_file = undefinied :: rrd_utils:rrd_file(),
     monitoring_interval = 0 :: non_neg_integer(),
     active = true :: boolean()
+}).
+
+%% Model that stores open file
+-record(open_file, {
+    is_removed = false :: true | false,
+    active_descriptors = #{} :: #{session:id() => non_neg_integer()}
 }).
 
 -endif.
