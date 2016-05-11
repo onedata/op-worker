@@ -17,6 +17,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
@@ -92,16 +93,27 @@ find_query(<<"file">>, _Data) ->
 
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = g_session:get_session_id(),
-    {ok, Distribution} = logical_file_manager:get_file_distribution(SessionId, {uuid, FileId}),
+    {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {uuid, FileId}),
+
     Res = lists:map(
         fun([{<<"provider">>, ProviderId}, {<<"blocks">>, Blocks}]) ->
+            BlocksList =
+                case Blocks of
+                    [] ->
+                        [0, 0];
+                    _ ->
+                        lists:foldl(
+                            fun([Offset, Size], Acc) ->
+                                Acc ++ [Offset, Offset + Size]
+                            end, [], Blocks)
+                end,
             [
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
-                {<<"blocks">>, Blocks}
+                {<<"blocks">>, BlocksList}
             ]
-        end, Distribution),
+        end, Distributions),
     {ok, Res}.
 
 

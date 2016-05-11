@@ -66,7 +66,7 @@
 -export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/1, unlink/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
-    truncate/3, get_file_distribution/1, get_file_distribution/2, release/1]).
+    truncate/3, get_file_distribution/2, release/1]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
@@ -291,11 +291,6 @@ release(FileHandle) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(Handle :: handle()) ->
-    {ok, list()} | error_reply().
-get_file_distribution(Handle) ->
-    ?run(fun() -> lfm_files:get_file_distribution(Handle) end).
-
 -spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, list()} | error_reply().
 get_file_distribution(SessId, FileKey) ->

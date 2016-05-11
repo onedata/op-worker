@@ -387,6 +387,12 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = File
     fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
     fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
+    fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = FileGUID}}) ->
+    fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -526,6 +532,10 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_p
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #fsync{uuid = UUID}}) ->
     {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #replicate_file{provider_id = ProviderId}}) ->
+    {provider, ProviderId};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->

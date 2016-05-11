@@ -90,7 +90,7 @@ content_types_provided(Req, State) ->
 %% @doc Handles GET with "application/json" content-type
 %%--------------------------------------------------------------------
 -spec get_file_distribution(req(), #{}) -> {term(), req(), #{}}.
-get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth, path := Path} = State) ->
+get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth} = State) ->
     {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, Guid}),
     Response = json_utils:encode(Distribution),
     {Response, Req, State}.

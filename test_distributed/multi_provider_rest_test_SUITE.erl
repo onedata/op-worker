@@ -46,20 +46,20 @@ all() ->
 %%%===================================================================
 
 file_distribution(Config) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, <<"user1">>}, Config),
     File = <<"/file">>,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, File, 8#700),
-    {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP2, Handle, 0, <<"test">>),
-    lfm_proxy:fsync(WorkerP2, Handle),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"file_distribution/file">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"file_distribution/file">>, get, [user_1_token_header(Config)], []),
 
     % then
-    ct:print("~p", Body).
-
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual([[{<<"provider">>, ?GET_DOMAIN(WorkerP1)}, {<<"blocks">>, [[0,4]]}]], DecodedBody).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
