@@ -34,11 +34,12 @@
     ok | {error, term()}.
 on_file_location_change(_SpaceId, ChangedLocationDoc =
     #document{value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->
+    fslogic_utils:get_local_file_location({uuid, Uuid}), % allow creation of file location before run_synchronized
     file_location:run_synchronized(Uuid,
         fun() ->
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
-                    LocalLocation = fslogic_utils:get_local_file_location({uuid, Uuid}),
+                    [LocalLocation] = fslogic_utils:get_local_file_locations_once({uuid, Uuid}),
                     update_local_location_replica(LocalLocation, ChangedLocationDoc);
                 false ->
                     ok

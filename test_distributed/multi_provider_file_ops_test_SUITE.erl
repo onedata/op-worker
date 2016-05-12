@@ -56,7 +56,7 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
 
 %%    tracer:start(Workers),
-%%    tracer:trace_calls(lfm_proxy),
+%%    tracer:trace_calls(replica_synchronizer),
 
     SessId = ?config({session_id, User}, Config),
 ct:print("w1 ~p", [Worker1]),

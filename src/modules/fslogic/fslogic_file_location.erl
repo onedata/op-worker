@@ -103,10 +103,7 @@ create_storage_file_if_not_exists(SpaceId, FileDoc, 0) ->
 create_storage_file_if_not_exists(SpaceId, FileDoc, Num) ->
     try create_storage_file_if_not_exists_once(SpaceId, FileDoc) of
         ok ->
-            ok;
-        _ ->
-            timer:sleep(500),
-            create_storage_file_if_not_exists(SpaceId, FileDoc, Num - 1)
+            ok
     catch
         _:_ ->
             timer:sleep(500),
