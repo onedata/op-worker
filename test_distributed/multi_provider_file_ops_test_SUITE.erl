@@ -347,6 +347,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
+    ct:timetrap({minutes, 30}),
     application:start(ssl2),
     hackney:start(),
     initializer:enable_grpca_based_communication(Config),
