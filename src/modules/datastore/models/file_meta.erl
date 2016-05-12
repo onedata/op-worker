@@ -690,6 +690,8 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
                     datastore:run_synchronized(?MODEL_NAME, Key2, fun() ->
                         {ok, NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName}),
+                        {ok, NewScope} = get_scope(NewParent),
+                        set_link_context(NewScope),
                         ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
                         ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
 
@@ -712,14 +714,26 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
     Subject :: entry()) -> ok.
 update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, Version, Subject) ->
     {ok, #document{key = SubjectUUID} = SubjectDoc} = get(Subject),
-    ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME, {snapshot_name(NewName, Version), {SubjectUUID, ?MODEL_NAME}}),
     case get_current_snapshot(SubjectDoc) =:= SubjectDoc of
         true ->
+            {ok, Scope1} = get_scope(OldParentUUID),
+            set_link_context(Scope1),
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
             ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME, {NewName, {SubjectUUID, ?MODEL_NAME}});
+            {ok, Scope2} = get_scope(NewParentUUID),
+            set_link_context(Scope2),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME,
+                {snapshot_name(NewName, Version), {SubjectUUID, ?MODEL_NAME}}),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME,
+                {NewName, {SubjectUUID, ?MODEL_NAME}});
         false ->
-            ok
+            {ok, Scope1} = get_scope(OldParentUUID),
+            set_link_context(Scope1),
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
+            {ok, Scope2} = get_scope(NewParentUUID),
+            set_link_context(Scope2),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME,
+                {snapshot_name(NewName, Version), {SubjectUUID, ?MODEL_NAME}})
     end.
 
 %%--------------------------------------------------------------------
