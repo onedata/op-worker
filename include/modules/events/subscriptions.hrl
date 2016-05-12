@@ -86,4 +86,10 @@
     file_uuid :: file_meta:uuid()
 }).
 
+%% definition of a subscription for file renaming
+%% file_uuid         - UUID of a file for which notifications should be sent
+-record(file_renamed_subscription, {
+    file_uuid :: file_meta:uuid()
+}).
+
 -endif.

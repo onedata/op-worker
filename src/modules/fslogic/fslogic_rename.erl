@@ -47,8 +47,6 @@
     #fuse_response{} | no_return().
 rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
-    {ok, #document{key = OldUUID}} = file_meta:get(SourceEntry),
-    OldGUID = fslogic_uuid:to_file_guid(OldUUID),
     case SourcePath =:= LogicalTargetPath of
         true ->
             #fuse_response{status = #status{code = ?OK}};
@@ -58,8 +56,6 @@ rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) 
             {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalTargetEntry, SessId),
             case rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
                 ok ->
-                    {guid, NewGUID} = fslogic_uuid:ensure_guid(CTX, {path, LogicalTargetPath}),
-                    spawn(fun() -> fslogic_event:emit_file_renamed(OldGUID, NewGUID) end),
                     #fuse_response{status = #status{code = ?OK}};
                 {error, Code} ->
                     #fuse_response{status = #status{code = Code}}
@@ -301,11 +297,14 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                     (_Dir) ->
                         ok
                 end,
-                fun(_, _) ->
-                    ok
+                fun(#document{key = Uuid}, _) ->
+                    spawn(fun() -> fslogic_event:emit_file_renamed(
+                        fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
+                        fslogic_uuid:to_file_guid(Uuid, TargetSpaceId))
+                    end)
                 end);
 
-        {ok, File} ->
+        {ok, #document{key = Uuid} = File} ->
             SourcePathTokens = filename:split(SourcePath),
             TargetPathTokens = filename:split(CanonicalTargetPath),
             {ok, OldPath} = fslogic_path:gen_path(File, SessId),
@@ -319,7 +318,11 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 fun(Snapshot) ->
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
                     ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
-                end, FileSnapshots)
+                end, FileSnapshots),
+            spawn(fun() -> fslogic_event:emit_file_renamed(
+                fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
+                fslogic_uuid:to_file_guid(Uuid, TargetSpaceId))
+            end)
     end,
 
     UserId = fslogic_context:get_user_id(CTX),
@@ -362,12 +365,13 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
             {guid, TargetGuid}
         end,
         fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
-            mtime = MTime, ctime = CTime, mode = Mode}}, Target) ->
+            mtime = MTime, ctime = CTime, mode = Mode}}, {guid, TargetGuid} = Target) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, Target, Mode),
             ok = logical_file_manager:update_times(SessId, Target, ATime, MTime, CTime),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, Target),
-            ok = logical_file_manager:unlink(SessId, {guid, SourceGuid})
+            ok = logical_file_manager:unlink(SessId, {guid, SourceGuid}),
+            spawn(fun() -> fslogic_event:emit_file_renamed(SourceGuid, TargetGuid) end)
         end),
 
     CurrTime = erlang:system_time(seconds),

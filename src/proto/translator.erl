@@ -86,6 +86,10 @@ translate_from_protobuf(#'FileRemovalSubscription'{} = Record) ->
     #file_removal_subscription{
         file_uuid = Record#'FileRemovalSubscription'.file_uuid
     };
+translate_from_protobuf(#'FileRenamedSubscription'{} = Record) ->
+    #file_renamed_subscription{
+        file_uuid = Record#'FileRenamedSubscription'.file_uuid
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
@@ -359,7 +363,7 @@ translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
 translate_to_protobuf(#file_removal_event{file_uuid = FileUuid}) ->
     {file_removal_event, #'FileRemovalEvent'{file_uuid = FileUuid}};
 translate_to_protobuf(#file_renamed_event{old_uuid = OldUuid, new_uuid = NewUuid}) ->
-    {file_removal_event, #'FileRenamedEvent'{old_uuid = OldUuid, new_uuid = NewUuid}};
+    {file_renamed_event, #'FileRenamedEvent'{old_uuid = OldUuid, new_uuid = NewUuid}};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->

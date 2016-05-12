@@ -93,6 +93,22 @@ inject_event_stream_definition(#subscription{
                 message_body = #events{events = Events}
             }, SessId)
         end
+    }};
+
+inject_event_stream_definition(#subscription{
+    object = #file_renamed_subscription{file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{event_stream = ?FILE_RENAMED_EVENT_STREAM#event_stream_definition{
+        admission_rule = fun
+            (#event{object = #file_renamed_event{old_uuid = Uuid}})
+                when Uuid =:= FileUuid -> true;
+            (_) -> false
+        end,
+        init_handler = fun(_, SessId, _) -> #{session_id => SessId} end,
+        event_handler = fun(Events, #{session_id := SessId}) ->
+            communicator:send(#server_message{
+                message_body = #events{events = Events}
+            }, SessId)
+        end
     }}.
 
 %%--------------------------------------------------------------------
