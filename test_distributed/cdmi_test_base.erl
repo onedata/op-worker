@@ -1342,6 +1342,7 @@ partial_upload(Config) ->
 
     % get created file and check its consistency
     RequestHeaders4 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
+    % TODO Verify once after VFS-2023
     CheckAllChunks = fun() ->
         {ok, Code4, _Headers4, Response4} = do_request(WorkerP2, FileName, get, RequestHeaders4, []),
         ?assertEqual(200, Code4),
@@ -1382,6 +1383,7 @@ partial_upload(Config) ->
 
     % get created file and check its consistency
     RequestHeaders8 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
+    % TODO Verify once after VFS-2023
     CheckAllChunks2 = fun() ->
         {ok, Code8, _Headers8, Response8} = do_request(WorkerP2, FileName2, get, RequestHeaders8, []),
         ?assertEqual(200, Code8),

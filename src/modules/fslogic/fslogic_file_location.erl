@@ -122,9 +122,7 @@ create_storage_file_if_not_exists_once(SpaceId, FileDoc = #document{key = FileUu
         fun() ->
             case fslogic_utils:get_local_file_locations_once(FileDoc) of
                 [] ->
-                    ?info("aaaaa2 ~p", [FileDoc]),
                     create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
-                    ?info("aaaaa3 ~p", [FileDoc]),
                     case onedata_user:exists(UserId) of
                         true ->
                             files_to_chown:chown_file(FileUuid, UserId, SpaceId);

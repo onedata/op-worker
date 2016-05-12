@@ -22,7 +22,7 @@
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_file_locations_once/1,
     get_local_storage_file_locations/1]).
 -export([session_to_rest_client/1]).
--export([wait_for_links/3, wait_for_file_meta/2]).
+-export([wait_for_links/3, wait_for_file_meta/2, wait_for_local_file_location/1]).
 
 %%%===================================================================
 %%% API functions
@@ -182,3 +182,13 @@ wait_for_file_meta(FileUuid, Retries) ->
             timer:sleep(timer:seconds(1)),
             wait_for_file_meta(FileUuid, Retries - 1)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waiting for local file_location to be present.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_local_file_location(file_meta:uuid()) -> ok | no_return().
+wait_for_local_file_location(Uuid) ->
+    #document{} = fslogic_utils:get_local_file_location({uuid, Uuid}),
+    ok.

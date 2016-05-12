@@ -367,7 +367,7 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value, rev = 
                     dbsync_events:change_replicated(SpaceId, Change)
                 catch
                     E1:E2  ->
-                        ?error_stacktrace("Change ~p replication failed: ~p:~p", [Change, E1, E2])
+                        ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
                 end,
                 ok
             end),
