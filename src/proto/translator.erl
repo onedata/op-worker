@@ -57,6 +57,10 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
         file_size = Record#'WriteEvent'.file_size,
         blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]
     };
+translate_from_protobuf(#'QuotaExeededEvent'{spaces = Spaces}) ->
+    #quota_exeeded_event{
+        spaces = Spaces
+    };
 translate_from_protobuf(#'UpdateEvent'{object = {_, Obj}}) ->
     #update_event{
         object = translate_from_protobuf(Obj)
@@ -98,6 +102,8 @@ translate_from_protobuf(#'WriteSubscription'{} = Record) ->
         size_threshold = Record#'WriteSubscription'.size_threshold,
         time_threshold = Record#'WriteSubscription'.time_threshold
     };
+translate_from_protobuf(#'QuotaSubscription'{}) ->
+    #quota_subscription{};
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
@@ -232,7 +238,8 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
         uuid = Record#'FileLocation'.uuid,
         provider_id = Record#'FileLocation'.provider_id,
-        space_uuid = Record#'FileLocation'.space_id,
+        space_uuid = Record#'FileLocation'.space_uuid,
+        space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
         blocks = lists:map(
@@ -364,6 +371,10 @@ translate_to_protobuf(#'write_event'{} = Record) ->
         file_size = Record#'write_event'.file_size,
         blocks = [translate_to_protobuf(B) || B <- Record#'write_event'.blocks]
     }};
+translate_to_protobuf(#'quota_exeeded_event'{spaces = Spaces}) ->
+    {quota_exeeded_event, #'QuotaExeededEvent'{
+        spaces = Spaces
+    }};
 translate_to_protobuf(#update_event{object = Type}) ->
     {update_event, #'UpdateEvent'{object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
@@ -400,19 +411,22 @@ translate_to_protobuf(#'permission_changed_subscription'{} = Record) ->
     {permission_changed_subscription, #'PermissionChangedSubscription'{
         file_uuid = Record#'permission_changed_subscription'.file_uuid
     }};
+translate_to_protobuf(#'quota_subscription'{}) ->
+    {quota_subscription, #'QuotaSubscription'{}};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
 translate_to_protobuf(#handshake_response{session_id = Id}) ->
     {handshake_response, #'HandshakeResponse'{
         session_id = Id
     }};
-translate_to_protobuf(#configuration{subscriptions = Subs}) ->
+translate_to_protobuf(#configuration{subscriptions = Subs, disabled_spaces = Spaces}) ->
     {configuration, #'Configuration'{
         subscriptions = lists:map(
             fun(Sub) ->
                 {_, Record} = translate_to_protobuf(Sub),
                 Record
-            end, Subs)
+            end, Subs),
+        disabled_spaces = Spaces
     }};
 translate_to_protobuf(#message_stream{stream_id = StmId, sequence_number = SeqNum}) ->
     #'MessageStream'{stream_id = StmId, sequence_number = SeqNum};
@@ -469,7 +483,8 @@ translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
         uuid = Record#file_location.uuid,
         provider_id = Record#file_location.provider_id,
-        space_id = Record#file_location.space_uuid,
+        space_uuid = Record#file_location.space_uuid,
+        space_id = Record#file_location.space_id,
         storage_id = Record#file_location.storage_id,
         file_id = Record#file_location.file_id,
         blocks = lists:map(fun(Block) ->

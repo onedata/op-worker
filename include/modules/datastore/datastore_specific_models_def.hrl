@@ -121,6 +121,7 @@
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     handle_id :: binary() | undefined,
+    space_id :: space_info:id(),
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
@@ -173,6 +174,10 @@
 %% Model that maps onedata user to POSIX user
 -record(posix_user, {
     credentials :: #{storage:id() => posix_user:credentials()}
+}).
+
+-record(space_quota, {
+    current_size = 0 :: non_neg_integer()
 }).
 
 -endif.

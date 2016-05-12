@@ -79,6 +79,7 @@
                 {<<"groups">>, [<<"group1">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
@@ -89,7 +90,9 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
+
                     ]}
                 ]}
             ]},
@@ -99,6 +102,7 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
@@ -109,6 +113,7 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
@@ -559,9 +564,12 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     end, #{}, GroupUsers),
 
     SpacesToProviders = lists:map(fun({SpaceId, SpaceConfig}) ->
-        Providers = proplists:get_value(<<"providers">>, SpaceConfig),
-        ProviderIds = [domain_to_provider_id(proplists:get_value(CPid, DomainMappings)) || {CPid, _} <- Providers],
-        {SpaceId, ProviderIds}
+        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+        Providers1 = [{domain_to_provider_id(proplists:get_value(CPid, DomainMappings)), Provider} || {CPid, Provider} <- Providers0],
+        ProviderSupp = lists:map(fun({PID, Info}) ->
+            {PID, proplists:get_value(<<"supported_size">>, Info, 0)}
+        end, Providers1),
+        {SpaceId, ProviderSupp}
     end, SpacesSetup),
 
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
@@ -584,6 +592,10 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     oz_users_mock_setup(AllWorkers, Users),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
+
+    lists:foreach(fun({SpaceId, _}) ->
+        rpc:multicall(MasterWorkers, space_info, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
+    end, Spaces),
 
     proplists:compact(
         lists:flatten([initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
@@ -658,7 +670,7 @@ oz_users_mock_setup(Workers, Users) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [binary()]}]) ->
+    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}]) ->
     ok.
 oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
@@ -666,13 +678,19 @@ oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
-            {ok, #space_details{id = SpaceId, name = SpaceName}}
+            {ok, #space_details{id = SpaceId, name = SpaceName,
+                providers_supports = proplists:get_value(SpaceId, SpacesToProviders, [{domain_to_provider_id(D), 1000000000} || D <- Domains])}}
         end
     ),
 
     test_utils:mock_expect(Workers, oz_spaces, get_providers,
         fun(_, SpaceId) ->
-            {ok, proplists:get_value(SpaceId, SpacesToProviders, [domain_to_provider_id(D) || D <- Domains])}
+            PIDs = lists:map(
+                fun({PID, _}) ->
+                    PID
+                end, proplists:get_value(SpaceId, SpacesToProviders, [{domain_to_provider_id(D), 1000000000} || D <- Domains])),
+            {ok, PIDs}
+
         end
     ),
 

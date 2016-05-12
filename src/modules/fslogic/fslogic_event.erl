@@ -18,10 +18,17 @@
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_permission_changed/1, emit_file_removal/1]).
+-export([emit_quota_exeeded/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+emit_quota_exeeded() ->
+    BlockedSpaces = space_quota:get_disabled_spaces(),
+    ?info("Sending blocked spaces ~p", [BlockedSpaces]),
+    event:emit(#event{object = #quota_exeeded_event{spaces = BlockedSpaces}}).
 
 %%--------------------------------------------------------------------
 %% @doc

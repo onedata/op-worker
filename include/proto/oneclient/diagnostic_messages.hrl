@@ -33,7 +33,8 @@
 -record(get_configuration, {}).
 
 -record(configuration, {
-    subscriptions = [] :: [#subscription{}]
+    subscriptions = [] :: [#subscription{}],
+    disabled_spaces = [] :: [space_info:id()]
 }).
 
 -endif.

@@ -69,4 +69,9 @@
     file_uuid :: file_meta:uuid()
 }).
 
+%% definition of an event triggered when any of spaces becomes (un)available
+-record(quota_exeeded_event, {
+   spaces = [] :: [space_info:id()]
+}).
+
 -endif.

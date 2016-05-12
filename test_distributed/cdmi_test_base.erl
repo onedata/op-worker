@@ -197,6 +197,9 @@ get_file(Config) ->
     FileContent = <<"Some content...">>,
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
+    tracer:start(Workers),
+    tracer:trace_calls(space_quota, available_size),
+
     {ok, _} = create_file(Config, FileName),
     ?assert(object_exists(Config, FileName)),
     {ok, _} = write_to_file(Config, FileName, FileContent, ?FILE_BEGINNING),

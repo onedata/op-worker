@@ -184,7 +184,10 @@ set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid};
 
 set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid}.
+    Evt#event{key = Uuid};
+
+set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
+    Evt#event{key = <<"quota_exeeded">>}.
 
 %%--------------------------------------------------------------------
 %% @private

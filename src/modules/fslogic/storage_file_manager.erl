@@ -270,7 +270,9 @@ stat(_FileHandle) ->
     {ok, non_neg_integer()} | logical_file_manager:error_reply().
 write(#sfm_handle{is_local = true, open_mode = undefined}, _, _) -> throw(?EPERM);
 write(#sfm_handle{is_local = true, open_mode = read}, _, _) -> throw(?EPERM);
-write(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
+write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    space_quota:assert_write(SpaceId, size(Buffer)),
     helpers:write(HelperHandle, File, Offset, Buffer);
 
 write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Data) ->

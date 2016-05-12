@@ -14,7 +14,17 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st"
+                    "name": "/mnt/st1"
+                }
+            ],
+            "users": [],
+            "groups": {}
+        },
+        "cfg2": {
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
                 }
             ],
             "users": [],
@@ -57,7 +67,7 @@
         },
         "p2": {
             "db_driver": "couchdb",
-            "os_config": "cfg1",
+            "os_config": "cfg2",
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
@@ -107,10 +117,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st1",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -123,10 +135,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st1",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     }
                 }
             }

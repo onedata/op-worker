@@ -278,6 +278,35 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
             %% TODO: get all snapshots: TODO: VFS-1966
             SourceDirSnapshots = [SourceEntry],
+
+            %% Quota
+            Host = self(),
+            for_each_child_file(SourceEntry,
+                fun
+                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File) ->
+                        Size = fslogic_blocks:get_file_size(File),
+                        Host ! {child_size, Size};
+                    (_Dir) ->
+                        ok
+                end,
+                fun(_, _) ->
+                    ok
+                end),
+            GetSize =
+                fun CollectAllSizes(Acc) ->
+                    receive
+                        {child_size, Size} -> CollectAllSizes(Acc + Size)
+                    after 0 ->
+                        Acc
+                    end
+                end,
+            Size = GetSize(0),
+            ok = space_quota:assert_write(TargetSpaceId, Size),
+            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size),
+            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
+
+
+
             lists:foreach(
                 fun(Snapshot) ->
                     ok = file_meta:rename(Snapshot, {path, CanonicalTargetPath})
@@ -306,6 +335,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
+            Size = fslogic_blocks:get_file_size(File),
+            space_quota:assert_write(TargetSpaceId, Size),
 
             %% TODO: get all snapshots: VFS-1965
             FileSnapshots = [File],
@@ -313,7 +344,10 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 fun(Snapshot) ->
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
                     ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
-                end, FileSnapshots)
+                end, FileSnapshots),
+
+            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
+            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size)
     end,
 
     UserId = fslogic_context:get_user_id(CTX),
