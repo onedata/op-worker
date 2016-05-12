@@ -98,7 +98,7 @@ handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
                 <<"Cannot leave space due to unknown error.">>)
     end;
 
-handle(<<"userToken">>, [{<<"groupId">>, GroupId}]) ->
+handle(<<"getTokenGroupJoin">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_invite_user_token(UserAuth, GroupId) of
         {ok, Token} ->
