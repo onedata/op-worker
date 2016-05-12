@@ -212,9 +212,9 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, Level2TmpDir, 8#755)),
         VerifyStats(Level2TmpDir, true),
 
-        lists:foreach(fun(W) ->
+        lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, Level3TmpDir, 8#755)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, Level3TmpDir, 8#755)),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
     end, Workers),
