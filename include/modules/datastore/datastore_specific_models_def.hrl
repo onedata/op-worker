@@ -176,6 +176,7 @@
     credentials :: #{storage:id() => posix_user:credentials()}
 }).
 
+%% Model for holding current quota state for spaces
 -record(space_quota, {
     current_size = 0 :: non_neg_integer()
 }).

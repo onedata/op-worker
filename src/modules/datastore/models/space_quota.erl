@@ -12,15 +12,10 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
--include("proto/common/credentials.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("storage_file_manager_errors.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
 -export([
