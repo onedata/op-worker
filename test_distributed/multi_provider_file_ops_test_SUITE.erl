@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of db_sync
+%%% Tests of db_sync and proxy
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_file_ops_test_SUITE).
@@ -29,7 +29,7 @@
 
 all() ->
     ?ALL([
-        db_sync_test%, proxy_test
+        proxy_test, db_sync_test
     ]).
 
 -define(match(Expect, Expr, Attempts),
