@@ -141,7 +141,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
             ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
-            Size = fslogic_blocks:get_file_size(File),
+            Size = fslogic_blocks:get_file_size(FileDoc),
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),

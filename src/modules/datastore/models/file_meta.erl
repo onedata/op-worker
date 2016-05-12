@@ -372,13 +372,15 @@ get_locations(Entry) ->
     ?run(begin
              {ok, #document{} = File} = get(Entry),
              set_link_context(File),
-             datastore:foreach_link(?LINK_STORE_LEVEL, File,
+             Ans = datastore:foreach_link(?LINK_STORE_LEVEL, File,
                  fun
                      (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
                          [Key | AccIn];
                      (_LinkName, _LinkTarget, AccIn) ->
                          AccIn
-                 end, [])
+                 end, []),
+             ?info("aaaaa1 ~p ~p", [File, Ans]),
+             Ans
          end).
 
 %%--------------------------------------------------------------------

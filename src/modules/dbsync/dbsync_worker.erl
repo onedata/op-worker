@@ -356,7 +356,12 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
 
         spawn(
             fun() ->
-                dbsync_events:change_replicated(SpaceId, Change),
+                try
+                    dbsync_events:change_replicated(SpaceId, Change)
+                catch
+                    E1:E2  ->
+                        ?error_stacktrace("Change ~p replicated failed: ~p:~p", [Change, E1, E2])
+                end,
                 ok
             end),
         apply_changes(SpaceId, T)

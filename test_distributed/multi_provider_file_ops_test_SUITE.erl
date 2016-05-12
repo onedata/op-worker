@@ -29,7 +29,7 @@
 
 all() ->
     ?ALL([
-        db_sync_test, proxy_test
+        db_sync_test%, proxy_test
     ]).
 
 -define(match(Expect, Expr, Attempts),
@@ -54,6 +54,10 @@ proxy_test(Config) ->
 
 synchronization_test_base(Config, User, Multisupport, Attempts) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+
+%%    tracer:start(Workers),
+%%    tracer:trace_calls(lfm_proxy),
+
     SessId = ?config({session_id, User}, Config),
 ct:print("w1 ~p", [Worker1]),
     Prov1ID = rpc:call(Worker1, oneprovider, get_provider_id, []),
@@ -123,17 +127,20 @@ ct:print("w1 ~p", [Worker1]),
     VerifyStats(Level2Dir, true),
 
     FileBeg = <<"1234567890abcd">>,
-    CreateFile = fun({Offset, File}) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId, File, 8#755)),
-        OpenAns = lfm_proxy:open(Worker1, SessId, {path, File}, rdwr),
+    CreateFileOnWorker = fun(Offset, File, WriteWorker) ->
+        ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker, SessId, File, 8#755)),
+        OpenAns = lfm_proxy:open(WriteWorker, SessId, {path, File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
         FileBegSize = size(FileBeg),
-        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(Worker1, Handle, 0, FileBeg)),
+        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(WriteWorker, Handle, 0, FileBeg)),
         Size = size(File),
         Offset2 = Offset rem 5 + 1,
-        ?assertMatch({ok, Size}, lfm_proxy:write(Worker1, Handle, Offset2, File)),
-        ?assertMatch(ok, lfm_proxy:truncate(Worker1, SessId, {path, File}, 2*Offset2))
+        ?assertMatch({ok, Size}, lfm_proxy:write(WriteWorker, Handle, Offset2, File)),
+        ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId, {path, File}, 2*Offset2))
+    end,
+    CreateFile = fun({Offset, File}) ->
+        CreateFileOnWorker(Offset, File, Worker1)
     end,
     CreateFile({2, Level2File}),
 
@@ -146,35 +153,50 @@ ct:print("w1 ~p", [Worker1]),
         End = binary:part(File, 0, Offset2),
         FileCheck = <<Beg/binary, End/binary>>,
 
-        VerAns = Verify(fun(W) ->
-            StatAns = lfm_proxy:stat(W, SessId, {path, File}),
-            ?assertMatch({ok, #file_attr{}}, StatAns),
-            {ok, #file_attr{uuid = FileGUID}} = StatAns,
-            FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+        VerifyLocation = fun() ->
+            Verify(fun(W) ->
+                StatAns = lfm_proxy:stat(W, SessId, {path, File}),
+                ?assertMatch({ok, #file_attr{}}, StatAns),
+                {ok, #file_attr{uuid = FileGUID}} = StatAns,
+                FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
-            S1 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov1ID)]) of
-                     {error, {not_found, _}} ->
-                         0;
-                     Get1Ans ->
-                         ?assertMatch({ok, #document{value = #links{}}}, Get1Ans),
-                         {ok, #document{value = Links1}} = Get1Ans,
-                         verify_locations(W, Links1)
-                 end,
-            S2 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov2ID)]) of
-                     {error, {not_found, _}} ->
-                         0;
-                     Get2Ans ->
-                         ?assertMatch({ok, #document{value = #links{}}}, Get2Ans),
-                         {ok, #document{value = Links2}} = Get2Ans,
-                         verify_locations(W, Links2)
-                 end,
-            [S1, S2]
+                S1 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov1ID)]) of
+                         {error, {not_found, _}} ->
+                             0;
+                         Get1Ans ->
+                             ?assertMatch({ok, #document{value = #links{}}}, Get1Ans),
+                             {ok, #document{value = Links1}} = Get1Ans,
+                             verify_locations(W, Links1)
+                     end,
+                S2 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov2ID)]) of
+                         {error, {not_found, _}} ->
+                             0;
+                         Get2Ans ->
+                             ?assertMatch({ok, #document{value = #links{}}}, Get2Ans),
+                             {ok, #document{value = Links2}} = Get2Ans,
+                             verify_locations(W, Links2)
+                     end,
+                [S1, S2]
+            end)
+        end,
+
+        VerAns0 = VerifyLocation(),
+        ct:print("bbb1 ~p", [{Offset, File, VerAns0, length(Workers)}]),
+
+        Verify(fun(W) ->
+            ct:print("xxx ~p", [W]),
+            OpenAns = lfm_proxy:open(W, SessId, {path, File}, rdwr),
+            ?assertMatch({ok, _}, OpenAns),
+            {ok, Handle} = OpenAns,
+            ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts)
         end),
+
+        VerAns = VerifyLocation(),
         Flattened = lists:flatten(VerAns),
-        ct:print("bbb ~p", [{Offset, File, VerAns, Flattened, length(Workers)}]),
+        ct:print("bbb2 ~p", [{Offset, File, VerAns, Flattened, length(Workers)}]),
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
-%TODO what if locations will not appear with file_meta?
+
         case Multisupport of
             true ->
                 ?assertEqual(2*length(Workers), length(ZerosList) + length(LocationsList)),
@@ -182,17 +204,26 @@ ct:print("w1 ~p", [Worker1]),
             _ ->
                 ?assertEqual(length(Workers) * 3 div 2, length(ZerosList)),
                 ?assertEqual(length(Workers) div 2, length(LocationsList))
-        end,
-
-        Verify(fun(W) ->
-            ct:print("xxx ~p", [W]),
-            OpenAns = lfm_proxy:open(W, SessId, {path, File}, rdwr),
-            ?assertMatch({ok, _}, OpenAns),
-            {ok, Handle} = OpenAns,
-            ?assertMatch({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size))
-        end)
+        end
     end,
     VerifyFile({2, Level2File}),
+
+    lists:foreach(fun(W) ->
+        OpenAns = lfm_proxy:open(W, SessId, {path, Level2File}, rdwr),
+        ?assertMatch({ok, _}, OpenAns),
+        {ok, Handle} = OpenAns,
+        WriteBuf = atom_to_binary(W, utf8),
+        WriteSize = size(WriteBuf),
+        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(W, Handle, 0, WriteBuf)),
+
+        Verify(fun(W2) ->
+            ct:print("zzzzz ~p", [W2]),
+            OpenAns2 = lfm_proxy:open(W2, SessId, {path, Level2File}, rdwr),
+            ?assertMatch({ok, _}, OpenAns2),
+            {ok, Handle2} = OpenAns2,
+            ?match({ok, WriteBuf}, lfm_proxy:read(W2, Handle2, 0, WriteSize), Attempts)
+        end)
+    end, Workers),
 
     lists:map(fun(D) ->
         ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, D, 8#755))
@@ -283,6 +314,13 @@ ct:print("w1 ~p", [Worker1]),
     end, Level3Dirs2),
     VerifyDirSize(Level3Dir, 0, length(Level4Files)),
     VerifyDirSize(Level2Dir, length(Level3Dirs) + 1, length(Level3Dirs2)),
+
+    lists:foreach(fun(W) ->
+        Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+        CreateFileOnWorker(4, Level2TmpFile, W),
+        VerifyFile({4, Level2TmpFile})
+    end, Workers),
+
     ok.
 
 %%%===================================================================

@@ -19,7 +19,8 @@
 
 %% API
 -export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
--export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
+-export([get_local_file_location/1, get_local_file_locations/1, get_local_file_locations_once/1,
+    get_local_storage_file_locations/1]).
 -export([session_to_rest_client/1]).
 -export([wait_for_links/3, wait_for_file_meta/2]).
 
@@ -90,9 +91,31 @@ get_local_file_location(Entry) -> %todo get rid of single file location and use 
 
 -spec get_local_file_locations(fslogic_worker:ext_file()) ->
     [datastore:document()] | no_return().
-get_local_file_locations({guid, FileGUID}) ->
-    get_local_file_locations({uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 get_local_file_locations(Entry) ->
+    get_local_file_locations(Entry, 10).
+
+-spec get_local_file_locations(fslogic_worker:ext_file(), integer()) ->
+    [datastore:document()] | no_return().
+get_local_file_locations(Entry, 0) ->
+    get_local_file_locations_once(Entry);
+get_local_file_locations(Entry, Num) ->
+    try get_local_file_locations_once(Entry) of
+        [] ->
+            timer:sleep(500),
+            get_local_file_locations(Entry, Num - 1);
+        Ans ->
+            Ans
+    catch
+        _:_ ->
+            timer:sleep(500),
+            get_local_file_locations(Entry, Num - 1)
+    end.
+
+-spec get_local_file_locations_once(fslogic_worker:ext_file()) ->
+    [datastore:document()] | no_return().
+get_local_file_locations_once({guid, FileGUID}) ->
+    get_local_file_locations_once({uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
+get_local_file_locations_once(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),
     Locations = [file_location:get(LocId) || LocId <- LocIds],
