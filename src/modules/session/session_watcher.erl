@@ -95,10 +95,6 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(schedule_session_status_checkup, #state{session_ttl = TTL} = Status) ->
-    schedule_session_status_checkup(TTL),
-    {noreply, Status, hibernate};
-
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
