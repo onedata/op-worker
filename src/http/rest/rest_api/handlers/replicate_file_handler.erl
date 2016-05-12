@@ -87,7 +87,7 @@ content_types_accepted(Req, State) ->
 %% @doc Handles POST
 %%--------------------------------------------------------------------
 -spec replicate_file(req(), #{}) -> {term(), req(), #{}}.
-replicate_file(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth} = State) ->
+replicate_file(Req, #{path:= Path, auth := Auth} = State) ->
     {ProviderId, Req2} = cowboy_req:qs_val(<<"provider_id">>, Req, oneprovider:get_provider_id()),
-    ok = onedata_file_api:replicate_file(Auth, {guid, Guid}, ProviderId),
+    ok = onedata_file_api:replicate_file(Auth, {path, Path}, ProviderId),
     {true, Req2, State}.

@@ -70,8 +70,8 @@ replicate_file(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    timer:sleep(timer:seconds(5)),
-    {ok, 200, _, _} = do_request(WorkerP1, <<"replicate_file/spaces/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    timer:sleep(timer:seconds(10)),
+    {ok, 204, _, _} = do_request(WorkerP1, <<"replicate_file/spaces/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
 
     % then
     timer:sleep(timer:seconds(5)),
@@ -79,8 +79,8 @@ replicate_file(Config) ->
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         [
-            [{<<"provider">>, ?GET_DOMAIN(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
-            [{<<"provider">>, ?GET_DOMAIN(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
+            [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
 
 %%%===================================================================
