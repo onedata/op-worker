@@ -1717,7 +1717,7 @@ do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
         cdmi_endpoint(Node) ++ RestSubpath,
         Headers,
         Body,
-        [insecure]
+        [insecure, {connect_timeout, timer:minutes(1)}, {recv_timeout, timer:minutes(1)}]
     ).
 
 cdmi_endpoint(Node) ->
