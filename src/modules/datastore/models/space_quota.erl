@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for space details fetched from Global Registry.
+%%% @doc Model holding current quota state all supported spaces.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_quota).
@@ -45,7 +45,7 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
+-spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
@@ -55,7 +55,7 @@ save(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
     datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
 
@@ -64,8 +64,8 @@ create_or_update(Doc, Diff) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
@@ -74,7 +74,7 @@ update(Key, Diff) ->
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
+-spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
@@ -83,10 +83,11 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
         {error, {not_found, _}} ->
+            %% Create empty entry
             case apply_size_change(Key, 0) of
                 {ok, _} ->
                     get(Key);
@@ -102,7 +103,7 @@ get(Key) ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
@@ -111,7 +112,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
@@ -149,7 +150,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Records total space size change.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply_size_change(SpaceId :: space_info:id(), SizeDiff :: integer()) ->
+    {ok, datastore:key()}.
 apply_size_change(SpaceId, SizeDiff) ->
     create_or_update(#document{key = SpaceId, value = #space_quota{current_size = 0}},
         fun(#space_quota{current_size = OldSize}) ->
@@ -157,6 +164,15 @@ apply_size_change(SpaceId, SizeDiff) ->
         end
     ).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Records total space size change. If space becomes accessible or
+%% is getting disabled because of this change, QuotaExeeded event is sent.
+%% @end
+%%--------------------------------------------------------------------
+-spec apply_size_change_and_maybe_emit(SpaceId :: space_info:id(), SizeDiff :: integer()) ->
+    ok | {error, Reason :: any()}.
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
     Before = available_size(SpaceId),
     {ok, _} = apply_size_change(SpaceId, SizeDiff),
@@ -167,6 +183,14 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns current available size of given space. Values below 0 mean that there are more
+%% bytes written to the space then quota allows.
+%% @end
+%%--------------------------------------------------------------------
+-spec available_size(SpaceId :: space_info:id()) ->
+    AvailableSize :: integer().
 available_size(SpaceId) ->
     try
         {ok, #document{value = #space_quota{current_size = CSize}}} = get(SpaceId),
@@ -179,19 +203,40 @@ available_size(SpaceId) ->
             0
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if any non-empty write operation is permitted for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_write(SpaceId :: space_info:id()) ->
+    ok | no_return().
 assert_write(SpaceId) ->
     assert_write(SpaceId, 1).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if write operation with given size is permitted for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_write(SpaceId :: space_info:id(), WriteSize :: integer()) ->
+    ok | no_return().
 assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
 assert_write(SpaceId, WriteSize) ->
-    ?info("assert_write ~p ~p", [SpaceId, WriteSize]),
     case available_size(SpaceId) >= WriteSize of
         true -> ok;
         false -> throw(?ENOSPC)
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of spaces that are currently over quota limit.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_disabled_spaces() -> [space_info:id()].
 get_disabled_spaces() ->
     {ok, SpaceIds} = oz_providers:get_spaces(provider),
     SpacesWithASize = lists:map(fun(SpaceId) ->

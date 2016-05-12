@@ -25,10 +25,18 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends list of currently disabled spaces due to exeeded quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_quota_exeeded() ->
+    ok | {error, Reason :: term()}.
 emit_quota_exeeded() ->
     BlockedSpaces = space_quota:get_disabled_spaces(),
-    ?info("Sending blocked spaces ~p", [BlockedSpaces]),
+    ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
     event:emit(#event{object = #quota_exeeded_event{spaces = BlockedSpaces}}).
+
 
 %%--------------------------------------------------------------------
 %% @doc
