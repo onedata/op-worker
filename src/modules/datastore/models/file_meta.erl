@@ -790,6 +790,7 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                  fun Receiver() ->
                      receive
                          {Entry0, ScopeUUID0} ->
+                             SetterFun(Entry0, ScopeUUID0),
                              Receiver();
                          exit ->
                              ok,
