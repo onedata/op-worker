@@ -146,15 +146,34 @@ fetch(Client, GroupId) ->
         {ok, #group_details{id = Id, name = Name}} =
             oz_groups:get_details(Client, GroupId),
         {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
+        {ok, ParentIds} = oz_groups:get_parents(Client, Id),
+
+        % nested groups
+        {ok, NestedIds} = oz_groups:get_nested(Client, Id),
+        NestedGroupsWithPrivileges = utils:pmap(fun(UID) ->
+            {ok, Privileges} = oz_groups:get_effective_nested_privileges(Client, Id, UID),
+            {UID, Privileges}
+        end, NestedIds),
+
+        % users
         {ok, UserIds} = oz_groups:get_users(Client, Id),
         UsersWithPrivileges = utils:pmap(fun(UID) ->
             {ok, Privileges} = oz_groups:get_user_privileges(Client, Id, UID),
             {UID, Privileges}
         end, UserIds),
 
+        % effective users
+        {ok, EffectiveUserIds} = oz_groups:get_effective_users(Client, Id),
+        EffectiveUsersWithPrivileges = utils:pmap(fun(UID) ->
+            {ok, Privileges} = oz_groups:get_effective_user_privileges(Client, Id, UID),
+            {UID, Privileges}
+        end, EffectiveUserIds),
+
         %todo consider getting user_details for each group member and storing it as onedata_user
         OnedataGroupDoc = #document{key = Id, value = #onedata_group{
-            users = UsersWithPrivileges, spaces = SpaceIds, name = Name}},
+            users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
+            effective_users = EffectiveUsersWithPrivileges,
+            parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
         {ok, OnedataGroupDoc}
     catch
