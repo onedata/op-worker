@@ -688,9 +688,8 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
 
                 datastore:run_synchronized(?MODEL_NAME, Key1, fun() ->
                     datastore:run_synchronized(?MODEL_NAME, Key2, fun() ->
-                        {ok, NewScope} = get_scope(NewParent),
-                        {ok, FileUUID} = update(Subject, #{name => NewName}),
-                        {ok, NewScope} = get_scope(NewParent),
+                        {ok, #document{key = NewScopeUUID} = NewScope} = get_scope(NewParent),
+                        {ok, FileUUID} = update(Subject, #{name => NewName, scope => NewScopeUUID}),
                         set_link_context(NewScope),
                         ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
                         ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
@@ -778,7 +777,12 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
     ?run(begin
              SetterFun =
                  fun(CurrentEntry, ScopeUUID) ->
-                     set_scope(CurrentEntry, ScopeUUID)
+                     case CurrentEntry of
+                         Entry ->
+                             ok;
+                         _ ->
+                             set_scope(CurrentEntry, ScopeUUID)
+                     end
                  end,
 
              Master = self(),
@@ -786,7 +790,6 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                  fun Receiver() ->
                      receive
                          {Entry0, ScopeUUID0} ->
-                             SetterFun(Entry0, ScopeUUID0),
                              Receiver();
                          exit ->
                              ok,
@@ -807,7 +810,7 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                  Setter ! exit,
                  receive
                      scope_setting_done -> ok
-                 after 200 ->
+                 after 2000 ->
                      ?error("set_scopes error for entry: ~p", [Entry])
                  end
              end, Setters),
@@ -829,10 +832,10 @@ set_scopes6([Entry | R], NewScopeUUID, [Setter | Setters], SettersBak, Offset, B
     ok = set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize), %% set_scopes for current entry
     ok = set_scopes6(R, NewScopeUUID, Setters, [Setter | SettersBak], Offset, BatchSize);     %% set_scopes for other entries
 set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize) -> %% set_scopes for current entry
-    Setter ! {Entry, NewScopeUUID}, %% Send job to first available process
     {ok, ChildLinks} = list_children(Entry, Offset, BatchSize), %% Apply this fuction for all children
     case length(ChildLinks) < BatchSize of
-        true -> ok;
+        true ->
+            Setter ! {Entry, NewScopeUUID}; %% Send job to first available process;
         false ->
             ok = set_scopes6(Entry, NewScopeUUID, Setters, [Setter | SettersBak], Offset + BatchSize, BatchSize)
     end,
