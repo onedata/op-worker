@@ -24,12 +24,12 @@
     end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, proxy_test/1
+    db_sync_test/1, proxy_test1/1, proxy_test2/1
 ]).
 
 all() ->
     ?ALL([
-        proxy_test, db_sync_test
+        proxy_test1, proxy_test2, db_sync_test
     ]).
 
 -define(match(Expect, Expr, Attempts),
@@ -48,8 +48,10 @@ all() ->
 db_sync_test(Config) ->
     synchronization_test_base(Config, <<"user1">>, true, 15).
 
-proxy_test(Config) ->
-    synchronization_test_base(Config, <<"user2">>, false, 0),
+proxy_test1(Config) ->
+    synchronization_test_base(Config, <<"user2">>, false, 0).
+
+proxy_test2(Config) ->
     synchronization_test_base(Config, <<"user3">>, false, 0).
 
 synchronization_test_base(Config, User, Multisupport, Attempts) ->
