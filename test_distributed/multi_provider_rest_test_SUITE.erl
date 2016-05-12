@@ -31,13 +31,17 @@
 
 -export([
     get_simple_file_distribution/1,
-    replicate_file/1
+    replicate_file/1,
+    posix_mode_get/1,
+    posix_mode_put/1
 ]).
 
 all() ->
     ?ALL([
         get_simple_file_distribution,
-        replicate_file
+        replicate_file,
+        posix_mode_get,
+        posix_mode_put
     ]).
 
 %%%===================================================================
@@ -82,6 +86,44 @@ replicate_file(Config) ->
             [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
             [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
+
+posix_mode_get(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/file1">>,
+    Mode = 8#700,
+    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"posix_mode/file1">>, get, [user_1_token_header(Config)], []),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [{<<"posix_mode">>, Mode}],
+        DecodedBody
+    ).
+
+posix_mode_put(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/file2">>,
+    Mode = 8#700,
+    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+
+    % when
+    NewMode = 8#777,
+    Body = json_utils:encode([{<<"posix_mode">>, NewMode}]),
+    {ok, 204, _, _} = do_request(WorkerP1, <<"posix_mode/file2">>, put,
+        [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
+
+    % then
+    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"posix_mode/file2">>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(RespBody),
+    ?assertEqual(
+        [{<<"posix_mode">>, NewMode}],
+        DecodedBody
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
