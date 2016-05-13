@@ -147,7 +147,7 @@ event_loop(SendChunk, Id, Timeout, Req, State) ->
                         {<<"count">>, Counter},
                         {<<"size">>, Size},
                         {<<"blocks">>, ParsedBlocks}]),
-                    SendChunk(JsonEvent)
+                    SendChunk(<<JsonEvent/binary, "\r\n">>)
                 end, Events),
             event_loop(SendChunk, Id, Timeout, Req, State)
     after
