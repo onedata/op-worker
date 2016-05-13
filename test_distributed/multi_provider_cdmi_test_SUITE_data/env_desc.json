@@ -114,13 +114,13 @@
     "test_global_setup": {
         "users": {
             "user1": {
-                "default_space": "space1"
+                "default_space": "space_id1"
             }
         },
         "groups": {
         },
         "spaces": {
-            "space1": {
+            "space_id1": {
                 "displayed_name": "space1",
                 "users": [
                     "user1"
@@ -134,7 +134,7 @@
                     }
                 }
             },
-            "space2": {
+            "space_id2": {
                 "displayed_name": "space2",
                 "users": [
                     "user1"

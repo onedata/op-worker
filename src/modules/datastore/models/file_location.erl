@@ -75,7 +75,19 @@ ensure_blocks_not_empty(Loc) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
+save(Document = #document{key = Key, value = #file_location{space_id = SpaceId}}) ->
+    NewSize = count_bytes(Document),
+    case get(Key) of
+        {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
+            OldSize = count_bytes(OldDoc),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize - OldSize);
+        {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
+            OldSize = count_bytes(OldDoc),
+            space_quota:apply_size_change_and_maybe_emit(OldSpaceId,  -1 * OldSize),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize);
+        _ ->
+            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize)
+    end,
     datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -95,7 +107,9 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
+create(Document = #document{value = #file_location{space_id = SpaceId}}) ->
+    NewSize = count_bytes(Document),
+    space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
     datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -114,6 +128,12 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
+    case get(Key) of
+        {ok, #document{value = #file_location{space_id = SpaceId}} = Doc} ->
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * count_bytes(Doc));
+        _ ->
+            ok
+    end,
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -157,3 +177,11 @@ model_init() ->
     ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
+    count_bytes(Blocks, 0).
+
+count_bytes([], Size) ->
+    Size;
+count_bytes([#file_block{size = Size} | T], TotalSize) ->
+    count_bytes(T, TotalSize + Size).

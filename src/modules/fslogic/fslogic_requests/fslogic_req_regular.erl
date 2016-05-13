@@ -44,7 +44,6 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     OldSize = fslogic_blocks:get_file_size(FileDoc),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
-    space_quota:apply_size_change_and_maybe_emit(SpaceId, Size - OldSize),
     %% END   -> Quota check
 
     Results = lists:map(

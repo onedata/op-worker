@@ -598,7 +598,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     end, Spaces),
 
     proplists:compact(
-        lists:flatten([initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
+        lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).
 
 %%--------------------------------------------------------------------

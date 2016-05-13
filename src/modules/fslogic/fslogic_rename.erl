@@ -302,8 +302,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 end,
             Size = GetSize(0),
             ok = space_quota:assert_write(TargetSpaceId, Size),
-            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size),
-            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
+%%            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size),
+%%            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
 
 
 
@@ -344,10 +344,10 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 fun(Snapshot) ->
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
                     ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
-                end, FileSnapshots),
+                end, FileSnapshots)
 
-            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
-            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size)
+%%            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
+%%            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size)
     end,
 
     UserId = fslogic_context:get_user_id(CTX),
@@ -469,18 +469,23 @@ rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, SourceEntry) ->
     TargetFileId :: helpers:file(), TargetSpaceUUID :: binary(),
     TargetStorageId :: storage:id()) -> ok.
 update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
+    TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
     #document{key = LocationId,
-        value = #file_location{blocks = Blocks}} = LocationDoc,
+        value = #file_location{blocks = Blocks} = Location} = LocationDoc,
     UpdatedBlocks = lists:map(
         fun(Block) ->
             Block#file_block{file_id = TargetFileId, storage_id = TargetStorageId}
         end, Blocks),
-    file_location:update(LocationId, #{
-        file_id => TargetFileId,
-        space_uuid => TargetSpaceUUID,
-        storage_id => TargetStorageId,
-        blocks => UpdatedBlocks
-    }),
+    {ok, _} = datastore:run_synchronized(file_location, LocationId,
+        fun() ->
+            file_location:save(LocationDoc#document{value = Location#file_location{
+                file_id = TargetFileId,
+                space_uuid = TargetSpaceUUID,
+                space_id = TargetSpaceId,
+                storage_id = TargetStorageId,
+                blocks = UpdatedBlocks
+            }})
+        end),
     ok.
 
 %%--------------------------------------------------------------------

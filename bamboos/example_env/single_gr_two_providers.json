@@ -261,7 +261,7 @@
                 "providers": {
                     "provider2": {
                         "storage": "/mnt/st2",
-                        "supported_size": 1000000000
+                        "supported_size": 15
                     }
                 }
             },
@@ -276,7 +276,7 @@
                 "providers": {
                     "provider1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 1000000000
+                        "supported_size": 25
                     }
                 }
             },
@@ -310,11 +310,11 @@
                 "providers": {
                     "provider1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 1000000000
+                        "supported_size": 25
                     },
                     "provider2": {
                         "storage": "/mnt/st2",
-                        "supported_size": 1000000000
+                        "supported_size": 15
                     }
                 }
             }

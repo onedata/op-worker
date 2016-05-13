@@ -27,7 +27,7 @@
 -type event() :: #event{}.
 -type key() :: term().
 -type object() :: #read_event{} | #update_event{} | #write_event{}
-| #permission_changed_event{} | #file_removal_event{}.
+| #permission_changed_event{} | #file_removal_event{} | #quota_exeeded_event{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.

@@ -46,16 +46,6 @@ save(Document) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
-create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
@@ -83,7 +73,7 @@ get(Key) ->
     case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
         {error, {not_found, _}} ->
             %% Create empty entry
-            case apply_size_change(Key, 0) of
+            case create(#document{key = Key, value = #space_quota{current_size = 0}}) of
                 {ok, _} ->
                     get(Key);
                 Other0 ->
@@ -118,7 +108,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_quota_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(space_quota_bucket, [], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -151,13 +141,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_size_change(SpaceId :: space_info:id(), SizeDiff :: integer()) ->
-    {ok, datastore:key()}.
+    {ok, datastore:key()} | datastore:update_error().
 apply_size_change(SpaceId, SizeDiff) ->
-    create_or_update(#document{key = SpaceId, value = #space_quota{current_size = 0}},
-        fun(#space_quota{current_size = OldSize}) ->
-            {ok, #space_quota{current_size = OldSize + SizeDiff}}
-        end
-    ).
+    datastore:run_synchronized(?MODEL_NAME, {quota, SpaceId},
+        fun() ->
+            {ok, #document{value = Quot = #space_quota{current_size = OldSize}} = Doc} = get(SpaceId),
+            save(Doc#document{value = Quot#space_quota{current_size = OldSize + SizeDiff}})
+        end).
 
 
 %%--------------------------------------------------------------------
