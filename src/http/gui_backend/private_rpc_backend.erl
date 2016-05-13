@@ -58,7 +58,7 @@ handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot leave space due to unknown error.">>)
     end;
 
-handle(<<"userToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"getTokenUserJoin">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_user_token(UserAuth, SpaceId) of
         {ok, Token} ->
@@ -68,7 +68,7 @@ handle(<<"userToken">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot get invite user token due to unknown error.">>)
     end;
 
-handle(<<"groupToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"getTokenGroupJoin">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_group_token(UserAuth, SpaceId) of
         {ok, Token} ->
@@ -78,7 +78,7 @@ handle(<<"groupToken">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot get invite group token due to unknown error.">>)
     end;
 
-handle(<<"supportToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"getTokenProviderSupport">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
         {ok, Token} ->
@@ -88,7 +88,7 @@ handle(<<"supportToken">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot get invite provider token due to unknown error.">>)
     end;
 
-handle(<<"leaveGroup">>, [{<<"groupId">>, GroupId}]) ->
+handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:leave_group(UserAuth, GroupId) of
         ok ->
@@ -98,7 +98,7 @@ handle(<<"leaveGroup">>, [{<<"groupId">>, GroupId}]) ->
                 <<"Cannot leave space due to unknown error.">>)
     end;
 
-handle(<<"userToken">>, [{<<"groupId">>, GroupId}]) ->
+handle(<<"getTokenGroupJoin">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_invite_user_token(UserAuth, GroupId) of
         {ok, Token} ->
@@ -108,7 +108,7 @@ handle(<<"userToken">>, [{<<"groupId">>, GroupId}]) ->
                 <<"Cannot get invite user token due to unknown error.">>)
     end;
 
-handle(<<"groupToken">>, [{<<"groupId">>, GroupId}]) ->
+handle(<<"getTokenUserJoin">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_invite_group_token(UserAuth, GroupId) of
         {ok, Token} ->
@@ -118,7 +118,7 @@ handle(<<"groupToken">>, [{<<"groupId">>, GroupId}]) ->
                 <<"Cannot get invite group token due to unknown error.">>)
     end;
 
-handle(<<"createSpaceToken">>, [{<<"groupId">>, GroupId}]) ->
+handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_create_space_token(UserAuth, GroupId) of
         {ok, Token} ->
