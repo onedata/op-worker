@@ -21,7 +21,7 @@
 
 -export([get/2]).
 -export([get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
--export([get_groups/2]).
+-export([join_group/2, leave_group/2, get_groups/2]).
 
 %%%===================================================================
 %%% API
@@ -105,6 +105,28 @@ get_default_space({user, {Macaroon, DischMacaroons}}, UserId) ->
 set_default_space({user, {Macaroon, DischMacaroons}}, SpaceId) ->
     oz_users:set_default_space({user, {Macaroon, DischMacaroons}},
         [{<<"spaceId">>, SpaceId}]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a user (owner of auth) from space users list.
+%% @end
+%%--------------------------------------------------------------------
+-spec join_group(oz_endpoint:client(), GroupId :: binary()) ->
+    ok | {error, Reason :: term()}.
+join_group(Client, Token) ->
+    oz_users:join_group(Client, [{<<"token">>, Token}]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a user (owner of auth) from space users list.
+%% @end
+%%--------------------------------------------------------------------
+-spec leave_group(oz_endpoint:client(), GroupId :: binary()) ->
+    ok | {error, Reason :: term()}.
+leave_group(Client, GroupId) ->
+    oz_users:leave_group(Client, GroupId).
 
 
 %%--------------------------------------------------------------------
