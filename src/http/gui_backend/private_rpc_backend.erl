@@ -91,7 +91,7 @@ handle(<<"getTokenProviderSupport">>, [{<<"spaceId">>, SpaceId}]) ->
 handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case user_logic:join_group(UserAuth, Token) of
-        ok ->
+        {ok, _} ->
             ok;
         {error, _} ->
             gui_error:report_error(
