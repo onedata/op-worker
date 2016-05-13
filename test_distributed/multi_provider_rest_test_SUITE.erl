@@ -33,7 +33,8 @@
     get_simple_file_distribution/1,
     replicate_file/1,
     posix_mode_get/1,
-    posix_mode_put/1
+    posix_mode_put/1,
+    read_event_subscription_test/1
 ]).
 
 all() ->
@@ -41,7 +42,8 @@ all() ->
         get_simple_file_distribution,
         replicate_file,
         posix_mode_get,
-        posix_mode_put
+        posix_mode_put,
+        read_event_subscription_test
     ]).
 
 %%%===================================================================
@@ -124,6 +126,29 @@ posix_mode_put(Config) ->
         [{<<"posix_mode">>, NewMode}],
         DecodedBody
     ).
+
+read_event_subscription_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/file3">>,
+    Mode = 8#700,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, rdwr),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    spawn(fun() ->
+        timer:sleep(500),
+        lfm_proxy:read(WorkerP1, Handle, 0, 2),
+        lfm_proxy:read(WorkerP1, Handle, 0, 2),
+        lfm_proxy:read(WorkerP1, Handle, 2, 2),
+        lfm_proxy:fsync(WorkerP1, Handle)
+    end),
+    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"read_event/file3?timeout=3000">>, get, [user_1_token_header(Config)], []),
+    ?assertEqual(<<"{\"type\":\"read_event\",\"count\":3,\"size\":0,\"blocks\":[[0,4]]}">>,
+        RespBody).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
