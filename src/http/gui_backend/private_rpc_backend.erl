@@ -88,14 +88,24 @@ handle(<<"getTokenProviderSupport">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot get invite provider token due to unknown error.">>)
     end;
 
-handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
+handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:leave_group(UserAuth, GroupId) of
+    case user_logic:join_group(UserAuth, Token) of
         ok ->
             ok;
         {error, _} ->
             gui_error:report_error(
-                <<"Cannot leave space due to unknown error.">>)
+                <<"Cannot join group due to unknown error.">>)
+    end;
+
+handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case user_logic:leave_group(UserAuth, GroupId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave group due to unknown error.">>)
     end;
 
 handle(<<"getTokenGroupJoin">>, [{<<"groupId">>, GroupId}]) ->
