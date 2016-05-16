@@ -359,8 +359,8 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
             mtime = MTime, ctime = CTime, mode = Mode}}, Target) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, Target, Mode),
-            ok = logical_file_manager:update_times(SessId, Target, ATime, MTime, CTime),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, Target),
+            ok = logical_file_manager:update_times(SessId, Target, ATime, MTime, CTime),
             ok = logical_file_manager:unlink(SessId, {guid, SourceGuid})
         end),
 

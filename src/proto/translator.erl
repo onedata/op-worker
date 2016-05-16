@@ -86,6 +86,18 @@ translate_from_protobuf(#'FileRemovalSubscription'{} = Record) ->
     #file_removal_subscription{
         file_uuid = Record#'FileRemovalSubscription'.file_uuid
     };
+translate_from_protobuf(#'ReadSubscription'{} = Record) ->
+    #read_subscription{
+        counter_threshold = Record#'ReadSubscription'.counter_threshold,
+        size_threshold = Record#'ReadSubscription'.size_threshold,
+        time_threshold = Record#'ReadSubscription'.time_threshold
+    };
+translate_from_protobuf(#'WriteSubscription'{} = Record) ->
+    #write_subscription{
+        counter_threshold = Record#'WriteSubscription'.counter_threshold,
+        size_threshold = Record#'WriteSubscription'.size_threshold,
+        time_threshold = Record#'WriteSubscription'.time_threshold
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->

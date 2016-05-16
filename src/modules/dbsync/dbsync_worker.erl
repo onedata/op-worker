@@ -363,7 +363,12 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value, rev = 
 
         spawn(
             fun() ->
-                dbsync_events:change_replicated(SpaceId, Change),
+                try
+                    dbsync_events:change_replicated(SpaceId, Change)
+                catch
+                    E1:E2  ->
+                        ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
+                end,
                 ok
             end),
         apply_changes(SpaceId, T)
@@ -448,9 +453,9 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sync_context(datastore:document()) ->
-    datastore:key().
-get_sync_context(#document{key = Key, value = #file_meta{}}) ->
-    Key;
+    datastore:key() | datastore:document().
+get_sync_context(#document{value = #file_meta{}} = Doc) ->
+    Doc;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_location}}) ->
@@ -491,8 +496,8 @@ get_space_id(#document{key = Key} = Doc) ->
 -spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
-    FileUUID = get_sync_context(Doc),
-    case file_meta:get_scope({uuid, FileUUID}) of
+    Context = get_sync_context(Doc),
+    case file_meta:get_scope(Context) of
         {ok, #document{key = <<"">> = Root}} ->
             state_put({sid, KeyToCache}, Root),
             {ok, Root};
