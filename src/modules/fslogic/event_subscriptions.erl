@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Default subscriptions definitions
+%%% Subscription templates.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(event_subscriptions).
