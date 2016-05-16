@@ -92,29 +92,28 @@ find_query(<<"file">>, _Data) ->
 
 
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
-    {ok, Locations} = file_meta:get_locations({guid, FileId}),
+    SessionId = g_session:get_session_id(),
+    {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
+
     Res = lists:map(
-        fun(LocationId) ->
-            {ok, #document{value = #file_location{
-                provider_id = ProviderId,
-                blocks = Blocks
-            }}} = file_location:get(LocationId),
-            BlocksList = case Blocks of
-                [] ->
-                    [0, 0];
-                _ ->
-                    lists:foldl(
-                        fun(#file_block{offset = Offset, size = Size}, Acc) ->
-                            Acc ++ [Offset, Offset + Size]
-                        end, [], Blocks)
-            end,
+        fun([{<<"provider">>, ProviderId}, {<<"blocks">>, Blocks}]) ->
+            BlocksList =
+                case Blocks of
+                    [] ->
+                        [0, 0];
+                    _ ->
+                        lists:foldl(
+                            fun([Offset, Size], Acc) ->
+                                Acc ++ [Offset, Offset + Size]
+                            end, [], Blocks)
+                end,
             [
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
                 {<<"blocks">>, BlocksList}
             ]
-        end, Locations),
+        end, Distributions),
     {ok, Res}.
 
 

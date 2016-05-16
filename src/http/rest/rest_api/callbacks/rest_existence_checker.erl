@@ -1,41 +1,41 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module provides information about rest protocol plugin and it's used
-%%% by onedata during plugin registration process.
+%%% Cowboy callback for checking existence of file
 %%% @end
 %%%--------------------------------------------------------------------
--module(rest_protocol_plugin).
--behaviour(protocol_plugin_behaviour).
+-module(rest_existence_checker).
 -author("Tomasz Lichon").
 
+-include("http/http_common.hrl").
+-include("global_definitions.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include("http/rest/http_status.hrl").
+
 %% API
--export([routes/0]).
+-export([resource_exists/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns routes to rest protocol.
-%% @end
+%% @doc Checks if resource exists, adds its attributes to state.
 %%--------------------------------------------------------------------
--spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
-routes() ->
-    [
-        {"/rest/:version/file_distribution/[...]", #{handler => file_distribution_handler}},
-        {"/rest/:version/replicate_file/[...]", #{handler => replicate_file_handler}},
-        {"/rest/:version/posix_mode/[...]", #{handler => posix_mode_handler}},
-        {"/rest/:version/read_event/[...]", #{handler => read_event_handler}},
-        {"/rest/:version/[...]", #{handler => rest_handler}}
-    ].
-
+-spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
+resource_exists(Req, State = #{path := Path, auth := Auth}) ->
+    case logical_file_manager:stat(Auth, {path, Path}) of
+        {ok, Attr = #file_attr{}} ->
+            {true, Req, State#{attributes => Attr}};
+        {error, ?ENOENT} ->
+            {false, Req, State}
+    end.
 
 %%%===================================================================
 %%% Internal functions

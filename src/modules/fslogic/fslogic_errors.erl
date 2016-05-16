@@ -48,7 +48,7 @@ gen_status_message({ErrorCode, ErrorDescription}) when
         false -> #status{code = ?EAGAIN, description = ErrorDescription}
     end;
 gen_status_message(Reason) ->
-    ?error("Unknown error occured: ~p", [Reason]),
+    ?error_stacktrace("Unknown error occured: ~p", [Reason]),
     #status{code = ?EAGAIN, description = <<"An unknown error occured.">>}.
 
 %%%===================================================================

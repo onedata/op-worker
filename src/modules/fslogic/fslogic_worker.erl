@@ -98,33 +98,10 @@ init(_Args) ->
             ok
     end,
 
-    {ok, ReadCounterThreshold} = application:get_env(?APP_NAME, default_read_event_counter_threshold),
-    {ok, ReadTimeThreshold} = application:get_env(?APP_NAME, default_read_event_time_threshold_miliseconds),
-    {ok, ReadSizeThreshold} = application:get_env(?APP_NAME, default_read_event_size_threshold),
-    ReadSub = #subscription{
-        object = #read_subscription{
-            counter_threshold = ReadCounterThreshold,
-            time_threshold = ReadTimeThreshold,
-            size_threshold = ReadSizeThreshold
-        },
-        event_stream = ?READ_EVENT_STREAM#event_stream_definition{
-            metadata = {0, 0}, %% {Counter, Size}
-            emission_time = ReadTimeThreshold,
-            emission_rule =
-            fun({Counter, Size}) ->
-                Counter > ReadCounterThreshold orelse Size > ReadSizeThreshold
-            end,
-            transition_rule =
-            fun({Counter, Size}, #event{counter = C, object = #read_event{size = S}}) ->
-                {Counter + C, Size + S}
-            end,
-            init_handler = event_utils:send_subscription_handler(),
-            event_handler = fun(Evts, Ctx) ->
-                handle_read_events(Evts, Ctx)
-            end,
-            terminate_handler = event_utils:send_subscription_cancellation_handler()
-        }
-    },
+    ReadSub = event_subscriptions:read_subscription(
+        fun(Evts, Ctx) ->
+            handle_read_events(Evts, Ctx)
+        end),
 
     case event:subscribe(ReadSub) of
         {ok, _ReadSubId} ->
@@ -383,6 +360,12 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = File
     fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
     fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
+    fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = FileGUID}}) ->
+    fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -522,6 +505,12 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_p
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #fsync{uuid = UUID}}) ->
     {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #replicate_file{provider_id = ProviderId}}) ->
+    {provider, ProviderId};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{}}) ->
+    {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{uuid = UUID}}) ->
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->
