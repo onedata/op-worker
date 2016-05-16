@@ -44,7 +44,6 @@ handle(<<"fileUploadComplete">>, Props) ->
     {ok, FileHandle} =
         logical_file_manager:open(SessionId, {guid, FileId}, read),
     ok = logical_file_manager:fsync(FileHandle),
-    ok = logical_file_manager:release(FileHandle),
     {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
     gui_async:push_created(<<"file">>, FileData, ConnPid),
     % @todo end
