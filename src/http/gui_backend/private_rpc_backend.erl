@@ -33,10 +33,12 @@
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
 handle(<<"fileUploadComplete">>, Props) ->
-    FileId = proplists:get_value(<<"fileId">>, Props),
-    upload_handler:upload_map_delete(FileId),
+    UploadId = proplists:get_value(<<"uploadId">>, Props),
+    FileId = upload_handler:upload_map_lookup(UploadId),
+    upload_handler:upload_map_delete(UploadId),
     % @todo VFS-2051 temporary solution for model pushing during upload
     SessionId = g_session:get_session_id(),
+    % This is sent to the client via sessionDetails object
     ConnRef = proplists:get_value(<<"connectionRef">>, Props),
     ConnPid = list_to_pid(binary_to_list(base64:decode(ConnRef))),
     ?dump({private_rpc, ConnRef, ConnPid}),

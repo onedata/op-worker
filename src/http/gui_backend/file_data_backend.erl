@@ -90,11 +90,9 @@ find_all(<<"file">>) ->
 find_query(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 
-
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = g_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
-
     Res = lists:map(
         fun([{<<"provider">>, ProviderId}, {<<"blocks">>, Blocks}]) ->
             BlocksList =
