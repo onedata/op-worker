@@ -357,6 +357,8 @@ get_sfm_handle_key_internal(_UUID, Offset, Size, [#file_block{offset = O, size =
     {{SID, FID}, S - (Offset - O)};
 get_sfm_handle_key_internal(_UUID, Offset, Size, [#file_block{offset = O, size = _S} | _]) when Offset + Size =< O ->
     {default, Size};
+get_sfm_handle_key_internal(_UUID, Offset, _Size, [#file_block{offset = O, size = _S} | _]) ->
+    {default, O - Offset};
 get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
     {default, Size}.
 
@@ -495,12 +497,13 @@ read(FileHandle, Offset, MaxSize, GenerateEvents) ->
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode = OpenType,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize, GenerateEvents) ->
-    {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
-
-    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     lfm_utils:call_fslogic(SessId, #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}},
         fun(_) -> ok end),
+
+    {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
+    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
+
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
             case GenerateEvents of
