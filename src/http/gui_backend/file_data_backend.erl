@@ -217,11 +217,14 @@ update_record(<<"file">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file">>, Id) ->
-    try
-        rm_rf(Id)
-    catch error:{badmatch, {error, eacces}} ->
-        gui_error:report_warning(<<"Cannot remove file - access denied.">>)
+delete_record(<<"file">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
+        ok ->
+            ok;
+        {error, eacces} ->
+            gui_error:report_warning(
+                <<"Cannot remove file or directory - access denied.">>)
     end.
 
 
