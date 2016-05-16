@@ -41,8 +41,11 @@ handle(<<"fileUploadComplete">>, Props) ->
     % This is sent to the client via sessionDetails object
     ConnRef = proplists:get_value(<<"connectionRef">>, Props),
     ConnPid = list_to_pid(binary_to_list(base64:decode(ConnRef))),
-    ?dump({private_rpc, ConnRef, ConnPid}),
-    FileData = file_data_backend:file_record(SessionId, FileId),
+    {ok, FileHandle} =
+        logical_file_manager:open(SessionId, {guid, FileId}, read),
+    ok = logical_file_manager:fsync(FileHandle),
+    ok = logical_file_manager:release(FileHandle),
+    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
     gui_async:push_created(<<"file">>, FileData, ConnPid),
     % @todo end
     ok;
