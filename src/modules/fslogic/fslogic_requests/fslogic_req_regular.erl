@@ -224,8 +224,8 @@ get_parent(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
     #fuse_response{}.
-synchronize_block(CTX = #fslogic_ctx{session_id = SessId}, {uuid, FileUUID}, undefined)  ->
-    {ok, #file_attr{size = Size}} = lfm_attrs:stat(SessId, {uuid, FileUUID}),
+synchronize_block(CTX, {uuid, FileUUID}, undefined)  ->
+    Size = fslogic_blocks:get_file_size({uuid, FileUUID}),
     synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size});
 synchronize_block(_CTX, {uuid, FileUUID}, Block)  ->
     ok = replica_synchronizer:synchronize(FileUUID, Block),
@@ -257,7 +257,7 @@ synchronize_block_and_compute_checksum(#fslogic_ctx{session_id = SessId}, {uuid,
 -spec get_file_distribution(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     #fuse_response{}.
 get_file_distribution(_CTX, {uuid, UUID})  ->
-    {ok, Locations} = file_meta:get_locations(UUID),
+    {ok, Locations} = file_meta:get_locations({uuid, UUID}),
     ProviderDistributions = lists:map(
         fun(LocationId) ->
             {ok, #document{value = #file_location{

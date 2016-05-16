@@ -301,7 +301,7 @@ get_file_distribution(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
-    {ok, list()} | logical_file_manager:error_reply().
+    ok | logical_file_manager:error_reply().
 replicate_file(SessId, FileKey, ProviderId) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),

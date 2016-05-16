@@ -146,7 +146,7 @@ read_event_subscription_test(Config) ->
         lfm_proxy:fsync(WorkerP1, Handle)
     end),
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"read_event/file3?timeout=3000">>, get, [user_1_token_header(Config)], []),
-    ?assertEqual(<<"{\"type\":\"read_event\",\"count\":3,\"size\":0,\"blocks\":[[0,4]]}">>, % todo check size
+    ?assertEqual(<<"{\"type\":\"read_event\",\"count\":3,\"size\":0,\"blocks\":[[0,4]]}\r\n">>, % todo check size
         RespBody).
 
 

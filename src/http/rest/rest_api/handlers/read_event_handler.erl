@@ -90,7 +90,7 @@ content_types_provided(Req, State) ->
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
+    {[{atom() | binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
         {'*', replicate_file}
@@ -128,7 +128,7 @@ get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := _Aut
         event_loop(SendChunk, Id, Timeout, Req2, State)
     end,
     Req3 = cowboy_req:set_resp_body_fun(chunked, StreamFun, Req2),
-    cowboy_req:reply(200, [], Req3).
+    cowboy_req:reply(?HTTP_OK, [], Req3).
 
 %%--------------------------------------------------------------------
 %% @doc

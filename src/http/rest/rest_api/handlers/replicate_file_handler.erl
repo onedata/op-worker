@@ -73,7 +73,7 @@ resource_exists(Req, State) ->
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
+    {[{atom() | binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
         {'*', replicate_file}

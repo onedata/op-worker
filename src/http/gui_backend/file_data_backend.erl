@@ -93,7 +93,7 @@ find_query(<<"file">>, _Data) ->
 
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = g_session:get_session_id(),
-    {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {uuid, FileId}),
+    {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
 
     Res = lists:map(
         fun([{<<"provider">>, ProviderId}, {<<"blocks">>, Blocks}]) ->
