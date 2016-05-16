@@ -32,8 +32,17 @@
 %%--------------------------------------------------------------------
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
-handle(<<"fileUploadComplete">>, [{<<"fileId">>, FileId}]) ->
+handle(<<"fileUploadComplete">>, Props) ->
+    FileId = proplists:get_value(<<"fileId">>, Props),
     upload_handler:upload_map_delete(FileId),
+    % @todo VFS-2051 temporary solution for model pushing during upload
+    SessionId = g_session:get_session_id(),
+    ConnRef = proplists:get_value(<<"connectionRef">>, Props),
+    ConnPid = list_to_pid(binary_to_list(base64:decode(ConnRef))),
+    ?dump({private_rpc, ConnRef, ConnPid}),
+    FileData = file_data_backend:file_record(SessionId, FileId),
+    gui_async:push_created(<<"file">>, FileData, ConnPid),
+    % @todo end
     ok;
 
 handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->

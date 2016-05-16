@@ -121,10 +121,14 @@ session_details() ->
         value = #onedata_user{
             name = Name
         }}} = onedata_user:get(g_session:get_user_id()),
+    ConnectionRef = base64:encode(pid_to_list(self())),
     Res = [
         {<<"userName">>, Name},
         {<<"manageProvidersURL">>,
-            str_utils:to_binary(oneprovider:get_oz_providers_page())}
+            str_utils:to_binary(oneprovider:get_oz_providers_page())},
+        % Used for model pushing during file upload - the client informs which
+        % connection is his and updates are pushed to that pid.
+        {<<"connectionRef">>, ConnectionRef}
     ],
     {ok, Res}.
 
