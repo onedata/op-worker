@@ -91,7 +91,7 @@ find_query(<<"file">>, _Data) ->
 
 
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
-    {ok, Locations} = file_meta:get_locations({uuid, FileId}),
+    {ok, Locations} = file_meta:get_locations({guid, FileId}),
     Res = lists:map(
         fun(LocationId) ->
             {ok, #document{value = #file_location{
@@ -135,12 +135,10 @@ create_record(<<"file">>, Data) ->
         Path = filename:join([ParentPath, Name]),
         FileId = case Type of
             <<"file">> ->
-                {ok, FId} = logical_file_manager:create(
-                    SessionId, Path, 8#777),
+                {ok, FId} = logical_file_manager:create(SessionId, Path),
                 FId;
             <<"dir">> ->
-                {ok, DirId} = logical_file_manager:mkdir(
-                    SessionId, Path, 8#777),
+                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
                 DirId
         end,
         {ok, #file_attr{
@@ -256,32 +254,6 @@ get_spaces_dir_uuid(SessionId) ->
     {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces">>}),
     SpacesDirUUID.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Recursively deletes a directory and all its contents.
-%% @end
-%%--------------------------------------------------------------------
--spec rm_rf(FileId :: binary()) -> ok | no_return().
-rm_rf(FileId) ->
-    SessionId = g_session:get_session_id(),
-    {ok, #file_attr{
-        type = Type
-    }} = logical_file_manager:stat(SessionId, {guid, FileId}),
-    case Type of
-        ?DIRECTORY_TYPE ->
-            {ok, Children} = logical_file_manager:ls(
-                SessionId, {guid, FileId}, 0, 1000),
-            lists:foreach(
-                fun({ChId, _}) ->
-                    ok = rm_rf(ChId)
-                end, Children);
-        _ ->
-            ok
-    end,
-    ok = logical_file_manager:unlink(SessionId, {guid, FileId}).
 
 
 %%--------------------------------------------------------------------
