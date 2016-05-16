@@ -128,7 +128,9 @@ get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := _Aut
         event_loop(SendChunk, Id, Timeout, Req2, State)
     end,
     Req3 = cowboy_req:set_resp_body_fun(chunked, StreamFun, Req2),
-    cowboy_req:reply(?HTTP_OK, [], Req3).
+    {ok, Req4} = cowboy_req:reply(?HTTP_OK, [], Req3),
+    {halt, Req4, State}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
