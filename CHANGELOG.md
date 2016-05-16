@@ -4,6 +4,51 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta4
+
+* VFS-1995 Syncing locations update
+* Fixing updating times in rename interprovider
+* VFS-1999 Fix Write/read subscription translate
+* VFS-1618 Fix old rmdir usage
+* VFS-1671 Update cluster_worker ref.
+* VFS-1618 Move configurable values to config
+* VFS-1618 Sort synchronization keys to avoid potential deadlocks
+* VFS-1975 Add uuid to release message, update release routing
+* VFS-1618 Add synchronization for file_meta:rename
+* VFS-1854 Improve dbsync's temp state clearing
+* VFS-1854 Disable rereplication in dbsync
+* VFS-1954 Make session:get_connections const.
+* VFS-1854 Fix GUI upload
+* VFS-1854 Fix uuid_to_path/2
+* VFS-1618 Fix storage files mode changing
+* VFS-1854 Fix merge
+* VFS-1964 Adjust permission tests to changes in required permissions for dir removal.
+* VFS-1854 Fix several cdmi tests
+* VFS-1964 Remove unnecessary unlink.
+* VFS-1964 Adjust existing implementation of recursive remove to behave like linux.
+* VFS-1618 Delete target file after checking all permissions, add ls assertions in tests
+* VFS-1618 Change tests to check acl on proper provider
+* VFS-1618 Change moving into itself detection to interprovider-friendly
+* VFS-1854 Fix fslogic's events subscribtion
+* VFS-1618 Improve permissions handling
+* VFS-1618 Enable grpca in rename tests
+* VFS-1887 Add missing implementation of release.
+* VFS-1854 Introduce logical_file_manager:release/1
+* VFS-1841 Fix target parent path usage
+* VFS-1841 Fix target path usage
+* VFS-1841 Change usage of fslogic_req modules to logical_files_manager
+* VFS-1841 Use get_file_attr to check if target exists
+* VFS-1841 Use space_info:get_or_fetch instead of oz_spaces:get_providers
+* VFS-1954 Implement Ceph helper tests.
+* VFS-1841 Fix timestamps update
+* VFS-1841 Fix usage of gen_path after merge
+* VFS-1841 Fix chmod usage in rename
+* VFS-1841 Fix sfm file copy fallback
+* VFS-1781 Fix rename permissions annotations
+* VFS-1781 Inter-space and inter-provider rename
+* VFS-1618 First sketch of interspace rename
+
+
 ### 3.0.0-beta3
 
 * VFS-1932 Create StorageHelperFactory with unset BufferAgent.

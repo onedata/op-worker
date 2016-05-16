@@ -105,6 +105,12 @@
         "users": {
             "user1": {
                 "default_space": "space1"
+            },
+            "user2": {
+                "default_space": "space2"
+            },
+            "user3": {
+                "default_space": "space3"
             }
         },
         "groups": {
@@ -120,13 +126,29 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2"
                     }
                 }
             },
             "space2": {
                 "displayed_name": "space2",
                 "users": [
-                    "user1"
+                    "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    }
+                }
+            },
+            "space3": {
+                "displayed_name": "space3",
+                "users": [
+                    "user3"
                 ],
                 "groups": [
                 ],

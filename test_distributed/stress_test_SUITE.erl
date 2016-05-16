@@ -86,7 +86,7 @@ many_files_creation_test(Config) ->
 many_files_creation_test_base(Config) ->
     % Sleep because test does to many operations for Cauchbase when running for a long time
     % TODO - make mnesia slower when Cauchbase working too slow
-    timer:sleep(timer:seconds(15)),
+%%    timer:sleep(timer:seconds(15)),
 
     LastFails = ?config(last_fails, Config),
     RepNum = ?config(rep_num, Config),
@@ -116,13 +116,14 @@ many_files_creation_test_base(Config) ->
             ok
     end,
 
-    SpaceNameString = "Space " ++ AnswerDesc,
+    SpaceNameString = "Space" ++ AnswerDesc,
     ct:print("Space name: ~p", [SpaceNameString]),
     SpaceName = list_to_binary(SpaceNameString),
     FullSpaceNameString = "/spaces/" ++ SpaceNameString,
     FullSpaceName = list_to_binary(FullSpaceNameString),
-    ?assertMatch({ok, _}, ?call(Worker2, create,
-        [{path, <<"/spaces">>}, #file_meta{name = SpaceName, is_scope = true}])),
+    ?assertMatch({ok, _}, ?call(Worker2, create, [{path, <<"/spaces">>},
+            #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
+                value = #file_meta{name = SpaceName, is_scope = true}}])),
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
@@ -193,9 +194,20 @@ many_files_creation_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [model_file_meta_test_SUITE]).
+    NewCongig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [model_file_meta_test_SUITE]),
+    Workers = ?config(op_worker_nodes, NewCongig),
+
+    test_utils:mock_new(Workers, [dbsync_utils]),
+    test_utils:mock_expect(Workers, dbsync_utils, get_providers_for_space,
+        fun(_) ->
+            []
+        end),
+
+    NewCongig.
 
 end_per_suite(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [oneprovider]),
     test_node_starter:clean_environment(Config).
 
 %%%===================================================================

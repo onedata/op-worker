@@ -305,11 +305,7 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_parent{uuid = GUID}})
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #change_mode{uuid = GUID, mode = Mode}}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Mode);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #rename{uuid = GUID, target_path = TargetPath}}) ->
-    {ok, Tokens} = fslogic_path:verify_file_path(TargetPath),
-    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
-    #fslogic_ctx{session_id = SessId} = Ctx,
-    {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalFileEntry, SessId),
-    fslogic_req_generic:rename(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, CanonicalTargetPath);
+    fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, TargetPath);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_new_file_location{name = Name, parent_uuid = ParentUUID,
@@ -515,6 +511,8 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #replicate_
     {provider, ProviderId};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{}}) ->
     {provider, oneprovider:get_provider_id()};
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{uuid = UUID}}) ->
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{}}) ->

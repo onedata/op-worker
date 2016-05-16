@@ -18,8 +18,8 @@
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2,
-    read/4, write/4, mkdir/3, mkdir/4, ls/5, set_perms/4, get_xattr/4,
-    set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
+    read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
+    get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3]).
@@ -216,15 +216,36 @@ ls(Worker, SessId, FileKey, Offset, Limit) ->
             Host ! {self(), Result}
         end).
 
+-spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
+    ok | logical_file_manager:error_reply().
+mv(Worker, SessId, FileKeyFrom, PathTo) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:mv(SessId, FileKeyFrom, PathTo),
+            Host ! {self(), Result}
+        end).
+
 -spec set_perms(node(), session:id(), logical_file_manager:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
     ok | logical_file_manager:error_reply().
 set_perms(Worker, SessId, FileKey, NewPerms) ->
-  exec(Worker,
-    fun(Host) ->
-      Result =
-        logical_file_manager:set_perms(SessId, uuid_to_guid(Worker, FileKey), NewPerms),
-      Host ! {self(), Result}
-    end).
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_perms(SessId, uuid_to_guid(Worker, FileKey), NewPerms),
+            Host ! {self(), Result}
+        end).
+
+-spec update_times(node(), session:id(), logical_file_manager:file_key(),
+    file_meta:time(), file_meta:time(), file_meta:time()) ->
+    ok | logical_file_manager:error_reply().
+update_times(Worker, SessId, FileKey, ATime, MTime, CTime) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:update_times(SessId, FileKey, ATime, MTime, CTime),
+            Host ! {self(), Result}
+        end).
 
 -spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name()) ->
     {ok, #xattr{}} | logical_file_manager:error_reply().
@@ -384,7 +405,7 @@ exec(Worker, Fun) ->
         end),
     receive
         {Pid, Result} -> Result
-    after timer:seconds(10) ->
+    after timer:seconds(60) ->
         {error, test_timeout}
     end.
 

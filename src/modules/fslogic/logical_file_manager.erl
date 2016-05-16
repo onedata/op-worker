@@ -72,7 +72,8 @@
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
+    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2, update_times/4,
+    update_times/5]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
@@ -391,6 +392,24 @@ stat(Handle) ->
 -spec stat(session:id(), file_key()) -> {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Changes file timestamps.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_times(Handle :: handle(), ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
+    ok | error_reply().
+update_times(Handle, ATime, MTime, CTime) ->
+    ?run(fun() -> lfm_attrs:update_times(Handle, ATime, MTime, CTime) end).
+
+-spec update_times(session:id(), file_key(), ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
+    ok | error_reply().
+update_times(SessId, FileKey, ATime, MTime, CTime) ->
+    ?run(fun() -> lfm_attrs:update_times(SessId, FileKey, ATime, MTime, CTime) end).
 
 
 %%--------------------------------------------------------------------

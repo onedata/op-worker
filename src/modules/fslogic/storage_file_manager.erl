@@ -24,7 +24,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 -export([new_handle/5, new_handle/6]).
--export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
+-export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, symlink/2, link/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
     fsync/1]).
 -export([open_at_creation/1]).
@@ -173,10 +173,13 @@ mkdir(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid 
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileHandleFrom :: handle(), PathOnStorageTo :: file_meta:path()) ->
+-spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
     ok | logical_file_manager:error_reply().
-mv(_FileHandleFrom, _PathOnStorageTo) ->
-    ok.
+mv(#sfm_handle{storage = Storage, file = FileFrom, space_uuid = SpaceUUID, session_id = SessionId}, FileTo) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:rename(HelperHandle, FileFrom, FileTo).
 
 
 %%--------------------------------------------------------------------
@@ -226,11 +229,24 @@ chown(_,_,_) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec link(Path :: binary(), TargetFileHandle :: handle()) ->
+-spec symlink(Path :: binary(), TargetFileHandle :: handle()) ->
     {ok, file_meta:uuid()} | logical_file_manager:error_reply().
-link(_Path, _TargetFileHandle) ->
+symlink(_Path, _TargetFileHandle) ->
     {ok, <<"">>}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a link on storage.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec link(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
+    ok | logical_file_manager:error_reply().
+link(#sfm_handle{storage = Storage, file = FileFrom, space_uuid = SpaceUUID, session_id = SessionId}, FileTo) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:link(HelperHandle, FileFrom, FileTo).
 
 %%--------------------------------------------------------------------
 %% @doc

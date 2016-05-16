@@ -76,7 +76,6 @@ def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
         _start_storages(config, config_path, ceph_image, s3_image, nfs_image,
                         image, uid)
     output['storages'] = storages_dockers
-    output['docker_ids'].extend(storages_dockers_ids)
 
     # Start python LUMA service
     luma_config = None
@@ -99,6 +98,9 @@ def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
         oc_output = client.up(image, bin_oc, dns_server, uid, config_path,
                               logdir, storages_dockers)
         common.merge(output, oc_output)
+
+    # Add storages at the end so they will be deleted after other dockers
+    output['docker_ids'].extend(storages_dockers_ids)
 
     # Setup global environment - providers, users, groups, spaces etc.
     if 'zone_domains' in config and \
