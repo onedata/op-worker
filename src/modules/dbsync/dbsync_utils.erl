@@ -35,7 +35,7 @@
 %% Checks if given provider supports given space.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_space_access(ProviderId, SpaceId) ->
+-spec validate_space_access(ProviderId :: oneprovider:id(), SpaceId :: space_info:id()) ->
     ok | {error, space_not_supported_locally}.
 validate_space_access(ProviderId, SpaceId) ->
     IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),

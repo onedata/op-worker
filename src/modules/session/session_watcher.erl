@@ -35,6 +35,7 @@
 
 -define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(5)).
 -define(CONNECTION_CHECK_INTERVAL, timer:seconds(30)).
+-define(MAX_PENDING_REQUESTS_PER_CONNECTION, 100).
 
 %%%===================================================================
 %%% API
@@ -149,7 +150,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
                 undefined ->
                     session:remove_connection(SessId, Pid),
                     AccIn;
-                {message_queue_len, NewQueueLen} when NewQueueLen < 100 ->
+                {message_queue_len, NewQueueLen} when NewQueueLen < ?MAX_PENDING_REQUESTS_PER_CONNECTION ->
                     %% Queue is still not too long
                     [{Pid, NewQueueLen} | AccIn];
                 {message_queue_len, NewQueueLen} when NewQueueLen < QueueLen ->
