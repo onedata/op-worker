@@ -89,18 +89,51 @@ get_merged_changes(Doc, N) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_file_if_not_exists(space_info:id(), datastore:document()) -> ok.
-create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
+create_storage_file_if_not_exists(SpaceId, FileDoc) ->
+    create_storage_file_if_not_exists(SpaceId, FileDoc, 10).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Create storage file and file_location if there is no file_location defined
+%% @end
+%%--------------------------------------------------------------------
+-spec create_storage_file_if_not_exists(space_info:id(), datastore:document(), integer()) ->
+    ok | {error, term()}.
+create_storage_file_if_not_exists(SpaceId, FileDoc, 0) ->
+    create_storage_file_if_not_exists_once(SpaceId, FileDoc);
+create_storage_file_if_not_exists(SpaceId, FileDoc, Num) ->
+    try
+        ok = create_storage_file_if_not_exists_once(SpaceId, FileDoc)
+    catch
+        _:_ ->
+            timer:sleep(500),
+            create_storage_file_if_not_exists(SpaceId, FileDoc, Num - 1)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Create storage file and file_location if there is no file_location defined
+%% @end
+%%--------------------------------------------------------------------
+-spec create_storage_file_if_not_exists_once(space_info:id(), datastore:document()) ->
+    ok | {error, term()}.
+create_storage_file_if_not_exists_once(SpaceId, FileDoc = #document{key = FileUuid,
     value = #file_meta{mode = Mode, uid = UserId}}) ->
     file_location:run_synchronized(FileUuid,
         fun() ->
-            case fslogic_utils:get_local_file_locations(FileDoc) of
+            case fslogic_utils:get_local_file_locations_once(FileDoc) of
                 [] ->
                     create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
                     case onedata_user:exists(UserId) of
                         true ->
                             files_to_chown:chown_file(FileUuid, UserId, SpaceId);
                         false ->
-                            files_to_chown:add(UserId, FileUuid)
+                            case files_to_chown:add(UserId, FileUuid) of
+                                {ok, _} ->
+                                    ok;
+                                AddAns ->
+                                    AddAns
+                            end
                     end,
                     ok;
                 _ ->

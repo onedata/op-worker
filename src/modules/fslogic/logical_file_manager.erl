@@ -66,13 +66,14 @@
 -export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/1, unlink/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
-    truncate/3, get_block_map/1, get_block_map/2, release/1]).
+    truncate/3, release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
+    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2, update_times/4,
+    update_times/5]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
@@ -291,15 +292,21 @@ release(FileHandle) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_block_map(Handle :: handle()) ->
-    {ok, fslogic_blocks:blocks()} | error_reply().
-get_block_map(Handle) ->
-    ?run(fun() -> lfm_files:get_block_map(Handle) end).
+-spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, list()} | error_reply().
+get_file_distribution(SessId, FileKey) ->
+    ?run(fun() -> lfm_files:get_file_distribution(SessId, FileKey) end).
 
--spec get_block_map(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, fslogic_blocks:blocks()} | error_reply().
-get_block_map(SessId, FileKey) ->
-    ?run(fun() -> lfm_files:get_block_map(SessId, FileKey) end).
+%%--------------------------------------------------------------------
+%% @doc
+%% Replicates file on given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    ProviderId :: oneprovider:id()) ->
+    ok | error_reply().
+replicate_file(SessId, FileKey, ProviderId) ->
+    ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
 
 
 %%--------------------------------------------------------------------
@@ -385,6 +392,24 @@ stat(Handle) ->
 -spec stat(session:id(), file_key()) -> {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Changes file timestamps.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_times(Handle :: handle(), ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
+    ok | error_reply().
+update_times(Handle, ATime, MTime, CTime) ->
+    ?run(fun() -> lfm_attrs:update_times(Handle, ATime, MTime, CTime) end).
+
+-spec update_times(session:id(), file_key(), ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
+    ok | error_reply().
+update_times(SessId, FileKey, ATime, MTime, CTime) ->
+    ?run(fun() -> lfm_attrs:update_times(SessId, FileKey, ATime, MTime, CTime) end).
 
 
 %%--------------------------------------------------------------------

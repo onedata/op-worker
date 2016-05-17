@@ -86,6 +86,18 @@ translate_from_protobuf(#'FileRemovalSubscription'{} = Record) ->
     #file_removal_subscription{
         file_uuid = Record#'FileRemovalSubscription'.file_uuid
     };
+translate_from_protobuf(#'ReadSubscription'{} = Record) ->
+    #read_subscription{
+        counter_threshold = Record#'ReadSubscription'.counter_threshold,
+        size_threshold = Record#'ReadSubscription'.size_threshold,
+        time_threshold = Record#'ReadSubscription'.time_threshold
+    };
+translate_from_protobuf(#'WriteSubscription'{} = Record) ->
+    #write_subscription{
+        counter_threshold = Record#'WriteSubscription'.counter_threshold,
+        size_threshold = Record#'WriteSubscription'.size_threshold,
+        time_threshold = Record#'WriteSubscription'.time_threshold
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
@@ -146,8 +158,8 @@ translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = Fo
     #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
-translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
-    #release{handle_id = HandleId};
+translate_from_protobuf(#'Release'{uuid = UUID, handle_id = HandleId}) ->
+    #release{uuid = UUID, handle_id = HandleId};
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
     #proxyio_request{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
@@ -290,6 +302,18 @@ translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{uuid = Uuid,
     #synchronize_block_and_compute_checksum{uuid = Uuid, block = #file_block{offset = O, size = S}};
 translate_from_protobuf(#'Checksum'{value = Value}) ->
     #checksum{value = Value};
+translate_from_protobuf(#'GetFileDistribution'{uuid = Uuid}) ->
+    #get_file_distribution{uuid = Uuid};
+translate_from_protobuf(#'ReplicateFile'{uuid = Uuid, provider_id = ProviderId,
+    block = Block}) ->
+    #replicate_file{uuid = Uuid, provider_id = ProviderId,
+        block = translate_from_protobuf(Block)};
+translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, blocks = Blocks}) ->
+    TranslatedBlocks = lists:map(fun translate_from_protobuf/1, Blocks),
+    #provider_file_distribution{provider_id = ProviderId, blocks = TranslatedBlocks};
+translate_from_protobuf(#'FileDistribution'{provider_file_distributions = Distributions}) ->
+    TranslatedDistributions = lists:map(fun translate_from_protobuf/1, Distributions),
+    #file_distribution{provider_file_distributions = TranslatedDistributions};
 
 %% CDMI
 translate_from_protobuf(#'Acl'{value = Value}) ->
@@ -527,8 +551,8 @@ translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = Forc
     {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
 translate_to_protobuf(#truncate{uuid = UUID, size = Size}) ->
     {truncate, #'Truncate'{uuid = UUID, size = Size}};
-translate_to_protobuf(#release{handle_id = HandleId}) ->
-    {release, #'Release'{handle_id = HandleId}};
+translate_to_protobuf(#release{uuid = UUID, handle_id = HandleId}) ->
+    {release, #'Release'{uuid = UUID, handle_id = HandleId}};
 
 translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}) ->
@@ -584,6 +608,18 @@ translate_to_protobuf(#synchronize_block_and_compute_checksum{uuid = Uuid, block
         #'SynchronizeBlockAndComputeChecksum'{uuid = Uuid, block = translate_to_protobuf(Block)}};
 translate_to_protobuf(#checksum{value = Value}) ->
     {checksum, #'Checksum'{value = Value}};
+translate_to_protobuf(#get_file_distribution{uuid = Uuid}) ->
+    {get_file_distribution, #'GetFileDistribution'{uuid = Uuid}};
+translate_to_protobuf(#replicate_file{uuid = Uuid, provider_id = ProviderId,
+    block = Block}) ->
+    {replicate_file, #'ReplicateFile'{uuid = Uuid, provider_id = ProviderId,
+        block = translate_to_protobuf(Block)}};
+translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
+    TranslatedBlocks = lists:map(fun translate_to_protobuf/1, Blocks),
+    #'ProviderFileDistribution'{provider_id = ProviderId, blocks = TranslatedBlocks};
+translate_to_protobuf(#file_distribution{provider_file_distributions = Distributions}) ->
+    TranslatedDistributions = lists:map(fun translate_to_protobuf/1, Distributions),
+    {file_distribution, #'FileDistribution'{provider_file_distributions = TranslatedDistributions}};
 
 %% CDMI
 translate_to_protobuf(#acl{value = Value}) ->

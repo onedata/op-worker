@@ -91,6 +91,7 @@
 }).
 
 -record(release, {
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     handle_id :: binary()
 }).
 
@@ -187,15 +188,27 @@
     uuid :: fslogic_worker:file_guid()
 }).
 
--type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
-                        #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
-                        #release{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
-                        #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-                        #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
-                        #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
-                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
-                        #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{} |
-                        #synchronize_block_and_compute_checksum{} | #get_file_path{} | #fsync{}.
+-record(get_file_distribution, {
+    uuid :: fslogic_worker:file_guid()
+}).
+
+-record(replicate_file, {
+    uuid :: fslogic_worker:file_guid(),
+    provider_id :: oneprovider:id(),
+    block :: #file_block{} | undefined
+}).
+
+-type fuse_request() ::
+    #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
+    #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
+    #release{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
+    #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
+    #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
+    #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
+    #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
+    #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{} |
+    #synchronize_block_and_compute_checksum{} | #get_file_path{} | #fsync{} |
+    #get_file_distribution{} | #replicate_file{}.
 
 
 -record(file_children, {
@@ -247,10 +260,20 @@
     value :: binary()
 }).
 
--type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
+-record(provider_file_distribution, {
+    provider_id :: oneprovider:id(),
+    blocks :: [#file_block{}]
+}).
+
+-record(file_distribution, {
+    provider_file_distributions :: [#provider_file_distribution{}]
+}).
+
+-type fuse_response() ::
+    #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
     #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
-    #checksum{} | #acl{} | #file_path{}.
+    #checksum{} | #acl{} | #file_path{} | #file_distribution{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

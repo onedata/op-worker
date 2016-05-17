@@ -166,7 +166,10 @@ saves_the_actual_data(Config) ->
         update(2, [<<"r2">>, <<"r1">>], G1, group(
             <<"group lol">>,
             [<<"S1">>, <<"S2">>],
-            [{<<"U1">>, Priv1}, {<<"U2">>, []}]
+            [{<<"U1">>, Priv1}, {<<"U2">>, []}],
+            [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
+            [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
+            [<<"dad">>, <<"mom">>]
         )),
         update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
     ]),
@@ -175,7 +178,8 @@ saves_the_actual_data(Config) ->
     push_update(Node, [
         update(4, [<<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
-                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>,
+                [<<"A">>, <<"B">>, <<"Z">>])
         ),
         update(5, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
@@ -195,6 +199,9 @@ saves_the_actual_data(Config) ->
         name = <<"group lol">>,
         spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
+        effective_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
+        nested_groups = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
+        parent_groups = [<<"dad">>, <<"mom">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
@@ -202,6 +209,7 @@ saves_the_actual_data(Config) ->
         group_ids = [<<"A">>, <<"B">>],
         spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         default_space = <<"C">>,
+        effective_group_ids = [<<"A">>, <<"B">>, <<"Z">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
     ?assertMatch({ok, #document{key = U2, value = #onedata_user{
@@ -291,7 +299,7 @@ new_user_with_new_space_triggers_file_meta_creation(Config) ->
             )
         ]),
         expect_message([U1], 3, [])
-                end,
+    end,
 
     check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
 
@@ -479,7 +487,7 @@ updates_with_the_actual_data(Config) ->
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], S1)),
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], S1, [<<"Z">>])),
         update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
     ]),
     expect_message([], 4, []),
@@ -495,11 +503,15 @@ updates_with_the_actual_data(Config) ->
         update(6, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(
             <<"group lol">>,
             [<<"S1">>, <<"S2">>],
-            [{<<"U1">>, Priv1}, {<<"U2">>, []}]
+            [{<<"U1">>, Priv1}, {<<"U2">>, []}],
+            [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
+            [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
+            [<<"dad">>, <<"mom">>]
         )),
         update(7, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
-                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>,
+                [<<"A">>, <<"B">>, <<"Y">>])
         ),
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
@@ -520,11 +532,15 @@ updates_with_the_actual_data(Config) ->
         name = <<"group lol">>,
         spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
+        effective_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
+        nested_groups = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
+        parent_groups = [<<"dad">>, <<"mom">>],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
+        effective_group_ids = [<<"A">>, <<"B">>, <<"Y">>],
         default_space = <<"C">>,
         spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
@@ -688,16 +704,23 @@ space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
 
 group(Name) ->
     group(Name, [], []).
-group(Name, SIDs, UsersWithPrivileges) ->
-    {group, [{name, Name}, {spaces, SIDs}, {users, UsersWithPrivileges}]}.
+group(Name, SIDs, Users) ->
+    group(Name, SIDs, Users, Users, [], []).
+group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups) ->
+    {group, [{name, Name}, {spaces, SIDs}, {users, Users},
+        {effective_users, EffectiveUsers}, {nested_groups, NestedGroups},
+        {parent_groups, ParentGroups}]}.
 
 public_only_user(Name) ->
-    user(Name, [], [], undefined, true).
+    user(Name, [], [], undefined, [], true).
 user(Name, GIDs, Spaces, DefaultSpace) ->
-    user(Name, GIDs, Spaces, DefaultSpace, false).
-user(Name, GIDs, Spaces, DefaultSpace, PublicOnly) ->
+    user(Name, GIDs, Spaces, DefaultSpace, GIDs).
+user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups) ->
+    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, false).
+user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, PublicOnly) ->
     {user, [{name, Name}, {group_ids, GIDs}, {space_names, Spaces},
-        {public_only, PublicOnly}, {default_space, DefaultSpace}]}.
+        {public_only, PublicOnly}, {default_space, DefaultSpace},
+        {effective_group_ids, EffectiveGroups}]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].

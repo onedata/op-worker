@@ -21,8 +21,8 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
-    get_block_map/1, get_block_map/2, unlink/1, unlink/2, fsync/1, release/1]).
+-export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, unlink/1,
+    unlink/2, fsync/1, release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -124,7 +124,8 @@ exists(FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Moves a file or directory to a new location.
 %%--------------------------------------------------------------------
--spec mv(onedata_auth_api:auth(), file_id_or_path(), file_path()) -> ok | error_reply().
+-spec mv(onedata_auth_api:auth(), file_id_or_path(), file_path()) ->
+    ok | error_reply().
 mv(Auth, FileEntry, TargetPath) ->
     logical_file_manager:mv(Auth, FileEntry, TargetPath).
 
@@ -220,14 +221,19 @@ release(FileHandle) ->
 %%--------------------------------------------------------------------
 %% @doc Returns block map for a file.
 %%--------------------------------------------------------------------
+-spec get_file_distribution(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) ->
+    {ok, list()} | error_reply().
+get_file_distribution(Auth, FileKey) ->
+    logical_file_manager:get_file_distribution(Auth, FileKey).
 
--spec get_block_map(FileHandle :: file_handle()) -> {ok, fslogic_blocks:blocks()} | error_reply().
-get_block_map(Handle) ->
-    logical_file_manager:get_block_map(Handle).
--spec get_block_map(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) ->
-    {ok, fslogic_blocks:blocks()} | error_reply().
-get_block_map(Auth, FileKey) ->
-    logical_file_manager:get_block_map(Auth, FileKey).
+
+%%--------------------------------------------------------------------
+%% @doc Replicates file on given provider.
+%%--------------------------------------------------------------------
+-spec replicate_file(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), ProviderId :: binary()) ->
+    ok | error_reply().
+replicate_file(Auth, FileKey, ProviderId) ->
+    logical_file_manager:replicate_file(Auth, FileKey, ProviderId).
 
 
 %%--------------------------------------------------------------------

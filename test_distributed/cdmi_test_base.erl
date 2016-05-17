@@ -1342,12 +1342,19 @@ partial_upload(Config) ->
 
     % get created file and check its consistency
     RequestHeaders4 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
-    {ok, Code4, _Headers4, Response4} = do_request(WorkerP2, FileName, get, RequestHeaders4, []),
-    ?assertEqual(200, Code4),
-    CdmiResponse4 = json_utils:decode(Response4),
-    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse4)),
-    ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse4)),
-    ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, proplists:get_value(<<"value">>, CdmiResponse4)),
+    % TODO Verify once after VFS-2023
+    CheckAllChunks = fun() ->
+        {ok, Code4, _Headers4, Response4} = do_request(WorkerP2, FileName, get, RequestHeaders4, []),
+        ?assertEqual(200, Code4),
+        CdmiResponse4 = json_utils:decode(Response4),
+        ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse4)),
+        ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse4)),
+        proplists:get_value(<<"value">>, CdmiResponse4)
+    end,
+    % File size event change is async
+    Chunks123 = <<Chunk1/binary, Chunk2/binary, Chunk3/binary>>,
+    ?assertMatch(Chunks123, CheckAllChunks(), 2),
+
     %%------------------------------
 
     %%----- non-cdmi request partial upload -------
@@ -1376,11 +1383,16 @@ partial_upload(Config) ->
 
     % get created file and check its consistency
     RequestHeaders8 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
-    {ok, Code8, _Headers8, Response8} = do_request(WorkerP2, FileName2, get, RequestHeaders8, []),
-    ?assertEqual(200, Code8),
-    CdmiResponse8 = json_utils:decode(Response8),
-    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse8)),
-    ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, base64:decode(proplists:get_value(<<"value">>, CdmiResponse8))).
+    % TODO Verify once after VFS-2023
+    CheckAllChunks2 = fun() ->
+        {ok, Code8, _Headers8, Response8} = do_request(WorkerP2, FileName2, get, RequestHeaders8, []),
+        ?assertEqual(200, Code8),
+        CdmiResponse8 = json_utils:decode(Response8),
+        ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse8)),
+        base64:decode(proplists:get_value(<<"value">>, CdmiResponse8))
+    end,
+    % File size event change is async
+    ?assertMatch(Chunks123, CheckAllChunks2(), 2).
 %%------------------------------
 
 % tests access control lists
@@ -1705,7 +1717,7 @@ do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
         cdmi_endpoint(Node) ++ RestSubpath,
         Headers,
         Body,
-        [insecure]
+        [insecure, {connect_timeout, timer:minutes(1)}, {recv_timeout, timer:minutes(1)}]
     ).
 
 cdmi_endpoint(Node) ->

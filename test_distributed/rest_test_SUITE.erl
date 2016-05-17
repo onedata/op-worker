@@ -23,14 +23,22 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([token_auth/1, cert_auth/1, internal_error_when_handler_crashes/1,
-    custom_code_when_handler_throws_code/1, custom_error_when_handler_throws_error/1]).
+-export([
+    token_auth/1,
+    cert_auth/1,
+    internal_error_when_handler_crashes/1,
+    custom_code_when_handler_throws_code/1,
+    custom_error_when_handler_throws_error/1
+]).
 
-%todo reenable rest_cert_auth after appmock repair
+
 all() -> ?ALL([
-            token_auth, internal_error_when_handler_crashes,
-            custom_code_when_handler_throws_code,
-            custom_error_when_handler_throws_error]).
+    token_auth,
+%%    cert_auth, %todo reenable rest_cert_auth after appmock repair
+    internal_error_when_handler_crashes,
+    custom_code_when_handler_throws_code,
+    custom_error_when_handler_throws_error
+]).
 
 -define(MACAROON, element(2, macaroon:serialize(macaroon:create("a", "b", "c")))).
 

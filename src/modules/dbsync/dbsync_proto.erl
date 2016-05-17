@@ -194,9 +194,9 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
     ok | no_return().
 handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
     Ignore =
-        case worker_host:state_get(dbsync_worker, {request, ReqId}) of
+        case dbsync_utils:temp_get({request, ReqId}) of
             undefined ->
-                worker_host:state_put(dbsync_worker, {request, ReqId}, erlang:system_time()),
+                dbsync_utils:temp_put({request, ReqId}, erlang:system_time(), timer:minutes(1)),
                 false;
             _MTime ->
                 true

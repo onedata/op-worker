@@ -62,6 +62,7 @@
     spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
     group_ids :: [binary()],
+    effective_group_ids = [] :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],
     alias :: binary(),
     email_list :: [binary()],
@@ -78,6 +79,9 @@
 -record(onedata_group, {
     name :: binary(),
     users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
+    parent_groups = [] :: [binary()],
     spaces = [] :: [SpaceId :: binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -92,7 +96,8 @@
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
     version = 1, %% Snapshot version
-    is_scope = false :: boolean()
+    is_scope = false :: boolean(),
+    scope :: datastore:key()
 }).
 
 

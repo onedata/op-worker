@@ -502,7 +502,8 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     end, SpacesSetup),
 
     test_utils:mock_expect(AllWorkers, oz_providers, get_spaces,
-        fun(PID) ->
+        fun(_) ->
+            PID = oneprovider:get_provider_id(),
             ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
                 Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
                 lists:foldl(fun({CPid, _}, CAcc) ->
@@ -518,7 +519,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         fun(_, PID) ->
             Domain = provider_id_to_domain(PID),
             Workers = get_same_domain_workers(Config, Domain),
-            {ok, #provider_details{id = PID, urls = [utils:get_host(Worker) || Worker <- Workers]}}
+            {ok, #provider_details{id = PID, urls = [list_to_binary(utils:get_host(Worker)) || Worker <- Workers]}}
         end),
 
 
@@ -647,6 +648,12 @@ oz_users_mock_setup(Workers, Users) ->
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
+    end),
+
+    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun({user, {Macaroon, _}}) ->
+        {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
+        {GroupIds, _} = lists:unzip(Groups),
+        {ok, GroupIds}
     end).
 
 %%--------------------------------------------------------------------
@@ -707,9 +714,19 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
     test_utils:mock_expect(Workers, oz_groups, get_users,
         fun(_, GroupId) ->
             {ok, proplists:get_value(GroupId, Users)} end),
+    test_utils:mock_expect(Workers, oz_groups, get_effective_users,
+        fun(_, GroupId) ->
+            {ok, proplists:get_value(GroupId, Users)} end),
+
+    test_utils:mock_expect(Workers, oz_groups, get_parents,
+        fun(_, _) -> {ok, []} end),
+    test_utils:mock_expect(Workers, oz_groups, get_nested,
+        fun(_, _) -> {ok, []} end),
     test_utils:mock_expect(Workers, oz_groups, get_spaces,
         fun(_, _) -> {ok, []} end),
 
+    test_utils:mock_expect(Workers, oz_groups, get_effective_user_privileges,
+        fun(_, _, _) -> {ok, privileges:space_privileges()} end),
     test_utils:mock_expect(Workers, oz_groups, get_user_privileges,
         fun(_, _, _) -> {ok, privileges:space_privileges()} end).
 
