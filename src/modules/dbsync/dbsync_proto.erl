@@ -24,6 +24,9 @@
 -export([handle/2, handle_impl/2]).
 -export([reemit/1]).
 
+%% Time between failed direct requests
+-define(DIRECT_MESSAGE_RETRY_TIME, 50).
+
 %%%==================================================================
 %%% API
 %%%===================================================================
@@ -88,6 +91,7 @@ send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
+            timer:sleep(?DIRECT_MESSAGE_RETRY_TIME),
             send_direct_message(ProviderId, Request, Attempts - 1)
     end;
 send_direct_message(_ProviderId, _Request, _) ->
