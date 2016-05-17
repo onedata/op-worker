@@ -131,16 +131,11 @@ route_and_ignore_answer(#client_message{session_id = SessId,
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription_cancellation{} = SubCan}) ->
     case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok; %% Do not route subscription_calcelations from other providers (route only subscription_cancelations from users)
+        true -> ok; %% Do not route subscription_calcelations from other providers
         false ->
             event:unsubscribe(SubCan, SessId),
             ok
     end;
-route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #subscription_cancellation{} = SubCan}) ->
-    event:unsubscribe(SubCan, SessId),
-    ok;
 % Message that updates the #auth{} record in given session (originates from
 % #'Token' client message).
 route_and_ignore_answer(#client_message{session_id = SessId,
