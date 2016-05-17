@@ -24,10 +24,28 @@
 -export([get_provider_url/1, encode_term/1, decode_term/1, gen_request_id/0]).
 -export([communicate/2]).
 -export([temp_get/1, temp_put/3, temp_clear/1]).
+-export([validate_space_access/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given provider supports given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_space_access(ProviderId, SpaceId) ->
+    ok | {error, space_not_supported_locally}.
+validate_space_access(ProviderId, SpaceId) ->
+    IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),
+    ?debug("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
+    case IsMember of
+        true -> ok;
+        false ->
+
+            {error, space_not_supported_locally}
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -303,9 +303,16 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
-apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
-        catch consume_batches(FromProvider, SpaceId),
+
+    %% Both providers have to support this space
+    ok = dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId),
+    ok = dbsync_utils:validate_space_access(FromProvider, SpaceId),
+
+    %% Apply old changes that weren't applied previously
+    catch consume_batches(FromProvider, SpaceId),
+
     NewChanges = lists:sort(lists:flatten(Changes)),
     do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true).
 
@@ -610,7 +617,13 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
     ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
-            do_request_changes(ProviderId, CurrentSeq, SeqNum);
+            case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
+                ok ->
+                    do_request_changes(ProviderId, CurrentSeq, SeqNum);
+                {error, space_not_supported_locally} ->
+                    ?info("Ignoring space ~p status since it's not supported locally."),
+                    ok
+            end;
         false ->
             ok
     end.
