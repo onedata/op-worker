@@ -50,9 +50,11 @@ send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Unt
     ok;
 send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
-    ok = dbsync_utils:validate_space_access(ProviderId, SpaceId),
-    send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
-        changes_encoded = dbsync_utils:encode_term(Changes)}, 3).
+    case dbsync_utils:validate_space_access(ProviderId, SpaceId) of
+        ok -> send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
+            changes_encoded = dbsync_utils:encode_term(Changes)}, 3);
+        _ -> skip
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -180,7 +182,10 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
     {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle_impl(ProviderId, MessageBody) of
         ok ->
-            #status{code = ?OK}
+            #status{code = ?OK};
+        Reason1 ->
+            ?error("DBSync error ~p", [Reason1]),
+            #status{code = ?EAGAIN}
     catch
         _:Reason0 ->
             ?error_stacktrace("DBSync error ~p", [Reason0]),
