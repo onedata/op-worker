@@ -36,7 +36,7 @@ change_replicated(SpaceId, Change) ->
         true ->
             change_replicated_internal(SpaceId, Change);
         false ->
-            ?error("Unsupported change received: ~p", [Change])
+            ok
     end.
 
 %%--------------------------------------------------------------------
