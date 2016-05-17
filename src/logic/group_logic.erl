@@ -18,7 +18,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
--export([get/2, create/2, set_name/3, delete/2]).
+-export([get/1, get/2, create/2, set_name/3, delete/2]).
 -export([leave_space/3, join_space/3]).
 -export([set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
@@ -30,7 +30,18 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves group document.
+%% Retrieves group document as provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(GroupId :: binary()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+get(GroupId) ->
+    onedata_group:get(GroupId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves group document as a user.
 %% Provided client should be authorised to access group details.
 %% @end
 %%--------------------------------------------------------------------
@@ -133,11 +144,10 @@ set_user_privileges(Client, GroupId, UserId, PrivilegesAtoms) ->
     ChildGroupId :: binary(), Privileges :: [atom()]) ->
     ok | {error, Reason :: term()}.
 set_group_privileges(Client, ParentGroupId, ChildGroupId, PrivilegesAtoms) ->
-%%    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-%%    oz_groups:group_privileges(Client, ParentGroupId, ChildGroupId, [
-%%        {<<"privileges">>, Privileges}
-%%    ]).
-    ok.
+    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
+    oz_groups:set_nested_privileges(Client, ParentGroupId, ChildGroupId, [
+        {<<"privileges">>, Privileges}
+    ]).
 
 
 %%--------------------------------------------------------------------

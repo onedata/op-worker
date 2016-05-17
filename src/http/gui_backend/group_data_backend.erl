@@ -56,7 +56,6 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"group">>, GroupId) ->
-    ?dump(GroupId),
     {ok, group_record(GroupId)};
 
 find(<<"group-user-permission">>, AssocId) ->
@@ -82,7 +81,6 @@ find_all(<<"group">>) ->
             {ok, GroupData} = find(<<"group">>, GroupId),
             GroupData
         end, GroupIds),
-    ?dump(Res),
     {ok, Res}.
 
 
@@ -255,7 +253,6 @@ group_record(CurrentGroupId) ->
         fun({UsId, _UsPerms}) ->
             op_gui_utils:ids_to_association(UsId, CurrentGroupId)
         end, UsersAndPerms),
-    GroupPermissions = [],
     GroupPermissions = lists:map(
         fun({ChildGroupId, _GroupPerms}) ->
             op_gui_utils:ids_to_association(ChildGroupId, CurrentGroupId)
