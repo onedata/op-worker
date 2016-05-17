@@ -36,6 +36,7 @@ change_replicated(SpaceId, Change) ->
         true ->
             change_replicated_internal(SpaceId, Change);
         false ->
+            ?warning("Change of unsupported space ~p received", [SpaceId]),
             ok
     end.
 
