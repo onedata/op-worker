@@ -585,6 +585,7 @@ get_current_seq(ProviderId, SpaceId) ->
 -spec bcast_status() ->
     ok.
 bcast_status() ->
+    ensure_global_stream_active(),
     SpaceIds = dbsync_utils:get_spaces_for_provider(),
     lists:foreach(
         fun(SpaceId) ->
@@ -604,6 +605,7 @@ bcast_status() ->
 -spec on_status_received(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
     ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
+    ensure_global_stream_active(),
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
     ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
@@ -627,10 +629,10 @@ do_request_changes(ProviderId, Since, Until) ->
     MaxWaitTime = ?DIRECT_REQUEST_BASE_TIMEOUT + ?DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT * (Until - Since),
     case state_get({do_request_changes, ProviderId, Until}) of
         undefined ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(milli_seconds)),
             dbsync_proto:changes_request(ProviderId, Since, Until);
         OldTime when OldTime + MaxWaitTime < Now ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(milli_seconds)),
             dbsync_proto:changes_request(ProviderId, Since, Until);
         _ ->
             ok

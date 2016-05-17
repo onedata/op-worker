@@ -84,8 +84,7 @@ status_report(SpaceId, Providers, CurrentSeq) ->
 -spec send_direct_message(ProviderId :: oneprovider:id(), Request :: term(), Attempts :: non_neg_integer()) ->
     ok | {error, Reason :: any()}.
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
-    PushTo = ProviderId,
-    case dbsync_utils:communicate(PushTo, Request) of
+    case dbsync_utils:communicate(ProviderId, Request) of
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
