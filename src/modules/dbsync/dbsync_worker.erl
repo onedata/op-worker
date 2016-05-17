@@ -155,7 +155,10 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     ?debug("Skipping doc ~p", [Doc]),
                     skip;
                 {ok, SpaceId} ->
-                    queue_push(QueueKey, Change, SpaceId);
+                    case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
+                        ok -> queue_push(QueueKey, Change, SpaceId);
+                        _  -> skip
+                    end;
                 {error, not_a_space} ->
                     skip;
                 {error, Reason} ->
