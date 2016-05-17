@@ -91,8 +91,7 @@ status_report(SpaceId, Providers, CurrentSeq) ->
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
     case dbsync_utils:communicate(ProviderId, Request) of
         {ok, _} -> ok;
-        {error, Reason} ->
-            ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
+        {error, _Reason} ->
             timer:sleep(?DIRECT_MESSAGE_RETRY_TIME),
             send_direct_message(ProviderId, Request, Attempts - 1)
     end;
