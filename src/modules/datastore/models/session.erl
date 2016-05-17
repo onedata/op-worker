@@ -26,8 +26,8 @@
 
 %% API
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
-    get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
-    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1,
+    get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
+    get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1]).
 
 -type id() :: binary().
@@ -289,6 +289,7 @@ get_sequencer_manager(SessId) ->
             {error, Reason}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns random connection associated with session.
@@ -297,11 +298,23 @@ get_sequencer_manager(SessId) ->
 -spec get_random_connection(SessId :: session:id()) ->
     {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId) ->
-    case get_connections(SessId) of
+    get_random_connection(SessId, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns random connection associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_random_connection(SessId :: session:id(), HideOverloaded :: boolean()) ->
+    {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
+get_random_connection(SessId, HideOverloaded) ->
+    case get_connections(SessId, HideOverloaded) of
         {ok, []} -> {error, empty_connection_pool};
         {ok, Cons} -> {ok, utils:random_element(Cons)};
         {error, Reason} -> {error, Reason}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -311,13 +324,44 @@ get_random_connection(SessId) ->
 -spec get_connections(SessId :: id()) ->
     {ok, Comm :: pid()} | {error, Reason :: term()}.
 get_connections(SessId) ->
+    get_connections(SessId, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns connections associated with session. If HideOverloaded is set to true, hides connections that
+%% have too long request queue and and removes invalid connections.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connections(SessId :: id(), HideOverloaded :: boolean()) ->
+    {ok, Comm :: pid()} | {error, Reason :: term()}.
+get_connections(SessId, HideOverloaded) ->
     case session:const_get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
             ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),
-            get_connections(ProxyViaSession);
-        {ok, #document{value = #session{connections = Cons}}} ->
-            {ok, Cons};
+            get_connections(ProxyViaSession, HideOverloaded);
+        {ok, #document{value = #session{connections = Cons, watcher = SessionWatcher}}} ->
+            case HideOverloaded of
+                false ->
+                    {ok, Cons};
+                true ->
+                    NewCons = lists:foldl( %% Foreach connection
+                        fun(Pid, AccIn) ->
+                            case process_info(Pid, message_queue_len) of
+                                undefined ->
+                                    %% Connection died, removing from session
+                                    ok = session:remove_connection(SessId, Pid),
+                                    AccIn;
+                                {message_queue_len, QueueLen} when QueueLen > 15 ->
+                                    SessionWatcher ! {overloaded_connection, Pid},
+                                    AccIn;
+                                _ ->
+                                    [Pid | AccIn]
+                            end
+                        end, [], Cons),
+                    {ok, NewCons}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.

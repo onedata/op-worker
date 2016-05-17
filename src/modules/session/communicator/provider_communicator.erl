@@ -145,7 +145,7 @@ ensure_connected(Conn) when is_pid(Conn) ->
     ok;
 ensure_connected(SessId) ->
     ProviderId = session_manager:session_id_to_provider_id(SessId),
-    case session:get_random_connection(SessId) of
+    case session:get_random_connection(SessId, true) of
         {error, _} ->
             {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
             lists:foreach(
