@@ -47,7 +47,7 @@ send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Unt
     ok;
 send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
-    %% @todo: filter spaces for given provider
+    ok = dbsync_utils:validate_space_access(ProviderId, SpaceId),
     send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
         changes_encoded = dbsync_utils:encode_term(Changes)}, 3).
 
