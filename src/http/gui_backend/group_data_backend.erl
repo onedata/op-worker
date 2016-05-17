@@ -56,6 +56,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"group">>, GroupId) ->
+    ?dump(GroupId),
     {ok, group_record(GroupId)};
 
 find(<<"group-user-permission">>, AssocId) ->
@@ -81,6 +82,7 @@ find_all(<<"group">>) ->
             {ok, GroupData} = find(<<"group">>, GroupId),
             GroupData
         end, GroupIds),
+    ?dump(Res),
     {ok, Res}.
 
 
@@ -180,36 +182,34 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
                 <<"Cannot change user privileges due to unknown error.">>)
     end;
 
-update_record(<<"group-group-permission">>, _AssocId, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
-%%    UserAuth = op_gui_utils:get_user_rest_auth(),
-%%    CurrentUser = g_session:get_user_id(),
-%%    {GroupId, GroupId} = op_gui_utils:association_to_ids(AssocId),
-%%    {ok, #document{
-%%        value = #onedata_group{
-%%            groups = GroupsAndPerms
-%%        }}} = group_logic:get(UserAuth, GroupId, CurrentUser),
-%%    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
-%%    NewGroupPerms = lists:foldl(
-%%        fun({PermGui, Flag}, PermsAcc) ->
-%%            Perm = perm_gui_to_db(PermGui),
-%%            case Flag of
-%%                true ->
-%%                    PermsAcc ++ [Perm];
-%%                false ->
-%%                    PermsAcc -- [Perm]
-%%            end
-%%        end, GroupPerms, Data),
-%%
-%%    Result = group_logic:set_group_privileges(
-%%        UserAuth, GroupId, GroupId, lists:usort(NewGroupPerms)),
-%%    case Result of
-%%        ok ->
-%%            ok;
-%%        {error, _} ->
-%%            gui_error:report_warning(
-%%                <<"Cannot change user privileges due to unknown error.">>)
-%%    end.
+update_record(<<"group-group-permission">>, AssocId, Data) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
+    {ok, #document{
+        value = #onedata_group{
+            nested_groups = GroupsAndPerms
+        }}} = group_logic:get(UserAuth, ParentGroupId),
+    GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
+    NewGroupPerms = lists:foldl(
+        fun({PermGui, Flag}, PermsAcc) ->
+            Perm = perm_gui_to_db(PermGui),
+            case Flag of
+                true ->
+                    PermsAcc ++ [Perm];
+                false ->
+                    PermsAcc -- [Perm]
+            end
+        end, GroupPerms, Data),
+
+    Result = group_logic:set_group_privileges(
+        UserAuth, ParentGroupId, ChildGroupId, lists:usort(NewGroupPerms)),
+    case Result of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_warning(
+                <<"Cannot change user privileges due to unknown error.">>)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -241,29 +241,27 @@ delete_record(<<"group">>, GroupId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary()) -> proplists:proplist().
-group_record(GroupId) ->
+group_record(CurrentGroupId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, #document{
         value = #onedata_group{
             name = Name,
-            users = UsersAndPerms%,
-%%            groups = GroupsAndPerms
-        }}} = group_logic:get(UserAuth, GroupId),
+            users = UsersAndPerms,
+            nested_groups = GroupsAndPerms
+        }}} = group_logic:get(UserAuth, CurrentGroupId),
     %% @todo wait for groups from zbyszek
-    GroupsAndPerms = UsersAndPerms,
 
     UserPermissions = lists:map(
         fun({UsId, _UsPerms}) ->
-            op_gui_utils:ids_to_association(UsId, GroupId)
+            op_gui_utils:ids_to_association(UsId, CurrentGroupId)
         end, UsersAndPerms),
-
+    GroupPermissions = [],
     GroupPermissions = lists:map(
-        fun({GrId, _GroupPerms}) ->
-            Id = op_gui_utils:ids_to_association(GrId, GroupId),
-            <<"group-", Id/binary>>
+        fun({ChildGroupId, _GroupPerms}) ->
+            op_gui_utils:ids_to_association(ChildGroupId, CurrentGroupId)
         end, GroupsAndPerms),
     [
-        {<<"id">>, GroupId},
+        {<<"id">>, CurrentGroupId},
         {<<"name">>, Name},
         {<<"userPermissions">>, UserPermissions},
         {<<"groupPermissions">>, GroupPermissions}
@@ -307,16 +305,13 @@ group_user_permission_record(AssocId) ->
     proplists:proplist().
 group_group_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {PrivGroupIdWithPrefix, GroupId} = op_gui_utils:association_to_ids(AssocId),
-    <<"group-", PrivGroupId/binary>> = PrivGroupIdWithPrefix,
+    {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #onedata_group{
-            users = UsersAndPerms
-%%            groups = GroupsAndPerms
-        }}} = group_logic:get(UserAuth, GroupId),
+            nested_groups = GroupsAndPerms
+        }}} = group_logic:get(UserAuth, ParentGroupId),
     %% @todo wait for groups from zbyszek
-    GroupsAndPerms = UsersAndPerms,
-    GroupPerms = proplists:get_value(PrivGroupId, GroupsAndPerms),
+    GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(GroupPerm) ->
             HasPerm = lists:member(GroupPerm, GroupPerms),
@@ -324,8 +319,8 @@ group_group_permission_record(AssocId) ->
         end, all_group_perms()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"group">>, GroupId},
-        {<<"systemGroup">>, PrivGroupId}
+        {<<"group">>, ParentGroupId},
+        {<<"systemGroup">>, ChildGroupId}
     ].
 
 

@@ -125,19 +125,19 @@ set_user_privileges(Client, GroupId, UserId, PrivilegesAtoms) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets space privileges for an user.
+%% Sets group privileges for a group.
 %% User identity is determined using provided client.
 %% @end
 %%--------------------------------------------------------------------
--spec set_group_privileges(oz_endpoint:client(), SpaceId :: binary(),
-    GroupId :: binary(), Privileges :: [atom()]) ->
+-spec set_group_privileges(oz_endpoint:client(), ParentGroupId :: binary(),
+    ChildGroupId :: binary(), Privileges :: [atom()]) ->
     ok | {error, Reason :: term()}.
-set_group_privileges(Client, GroupId, PrivsGroupId, PrivilegesAtoms) ->
-    {error, not_implemented}.
+set_group_privileges(Client, ParentGroupId, ChildGroupId, PrivilegesAtoms) ->
 %%    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-%%    oz_groups:set_group_privileges(Client, GroupId, PrivsGroupId, [
+%%    oz_groups:group_privileges(Client, ParentGroupId, ChildGroupId, [
 %%        {<<"privileges">>, Privileges}
 %%    ]).
+    ok.
 
 
 %%--------------------------------------------------------------------
