@@ -121,6 +121,30 @@ handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
                 <<"Cannot leave group due to unknown error.">>)
     end;
 
+handle(<<"groupJoinGroup">>, Props) ->
+    GroupId = proplists:get_value(<<"groupId">>, Props),
+    Token = proplists:get_value(<<"token">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:join_group(UserAuth, GroupId, Token) of
+        {ok, _} ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot join group due to unknown error.">>)
+    end;
+
+handle(<<"groupLeaveGroup">>, Props) ->
+    ParentGroupId = proplists:get_value(<<"parentGroupId">>, Props),
+    ChildGroupId = proplists:get_value(<<"childGroupId">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:leave_group(UserAuth, ParentGroupId, ChildGroupId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave group due to unknown error.">>)
+    end;
+
 handle(<<"getTokenGroupJoin">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_invite_user_token(UserAuth, GroupId) of

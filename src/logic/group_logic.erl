@@ -20,6 +20,7 @@
 
 -export([get/1, get/2, create/2, set_name/3, delete/2]).
 -export([leave_space/3, join_space/3]).
+-export([join_group/3, leave_group/3]).
 -export([set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_create_space_token/2]).
@@ -104,6 +105,39 @@ join_space(Client, GroupId, Token) ->
     SpaceId :: binary()) -> ok | {error, Reason :: term()}.
 leave_space(Client, GroupId, SpaceId) ->
     oz_groups:leave_space(Client, GroupId, SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Joins a group to a space based on token.
+%% @end
+%%--------------------------------------------------------------------
+-spec join_group(oz_endpoint:client(), GroupId :: binary(),
+    Token :: binary()) -> ok | {error, Reason :: term()}.
+join_group(Client, GroupId, Token) ->
+%%    case oz_groups:join_group(Client, GroupId, [{<<"token">>, Token}]) of
+%%        {ok, SpaceId} ->
+%%            {ok, SpaceId};
+%%        {error, {
+%%            400,
+%%            <<"invalid_request">>,
+%%            <<"invalid 'token' value: ", _/binary>>
+%%        }} ->
+%%            {error, invalid_token_value}
+%%    end.
+    {ok, <<"mock">>}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a user (owner of auth) from space users list.
+%% @end
+%%--------------------------------------------------------------------
+-spec leave_group(oz_endpoint:client(), ParentGroupId :: binary(),
+    ChildGroupId :: binary()) -> ok | {error, Reason :: term()}.
+leave_group(Client, ParentGroupId, ChildGroupId) ->
+    ok.
+%%    oz_groups:leave_space(Client, GroupId, SpaceId).
 
 
 %%--------------------------------------------------------------------
