@@ -360,8 +360,6 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = File
     fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
     fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
-    fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = FileGUID}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
