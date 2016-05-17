@@ -109,7 +109,7 @@ set_default_space({user, {Macaroon, DischMacaroons}}, SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a user (owner of auth) from space users list.
+%% Adds a user (owner of auth) to a group.
 %% @end
 %%--------------------------------------------------------------------
 -spec join_group(oz_endpoint:client(), GroupId :: binary()) ->
@@ -120,7 +120,7 @@ join_group(Client, Token) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a user (owner of auth) from space users list.
+%% Removes a user (owner of auth) from group users list.
 %% @end
 %%--------------------------------------------------------------------
 -spec leave_group(oz_endpoint:client(), GroupId :: binary()) ->
@@ -131,7 +131,7 @@ leave_group(Client, GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of user space IDs.
+%% Returns list of user group IDs.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_groups(oz_endpoint:client(), UserId :: onedata_user:id()) ->
