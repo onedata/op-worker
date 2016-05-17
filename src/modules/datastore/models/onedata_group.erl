@@ -151,7 +151,7 @@ fetch(Client, GroupId) ->
         % nested groups
         {ok, NestedIds} = oz_groups:get_nested(Client, Id),
         NestedGroupsWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_effective_nested_privileges(Client, Id, UID),
+            {ok, Privileges} = oz_groups:get_nested_privileges(Client, Id, UID),
             {UID, Privileges}
         end, NestedIds),
 
