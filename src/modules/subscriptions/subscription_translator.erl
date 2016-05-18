@@ -86,6 +86,7 @@ props_to_value(onedata_user, Props) ->
 props_to_value(onedata_group, Props) ->
     #onedata_group{
         name = proplists:get_value(<<"name">>, Props),
+        type = binary_to_atom(proplists:get_value(<<"type">>, Props), latin1),
         spaces = proplists:get_value(<<"spaces">>, Props, []),
         users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
         effective_users = process_ids_with_privileges(

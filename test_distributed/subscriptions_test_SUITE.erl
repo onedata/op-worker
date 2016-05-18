@@ -169,7 +169,8 @@ saves_the_actual_data(Config) ->
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
             [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
             [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
-            [<<"dad">>, <<"mom">>]
+            [<<"dad">>, <<"mom">>],
+            <<"unit">>
         )),
         update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
     ]),
@@ -197,6 +198,7 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, space_info, S1)),
     ?assertMatch({ok, #document{key = G1, value = #onedata_group{
         name = <<"group lol">>,
+        type = unit,
         spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         effective_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
@@ -506,7 +508,8 @@ updates_with_the_actual_data(Config) ->
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
             [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
             [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
-            [<<"dad">>, <<"mom">>]
+            [<<"dad">>, <<"mom">>],
+            <<"team">>
         )),
         update(7, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
@@ -530,6 +533,7 @@ updates_with_the_actual_data(Config) ->
     }, fetch(Node, space_info, S1)),
     ?assertMatch({ok, #document{key = G1, value = #onedata_group{
         name = <<"group lol">>,
+        type = team,
         spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         effective_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
@@ -705,9 +709,9 @@ space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
 group(Name) ->
     group(Name, [], []).
 group(Name, SIDs, Users) ->
-    group(Name, SIDs, Users, Users, [], []).
-group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups) ->
-    {group, [{name, Name}, {spaces, SIDs}, {users, Users},
+    group(Name, SIDs, Users, Users, [], [], undefined).
+group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, Type) ->
+    {group, [{name, Name}, {type, Type}, {spaces, SIDs}, {users, Users},
         {effective_users, EffectiveUsers}, {nested_groups, NestedGroups},
         {parent_groups, ParentGroups}]}.
 
