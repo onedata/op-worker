@@ -89,7 +89,9 @@ init_stream(Since, Until, Queue) ->
                 end, dbsync_utils:get_spaces_for_provider())),
             timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
             state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
-        _ -> ok
+        _ ->
+            CTime = erlang:monotonic_time(milli_seconds),
+            dbsync_utils:temp_put(last_change, CTime, 0)
     end,
 
     couchdb_datastore_driver:changes_start_link(
@@ -144,6 +146,7 @@ handle({clear_temp, Key}) ->
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+    dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
@@ -640,15 +643,15 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
 -spec do_request_changes(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 do_request_changes(ProviderId, Since, Until) ->
-    Now = erlang:system_time(milli_seconds),
+    Now = erlang:monotonic_time(milli_seconds),
     %% Wait for {X}ms + {Y}ms per one document
     MaxWaitTime = ?DIRECT_REQUEST_BASE_TIMEOUT + ?DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT * (Until - Since),
     case state_get({do_request_changes, ProviderId, Until}) of
         undefined ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(milli_seconds)),
+            state_put({do_request_changes, ProviderId, Until}, erlang:monotonic_time(milli_seconds)),
             dbsync_proto:changes_request(ProviderId, Since, Until);
         OldTime when OldTime + MaxWaitTime < Now ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(milli_seconds)),
+            state_put({do_request_changes, ProviderId, Until}, erlang:monotonic_time(milli_seconds)),
             dbsync_proto:changes_request(ProviderId, Since, Until);
         _ ->
             ok
@@ -735,7 +738,15 @@ is_valid_stream(_) ->
 -spec ensure_global_stream_active() -> ok.
 ensure_global_stream_active() ->
     case is_valid_stream(state_get(changes_stream)) of
-        true -> ok;
+        true ->
+            CTime = erlang:monotonic_time(milli_seconds),
+            MaxIdleTime = timer:seconds(10),
+            case dbsync_utils:temp_get(last_change) of
+                undefined ->
+                    dbsync_utils:temp_put(last_change, CTime, 0);
+                Time when Time + MaxIdleTime < CTime ->
+                    erlang:exit(state_get(changes_stream), force_restart)
+            end;
         false ->
             Since = state_get(global_resume_seq),
             timer:send_after(0, whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),

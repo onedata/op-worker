@@ -39,7 +39,7 @@
     ok | {error, space_not_supported_locally}.
 validate_space_access(ProviderId, SpaceId) ->
     IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),
-    ?debug("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
+    ?info("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
     case IsMember of
         true -> ok;
         false ->
@@ -54,6 +54,8 @@ validate_space_access(ProviderId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec temp_put(Key :: term(), Value :: term(), Timeout :: non_neg_integer()) -> ok.
+temp_put(Key, Value, 0) ->
+    worker_host:state_put(dbsync_worker, Key, Value);
 temp_put(Key, Value, Timeout) ->
     timer:send_after(Timeout, whereis(dbsync_worker), {timer, {clear_temp, Key}}),
     worker_host:state_put(dbsync_worker, Key, Value).
