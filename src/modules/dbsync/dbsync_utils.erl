@@ -21,7 +21,7 @@
 %% API
 -export([get_providers_for_space/1]).
 -export([get_spaces_for_provider/0, get_spaces_for_provider/1]).
--export([get_provider_url/1, encode_term/1, decode_term/1, gen_request_id/0]).
+-export([get_provider_url/1, get_provider_urls/1, encode_term/1, decode_term/1, gen_request_id/0]).
 -export([communicate/2]).
 -export([temp_get/1, temp_put/3, temp_clear/1]).
 -export([validate_space_access/2]).
@@ -112,24 +112,48 @@ get_spaces_for_provider() ->
 -spec get_spaces_for_provider(oneprovider:id()) ->
     [SpaceId :: binary()].
 get_spaces_for_provider(ProviderId) ->
-    {ok, SpaceIds} = oz_providers:get_spaces(provider),
-    lists:foldl(
-        fun(SpaceId, Acc) ->
-            {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
-            case lists:member(ProviderId, Providers) of
-                true -> [SpaceId | Acc];
-                false -> Acc
-            end
-        end, [], SpaceIds).
+    Key = {spaces_for, ProviderId},
+    case temp_get(Key) of
+        SpaceIds0 when is_list(SpaceIds0) ->
+            SpaceIds0;
+        _ ->
+            {ok, SpaceIds} = oz_providers:get_spaces(provider),
+            SpaceIds1 = lists:foldl(
+                fun(SpaceId, Acc) ->
+                    {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
+                    case lists:member(ProviderId, Providers) of
+                        true -> [SpaceId | Acc];
+                        false -> Acc
+                    end
+                end, [], SpaceIds),
+            temp_put(Key, SpaceIds1, timer:seconds(15)),
+            SpaceIds1
+    end.
 
 
 %%--------------------------------------------------------------------
-%% @doc Selects URL of the provider
+%% @doc Get list of URLs for the provider
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_urls(ProviderId :: oneprovider:id()) -> [URL :: binary()] | no_return().
+get_provider_urls(ProviderId) ->
+    Key = {urls_for, ProviderId},
+    case temp_get(Key) of
+       [_ | _] = URLs0 ->
+           URLs0;
+       _ ->
+           {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
+           temp_put(Key, URLs, timer:seconds(15)),
+           URLs
+   end.
+
+%%--------------------------------------------------------------------
+%% @doc Selects random URL of the provider
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_url(ProviderId :: oneprovider:id()) -> URL :: binary() | no_return().
 get_provider_url(ProviderId) ->
-    {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
+    URLs = get_provider_urls(ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
 
