@@ -199,7 +199,7 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_impl(From :: oneprovider:id(), #tree_broadcast{} | #changes_request{} | #batch_update{}) ->
-    ok | no_return().
+    ok | {error, Reason :: term()} | no_return().
 handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
     Ignore =
         case dbsync_utils:temp_get({request, ReqId}) of

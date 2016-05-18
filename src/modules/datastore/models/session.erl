@@ -322,7 +322,7 @@ get_random_connection(SessId, HideOverloaded) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_connections(SessId :: id()) ->
-    {ok, Comm :: pid()} | {error, Reason :: term()}.
+    {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId) ->
     get_connections(SessId, false).
 
@@ -334,7 +334,7 @@ get_connections(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_connections(SessId :: id(), HideOverloaded :: boolean()) ->
-    {ok, Comm :: pid()} | {error, Reason :: term()}.
+    {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId, HideOverloaded) ->
     case session:const_get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
