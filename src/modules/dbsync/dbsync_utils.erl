@@ -39,7 +39,7 @@
     ok | {error, space_not_supported_locally}.
 validate_space_access(ProviderId, SpaceId) ->
     IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),
-    ?debug("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
+    ?info("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
     case IsMember of
         true -> ok;
         false ->
