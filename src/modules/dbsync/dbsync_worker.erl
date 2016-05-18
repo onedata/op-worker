@@ -745,7 +745,9 @@ ensure_global_stream_active() ->
                 undefined ->
                     dbsync_utils:temp_put(last_change, CTime, 0);
                 Time when Time + MaxIdleTime < CTime ->
-                    erlang:exit(state_get(changes_stream), force_restart)
+                    erlang:exit(state_get(changes_stream), force_restart);
+                _ ->
+                    ok
             end;
         false ->
             Since = state_get(global_resume_seq),
