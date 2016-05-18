@@ -54,6 +54,8 @@ validate_space_access(ProviderId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec temp_put(Key :: term(), Value :: term(), Timeout :: non_neg_integer()) -> ok.
+temp_put(Key, Value, 0) ->
+    worker_host:state_put(dbsync_worker, Key, Value);
 temp_put(Key, Value, Timeout) ->
     timer:send_after(Timeout, whereis(dbsync_worker), {timer, {clear_temp, Key}}),
     worker_host:state_put(dbsync_worker, Key, Value).
