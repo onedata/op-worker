@@ -168,7 +168,7 @@ handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
 
 handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:get_invite_user_token(UserAuth, GroupId) of
+    case group_logic:get_invite_group_token(UserAuth, GroupId) of
         {ok, Token} ->
             {ok, Token};
         {error, _} ->

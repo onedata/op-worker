@@ -17,6 +17,7 @@
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([get/1, get/2, create/2, set_name/3, delete/2]).
 -export([leave_space/3, join_space/3]).
@@ -114,18 +115,18 @@ leave_space(Client, GroupId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec join_group(oz_endpoint:client(), GroupId :: binary(),
     Token :: binary()) -> ok | {error, Reason :: term()}.
-join_group(Client, GroupId, Token) ->
-%%    case oz_groups:join_group(Client, GroupId, [{<<"token">>, Token}]) of
-%%        {ok, SpaceId} ->
-%%            {ok, SpaceId};
-%%        {error, {
-%%            400,
-%%            <<"invalid_request">>,
-%%            <<"invalid 'token' value: ", _/binary>>
-%%        }} ->
-%%            {error, invalid_token_value}
-%%    end.
-    {ok, <<"mock">>}.
+join_group(Client, ChildGroupId, Token) ->
+    case oz_groups:join_group(Client, ChildGroupId, [{<<"token">>, Token}]) of
+        {ok, ParentGroupId} ->
+            ?dump({ok, ParentGroupId}),
+            {ok, ParentGroupId};
+        {error, {
+            400,
+            <<"invalid_request">>,
+            <<"invalid 'token' value: ", _/binary>>
+        }} ->
+            {error, invalid_token_value}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -136,8 +137,7 @@ join_group(Client, GroupId, Token) ->
 -spec leave_group(oz_endpoint:client(), ParentGroupId :: binary(),
     ChildGroupId :: binary()) -> ok | {error, Reason :: term()}.
 leave_group(Client, ParentGroupId, ChildGroupId) ->
-    ok.
-%%    oz_groups:leave_space(Client, GroupId, SpaceId).
+    oz_groups:leave_group(Client, ParentGroupId, ChildGroupId).
 
 
 %%--------------------------------------------------------------------
@@ -203,7 +203,7 @@ get_invite_user_token(Client, GroupId) ->
 -spec get_invite_group_token(oz_endpoint:client(), GroupId :: binary()) ->
     {ok, binary()} | {error, Reason :: term()}.
 get_invite_group_token(Client, GroupId) ->
-    oz_groups:get_invite_user_token(Client, GroupId).
+    oz_groups:get_invite_group_token(Client, GroupId).
 
 
 %%--------------------------------------------------------------------

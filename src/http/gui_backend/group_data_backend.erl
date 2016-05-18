@@ -35,6 +35,8 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    ?dump(UserAuth),
     ok.
 
 
@@ -245,7 +247,8 @@ group_record(CurrentGroupId) ->
         value = #onedata_group{
             name = Name,
             users = UsersAndPerms,
-            nested_groups = GroupsAndPerms
+            nested_groups = GroupsAndPerms,
+            parent_groups = ParentGroups
         }}} = group_logic:get(UserAuth, CurrentGroupId),
     %% @todo wait for groups from zbyszek
 
@@ -261,7 +264,8 @@ group_record(CurrentGroupId) ->
         {<<"id">>, CurrentGroupId},
         {<<"name">>, Name},
         {<<"userPermissions">>, UserPermissions},
-        {<<"groupPermissions">>, GroupPermissions}
+        {<<"groupPermissions">>, GroupPermissions},
+        {<<"parentGroups">>, ParentGroups}
     ].
 
 
