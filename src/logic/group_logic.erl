@@ -54,7 +54,7 @@ get({user, {Macaroon, DischMacaroons}}, GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates space in context of an user.
+%% Creates group in context of an user.
 %% User identity is determined using provided client.
 %% @end
 %%--------------------------------------------------------------------
@@ -67,7 +67,7 @@ create(Client = {user, _}, Record) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes space from the system.
+%% Deletes group from the system.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(oz_endpoint:client(), GroupId :: binary()) ->
@@ -78,7 +78,7 @@ delete(Client, GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Joins a group to a space based on token.
+%% Joins a group to a space based on invite token.
 %% @end
 %%--------------------------------------------------------------------
 -spec join_space(oz_endpoint:client(), GroupId :: binary(),
@@ -98,7 +98,7 @@ join_space(Client, GroupId, Token) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a user (owner of auth) from space users list.
+%% Removes a group from space.
 %% @end
 %%--------------------------------------------------------------------
 -spec leave_space(oz_endpoint:client(), GroupId :: binary(),
@@ -109,7 +109,7 @@ leave_space(Client, GroupId, SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Joins a group to a space based on token.
+%% Joins a group to a space based on invite token.
 %% @end
 %%--------------------------------------------------------------------
 -spec join_group(oz_endpoint:client(), GroupId :: binary(),
@@ -130,7 +130,7 @@ join_group(Client, GroupId, Token) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a user (owner of auth) from space users list.
+%% Removes a subgroup from a group.
 %% @end
 %%--------------------------------------------------------------------
 -spec leave_group(oz_endpoint:client(), ParentGroupId :: binary(),
@@ -142,7 +142,7 @@ leave_group(Client, ParentGroupId, ChildGroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets name for an user.
+%% Sets name for a group.
 %% User identity is determined using provided client.
 %% @end
 %%--------------------------------------------------------------------
@@ -154,7 +154,7 @@ set_name(Client, GroupId, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets space privileges for an user.
+%% Sets group privileges for an user.
 %% User identity is determined using provided client.
 %% @end
 %%--------------------------------------------------------------------
@@ -186,7 +186,7 @@ set_group_privileges(Client, ParentGroupId, ChildGroupId, PrivilegesAtoms) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a user invitation token for given space.
+%% Returns a user invitation token to group.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_invite_user_token(oz_endpoint:client(), GroupId :: binary()) ->
@@ -197,7 +197,7 @@ get_invite_user_token(Client, GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a group invitation token for given space.
+%% Returns a group invitation token to group.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_invite_group_token(oz_endpoint:client(), GroupId :: binary()) ->
@@ -208,12 +208,11 @@ get_invite_group_token(Client, GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a provider invitation token (to get support) for given space.
+%% Returns a create space token (for provider to create a space for group).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_create_space_token(oz_endpoint:client(), GroupId :: binary()) ->
     {ok, binary()} | {error, Reason :: term()}.
 get_create_space_token(Client, GroupId) ->
     oz_groups:get_create_space_token(Client, GroupId).
-
 

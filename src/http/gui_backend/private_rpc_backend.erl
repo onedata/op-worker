@@ -32,6 +32,9 @@
 %%--------------------------------------------------------------------
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
+%%--------------------------------------------------------------------
+%% File upload related procedures
+%%--------------------------------------------------------------------
 handle(<<"fileUploadComplete">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     FileId = upload_handler:upload_map_lookup(UploadId),
@@ -48,6 +51,19 @@ handle(<<"fileUploadComplete">>, Props) ->
     gui_async:push_created(<<"file">>, FileData, ConnPid),
     % @todo end
     ok;
+
+%%--------------------------------------------------------------------
+%% Space related procedures
+%%--------------------------------------------------------------------
+handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case space_logic:get_invite_user_token(UserAuth, SpaceId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite user token due to unknown error.">>)
+    end;
 
 handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
@@ -71,17 +87,7 @@ handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot leave space due to unknown error.">>)
     end;
 
-handle(<<"getTokenUserJoin">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case space_logic:get_invite_user_token(UserAuth, SpaceId) of
-        {ok, Token} ->
-            {ok, Token};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite user token due to unknown error.">>)
-    end;
-
-handle(<<"getTokenGroupJoin">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_group_token(UserAuth, SpaceId) of
         {ok, Token} ->
@@ -89,90 +95,6 @@ handle(<<"getTokenGroupJoin">>, [{<<"spaceId">>, SpaceId}]) ->
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite group token due to unknown error.">>)
-    end;
-
-handle(<<"getTokenProviderSupport">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
-        {ok, Token} ->
-            {ok, Token};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite provider token due to unknown error.">>)
-    end;
-
-handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case user_logic:join_group(UserAuth, Token) of
-        {ok, _} ->
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot join group due to unknown error.">>)
-    end;
-
-handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case user_logic:leave_group(UserAuth, GroupId) of
-        ok ->
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot leave group due to unknown error.">>)
-    end;
-
-handle(<<"groupJoinGroup">>, Props) ->
-    GroupId = proplists:get_value(<<"groupId">>, Props),
-    Token = proplists:get_value(<<"token">>, Props),
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:join_group(UserAuth, GroupId, Token) of
-        {ok, _} ->
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot join group due to unknown error.">>)
-    end;
-
-handle(<<"groupLeaveGroup">>, Props) ->
-    ParentGroupId = proplists:get_value(<<"parentGroupId">>, Props),
-    ChildGroupId = proplists:get_value(<<"childGroupId">>, Props),
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:leave_group(UserAuth, ParentGroupId, ChildGroupId) of
-        ok ->
-            ok;
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot leave group due to unknown error.">>)
-    end;
-
-handle(<<"getTokenGroupJoin">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:get_invite_user_token(UserAuth, GroupId) of
-        {ok, Token} ->
-            {ok, Token};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite user token due to unknown error.">>)
-    end;
-
-handle(<<"getTokenUserJoin">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:get_invite_group_token(UserAuth, GroupId) of
-        {ok, Token} ->
-            {ok, Token};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite group token due to unknown error.">>)
-    end;
-
-handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:get_create_space_token(UserAuth, GroupId) of
-        {ok, Token} ->
-            {ok, Token};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite provider token due to unknown error.">>)
     end;
 
 handle(<<"groupJoinSpace">>, Props) ->
@@ -199,4 +121,91 @@ handle(<<"groupLeaveSpace">>, Props) ->
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot leave space due to unknown error.">>)
+    end;
+
+handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite provider token due to unknown error.">>)
+    end;
+
+%%--------------------------------------------------------------------
+%% Group related procedures
+%%--------------------------------------------------------------------
+handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_invite_group_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite group token due to unknown error.">>)
+    end;
+
+handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case user_logic:join_group(UserAuth, Token) of
+        {ok, _} ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot join group due to unknown error.">>)
+    end;
+
+handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case user_logic:leave_group(UserAuth, GroupId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave group due to unknown error.">>)
+    end;
+
+handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_invite_user_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite user token due to unknown error.">>)
+    end;
+
+handle(<<"groupJoinGroup">>, Props) ->
+    GroupId = proplists:get_value(<<"groupId">>, Props),
+    Token = proplists:get_value(<<"token">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:join_group(UserAuth, GroupId, Token) of
+        {ok, _} ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot join group due to unknown error.">>)
+    end;
+
+handle(<<"groupLeaveGroup">>, Props) ->
+    ParentGroupId = proplists:get_value(<<"parentGroupId">>, Props),
+    ChildGroupId = proplists:get_value(<<"childGroupId">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:leave_group(UserAuth, ParentGroupId, ChildGroupId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave group due to unknown error.">>)
+    end;
+
+handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_create_space_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite provider token due to unknown error.">>)
     end.

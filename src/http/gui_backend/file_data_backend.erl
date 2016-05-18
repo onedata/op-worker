@@ -109,7 +109,7 @@ find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
-                {<<"blocks">>, BlocksList}
+                {<<"blocks">>, [0, 0]}
             ]
         end, Distributions),
     {ok, Res}.
