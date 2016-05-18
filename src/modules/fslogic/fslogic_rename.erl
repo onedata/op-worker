@@ -577,6 +577,7 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
         Size ->
             copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset+Size, Size);
         _ ->
+            logical_file_manager:fsync(ToHandle),
             ok
     end.
 
