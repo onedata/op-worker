@@ -55,8 +55,8 @@ send(#client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of
-                infinity -> communicator:send(Msg, Ref, Retry);
-                _ -> communicator:send(Msg, Ref, Retry - 1)
+                infinity -> provider_communicator:send(Msg, Ref, Retry);
+                _ -> provider_communicator:send(Msg, Ref, Retry - 1)
             end
     end;
 send(#client_message{} = Msg, Ref, 1) ->

@@ -87,8 +87,7 @@ send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
     PushTo = ProviderId,
     case dbsync_utils:communicate(PushTo, Request) of
         {ok, _} -> ok;
-        {error, Reason} ->
-            ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
+        {error, _Reason} ->
             send_direct_message(ProviderId, Request, Attempts - 1)
     end;
 send_direct_message(_ProviderId, _Request, _) ->
