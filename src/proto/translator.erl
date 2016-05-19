@@ -260,6 +260,8 @@ translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
     #'proxyio_request'{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
+translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid}) ->
+    #'file_renamed'{new_uuid = NewUuid};
 
 translate_from_protobuf(#'GetParent'{uuid = UUID}) ->
     #'get_parent'{uuid = UUID};
@@ -516,6 +518,8 @@ translate_to_protobuf(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) 
     #'Token'{value = Token, secondary_values = SecValues};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
+translate_to_protobuf(#file_renamed{new_uuid = NewUuid}) ->
+    {file_renamed, #'FileRenamed'{new_uuid = NewUuid}};
 
 
 translate_to_protobuf(#fuse_request{fuse_request = Record}) ->

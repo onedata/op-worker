@@ -114,12 +114,12 @@ rename_file_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/renamed_file1_target"), 8#770)),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(1, TestDir, "/renamed_file1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(1, TestDir, "/renamed_file1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/renamed_file1_target")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(1, TestDir, "/renamed_file2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(1, TestDir, "/renamed_file2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/renamed_file2_target")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
@@ -162,12 +162,12 @@ move_file_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/target_dir/moved_file1_target"), 8#770)),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(1, TestDir, "/target_dir/moved_file1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(1, TestDir, "/target_dir/moved_file1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_file1_target")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(1, TestDir, "/target_dir/moved_file2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(1, TestDir, "/target_dir/moved_file2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_file2_target")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
@@ -201,12 +201,12 @@ move_file_interspace_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(2, TestDir, "/target_dir/moved_file1_target"), 8#770)),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(2, TestDir, "/target_dir/moved_file1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(2, TestDir, "/target_dir/moved_file1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(2, TestDir, "/target_dir/moved_file1_target")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(2, TestDir, "/target_dir/moved_file2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(2, TestDir, "/target_dir/moved_file2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(2, TestDir, "/target_dir/moved_file2_target")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
@@ -240,12 +240,12 @@ move_file_interprovider_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId, filename(3, TestDir, "/target_dir/moved_file1_target"), 8#770)),
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, File1Guid}, filename(3, TestDir, "/target_dir/moved_file1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File1Guid}, filename(3, TestDir, "/target_dir/moved_file1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId, {path, filename(3, TestDir, "/target_dir/moved_file1_target")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, File2Guid}, filename(3, TestDir, "/target_dir/moved_file2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File2Guid}, filename(3, TestDir, "/target_dir/moved_file2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId, {path, filename(3, TestDir, "/target_dir/moved_file2_target")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W2, Handle4, 0, 10)),
 
@@ -274,12 +274,12 @@ rename_dir_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/renamed_dir1_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/renamed_dir1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/renamed_dir1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/renamed_dir1_target/inner_file1")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Dir2Guid}, filename(1, TestDir, "/renamed_dir2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir2Guid}, filename(1, TestDir, "/renamed_dir2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/renamed_dir2_target/inner_file2")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
@@ -331,12 +331,12 @@ move_dir_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/target_dir/moved_dir1_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/target_dir/moved_dir1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/target_dir/moved_dir1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_dir1_target/inner_file1")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Dir2Guid}, filename(1, TestDir, "/target_dir/moved_dir2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir2Guid}, filename(1, TestDir, "/target_dir/moved_dir2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_dir2_target/inner_file2")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
@@ -377,12 +377,12 @@ move_dir_interspace_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(2, TestDir, "/target_dir/moved_dir1_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Dir1Guid}, filename(2, TestDir, "/target_dir/moved_dir1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir1Guid}, filename(2, TestDir, "/target_dir/moved_dir1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(2, TestDir, "/target_dir/moved_dir1_target/inner_file1")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Dir2Guid}, filename(2, TestDir, "/target_dir/moved_dir2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Dir2Guid}, filename(2, TestDir, "/target_dir/moved_dir2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(2, TestDir, "/target_dir/moved_dir2_target/inner_file2")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
@@ -423,12 +423,12 @@ move_dir_interprovider_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, filename(3, TestDir, "/target_dir/moved_dir1_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir1Guid}, filename(3, TestDir, "/target_dir/moved_dir1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir1Guid}, filename(3, TestDir, "/target_dir/moved_dir1_target"))),
     {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId, {path, filename(3, TestDir, "/target_dir/moved_dir1_target/inner_file1")}, read)),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10)),
 
     %% without overwrite
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir2Guid}, filename(3, TestDir, "/target_dir/moved_dir2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir2Guid}, filename(3, TestDir, "/target_dir/moved_dir2_target"))),
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId, {path, filename(3, TestDir, "/target_dir/moved_dir2_target/inner_file2")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W2, Handle4, 0, 10)),
 
@@ -486,9 +486,9 @@ attributes_retaining_test(Config) ->
               end, Xattrs)
       end, PreRenameGuids),
 
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/dir1_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir2Guid}, filename(2, TestDir, "/dir2_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir3Guid}, filename(3, TestDir, "/dir3_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/dir1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir2Guid}, filename(2, TestDir, "/dir2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir3Guid}, filename(3, TestDir, "/dir3_target"))),
 
     PostRenamePathsAndWorkers = [
         {filename(1, TestDir, "/dir1_target"), W1},
@@ -548,9 +548,9 @@ times_update_test(Config) ->
     %% ensure time difference
     ct:sleep(timer:seconds(1)),
 
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/target1/dir1_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir2Guid}, filename(2, TestDir, "/target2/dir2_target"))),
-    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {guid, Dir3Guid}, filename(3, TestDir, "/target3/dir3_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir1Guid}, filename(1, TestDir, "/target1/dir1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir2Guid}, filename(2, TestDir, "/target2/dir2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, Dir3Guid}, filename(3, TestDir, "/target3/dir3_target"))),
 
     PostRenameDirPaths = [
         filename(1, TestDir, "/target1/dir1_target"),
@@ -610,7 +610,7 @@ moving_file_onto_itself_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
     {_, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/file"), 8#770)),
 
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, FileGuid}, filename(1, TestDir, "/file"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, FileGuid}, filename(1, TestDir, "/file"))),
     ok.
 
 rename_in_default_space_test(Config) ->
@@ -619,7 +619,7 @@ rename_in_default_space_test(Config) ->
 
     {_, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/file_to_rename">>, 8#770)),
 
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Guid}, <<"/renamed_file">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, Guid}, <<"/renamed_file">>)),
     ok.
 
 reading_from_open_file_after_rename_test(Config) ->
@@ -646,14 +646,14 @@ reading_from_open_file_after_rename_test(Config) ->
 
 
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File1Guid}, read)),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(1, TestDir, "/file1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(1, TestDir, "/file1_target"))),
     ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle4, 0, 5)),
     {_, Handle5} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File2Guid}, read)),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(2, TestDir, "/file2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(2, TestDir, "/file2_target"))),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle5, 0, 5)),
     %% TODO: VFS-2007
 %%    {_, Handle6} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File3Guid}, read)),
-%%    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(3, TestDir, "/file3_target"))),
+%%    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(3, TestDir, "/file3_target"))),
 %%    ?assertEqual({ok, <<"test3">>}, lfm_proxy:read(W, Handle6, 0, 5)),
 
     ok.

@@ -18,7 +18,7 @@
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_permission_changed/1, emit_file_removal/1,
-    emit_file_renamed/2]).
+    emit_file_renamed/3]).
 
 %%%===================================================================
 %%% API
@@ -111,9 +111,11 @@ emit_file_removal(FileGUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed(OldGUID :: fslogic_worker:file_guid(),
-    NewGUID :: fslogic_worker:file_guid()) -> ok | {error, Reason :: term()}.
-emit_file_renamed(OldGUID, NewGUID) ->
-    event:emit(#event{object = #file_renamed_event{old_uuid = OldGUID, new_uuid = NewGUID}}).
+    NewGUID :: fslogic_worker:file_guid(), ExcludedSessions :: [session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_file_renamed(OldGUID, NewGUID, ExcludedSessions) ->
+    event:emit(#event{object = #file_renamed_event{old_uuid = OldGUID, new_uuid = NewGUID}},
+        {exclude, ExcludedSessions}).
 
 %%%===================================================================
 %%% Internal functions

@@ -248,10 +248,14 @@
     value :: binary()
 }).
 
+-record(file_renamed, {
+    new_uuid :: fslogic_worker:file_guid()
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
     #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
-    #checksum{} | #acl{} | #file_path{}.
+    #checksum{} | #acl{} | #file_path{} | #file_renamed{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
