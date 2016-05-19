@@ -310,7 +310,7 @@ space_user_permission_record(AssocId) ->
         fun(SpacePerm) ->
             HasPerm = lists:member(SpacePerm, UserPerms),
             {perm_db_to_gui(SpacePerm), HasPerm}
-        end, all_space_perms()),
+        end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
@@ -339,28 +339,12 @@ space_group_permission_record(AssocId) ->
         fun(SpacePerm) ->
             HasPerm = lists:member(SpacePerm, GroupPerms),
             {perm_db_to_gui(SpacePerm), HasPerm}
-        end, all_space_perms()),
+        end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
         {<<"systemGroup">>, GroupId}
     ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns all allowed space permissions.
-%% @end
-%%--------------------------------------------------------------------
--spec all_space_perms() -> [atom()].
-all_space_perms() -> [
-    space_view_data, space_change_data,
-    space_remove, space_set_privileges,
-    space_invite_user, space_remove_user,
-    space_invite_group, space_remove_group,
-    space_add_provider, space_remove_provider
-].
 
 
 %%--------------------------------------------------------------------

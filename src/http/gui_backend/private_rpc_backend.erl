@@ -35,21 +35,27 @@
 %%--------------------------------------------------------------------
 %% File upload related procedures
 %%--------------------------------------------------------------------
-handle(<<"fileUploadComplete">>, Props) ->
+handle(<<"fileUploadSuccess">>, Props) ->
+    ConnRef = proplists:get_value(<<"connectionRef">>, Props),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     FileId = upload_handler:upload_map_lookup(UploadId),
     upload_handler:upload_map_delete(UploadId),
     % @todo VFS-2051 temporary solution for model pushing during upload
     SessionId = g_session:get_session_id(),
     % This is sent to the client via sessionDetails object
-    ConnRef = proplists:get_value(<<"connectionRef">>, Props),
     ConnPid = list_to_pid(binary_to_list(base64:decode(ConnRef))),
     {ok, FileHandle} =
         logical_file_manager:open(SessionId, {guid, FileId}, read),
     ok = logical_file_manager:fsync(FileHandle),
+    ok = logical_file_manager:release(FileHandle),
     {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
     gui_async:push_created(<<"file">>, FileData, ConnPid),
     % @todo end
+    ok;
+
+handle(<<"fileUploadFailure">>, Props) ->
+    UploadId = proplists:get_value(<<"uploadId">>, Props),
+    upload_handler:upload_map_delete(UploadId),
     ok;
 
 %%--------------------------------------------------------------------
@@ -138,7 +144,7 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:get_invite_group_token(UserAuth, GroupId) of
+    case group_logic:get_invite_user_token(UserAuth, GroupId) of
         {ok, Token} ->
             {ok, Token};
         {error, _} ->

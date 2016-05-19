@@ -63,7 +63,10 @@ get({user, {Macaroon, DischMacaroons}}, GroupId) ->
     {ok, GroupId :: binary()} | {error, Reason :: term()}.
 create(Client = {user, _}, Record) ->
     Name = Record#onedata_group.name,
-    oz_users:create_group(Client, [{<<"name">>, Name}]).
+    oz_users:create_group(Client, [
+        {<<"name">>, Name},
+        {<<"type">>, undefined}
+    ]).
 
 
 %%--------------------------------------------------------------------
@@ -118,7 +121,6 @@ leave_space(Client, GroupId, SpaceId) ->
 join_group(Client, ChildGroupId, Token) ->
     case oz_groups:join_group(Client, ChildGroupId, [{<<"token">>, Token}]) of
         {ok, ParentGroupId} ->
-            ?dump({ok, ParentGroupId}),
             {ok, ParentGroupId};
         {error, {
             400,
