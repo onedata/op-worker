@@ -53,7 +53,7 @@ change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document
     ok = replica_cleanup:clean_replica_files(FileUUID);
 change_replicated_internal(SpaceId, #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
-    ?info("change_replicated_internal: changed file_meta ~p", [FileDoc]),
+    ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
 %%    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);

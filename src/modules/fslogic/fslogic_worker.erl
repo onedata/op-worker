@@ -435,6 +435,9 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_at
         {path, P} = FileEntry ->
             {ok, Tokens1} = fslogic_path:verify_file_path(P),
             case Tokens1 of
+                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId] ->
+                    %% Handle root space dir locally
+                    {provider, oneprovider:get_provider_id()};
                 [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | _] ->
                     {space, SpaceId};
                 _ ->
@@ -444,7 +447,13 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_at
             {file, OtherFileEntry}
     end;
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {guid, FileGUID}}}) ->
-    {file, {guid, FileGUID}};
+    case catch fslogic_uuid:space_dir_uuid_to_spaceid(fslogic_uuid:file_guid_to_uuid(FileGUID)) of
+        SpaceId when is_binary(SpaceId) ->
+            %% Handle root space dir locally
+            {provider, oneprovider:get_provider_id()};
+        _ ->
+            {file, {guid, FileGUID}}
+    end;
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     {file, Entry};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #delete_file{uuid = UUID}}) ->

@@ -74,7 +74,12 @@ preroute_message(#client_message{message_body = #subscription_cancellation{}} = 
 preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    sequencer:route_message(Msg, SessId).
+    case session_manager:is_provider_session_id(SessId) of
+        true ->
+            ok;
+        false ->
+            sequencer:route_message(Msg, SessId)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
