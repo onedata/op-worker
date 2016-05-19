@@ -78,6 +78,7 @@
 %% Local, cached version of OZ group
 -record(onedata_group, {
     name :: binary(),
+    type :: onedata_group:type(),
     users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
     effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
     nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],

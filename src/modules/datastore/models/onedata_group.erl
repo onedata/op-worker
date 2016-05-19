@@ -25,8 +25,9 @@
 %% API
 -export([fetch/2, get_or_fetch/2, create_or_update/2]).
 
--export_type([id/0]).
+-export_type([id/0, type/0]).
 
+-type type() :: 'organization' | 'unit' | 'team' | 'role'.
 -type id() :: binary().
 
 %%%===================================================================
@@ -152,7 +153,7 @@ create_or_update(Doc, Diff) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(Client, GroupId) ->
     try
-        {ok, #group_details{id = Id, name = Name}} =
+        {ok, #group_details{id = Id, name = Name, type = Type}} =
             oz_groups:get_details(Client, GroupId),
         {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
         {ok, ParentIds} = oz_groups:get_parents(Client, Id),
@@ -181,7 +182,7 @@ fetch(Client, GroupId) ->
         %todo consider getting user_details for each group member and storing it as onedata_user
         OnedataGroupDoc = #document{key = Id, value = #onedata_group{
             users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
-            effective_users = EffectiveUsersWithPrivileges,
+            effective_users = EffectiveUsersWithPrivileges, type = Type,
             parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
         {ok, OnedataGroupDoc}
