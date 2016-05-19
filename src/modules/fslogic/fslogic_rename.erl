@@ -370,7 +370,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
             ok = logical_file_manager:set_perms(SessId, Target, Mode),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, Target),
             ok = logical_file_manager:update_times(SessId, Target, ATime, MTime, CTime),
-            ok = logical_file_manager:unlink(SessId, {guid, SourceGuid})
+            ok = logical_file_manager:unlink(SessId, {guid, SourceGuid}),
             spawn(fun() -> fslogic_event:emit_file_renamed(SourceGuid, TargetGuid) end)
         end),
 
