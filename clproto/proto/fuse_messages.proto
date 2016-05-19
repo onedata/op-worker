@@ -51,6 +51,19 @@ message FuseRequest {
         VerifyStorageTestFile verify_storage_test_file = 19;
         GetParent get_parent = 20;
         SynchronizeBlockAndComputeChecksum synchronize_block_and_compute_checksum = 21;
+        GetAcl get_acl = 22;
+        SetAcl set_acl = 23;
+        RemoveAcl remove_acl = 24;
+        GetTransferEncoding get_transfer_encoding = 25;
+        SetTransferEncoding set_transfer_encoding = 26;
+        GetCdmiCompletionStatus get_cdmi_completion_status = 27;
+        SetCdmiCompletionStatus set_cdmi_completion_status = 28;
+        GetMimetype get_mimetype = 29;
+        SetMimetype set_mimetype = 30;
+        GetFilePath get_file_path = 31;
+        FSync fsync = 32;
+        GetFileDistribution get_file_distribution = 33;
+        ReplicateFile replicate_file = 34;
     }
 }
 
@@ -115,11 +128,74 @@ message Truncate {
 }
 
 message Release {
-    required bytes handle_id = 1;
+    required bytes uuid = 1;
+    required bytes handle_id = 2;
 }
 
 message GetParent {
     required bytes uuid = 1;
+}
+
+message Acl {
+    required bytes value = 1;
+}
+
+message GetAcl {
+    required bytes uuid = 1;
+}
+
+message SetAcl {
+    required bytes uuid = 1;
+    required Acl acl = 2;
+}
+
+message RemoveAcl {
+    required bytes uuid = 1;
+}
+
+message GetTransferEncoding {
+    required bytes uuid = 1;
+}
+
+message SetTransferEncoding {
+    required bytes uuid = 1;
+    required bytes value = 2;
+}
+
+message GetCdmiCompletionStatus {
+    required bytes uuid = 1;
+}
+
+message SetCdmiCompletionStatus {
+    required bytes uuid = 1;
+    required bytes value = 2;
+}
+
+message GetMimetype {
+    required bytes uuid = 1;
+}
+
+message SetMimetype {
+    required bytes uuid = 1;
+    required bytes value = 2;
+}
+
+message GetFilePath {
+    required bytes uuid = 1;
+}
+
+message FSync {
+    required bytes uuid = 1;
+}
+
+message GetFileDistribution {
+    required bytes uuid = 1;
+}
+
+message ReplicateFile {
+    required bytes uuid = 1;
+    required bytes provider_id = 2;
+    optional FileBlock block = 3;
 }
 
 // Generic FUSE client response
@@ -136,6 +212,13 @@ message FuseResponse {
         StorageTestFile storage_test_file = 8;
         Dir dir = 9;
         Checksum checksum = 10;
+        TransferEncoding transfer_encoding = 11;
+        CdmiCompletionStatus cdmi_completion_status = 12;
+        Mimetype mimetype = 13;
+        Acl acl = 14;
+        FilePath file_path = 15;
+        FileDistribution file_distribution = 16;
+        FileGuid file_guid = 17;
     }
 }
 
@@ -238,5 +321,34 @@ message SynchronizeBlockAndComputeChecksum {
 }
 
 message Checksum {
+    required bytes value = 1;
+}
+
+message TransferEncoding {
+    required bytes value = 1;
+}
+
+message CdmiCompletionStatus {
+    required bytes value = 1;
+}
+
+message Mimetype {
+    required bytes value = 1;
+}
+
+message FilePath {
+    required bytes value = 1;
+}
+
+message ProviderFileDistribution {
+    required bytes provider_id = 1;
+    repeated FileBlock blocks = 2;
+}
+
+message FileDistribution {
+    repeated ProviderFileDistribution provider_file_distributions = 1;
+}
+
+message FileGuid {
     required bytes value = 1;
 }
