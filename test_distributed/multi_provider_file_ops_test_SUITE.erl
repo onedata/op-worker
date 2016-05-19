@@ -334,6 +334,54 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
         NewAcc
     end, <<>>, Workers),
 
+    Master = self(),
+    lists:foreach(fun(W) ->
+        spawn_link(fun() ->
+            Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+            MkAns = lfm_proxy:mkdir(W, SessId, Level2TmpDir, 8#755),
+            Master ! {mkdir_ans, Level2TmpDir, MkAns}
+        end)
+    end, Workers),
+
+    Level2TmpDirs = lists:foldl(fun(_, Acc) ->
+        MkAnsCheck =
+            receive
+                {mkdir_ans, ReceivedLevel2TmpDir, MkAns} ->
+                    {ReceivedLevel2TmpDir, MkAns}
+            after timer:seconds(2*Attempts) ->
+                {error, timeout}
+            end,
+        ?assertMatch({_, {ok, _}}, MkAnsCheck),
+        {Level2TmpDir, _} = MkAnsCheck,
+        VerifyStats(Level2TmpDir, true),
+        [Level2TmpDir | Acc]
+    end, [], Workers),
+
+    lists:foreach(fun(Level2TmpDir) ->
+        lists:foreach(fun(W2) ->
+            spawn_link(fun() ->
+                Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
+                MkAns = lfm_proxy:mkdir(W2, SessId, Level3TmpDir, 8#755),
+                Master ! {mkdir_ans, Level3TmpDir, MkAns}
+            end)
+        end, Workers)
+    end, Level2TmpDirs),
+
+    lists:foreach(fun(_) ->
+        lists:foreach(fun(_) ->
+            MkAnsCheck =
+                receive
+                    {mkdir_ans, ReceivedLevel2TmpDirLevel3TmpDir, MkAns} ->
+                        {ReceivedLevel2TmpDirLevel3TmpDir, MkAns}
+                after timer:seconds(2*Attempts) ->
+                    {error, timeout}
+                end,
+            ?assertMatch({_, {ok, _}}, MkAnsCheck),
+            {Level3TmpDir, _} = MkAnsCheck,
+            VerifyStats(Level3TmpDir, true)
+        end, Workers)
+    end, Level2TmpDirs),
+
     ok.
 
 %%%===================================================================
