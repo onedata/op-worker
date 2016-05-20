@@ -13,7 +13,6 @@
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -137,7 +136,7 @@ find_all_groups(_, _, 0) ->
     [];
 
 find_all_groups(UserAuth, UserId, MaxRetries) ->
-    {ok, GroupIds} = user_logic:get_groups(UserAuth, UserId),
+    {ok, GroupIds} = user_logic:get_effective_groups(UserAuth, UserId),
     case GroupIds of
         [] ->
             timer:sleep(500),

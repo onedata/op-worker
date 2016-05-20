@@ -14,8 +14,6 @@
 -author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
 
--include_lib("ctool/include/logging.hrl").
-
 %% API
 -export([handle/2]).
 

@@ -195,7 +195,7 @@ get_download_buffer_size() ->
 -spec attachment_headers(FileName :: file_meta:name()) ->
     [{binary(), binary()}].
 attachment_headers(FileName) ->
-    %% @todo VFS-2073
+    %% @todo VFS-2073 - check if needed
 %%    FileNameUrlEncoded = http_utils:url_encode(FileName),
     {Type, Subtype, _} = cow_mimetypes:all(FileName),
     MimeType = <<Type/binary, "/", Subtype/binary>>,
@@ -203,7 +203,7 @@ attachment_headers(FileName) ->
         {<<"content-type">>, MimeType},
         {<<"content-disposition">>,
             <<"attachment; filename=\"", FileName/binary, "\"">>
-            %% @todo VFS-2073
+            %% @todo VFS-2073 - check if needed
 %%            "filename*=UTF-8''", FileNameUrlEncoded/binary>>
         }
     ].

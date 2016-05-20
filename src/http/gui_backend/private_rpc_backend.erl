@@ -14,6 +14,8 @@
 -author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
 
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
@@ -183,12 +185,17 @@ handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
     end;
 
 handle(<<"groupJoinGroup">>, Props) ->
-    GroupId = proplists:get_value(<<"groupId">>, Props),
+    ChildGroupId = proplists:get_value(<<"groupId">>, Props),
     Token = proplists:get_value(<<"token">>, Props),
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    case group_logic:join_group(UserAuth, GroupId, Token) of
-        {ok, _} ->
-            ok;
+    case group_logic:join_group(UserAuth, ChildGroupId, Token) of
+        {ok, ParentGroupId} ->
+            {ok, #document{
+                value = #onedata_group{
+                    name = GroupName
+                }
+            }} = group_logic:get(UserAuth, ParentGroupId),
+            {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot join group due to unknown error.">>)

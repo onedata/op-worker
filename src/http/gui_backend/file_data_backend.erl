@@ -15,8 +15,8 @@
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/common_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
@@ -109,7 +109,7 @@ find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
-                {<<"blocks">>, [0, 0]}
+                {<<"blocks">>, BlocksList}
             ]
         end, Distributions),
     {ok, Res}.

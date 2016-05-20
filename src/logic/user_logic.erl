@@ -21,7 +21,7 @@
 
 -export([get/2]).
 -export([get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
--export([join_group/2, leave_group/2, get_groups/2]).
+-export([join_group/2, leave_group/2, get_groups/2, get_effective_groups/2]).
 
 %%%===================================================================
 %%% API
@@ -139,6 +139,23 @@ leave_group(Client, GroupId) ->
 get_groups({user, {Macaroon, DischMacaroons}}, UserId) ->
     case get({user, {Macaroon, DischMacaroons}}, UserId) of
         {ok, #document{value = #onedata_user{group_ids = GroupsIds}}} ->
+            {ok, GroupsIds};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of user effective group IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective_groups(oz_endpoint:client(), UserId :: onedata_user:id()) ->
+    {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
+get_effective_groups({user, {Macaroon, DischMacaroons}}, UserId) ->
+    case get({user, {Macaroon, DischMacaroons}}, UserId) of
+        {ok, #document{value = #onedata_user{
+            effective_group_ids = GroupsIds}}} ->
             {ok, GroupsIds};
         {error, Reason} ->
             {error, Reason}
