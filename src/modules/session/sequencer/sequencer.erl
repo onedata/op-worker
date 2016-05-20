@@ -72,8 +72,16 @@ send_message(Msg, StmId, Ref) ->
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: term(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
-route_message(#client_message{} = Msg, Ref) ->
-    send_to_sequencer_manager(Msg, Ref).
+route_message(#client_message{} = Msg, Pid) when is_pid(Pid) ->
+    send_to_sequencer_manager(Msg, Pid);
+route_message(#client_message{} = Msg, SessId) when is_binary(SessId) ->
+    case session_manager:is_provider_session_id(SessId) of
+        true ->
+            ok;
+        false ->
+            send_to_sequencer_manager(Msg, SessId)
+    end.
+
 
 %%%===================================================================
 %%% Internal functions
