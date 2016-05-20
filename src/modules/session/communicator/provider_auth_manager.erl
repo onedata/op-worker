@@ -58,7 +58,7 @@ is_provider(_) ->
 -spec handshake(Cert :: #'OTPCertificate'{}, Conn :: pid()) ->
     session:id() | no_return().
 handshake(Cert, Conn) ->
-    ProviderId = get_provider_id(Cert),
+    ProviderId = provider_auth_manager:get_provider_id(Cert),
     Identity = #identity{provider_id = ProviderId},
     SessionId = session_manager:get_provider_session_id(incoming, ProviderId),
     {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider, Identity, Conn),
