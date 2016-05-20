@@ -35,7 +35,8 @@
     incremental_write_smaller_then_quota_should_not_fail/1,
     unlink_should_unlock_space/1,
     rename_should_unlock_space/1,
-    rename_bigger_then_quota_should_fail/1
+    rename_bigger_then_quota_should_fail/1,
+    soft_quota_should_allow_bigger_writes/1
 
 ]).
 
@@ -49,7 +50,8 @@ all() ->
         incremental_write_smaller_then_quota_should_not_fail,
         unlink_should_unlock_space,
         rename_should_unlock_space,
-        rename_bigger_then_quota_should_fail
+        rename_bigger_then_quota_should_fail,
+        soft_quota_should_allow_bigger_writes
     ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -58,7 +60,7 @@ all() ->
 -define(INFINITY, 9999).
 
 -record(env, {
-    p1, p2, user1, user2, file1, file2, file3
+    p1, p2, user1, user2, file1, file2, file3, dir1
 }).
 
 %% Spaces support:
@@ -281,15 +283,17 @@ unlink_should_unlock_space(Config) ->
     ok.
 
 rename_should_unlock_space(Config) ->
-    #env{p1 = P1, p2 = P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3} =
+    #env{p1 = P1, p2 = P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3, dir1 = Dir1} =
         gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, [File1], File1)),
+    {ok, _} = mkdir(P1, User1,       f(<<"space1">>, Dir1)),
+    {ok, _} = create_file(P1, User1, f(<<"space1">>, [Dir1], File1)),
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File2)),
     {ok, _} = create_file(P1, User2, f(<<"space1">>, File3)),
     {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, [File1], File1)),
+    {ok, _} = mkdir(P1, User1,       f(<<"space2">>, Dir1)),
+    {ok, _} = create_file(P1, User1, f(<<"space2">>, [Dir1], File1)),
     {ok, _} = create_file(P1, User1, f(<<"space2">>, File2)),
     {ok, _} = create_file(P1, User2, f(<<"space2">>, File3)),
 
@@ -300,6 +304,7 @@ rename_should_unlock_space(Config) ->
 %%    tracer:trace_calls(fslogic_req_generic),
 %%    tracer:trace_calls(fslogic_worker, handle),
 
+    %% ### Space1 ###
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:rand_bytes(16))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:rand_bytes(12))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File3), 0, crypto:rand_bytes(3))),
@@ -309,15 +314,22 @@ rename_should_unlock_space(Config) ->
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:rand_bytes(18))),
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
     ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, File1), f(<<"space0">>, File1))),
+
+    %% Cleanup only
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File1))),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, [File1], File1), 0, crypto:rand_bytes(17))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 3, crypto:rand_bytes(1))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, [File1], File1), f(<<"space0">>, [File1], File1))),
-    ?assertMatch(ok, write_to_file(P1, User2,               f(<<"space1">>, File3), 3, crypto:rand_bytes(1))),
-    ?assertMatch(ok, write_to_file(P1, User2,               f(<<"space1">>, File3), 3, crypto:rand_bytes(17))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, [Dir1], File1), 0, crypto:rand_bytes(17))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 3, crypto:rand_bytes(11))),
+    ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, Dir1), f(<<"space0">>, Dir1))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 3, crypto:rand_bytes(11))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 3, crypto:rand_bytes(17))),
+
+    %% Cleanup only
+    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, [Dir1], File1))),
+    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, Dir1))),
 
 
+    %% ### Space2 ###
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:rand_bytes(26))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:rand_bytes(18))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File3), 0, crypto:rand_bytes(7))),
@@ -325,7 +337,16 @@ rename_should_unlock_space(Config) ->
     ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, File2), f(<<"space0">>, File2))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File3), 0, crypto:rand_bytes(7))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:rand_bytes(28))),
+
+    %% Cleanup only
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
+    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space2">>, File1))),
+
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, [Dir1], File1), 0, crypto:rand_bytes(17))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 7, crypto:rand_bytes(27))),
+    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, Dir1), f(<<"space0">>, Dir1))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 7, crypto:rand_bytes(27))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 7, crypto:rand_bytes(37))),
 
     ok.
 
@@ -348,28 +369,84 @@ rename_bigger_then_quota_should_fail(Config) ->
     {ok, _} = create_file(P1, User1,    f(<<"space2">>, [File3], File2)),
     {ok, _} = create_file(P1, User1,    f(<<"space2">>, [File3, File3], File2)),
 
-    tracer:start([P1]),
-%%    tracer:trace_calls(fslogic_blocks, get_file_size),
 
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:rand_bytes(16))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:rand_bytes(12))),
     ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, File2), f(<<"space0">>, File2))),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space1">>, File1), f(<<"space0">>, File1))),
-%%    ?assertMatch(ok, rename(P1, User1,                      f(<<"space0">>, File1), f(<<"space1">>, File1))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3, File3], File2), 0, crypto:rand_bytes(8))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3], File2), 0, crypto:rand_bytes(2))),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space1">>, File3), f(<<"space0">>, File3))),
     ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, [File3], File3), f(<<"space0">>, File3))),
 
-%%    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:rand_bytes(16))),
-%%    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:rand_bytes(12))),
-%%    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, File2), f(<<"space0">>, File2))),
-%%    ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File1), f(<<"space0">>, File1))),
-%%%%    ?assertMatch(ok, rename(P1, User1,                      f(<<"space0">>, File1), f(<<"space2">>, File1))),
-%%    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3, File3], File2), 0, crypto:rand_bytes(8))),
-%%    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3], File2), 0, crypto:rand_bytes(2))),
-%%    ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File3), f(<<"space0">>, File3))),
-%%    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, [File3], File3), f(<<"space0">>, File3))),
+    %% Cleanup only
+    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
+    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, [File3], File2))),
+
+    tracer:start([P1, _P2]),
+
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:rand_bytes(16))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:rand_bytes(12))),
+    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, File2), f(<<"space0">>, File2))),
+    tracer:trace_calls(space_quota, available_size),
+    tracer:trace_calls(space_quota, assert_write),
+    tracer:trace_calls(space_quota, soft_assert_write),
+    ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File1), f(<<"space0">>, File1))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3, File3], File2), 0, crypto:rand_bytes(8))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3], File2), 0, crypto:rand_bytes(2))),
+    ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File3), f(<<"space0">>, File3))),
+    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, [File3], File2), f(<<"space0">>, File2))),
+
+    ok.
+
+
+soft_quota_should_allow_bigger_writes(Config) ->
+    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3} =
+        gen_test_env(Config),
+
+    {ok, _} = create_file(P1, User1,    f(<<"space1">>, File1)),
+    {ok, _} = create_file(P1, User1,    f(<<"space1">>, File2)),
+    {ok, _} = create_file(P1, User2,    f(<<"space1">>, File3)),
+
+    {ok, _} = create_file(P1, User1,    f(<<"space2">>, File1)),
+    {ok, _} = create_file(P1, User1,    f(<<"space2">>, File2)),
+    {ok, _} = create_file(P1, User2,    f(<<"space2">>, File3)),
+
+    SetSoftLimit =
+        fun(Size) ->
+            Workers = ?config(op_worker_nodes, Config),
+            rpc:multicall(Workers, application, set_env, [?APP_NAME, soft_quota_limit_size, Size])
+        end,
+
+    SetSoftLimit(0),
+
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:rand_bytes(16))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:rand_bytes(12))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:rand_bytes(8))),
+
+    SetSoftLimit(6),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 0, crypto:rand_bytes(8))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:rand_bytes(9))),
+
+    SetSoftLimit(10),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 0, crypto:rand_bytes(12))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:rand_bytes(13))),
+
+
+
+    SetSoftLimit(0),
+
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:rand_bytes(36))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:rand_bytes(12))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:rand_bytes(8))),
+
+    SetSoftLimit(6),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 0, crypto:rand_bytes(8))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:rand_bytes(9))),
+
+    SetSoftLimit(10),
+    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 0, crypto:rand_bytes(12))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:rand_bytes(13))),
 
     ok.
 
@@ -390,7 +467,12 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
+
+    Workers = ?config(op_worker_nodes, ConfigWithSessionInfo),
+    rpc:multicall(Workers, application, set_env, [?APP_NAME, soft_quota_limit_size, 0]),
+
     lfm_proxy:init(ConfigWithSessionInfo).
+
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -462,7 +544,8 @@ gen_test_env(Config) ->
         user2 = User2,
         file1 = generator:gen_name(),
         file2 = generator:gen_name(),
-        file3 = generator:gen_name()
+        file3 = generator:gen_name(),
+        dir1 = generator:gen_name()
     }.
 
 f(Space, FileName) ->

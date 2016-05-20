@@ -487,7 +487,7 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
 
                         Size = fslogic_blocks:get_file_size(Location),
                         space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
-                        {ok, []};;
+                        {ok, []};
                     Reason3 ->
                         ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p", [File, Reason3]),
                         {ok, []}

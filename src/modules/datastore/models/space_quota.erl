@@ -14,13 +14,14 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
 -export([
     apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
-    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2
+    get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, soft_assert_write/2
 ]).
 
 %% model_behaviour callbacks
@@ -198,6 +199,23 @@ available_size(SpaceId) ->
     ok | no_return().
 assert_write(SpaceId) ->
     assert_write(SpaceId, 1).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if any non-empty write operation is permitted for given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec soft_assert_write(SpaceId :: space_info:id(), WriteSize :: integer()) ->
+    ok | no_return().
+soft_assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
+    ok;
+soft_assert_write(SpaceId, WriteSize) ->
+    {ok, SoftQuotaSize} = application:get_env(?APP_NAME, soft_quota_limit_size),
+    case available_size(SpaceId) + SoftQuotaSize >= WriteSize of
+        true -> ok;
+        false -> throw(?ENOSPC)
+    end.
 
 
 %%--------------------------------------------------------------------
