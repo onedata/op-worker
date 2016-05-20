@@ -153,7 +153,6 @@ create_or_update(Doc, Diff) ->
 -spec fetch(Client :: oz_endpoint:client(), GroupId :: id()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(Client, GroupId) ->
-    ?dump(fetch_start),
     try
         {ok, #group_details{id = Id, name = Name, type = Type}} =
             oz_groups:get_details(Client, GroupId),
@@ -187,7 +186,6 @@ fetch(Client, GroupId) ->
             effective_users = EffectiveUsersWithPrivileges, type = Type,
             parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
-        ?dump({fetch_end, OnedataGroupDoc}),
         {ok, OnedataGroupDoc}
     catch
         _:Reason ->

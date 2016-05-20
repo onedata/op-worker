@@ -151,7 +151,10 @@ leave_group(Client, ParentGroupId, ChildGroupId) ->
 -spec set_name(oz_endpoint:client(), GroupId :: binary(), Name :: binary()) ->
     ok | {error, Reason :: term()}.
 set_name(Client, GroupId, Name) ->
-    oz_groups:modify_details(Client, GroupId, [{<<"name">>, Name}]).
+    oz_groups:modify_details(Client, GroupId, [
+        {<<"name">>, Name},
+        {<<"type">>, <<"undefined">>}
+    ]).
 
 
 %%--------------------------------------------------------------------
