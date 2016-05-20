@@ -67,7 +67,7 @@ handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_user_token(UserAuth, SpaceId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite user token due to unknown error.">>)
@@ -80,7 +80,7 @@ handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
             {ok, #space_details{
                 name = SpaceName
             }} = oz_spaces:get_details(UserAuth, SpaceId),
-            {ok, SpaceName};
+            {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
@@ -99,7 +99,7 @@ handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_group_token(UserAuth, SpaceId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite group token due to unknown error.">>)
@@ -114,7 +114,7 @@ handle(<<"groupJoinSpace">>, Props) ->
             {ok, #space_details{
                 name = SpaceName
             }} = oz_spaces:get_details(UserAuth, SpaceId),
-            {ok, SpaceName};
+            {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
@@ -135,7 +135,7 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite provider token due to unknown error.">>)
@@ -148,7 +148,7 @@ handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_invite_user_token(UserAuth, GroupId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite group token due to unknown error.">>)
@@ -157,8 +157,12 @@ handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
 handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case user_logic:join_group(UserAuth, Token) of
-        {ok, _} ->
-            ok;
+        {ok, GroupId} ->
+            {ok, #document{
+                value = #onedata_group{
+                    name = GroupName
+                }}} = group_logic:get(UserAuth, GroupId),
+            {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot join group due to unknown error.">>)
@@ -178,7 +182,7 @@ handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_invite_group_token(UserAuth, GroupId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite user token due to unknown error.">>)
@@ -193,8 +197,7 @@ handle(<<"groupJoinGroup">>, Props) ->
             {ok, #document{
                 value = #onedata_group{
                     name = GroupName
-                }
-            }} = group_logic:get(UserAuth, ParentGroupId),
+                }}} = group_logic:get(UserAuth, ParentGroupId),
             {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
@@ -217,7 +220,7 @@ handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:get_create_space_token(UserAuth, GroupId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite provider token due to unknown error.">>)
