@@ -97,13 +97,13 @@ create_storage_file_if_not_exists(SpaceId, FileDoc) ->
 %% Create storage file and file_location if there is no file_location defined
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(space_info:id(), datastore:document(), integer()) -> ok.
+-spec create_storage_file_if_not_exists(space_info:id(), datastore:document(), integer()) ->
+    ok | {error, term()}.
 create_storage_file_if_not_exists(SpaceId, FileDoc, 0) ->
     create_storage_file_if_not_exists_once(SpaceId, FileDoc);
 create_storage_file_if_not_exists(SpaceId, FileDoc, Num) ->
-    try create_storage_file_if_not_exists_once(SpaceId, FileDoc) of
-        ok ->
-            ok
+    try
+        ok = create_storage_file_if_not_exists_once(SpaceId, FileDoc)
     catch
         _:_ ->
             timer:sleep(500),
@@ -115,7 +115,8 @@ create_storage_file_if_not_exists(SpaceId, FileDoc, Num) ->
 %% Create storage file and file_location if there is no file_location defined
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists_once(space_info:id(), datastore:document()) -> ok.
+-spec create_storage_file_if_not_exists_once(space_info:id(), datastore:document()) ->
+    ok | {error, term()}.
 create_storage_file_if_not_exists_once(SpaceId, FileDoc = #document{key = FileUuid,
     value = #file_meta{mode = Mode, uid = UserId}}) ->
     file_location:run_synchronized(FileUuid,

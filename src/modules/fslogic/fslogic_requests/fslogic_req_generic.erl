@@ -458,35 +458,40 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
             ?DIRECTORY_TYPE ->
                 file_meta:list_children(FileDoc, 0, 1);
             ?REGULAR_FILE_TYPE ->
-                #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
-                ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
-                Results =
-                    lists:map( %% @todo: run this via task manager
-                        fun({StorageId, FileId}) ->
-                            case storage:get(StorageId) of
-                                {ok, Storage} ->
-                                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
-                                    case storage_file_manager:unlink(SFMHandle) of
-                                        ok -> ok;
-                                        {error, Reason1} ->
-                                            {{StorageId, FileId}, {error, Reason1}}
-                                    end ;
-                                {error, Reason2} ->
-                                    {{StorageId, FileId}, {error, Reason2}}
-                            end
-                        end, ToDelete),
-                case Results -- [ok] of
-                    [] -> ok;
-                    Errors ->
-                        lists:foreach(
-                            fun({{SID0, FID0}, {error, Reason0}}) ->
-                                ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
-                            end, Errors)
-                end,
+                case catch fslogic_utils:get_local_file_location(File) of
+                    #document{value = #file_location{} = Location} ->
+                        ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
+                        Results =
+                            lists:map( %% @todo: run this via task manager
+                                fun({StorageId, FileId}) ->
+                                    case storage:get(StorageId) of
+                                        {ok, Storage} ->
+                                            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
+                                            case storage_file_manager:unlink(SFMHandle) of
+                                                ok -> ok;
+                                                {error, Reason1} ->
+                                                    {{StorageId, FileId}, {error, Reason1}}
+                                            end ;
+                                        {error, Reason2} ->
+                                            {{StorageId, FileId}, {error, Reason2}}
+                                    end
+                                end, ToDelete),
+                        case Results -- [ok] of
+                            [] -> ok;
+                            Errors ->
+                                lists:foreach(
+                                    fun({{SID0, FID0}, {error, Reason0}}) ->
+                                        ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
+                                    end, Errors)
+                        end,
 
-                Size = fslogic_blocks:get_file_size(Location),
-                space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
-                {ok, []};
+                        Size = fslogic_blocks:get_file_size(Location),
+                        space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
+                        {ok, []};;
+                    Reason3 ->
+                        ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p", [File, Reason3]),
+                        {ok, []}
+                end;
             _ ->
                 {ok, []}
         end,

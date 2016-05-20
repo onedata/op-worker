@@ -57,10 +57,29 @@ preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg,
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
+preroute_message(#client_message{message_body = #subscription{}} = Msg, SessId) ->
+    case session_manager:is_provider_session_id(SessId) of
+        true ->
+            ok;
+        false ->
+            sequencer:route_message(Msg, SessId)
+    end;
+preroute_message(#client_message{message_body = #subscription_cancellation{}} = Msg, SessId) ->
+    case session_manager:is_provider_session_id(SessId) of
+        true ->
+            ok;
+        false ->
+            sequencer:route_message(Msg, SessId)
+    end;
 preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    sequencer:route_message(Msg, SessId).
+    case session_manager:is_provider_session_id(SessId) of
+        true ->
+            ok;
+        false ->
+            sequencer:route_message(Msg, SessId)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,8 +135,12 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     end;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription_cancellation{} = SubCan}) ->
-    event:unsubscribe(SubCan, SessId),
-    ok;
+    case session_manager:is_provider_session_id(SessId) of
+        true -> ok; %% Do not route subscription_calcelations from other providers
+        false ->
+            event:unsubscribe(SubCan, SessId),
+            ok
+    end;
 % Message that updates the #auth{} record in given session (originates from
 % #'Token' client message).
 route_and_ignore_answer(#client_message{session_id = SessId,

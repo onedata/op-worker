@@ -22,7 +22,7 @@
     unsubscribe/1, unsubscribe/2]).
 
 -export_type([key/0, object/0, update_object/0, counter/0, subscription/0,
-    manager_ref/0]).
+    manager_ref/0, event/0]).
 
 -type event() :: #event{}.
 -type key() :: term().

@@ -41,7 +41,6 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
     fslogic_utils:wait_for_local_file_location(FileUUID),
     file_location:run_synchronized(FileUUID,
         fun() ->
-            try
                 [Location = #document{value = #file_location{size = OldSize}} | _] =
                     fslogic_utils:get_local_file_locations_once({uuid, FileUUID}), %todo get location as argument, insted operating on first one
                 FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
@@ -62,11 +61,6 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
                         {ok, {size_changed, OldSize, FileSize}}
                 end
                 % todo reconcile other local replicas according to this one
-            catch
-                _:Reason ->
-                    ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),
-                    {error, Reason}
-            end
         end).
 
 %%%===================================================================

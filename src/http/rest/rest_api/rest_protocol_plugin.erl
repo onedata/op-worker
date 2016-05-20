@@ -29,6 +29,10 @@
 -spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
 routes() ->
     [
+        {"/rest/:version/file_distribution/[...]", #{handler => file_distribution_handler}},
+        {"/rest/:version/replicate_file/[...]", #{handler => replicate_file_handler}},
+        {"/rest/:version/posix_mode/[...]", #{handler => posix_mode_handler}},
+        {"/rest/:version/read_event/[...]", #{handler => read_event_handler}},
         {"/rest/:version/[...]", #{handler => rest_handler}}
     ].
 

@@ -27,12 +27,10 @@
 -export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, truncate/2, truncate/3, get_block_map/1,
-    get_block_map/2, unlink/1, unlink/2, release/1]).
+    read/3, read_without_events/3, truncate/2, truncate/3, unlink/1,
+    unlink/2, release/1, get_file_distribution/2, replicate_file/3]).
 
 -compile({no_auto_import, [unlink/1]}).
-
-
 
 %%%===================================================================
 %%% API
@@ -277,25 +275,41 @@ truncate(SessId, FileKey, Size) ->
             event:emit(#write_event{file_uuid = FileGUID, blocks = [], file_size = Size}, SessId)
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns block map for a file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, list()} | logical_file_manager:error_reply().
+get_file_distribution(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #get_file_distribution{uuid = FileGUID},
+        fun(#file_distribution{provider_file_distributions = Distributions}) ->
+            Distribution =
+                lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
+                    [
+                        {<<"provider">>, ProviderId},
+                        {<<"blocks">>, lists:map(fun(#file_block{offset = O, size = S}) ->
+                            [O, S] end, Blocks)}
+                    ]
+                end, Distributions),
+            {ok, Distribution}
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_block_map(FileHandle :: logical_file_manager:handle()) ->
-    {ok, fslogic_blocks:blocks()} | logical_file_manager:error_reply().
-get_block_map(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    get_block_map(SessId, {guid, GUID}).
-
--spec get_block_map(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, fslogic_blocks:blocks()} | logical_file_manager:error_reply().
-get_block_map(SessId, FileKey) ->
+-spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
+    ok | logical_file_manager:error_reply().
+replicate_file(SessId, FileKey, ProviderId) ->
     CTX = fslogic_context:new(SessId),
-    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    #document{value = LocalLocation} = fslogic_utils:get_local_file_location({guid, GUID}),
-    #file_location{blocks = Blocks} = LocalLocation,
-    {ok, Blocks}.
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #replicate_file{uuid = FileGUID, provider_id = ProviderId},
+        fun(_) -> ok end).
 
 %%%===================================================================
 %%% Internal functions
@@ -345,6 +359,8 @@ get_sfm_handle_key_internal(_UUID, Offset, Size, [#file_block{offset = O, size =
     {{SID, FID}, S - (Offset - O)};
 get_sfm_handle_key_internal(_UUID, Offset, Size, [#file_block{offset = O, size = _S} | _]) when Offset + Size =< O ->
     {default, Size};
+get_sfm_handle_key_internal(_UUID, Offset, _Size, [#file_block{offset = O, size = _S} | _]) ->
+    {default, O - Offset};
 get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
     {default, Size}.
 
@@ -483,12 +499,13 @@ read(FileHandle, Offset, MaxSize, GenerateEvents) ->
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode = OpenType,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize, GenerateEvents) ->
-    {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
-
-    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     lfm_utils:call_fslogic(SessId, #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}},
         fun(_) -> ok end),
+
+    {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
+    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
+
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
             case GenerateEvents of

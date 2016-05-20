@@ -46,6 +46,7 @@
     node :: node(),
     supervisor :: pid(),
     event_manager :: pid(),
+    watcher :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
     proxy_via :: session:id() | undefined,
