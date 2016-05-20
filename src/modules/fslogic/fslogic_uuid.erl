@@ -20,7 +20,7 @@
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
     guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2,
     default_space_owner/1]).
--export([file_uuid_to_space_id/1, gen_file_uuid/1, gen_file_uuid/0]).
+-export([gen_file_uuid/1, gen_file_uuid/0]).
 -export([to_file_guid/2, unpack_file_guid/1, file_guid_to_uuid/1, to_file_guid/1, ensure_guid/2]).
 
 %%%===================================================================
@@ -78,27 +78,6 @@ unpack_file_guid(FileGUID) ->
 file_guid_to_uuid(FileGUID) ->
     {FileUUID, _} = unpack_file_guid(FileGUID),
     FileUUID.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given file's UUID returns Space's ID that contains this file.
-%% @end
-%%--------------------------------------------------------------------
--spec file_uuid_to_space_id(file_meta:uuid()) ->
-    {ok, binary()} | {error, {not_in_space_scope, file_meta:uuid(), Reason :: term()}}.
-file_uuid_to_space_id(FileUUID) ->
-    BinParentUUID = http_utils:base64url_decode(FileUUID),
-    try binary_to_term(BinParentUUID) of
-        {space, SpaceId} ->
-            {ok, SpaceId};
-        {{s, SpaceId}, _} ->
-            {ok, SpaceId}
-    catch
-        _:Reason ->
-            ?error("Unable to decode file UUID ~p due to: ~p", [FileUUID, Reason]),
-            {error, {not_in_space_scope, FileUUID, Reason}}
-    end.
 
 
 %%--------------------------------------------------------------------
