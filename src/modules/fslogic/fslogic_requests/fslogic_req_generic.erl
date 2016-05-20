@@ -108,7 +108,7 @@ chmod(CTX, FileEntry, Mode) ->
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
-    fslogic_times:update_mtime_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
+    fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
     spawn(
         fun() ->
             fslogic_event:emit_permission_changed(FileUuid)
