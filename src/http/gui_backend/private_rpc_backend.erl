@@ -77,9 +77,9 @@ handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:join_space(UserAuth, Token) of
         {ok, SpaceId} ->
-            {ok, #space_details{
-                name = SpaceName
-            }} = oz_spaces:get_details(UserAuth, SpaceId),
+            SpaceRecord = space_data_backend:space_record(SpaceId),
+            SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
+            gui_async:push_created(<<"space">>, SpaceRecord, self()),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -111,9 +111,9 @@ handle(<<"groupJoinSpace">>, Props) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:join_space(UserAuth, GroupId, Token) of
         {ok, SpaceId} ->
-            {ok, #space_details{
-                name = SpaceName
-            }} = oz_spaces:get_details(UserAuth, SpaceId),
+            SpaceRecord = space_data_backend:space_record(SpaceId),
+            SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
+            gui_async:push_created(<<"space">>, SpaceRecord, self()),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -158,10 +158,9 @@ handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case user_logic:join_group(UserAuth, Token) of
         {ok, GroupId} ->
-            {ok, #document{
-                value = #onedata_group{
-                    name = GroupName
-                }}} = group_logic:get(UserAuth, GroupId),
+            GroupRecord = group_data_backend:group_record(GroupId),
+            GroupName = proplists:get_value(<<"name">>, GroupRecord),
+            gui_async:push_created(<<"group">>, GroupRecord, self()),
             {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
@@ -194,10 +193,9 @@ handle(<<"groupJoinGroup">>, Props) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:join_group(UserAuth, ChildGroupId, Token) of
         {ok, ParentGroupId} ->
-            {ok, #document{
-                value = #onedata_group{
-                    name = GroupName
-                }}} = group_logic:get(UserAuth, ParentGroupId),
+            GroupRecord = group_data_backend:group_record(ParentGroupId),
+            GroupName = proplists:get_value(<<"name">>, GroupRecord),
+            gui_async:push_created(<<"group">>, GroupRecord, self()),
             {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
