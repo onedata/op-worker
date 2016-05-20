@@ -17,6 +17,7 @@
 -include("proto/common/credentials.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_groups.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -152,6 +153,7 @@ create_or_update(Doc, Diff) ->
 -spec fetch(Client :: oz_endpoint:client(), GroupId :: id()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(Client, GroupId) ->
+    ?dump(fetch_start),
     try
         {ok, #group_details{id = Id, name = Name, type = Type}} =
             oz_groups:get_details(Client, GroupId),
@@ -185,6 +187,7 @@ fetch(Client, GroupId) ->
             effective_users = EffectiveUsersWithPrivileges, type = Type,
             parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
+        ?dump({fetch_end, OnedataGroupDoc}),
         {ok, OnedataGroupDoc}
     catch
         _:Reason ->

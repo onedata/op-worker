@@ -114,12 +114,8 @@ create_record(<<"group">>, Data) ->
         _ ->
             case group_logic:create(UserAuth, #onedata_group{name = Name}) of
                 {ok, GroupId} ->
-                    {ok, [
-                        {<<"id">>, GroupId},
-                        {<<"name">>, Name},
-                        {<<"userPermissions">>, []},
-                        {<<"groupPermissions">>, []}
-                    ]};
+                    GroupRecord = group_record(GroupId),
+                    {ok, GroupRecord};
                 _ ->
                     gui_error:report_warning(
                         <<"Cannot create new group due to unknown error.">>)
@@ -284,11 +280,14 @@ group_user_permission_record(AssocId) ->
         value = #onedata_group{
             users = UsersAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+    UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
+    % @TODO remove to binary when Zbyszek has integrated his fix
+    UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
     PermsMapped = lists:map(
-        fun(GroupPerm) ->
-            HasPerm = lists:member(GroupPerm, UserPerms),
-            {perm_db_to_gui(GroupPerm), HasPerm}
+        fun(Perm) ->
+            % @TODO remove to binary when Zbyszek has integrated his fix
+            HasPerm = lists:member(str_utils:to_binary(Perm), UserPerms),
+            {perm_db_to_gui(Perm), HasPerm}
         end, privileges:group_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
@@ -313,11 +312,14 @@ group_group_permission_record(AssocId) ->
             nested_groups = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
     %% @todo wait for groups from zbyszek
-    GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
+    GroupPermsAtoms = proplists:get_value(ChildGroupId, GroupsAndPerms),
+    % @TODO remove to binary when Zbyszek has integrated his fix
+    GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
     PermsMapped = lists:map(
-        fun(GroupPerm) ->
-            HasPerm = lists:member(GroupPerm, GroupPerms),
-            {perm_db_to_gui(GroupPerm), HasPerm}
+        fun(Perm) ->
+            % @TODO remove to binary when Zbyszek has integrated his fix
+            HasPerm = lists:member(str_utils:to_binary(Perm), GroupPerms),
+            {perm_db_to_gui(Perm), HasPerm}
         end, privileges:group_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},

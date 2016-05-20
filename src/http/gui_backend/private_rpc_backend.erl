@@ -193,10 +193,12 @@ handle(<<"groupJoinGroup">>, Props) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case group_logic:join_group(UserAuth, ChildGroupId, Token) of
         {ok, ParentGroupId} ->
-            GroupRecord = group_data_backend:group_record(ParentGroupId),
-            GroupName = proplists:get_value(<<"name">>, GroupRecord),
-            gui_async:push_created(<<"group">>, GroupRecord, self()),
-            {ok, [{<<"groupName">>, GroupName}]};
+            ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
+            ChildGroupRecord = group_data_backend:group_record(ChildGroupId),
+            gui_async:push_updated(<<"group">>, ParentGroupRecord, self()),
+            gui_async:push_updated(<<"group">>, ChildGroupRecord, self()),
+            PrntGroupName = proplists:get_value(<<"name">>, ParentGroupRecord),
+            {ok, [{<<"groupName">>, PrntGroupName}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot join group due to unknown error.">>)

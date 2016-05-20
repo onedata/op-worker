@@ -115,13 +115,8 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
                 {ok, SpaceId} ->
-                    {ok, [
-                        {<<"id">>, SpaceId},
-                        {<<"name">>, Name},
-                        {<<"isDefault">>, false},
-                        {<<"userPermissions">>, []},
-                        {<<"groupPermissions">>, []}
-                    ]};
+                    SpaceRecord = space_record(SpaceId),
+                    {ok, SpaceRecord};
                 _ ->
                     gui_error:report_warning(
                         <<"Cannot create new space due to unknown error.">>)
@@ -307,10 +302,13 @@ space_user_permission_record(AssocId) ->
         value = #space_info{
             users = UsersAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+    UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
+    % @TODO remove to binary when Zbyszek has integrated his fix
+    UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
     PermsMapped = lists:map(
         fun(SpacePerm) ->
-            HasPerm = lists:member(SpacePerm, UserPerms),
+            % @TODO remove to binary when Zbyszek has integrated his fix
+            HasPerm = lists:member(str_utils:to_binary(SpacePerm), UserPerms),
             {perm_db_to_gui(SpacePerm), HasPerm}
         end, privileges:space_privileges()),
     PermsMapped ++ [
@@ -336,11 +334,14 @@ space_group_permission_record(AssocId) ->
         value = #space_info{
             groups = GroupsAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+    GroupPermsAtoms = proplists:get_value(GroupId, GroupsAndPerms),
+    % @TODO remove to binary when Zbyszek has integrated his fix
+    GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
     PermsMapped = lists:map(
-        fun(SpacePerm) ->
-            HasPerm = lists:member(SpacePerm, GroupPerms),
-            {perm_db_to_gui(SpacePerm), HasPerm}
+        fun(Perm) ->
+            % @TODO remove to binary when Zbyszek has integrated his fix
+            HasPerm = lists:member(str_utils:to_binary(Perm), GroupPerms),
+            {perm_db_to_gui(Perm), HasPerm}
         end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
