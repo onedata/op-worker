@@ -65,7 +65,7 @@ create(Client = {user, _}, Record) ->
     Name = Record#onedata_group.name,
     oz_users:create_group(Client, [
         {<<"name">>, Name},
-        {<<"type">>, undefined}
+        {<<"type">>, <<"undefined">>}
     ]).
 
 
