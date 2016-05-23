@@ -225,7 +225,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                     end
             catch
                 _:Reason ->
-                    ?error("Error while handling tree broadcast: ~p", [Reason]),
+                    ?error_stacktrace("Error while handling tree broadcast: ~p", [Reason]),
                     {error, Reason}
             end;
         true -> ok

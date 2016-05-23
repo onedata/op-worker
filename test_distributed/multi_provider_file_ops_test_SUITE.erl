@@ -389,11 +389,9 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
@@ -405,6 +403,7 @@ init_per_testcase(_, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->
+    tracer:stop(),
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),

@@ -332,7 +332,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
 do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch, ShouldRequest) ->
     ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
-    case CurrentUntil < Since of
+    case CurrentUntil + 1 < Since of
         true ->
             ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p", [FromProvider, SpaceId, CurrentUntil, Since]),
             stash_batch(FromProvider, SpaceId, Batch),
@@ -342,7 +342,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
                 false ->
                     ok
             end;
-        false when Until < CurrentUntil ->
+        false when Until =< CurrentUntil ->
             ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
             ok;
         false ->
