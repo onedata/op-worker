@@ -383,19 +383,13 @@ rename_bigger_then_quota_should_fail(Config) ->
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, [File3], File2))),
 
-    tracer:start([P1, _P2]),
-
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:rand_bytes(16))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:rand_bytes(12))),
     ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, File2), f(<<"space0">>, File2))),
-    tracer:trace_calls(space_quota, available_size),
-    tracer:trace_calls(space_quota, assert_write),
-    tracer:trace_calls(space_quota, soft_assert_write),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File1), f(<<"space0">>, File1))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3, File3], File2), 0, crypto:rand_bytes(8))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3], File2), 0, crypto:rand_bytes(2))),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File3), f(<<"space0">>, File3))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, [File3], File2), f(<<"space0">>, File2))),
 
     ok.
 
