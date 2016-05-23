@@ -280,13 +280,10 @@ group_user_permission_record(AssocId) ->
         value = #onedata_group{
             users = UsersAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
-    UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
-    % @TODO remove to binary when Zbyszek has integrated his fix
-    UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
+    UserPerms = proplists:get_value(UserId, UsersAndPerms),
     PermsMapped = lists:map(
         fun(Perm) ->
-            % @TODO remove to binary when Zbyszek has integrated his fix
-            HasPerm = lists:member(str_utils:to_binary(Perm), UserPerms),
+            HasPerm = lists:member(Perm, UserPerms),
             {perm_db_to_gui(Perm), HasPerm}
         end, privileges:group_privileges()),
     PermsMapped ++ [
@@ -311,14 +308,10 @@ group_group_permission_record(AssocId) ->
         value = #onedata_group{
             nested_groups = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
-    %% @todo wait for groups from zbyszek
-    GroupPermsAtoms = proplists:get_value(ChildGroupId, GroupsAndPerms),
-    % @TODO remove to binary when Zbyszek has integrated his fix
-    GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
+    GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(Perm) ->
-            % @TODO remove to binary when Zbyszek has integrated his fix
-            HasPerm = lists:member(str_utils:to_binary(Perm), GroupPerms),
+            HasPerm = lists:member(Perm, GroupPerms),
             {perm_db_to_gui(Perm), HasPerm}
         end, privileges:group_privileges()),
     PermsMapped ++ [
