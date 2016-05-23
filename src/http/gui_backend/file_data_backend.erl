@@ -75,7 +75,7 @@ find(<<"file">>, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"file">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
