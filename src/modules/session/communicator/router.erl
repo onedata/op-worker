@@ -50,37 +50,17 @@ route_proxy_message(#client_message{message_body = #events{events = Evts}} = Msg
 -spec preroute_message(Msg :: #client_message{} | #server_message{}, SessId :: session:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
 preroute_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
-    end;
+    sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_body = #message_acknowledgement{}} = Msg, SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
-    end;
+    sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
-    end;
+    sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true ->
-            ok;
-        false ->
-            sequencer:route_message(Msg, SessId)
-    end.
+    sequencer:route_message(Msg, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -136,12 +116,8 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     end;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription_cancellation{} = SubCan}) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true -> ok; %% Do not route subscription_calcelations from other providers
-        false ->
-            event:unsubscribe(SubCan, SessId),
-            ok
-    end;
+    event:unsubscribe(SubCan, SessId),
+    ok;
 % Message that updates the #auth{} record in given session (originates from
 % #'Token' client message).
 route_and_ignore_answer(#client_message{session_id = SessId,
