@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the data-space model used in Ember application.
+%%% the group model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(group_data_backend).
