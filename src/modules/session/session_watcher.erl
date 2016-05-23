@@ -146,7 +146,7 @@ handle_info(check_session_status, #state{session_id = SessId,
 handle_info(check_connections_status, #state{session_id = SessId, overloaded_connections = Conns} = State) ->
     NewConnsProplist = lists:foldl(
         fun({Pid, QueueLen}, AccIn) ->
-            case process_info(Pid, message_queue_len) of
+            case utils:process_info(Pid, message_queue_len) of
                 undefined ->
                     session:remove_connection(SessId, Pid),
                     AccIn;
@@ -169,7 +169,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
     {noreply, State#state{overloaded_connections = maps:from_list(NewConnsProplist)}, hibernate};
 
 handle_info({overloaded_connection, Pid}, State = #state{overloaded_connections = Connections}) ->
-    case process_info(Pid, message_queue_len) of
+    case utils:process_info(Pid, message_queue_len) of
         undefined ->
             {noreply, State, hibernate};
         {message_queue_len, QueueLen} ->
