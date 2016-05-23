@@ -784,9 +784,9 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     application:start(ssl2),
     hackney:start(),
+    initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -794,6 +794,7 @@ end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     tracer:start(Workers),
     lfm_proxy:teardown(Config),
+    initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     application:stop(ssl2).

@@ -130,9 +130,11 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:disable_quota_limit(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
+    initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config).
 

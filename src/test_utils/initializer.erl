@@ -32,6 +32,7 @@
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
 -export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
+-export([unload_quota_mocks/1, disable_quota_limit/1]).
 
 -record(user_config, {
     id :: onedata_user:id(),
@@ -443,6 +444,30 @@ disable_grpca_based_communication(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [oz_plugin, provider_auth_manager]).
 
+
+
+%%--------------------------------------------------------------------
+%% @doc Disables all quota checks. Should be unloaded via unload_quota_mocks/1.
+%%--------------------------------------------------------------------
+-spec disable_quota_limit(Config :: list()) -> ok.
+disable_quota_limit(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [space_quota]),
+    test_utils:mock_expect(Workers, space_quota, assert_write,
+        fun(_, _) -> ok end),
+    test_utils:mock_expect(Workers, space_quota, soft_assert_write,
+        fun(_, _) -> ok end),
+
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc Unloads space_quota mock.
+%%--------------------------------------------------------------------
+-spec unload_quota_mocks(Config :: list()) -> ok.
+unload_quota_mocks(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [space_quota]).
 
 
 %%%===================================================================
