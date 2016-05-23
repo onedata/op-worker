@@ -136,13 +136,16 @@ find_all_groups(_, _, 0) ->
     [];
 
 find_all_groups(UserAuth, UserId, MaxRetries) ->
-    {ok, GroupIds} = user_logic:get_effective_groups(UserAuth, UserId),
-    case GroupIds of
-        [] ->
+    {ok, GroupIds} = user_logic:get_groups(UserAuth, UserId),
+    {ok, EffGroupIds} = user_logic:get_effective_groups(UserAuth, UserId),
+    % Make sure that effective groups are synchronized - there should be at
+    % least as many as direct groups.
+    case length(EffGroupIds) < length(GroupIds) of
+        true ->
             timer:sleep(500),
             find_all_groups(UserAuth, UserId, MaxRetries - 1);
-        _ ->
-            GroupIds
+        false ->
+            EffGroupIds
     end.
 
 
