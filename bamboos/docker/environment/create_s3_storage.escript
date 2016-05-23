@@ -6,8 +6,9 @@ main([Cookie, Node, Name, HostName, BucketName, AccessKey, SecretKey, IAMRequest
   NodeAtom = list_to_atom(Node),
   Helper = safe_call(NodeAtom, fslogic_storage, new_helper_init, [<<"AmazonS3">>, #{
     <<"host_name">> => list_to_binary(HostName), <<"bucket_name">> => list_to_binary(BucketName),
-    <<"access_key">> => list_to_binary(AccessKey), <<"secret_key">> => list_to_binary(SecretKey),
-    <<"iam_host">> => list_to_binary(IAMHost), <<"iam_request_scheme">> => list_to_binary(IAMRequestScheme)}]),
+    <<"scheme">> => <<"http">>, <<"access_key">> => list_to_binary(AccessKey),
+    <<"secret_key">> => list_to_binary(SecretKey), <<"iam_host">> => list_to_binary(IAMHost),
+    <<"iam_request_scheme">> => list_to_binary(IAMRequestScheme)}]),
   Storage = safe_call(NodeAtom, fslogic_storage, new_storage, [list_to_binary(Name), [Helper]]),
   safe_call(NodeAtom, storage, create, [Storage]).
 
