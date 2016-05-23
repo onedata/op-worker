@@ -146,7 +146,12 @@ handle({clear_temp, Key}) ->
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
-    dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
+    case QueueKey of
+        global ->
+            dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0);
+        _ -> ok
+    end,
+
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
@@ -216,6 +221,8 @@ handle({dbsync_request, SessId, DBSyncRequest}) ->
 
 %% Handle stream crashes
 %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
+handle({'EXIT', _, stream_replaced}) ->
+    ok;
 handle({'EXIT', Stream, Reason}) ->
     case state_get(changes_stream) of
         Stream ->
@@ -231,15 +238,23 @@ handle({'EXIT', Stream, Reason}) ->
 handle({async_init_stream, undefined, Until, Queue}) ->
     handle({async_init_stream, 0, Until, Queue});
 handle({async_init_stream, Since, Until, Queue}) ->
+    CurrentStream = state_get(changes_stream),
     state_update(changes_stream, fun(OldStream) ->
-        case catch init_stream(Since, infinity, Queue) of
-            {ok, Pid} ->
-                    catch exit(OldStream, shutdown),
-                Pid;
-            Reason ->
-                ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
-                timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {timer, {async_init_stream, Since, Until, Queue}}),
-                undefined
+        case CurrentStream of
+            OldStream ->
+                case catch init_stream(Since, infinity, Queue) of
+                    {ok, Pid} ->
+                            catch exit(OldStream, stream_replaced),
+                        Pid;
+                    Reason ->
+                        ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
+                        timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {timer, {async_init_stream, Since, Until, Queue}}),
+                        undefined
+                end;
+            _ ->
+                ?info("Ignoring stream ~p restart request: stream has been changed since
+                        request was issued."),
+                OldStream
         end
     end);
 %% Unknown request
@@ -426,7 +441,7 @@ state_get(Key) ->
 -spec state_update(Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
     ok | no_return().
 state_update(Key, UpdateFun) when is_function(UpdateFun) ->
-    DoUpdate = fun() ->
+    DoUpdate = fun(_) ->
         OldValue = state_get(Key),
         NewValue = UpdateFun(OldValue),
         case OldValue of
@@ -440,9 +455,10 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
     DBSyncPid = whereis(?MODULE),
     case self() of
         DBSyncPid ->
-            DoUpdate();
+            DoUpdate(undefined);
         _ ->
-            datastore:run_synchronized(dbsync_state, term_to_binary(Key), DoUpdate)
+            %% Just run in worker_host's process on any key
+            worker_host:state_update(dbsync_worker, undefined, DoUpdate)
     end.
 
 
