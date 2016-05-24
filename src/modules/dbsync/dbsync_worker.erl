@@ -67,7 +67,7 @@ init(_Args) ->
     ?info("[ DBSync ]: Starting dbsync..."),
     Since = 0,
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
-    timer:send_after(timer:seconds(5), whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+    timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
     {ok, #{changes_stream => undefined}}.
 
@@ -238,7 +238,7 @@ handle({async_init_stream, Since, Until, Queue}) ->
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
-                timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {timer, {async_init_stream, Since, Until, Queue}}),
+                timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, Until, Queue}}),
                 undefined
         end
     end);
@@ -329,18 +329,36 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
 %%--------------------------------------------------------------------
 -spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean()) ->
     ok | no_return().
-do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch, ShouldRequest) ->
+do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest) ->
+    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, 3).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Apply whole batch of changes from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean(),
+    Attempts :: integer()) -> ok | no_return().
+do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch,
+    ShouldRequest, Attempts) ->
     ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil + 1 < Since of
         true ->
-            ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p", [FromProvider, SpaceId, CurrentUntil, Since]),
-            stash_batch(FromProvider, SpaceId, Batch),
-            case ShouldRequest of
+            ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p, attempt ~p",
+                [FromProvider, SpaceId, CurrentUntil, Since, Attempts]),
+            case Attempts > 1 of
                 true ->
-                    request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
-                false ->
-                    ok
+                    timer:sleep(500),
+                    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, Attempts - 1);
+                _ ->
+                    stash_batch(FromProvider, SpaceId, Batch),
+                    case ShouldRequest of
+                        true ->
+                            request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
+                        false ->
+                            ok
+                    end
             end;
         false when Until =< CurrentUntil ->
             ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
@@ -751,6 +769,6 @@ ensure_global_stream_active() ->
             end;
         false ->
             Since = state_get(global_resume_seq),
-            timer:send_after(0, whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+            timer:send_after(0, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
             ok
     end.

@@ -46,7 +46,7 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, true, 15).
+    synchronization_test_base(Config, <<"user1">>, true, 30).
 
 synchronization_test_base(Config, User, Multisupport, Attempts) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -65,6 +65,7 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
 
     Verify = fun(TestFun) ->
         lists:foldl(fun(W, Acc) ->
+            ct:print("qqqq ~p", [W]),
             [TestFun(W) | Acc]
         end, [], Workers)
     end,
