@@ -86,6 +86,7 @@ gen_storage_file_id(Entry) ->
     datastore:document() | no_return().
 get_local_file_location(Entry) -> %todo get rid of single file location and use get_local_file_locations/1
     [LocalLocation] = get_local_file_locations(Entry),
+    ?error("ppppp ~p", [{Entry, LocalLocation}]),
     LocalLocation.
 
 

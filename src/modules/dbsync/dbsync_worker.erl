@@ -330,7 +330,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
 -spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean()) ->
     ok | no_return().
 do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest) ->
-    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, 3).
+    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, 4).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -347,18 +347,24 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
         true ->
             ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p, attempt ~p",
                 [FromProvider, SpaceId, CurrentUntil, Since, Attempts]),
-            case Attempts > 1 of
-                true ->
-                    timer:sleep(500),
-                    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, Attempts - 1);
-                _ ->
+            case Attempts of
+                4 ->
                     stash_batch(FromProvider, SpaceId, Batch),
                     case ShouldRequest of
                         true ->
                             request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
                         false ->
                             ok
-                    end
+                    end;
+                _ ->
+                   ok
+            end,
+            case Attempts > 1 of
+                true ->
+                    timer:sleep(500),
+                    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, Attempts - 1);
+                _ ->
+                    ok
             end;
         false when Until =< CurrentUntil ->
             ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
