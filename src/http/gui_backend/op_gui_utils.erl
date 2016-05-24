@@ -13,7 +13,6 @@
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -22,7 +21,7 @@
 -export([ids_to_association/2, association_to_ids/1]).
 
 % @todo temporary solution, fix when subscriptions work better
--export([find_all_spaces/2]).
+-export([find_all_spaces/2, find_all_groups/2]).
 
 %%%===================================================================
 %%% API functions
@@ -77,7 +76,7 @@ association_to_ids(AssocId) ->
     when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
     DischargeMacaroons :: [macaroon:macaroon()]}}.
 find_all_spaces(UserAuth, UserId) ->
-    find_all_spaces(UserAuth, UserId, 500).
+    find_all_spaces(UserAuth, UserId, 100).
 
 
 %%--------------------------------------------------------------------
@@ -104,6 +103,49 @@ find_all_spaces(UserAuth, UserId, MaxRetries) ->
             find_all_spaces(UserAuth, UserId, MaxRetries - 1);
         _ ->
             SpaceIds
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of all group ids for given user. Blocks until the groups
+%% are synchronized (by repetitive polling).
+% @todo temporary solution, fix when subscriptions work better
+%% @end
+%%--------------------------------------------------------------------
+-spec find_all_groups(UserAuth, UserId :: binary()) -> [SpaceId :: binary()]
+    when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
+    DischargeMacaroons :: [macaroon:macaroon()]}}.
+find_all_groups(UserAuth, UserId) ->
+    find_all_groups(UserAuth, UserId, 100).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of all group ids for given user. Blocks until the groups
+%% are synchronized (by repetitive polling).
+%% Retries up to given amount of times. Retries every 500 milliseconds.
+% @todo temporary solution, fix when subscriptions work better
+%% @end
+%%--------------------------------------------------------------------
+-spec find_all_groups(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary()] when UserAuth :: {user, {
+    Macaroon :: macaroon:macaroon(),
+    DischargeMacaroons :: [macaroon:macaroon()]}}.
+find_all_groups(_, _, 0) ->
+    [];
+
+find_all_groups(UserAuth, UserId, MaxRetries) ->
+    {ok, GroupIds} = user_logic:get_groups(UserAuth, UserId),
+    {ok, EffGroupIds} = user_logic:get_effective_groups(UserAuth, UserId),
+    % Make sure that effective groups are synchronized - there should be at
+    % least as many as direct groups.
+    case length(EffGroupIds) < length(GroupIds) of
+        true ->
+            timer:sleep(500),
+            find_all_groups(UserAuth, UserId, MaxRetries - 1);
+        false ->
+            EffGroupIds
     end.
 
 
