@@ -46,15 +46,20 @@
 %% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
   Storage :: datastore:document(), FileId :: helpers:file()) ->
     handle().
 new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
     FSize =
-        case catch fslogic_blocks:get_file_size({uuid, FileUUID}) of
-            Size when is_integer(Size) ->
-                Size;
-            _ -> 0
+        case FileUUID of
+            undefined ->
+                0;
+            _ ->
+                case catch fslogic_blocks:get_file_size({uuid, FileUUID}) of
+                    Size when is_integer(Size) ->
+                        Size;
+                    _ -> 0
+                end
         end,
     #sfm_handle{
         session_id = SessionId,
