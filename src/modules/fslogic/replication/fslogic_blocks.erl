@@ -23,12 +23,25 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
+-export([merge/2, aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
     lower/1, calculate_file_size/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Merges given blocks to one blocks list. Blocks from he first list override
+%% blocks with the same ranges from second list. This function returns
+%% consolidated list.
+%% @end
+%%--------------------------------------------------------------------
+-spec merge(blocks(), blocks()) -> blocks().
+merge(Blocks1, Blocks2) ->
+    NewBlocks = fslogic_blocks:invalidate(Blocks2, Blocks1) ++ Blocks1,
+    fslogic_blocks:consolidate(lists:sort(NewBlocks)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -46,6 +59,7 @@ aggregate(Blocks, []) ->
 
 aggregate(Blocks1, Blocks2) ->
     aggregate_blocks(Blocks1, Blocks2, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,7 +117,7 @@ get_file_size(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Internal impl. of invalidate/2
+%% Invalidates second list's blocks in first list.
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate(blocks(), blocks() | block()) -> blocks().

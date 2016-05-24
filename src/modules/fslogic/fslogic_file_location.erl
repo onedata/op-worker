@@ -78,7 +78,7 @@ get_merged_changes(Doc, N) ->
         (_) -> true
     end, Changes),
     AggregatedBlocks = lists:foldl(fun(Blocks, Acc) ->
-        aggregate(Acc, Blocks)
+        fslogic_blocks:merge(Blocks, Acc)
     end, [], BlockChanges),
     {AggregatedBlocks, Shrink}.
 
@@ -177,13 +177,3 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Aggregates and consolidates given blocks lists.
-%% @end
-%%--------------------------------------------------------------------
--spec aggregate(fslogic_blocks:blocks(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
-aggregate(Blocks1, Blocks2) ->
-    AggregatedBlocks = fslogic_blocks:invalidate(Blocks1, Blocks2) ++ Blocks2,
-    fslogic_blocks:consolidate(lists:sort(AggregatedBlocks)).
