@@ -77,8 +77,29 @@ send_message(Msg, StmId, Ref) ->
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: term(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
-route_message(#client_message{} = Msg, Ref) ->
+route_message(#client_message{session_id = From, proxy_session_id = ProxySessionId, message_body = MsgBody} = Msg, Ref) ->
+    case {session_manager:is_provider_session_id(From), is_binary(ProxySessionId)} of
+        {true, true} ->
+            ProviderId = session_manager:session_id_to_provider_id(From),
+            SequencerSessionId = session_manager:get_provider_session_id(outgoing, ProviderId),
+            provider_communicator:ensure_connected(SequencerSessionId),
+            send_to_sequencer_manager(Msg, SequencerSessionId);
+        {true, false} ->
+            ok;
+        {false, _} ->
+            send_to_sequencer_manager(Msg, From)
+    end;
+route_message(Msg, Ref) ->
     send_to_sequencer_manager(Msg, Ref).
+
+message_to_direction(#message_acknowledgement{}) ->
+    outgoing;
+message_to_direction(#message_request{}) ->
+    outgoing;
+message_to_direction(#message_request{}) ->
+    outgoing;
+message_to_direction(_) ->
+    incoming.
 
 
 -spec term_to_stream_id(term()) -> stream_id().

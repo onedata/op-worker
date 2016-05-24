@@ -53,7 +53,7 @@ init([SessId, SessType]) ->
     SupFlags = #{strategy => one_for_all, intensity => 0, period => 1},
     {ok, SessId} = session:update(SessId, #{supervisor => self(), node => node()}),
 
-    SequencerEnabled = [fuse, provider, provider_outgoing],
+    SequencerEnabled = [fuse, provider_outgoing],
 
     case lists:member(SessType, SequencerEnabled) of
         true ->

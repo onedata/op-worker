@@ -20,6 +20,7 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -133,25 +134,48 @@ handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
 
 handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
-    HandleLocally = fun
-        (NewProvMap, false) ->
-            {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:map(fun(_, EvtStm) ->
-                gen_server:cast(EvtStm, Evt),
-                EvtStm
-            end, EvtStms)}};
-        (NewProvMap, true) ->
-            {noreply, State#state{entry_to_provider_map = NewProvMap}}
-    end,
+    HandleLocally =
+        fun
+            (NewProvMap, false) ->
+                {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:map(
+                    fun(_, EvtStm) ->
+                        gen_server:cast(EvtStm, Evt),
+                        EvtStm
+                    end, EvtStms)}};
+            (NewProvMap, true) ->
+                {noreply, State#state{entry_to_provider_map = NewProvMap}}
+        end,
 
     handle_or_reroute(#events{events = [Evt]}, request_to_file_entry_or_provider(Evt), SessId, HandleLocally, ProvMap);
 
+handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, notify = NotifyFun} = Evt,
+    #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
+    ?debug("Handling event ~p in session ~p", [Evt, SessId]),
+    HandleLocally =
+        fun
+            (NewProvMap, false) ->
+                case maps:find(SubId, EvtStms) of
+                    {ok, Stm} ->
+                        gen_server:cast(Stm, {flush, NotifyFun});
+                    error ->
+                        ?warning("Event stream flush error: stream for subscription ~p and "
+                        "session ~p not found", [SubId, SessId])
+                end,
+                {noreply, State#state{entry_to_provider_map = NewProvMap}};
+            (NewProvMap, true) ->
+                {noreply, State#state{entry_to_provider_map = NewProvMap}}
+        end,
+
+    handle_or_reroute(Evt, {provider, ProviderId}, SessId, HandleLocally, ProvMap);
+
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
-    HandleLocally = fun(NewProvMap, _) ->
-        ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
-        {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-        {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:put(SubId, EvtStm, EvtStms)}}
-    end,
+    HandleLocally =
+        fun(NewProvMap, _) ->
+            ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
+            {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
+            {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:put(SubId, EvtStm, EvtStms)}}
+        end,
 
     handle_or_reroute(Sub, request_to_file_entry_or_provider(Sub), SessId, HandleLocally, ProvMap);
 
@@ -234,7 +258,7 @@ start_event_streams(EvtStmSup, SessId) ->
     lists:foldl(fun(#document{key = SubId, value = Sub}, Stms) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
         maps:put(SubId, EvtStm, Stms)
-    end, #{}, Docs).
+                end, #{}, Docs).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -272,6 +296,32 @@ request_to_file_entry_or_provider(_) ->
     HandleLocallyFun :: fun((NewProvMap :: #{}, IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
 handle_or_reroute(_, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(ProvMap, false);
+handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage, {provider, ProviderId}, SessId, HandleLocallyFun, ProvMap) ->
+    {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
+    case oneprovider:get_provider_id() of
+        ProviderId ->
+            HandleLocallyFun(ProvMap, false);
+        _ ->
+            ClientMsg =
+                #client_message{
+                    message_stream = #message_stream{stream_id = sequencer:term_to_stream_id(Context)},
+                    message_body = RequestMessage,
+                    proxy_session_id = SessId,
+                    proxy_session_auth = Auth
+                },
+            Ref = session_manager:get_provider_session_id(outgoing, ProviderId),
+            RequestTranslator = spawn(
+                fun() ->
+                    receive
+                        #server_message{message_body = #status{}} = Msg ->
+                            NotifyFun(Msg)
+                    after timer:minutes(10) ->
+                        ok
+                    end
+                end),
+            provider_communicator:communicate_async(ClientMsg, Ref, RequestTranslator),
+            HandleLocallyFun(ProvMap, true)
+    end;
 handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
     {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
     SpacesDir = fslogic_uuid:spaces_uuid(UserId),
@@ -281,15 +331,15 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
         {ok, FileUUID} ->
             CurrentTime = erlang:system_time(seconds),
             {NewProvMap, ProviderIdsFinal} =
-                    case maps:get(Entry, ProvMap, undefined) of
-                        {CachedTime, Mapped} when CachedTime + ?ENTRY_TO_PROVIDER_MAPPING_CACHE_LIFETIME_SECONDS > CurrentTime ->
-                            {ProvMap, Mapped};
-                        _ ->
-                            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
-                            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                            RestClient = fslogic_utils:session_to_rest_client(SessId),
-                            {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(RestClient, SpaceId, UserId),
-                            {maps:put(Entry, {erlang:system_time(seconds), ProviderIds}, ProvMap), ProviderIds}
+                case maps:get(Entry, ProvMap, undefined) of
+                    {CachedTime, Mapped} when CachedTime + ?ENTRY_TO_PROVIDER_MAPPING_CACHE_LIFETIME_SECONDS > CurrentTime ->
+                        {ProvMap, Mapped};
+                    _ ->
+                        {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
+                        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+                        RestClient = fslogic_utils:session_to_rest_client(SessId),
+                        {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(RestClient, SpaceId, UserId),
+                        {maps:put(Entry, {erlang:system_time(seconds), ProviderIds}, ProvMap), ProviderIds}
                 end,
             case {ProviderIdsFinal, lists:member(oneprovider:get_provider_id(), ProviderIdsFinal)} of
                 {_, true} ->

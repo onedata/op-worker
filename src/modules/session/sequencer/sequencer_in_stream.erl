@@ -46,6 +46,7 @@
 %%                        waiting to be forwarded
 -record(state, {
     session_id :: session:id(),
+    proxy_session_id :: session:id(),
     sequencer_manager :: pid(),
     stream_id :: stream_id(),
     sequence_number = 0 :: sequence_number(),
@@ -93,8 +94,8 @@ init([SeqMan, StmId, SessId]) ->
     ?debug("Initializing sequencer in stream for session ~p", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
-    {ok, #document{value = #session{type = SessionType}}} = session:get(SessId),
-    IsProxy = SessionType =:= provider orelse SessionType =:= provider_outgoing,
+    {ok, #document{value = #session{type = SessionType, proxy_via = ProxyVia}}} = session:get(SessId),
+    IsProxy = SessionType =:= provider orelse SessionType =:= provider_outgoing orelse ProxyVia =/= undefined,
     send_message_stream_reset(StmId, SessId, IsProxy),
     {ok, receiving, #state{
         sequencer_manager = SeqMan,
@@ -338,6 +339,8 @@ send_message_stream_reset(StmId, SessId, IsProxy) ->
 -spec send_message_acknowledgement(State :: #state{}) -> NewState :: #state{}.
 send_message_acknowledgement(#state{sequence_number = SeqNum,
     sequence_number_ack = SeqNumAck} = State) when SeqNum == SeqNumAck + 1 ->
+    State;
+send_message_acknowledgement(#state{sequence_number = SeqNum} = State) when SeqNum < 1 ->
     State;
 
 send_message_acknowledgement(#state{stream_id = StmId, sequence_number = SeqNum,

@@ -406,7 +406,7 @@ get_auth(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_rest_session_id(session:identity()) -> id().
 get_rest_session_id(#identity{user_id = Uid}) ->
-    <<Uid/binary, "_rest_session">>.
+    <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
 
 %%%===================================================================
 %%% Internal functions

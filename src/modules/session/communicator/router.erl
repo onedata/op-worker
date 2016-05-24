@@ -25,6 +25,7 @@
 
 %% API
 -export([preroute_message/2, route_message/1, route_proxy_message/2]).
+-export([effective_session_id/1]).
 
 %%%===================================================================
 %%% API
@@ -56,6 +57,14 @@ preroute_message(#client_message{message_body = #message_acknowledgement{}} = Ms
 preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_body = #message_stream_reset{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
+preroute_message(#server_message{message_body = #message_request{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
+preroute_message(#server_message{message_body = #message_acknowledgement{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
+preroute_message(#server_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
+preroute_message(#server_message{message_body = #message_stream_reset{}} = Msg, SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
@@ -119,40 +128,34 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 %% @end
 %%--------------------------------------------------------------------
 -spec route_and_ignore_answer(#client_message{}) -> ok.
-route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #event{} = Evt}) ->
-    event:emit(Evt, SessId),
+route_and_ignore_answer(#client_message{message_body = #event{} = Evt} = Msg) ->
+    event:emit(Evt, effective_session_id(Msg)),
     ok;
-route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #events{events = Evts}}) ->
-    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, SessId) end, Evts),
+route_and_ignore_answer(#client_message{message_body = #events{events = Evts}} = Msg) ->
+    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, effective_session_id(Msg)) end, Evts),
     ok;
-route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #subscription{} = Sub}) ->
-    case session_manager:is_provider_session_id(SessId) of
+route_and_ignore_answer(#client_message{message_body = #subscription{} = Sub} = Msg) ->
+    case session_manager:is_provider_session_id(effective_session_id(Msg)) of
         true -> ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
         false ->
-            event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId),
+            event:subscribe(event_utils:inject_event_stream_definition(Sub), effective_session_id(Msg)),
             ok
     end;
-route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #subscription_cancellation{} = SubCan}) ->
-    case session_manager:is_provider_session_id(SessId) of
-        true -> ok; %% Do not route subscription_calcelations from other providers
+route_and_ignore_answer(#client_message{message_body = #subscription_cancellation{} = SubCan} = Msg) ->
+    case session_manager:is_provider_session_id(effective_session_id(Msg)) of
+        true -> ok; %% Do not route subscription_cancellations from other providers
         false ->
-            event:unsubscribe(SubCan, SessId),
+            event:unsubscribe(SubCan, effective_session_id(Msg)),
             ok
     end;
 % Message that updates the #auth{} record in given session (originates from
 % #'Token' client message).
-route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #auth{} = Auth}) ->
+route_and_ignore_answer(#client_message{message_body = #auth{} = Auth} = Msg) ->
     % This function performs an async call to session manager worker.
-    {ok, SessId} = session:update(SessId, #{auth => Auth}),
+    {ok, SessId} = session:update(effective_session_id(Msg), #{auth => Auth}),
     ok;
-route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #fuse_request{} = FuseRequest}) ->
-    ok = worker_proxy:cast(fslogic_worker, {fuse_request, SessId, FuseRequest}).
+route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->
+    ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -162,34 +165,42 @@ route_and_ignore_answer(#client_message{session_id = SessId,
 %%--------------------------------------------------------------------
 -spec route_and_send_answer(#client_message{}) ->
     ok | {ok, #server_message{}} | {error, term()}.
+route_and_send_answer(#client_message{session_id = OriginSessId, message_id = MsgId,
+    message_body = #flush_events{} = FlushMsg} = Msg) ->
+    event:flush(FlushMsg#flush_events{notify =
+        fun(Result) ->
+            communicator:send(Result#server_message{message_id = MsgId}, OriginSessId)
+        end
+    }, effective_session_id(Msg)),
+    ok;
 route_and_send_answer(#client_message{message_id = Id,
     message_body = #ping{data = Data}}) ->
     {ok, #server_message{message_id = Id, message_body = #pong{data = Data}}};
 route_and_send_answer(#client_message{message_id = Id,
     message_body = #get_protocol_version{}}) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
-route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId,
     message_body = #get_configuration{}}) ->
     spawn(fun() ->
         Configuration = fuse_config_manager:get_configuration(),
         communicator:send(#server_message{
             message_id = Id, message_body = Configuration
-        }, SessId)
+        }, OriginSessId)
     end),
     ok;
-route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #fuse_request{} = FuseRequest}) ->
     Connection = self(),
-    ?debug("Fuse request: ~p ~p", [FuseRequest, SessId]),
+    ?debug("Fuse request: ~p ~p", [FuseRequest, effective_session_id(Msg)]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
         ?debug("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
-        }, Connection)
+        }, OriginSessId)
     end),
     ok;
-route_and_send_answer(Msg = #client_message{message_id = Id, session_id = _SessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
     Connection = self(),
@@ -199,20 +210,21 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = _SessI
 
         ?debug("ProxyIO response ~p", [ProxyIOResponse]),
         communicator:send(#server_message{message_id = Id,
-            message_body = ProxyIOResponse}, Connection)
+            message_body = ProxyIOResponse
+        }, OriginSessId)
     end),
     ok;
-route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
-    message_body = #dbsync_request{} = DBSyncRequest}) ->
+route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId,
+    message_body = #dbsync_request{} = DBSyncRequest} = Msg) ->
     ?debug("DBSync request ~p", [DBSyncRequest]),
     Connection = self(),
     spawn(fun() ->
         DBSyncResponse = worker_proxy:call(dbsync_worker,
-            {dbsync_request, SessId, DBSyncRequest}),
+            {dbsync_request, effective_session_id(Msg), DBSyncRequest}),
 
         ?debug("DBSync response ~p", [DBSyncResponse]),
         communicator:send(#server_message{message_id = Id,
-            message_body = DBSyncResponse}, Connection)
+            message_body = DBSyncResponse}, OriginSessId)
     end),
     ok.
 

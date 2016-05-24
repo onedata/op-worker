@@ -57,6 +57,7 @@ get_file_path(Ctx, FileUUID) ->
 -spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
     #fuse_response{} | no_return().
 fsync(Ctx, _FileUUID) ->
+    timer:sleep(timer:seconds(2)),
     SessId = fslogic_context:get_session_id(Ctx),
     event:flush(?FSLOGIC_SUB_ID, self(), SessId),
     receive

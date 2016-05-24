@@ -15,10 +15,11 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit/1, emit/2, flush/2, flush/3, subscribe/1, subscribe/2,
+-export([emit/1, emit/2, flush/2, flush/4, flush/5, subscribe/1, subscribe/2,
     unsubscribe/1, unsubscribe/2]).
 
 -export_type([key/0, object/0, update_object/0, counter/0, subscription/0,
@@ -77,9 +78,20 @@ emit(EvtObject, Ref) ->
 %% IMPORTANT! Event handler is responsible for notifying the awaiting process.
 %% @end
 %%--------------------------------------------------------------------
--spec flush(SubId :: subscription:id(), Notify :: pid()) -> ok.
-flush(SubId, Notify) ->
-    send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers()).
+-spec flush(#flush_events{}, Ref :: event:manager_ref()) -> ok.
+flush(#flush_events{} = FlushMsg, Ref) ->
+    send_to_event_managers(FlushMsg, get_event_managers(as_list(Ref))).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes all event streams associated with a subscription. Injects PID of a process,
+%% which should be notified when operation completes, to the event handler context.
+%% IMPORTANT! Event handler is responsible for notifying the awaiting process.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush(ProviderId :: oneprovider:id(), Context :: term(), SubId :: subscription:id(), Notify :: pid()) -> term().
+flush(ProviderId, Context, SubId, Notify) ->
+    flush(ProviderId, Context, SubId, Notify, get_event_managers()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -89,9 +101,20 @@ flush(SubId, Notify) ->
 %% IMPORTANT! Event handler is responsible for notifying the awaiting process.
 %% @end
 %%--------------------------------------------------------------------
--spec flush(SubId :: subscription:id(), Notify :: pid(), Ref :: event:manager_ref()) -> ok.
-flush(SubId, Notify, Ref) ->
-    send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers(as_list(Ref))).
+-spec flush(ProviderId :: oneprovider:id(), Context :: term(), SubId :: subscription:id(), Notify :: pid(), Ref :: event:manager_ref()) -> term().
+flush(ProviderId, Context, SubId, Notify, Ref) ->
+    RecvRef = make_ref(),
+    ok = send_to_event_managers(#flush_events{
+        provider_id = ProviderId, subscription_id = SubId,
+        context = Context,
+        notify = fun
+                     (#server_message{message_body = #status{code = ?OK}}) ->
+                         Notify ! {RecvRef, ok};
+                     (#server_message{message_body = #status{code = Code}}) ->
+                         Notify ! {RecvRef, {error, Code}}
+                 end
+    }, get_event_managers(as_list(Ref))),
+    RecvRef.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -218,7 +241,7 @@ get_event_managers(Refs) ->
             {ok, EvtMan} -> [EvtMan | EvtMans];
             {error, _} -> EvtMans
         end
-    end, [], Refs).
+                end, [], Refs).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -231,12 +254,12 @@ get_event_managers() ->
     case session:get_event_managers() of
         {ok, Refs} ->
             lists:foldl(fun
-                ({ok, EvtMan}, EvtMans) ->
-                    [EvtMan | EvtMans];
-                ({error, {not_found, SessId}}, EvtMans) ->
-                    ?warning("Cannot get event manager for session ~p due to: missing", [SessId]),
-                    EvtMans
-            end, [], Refs);
+                            ({ok, EvtMan}, EvtMans) ->
+                                [EvtMan | EvtMans];
+                            ({error, {not_found, SessId}}, EvtMans) ->
+                                ?warning("Cannot get event manager for session ~p due to: missing", [SessId]),
+                                EvtMans
+                        end, [], Refs);
         {error, Reason} ->
             ?warning("Cannot get event managers due to: ~p", [Reason]),
             []
@@ -253,7 +276,7 @@ get_event_managers() ->
 filter_event_managers(EvtMans, ExcludedEvtMans) ->
     lists:filter(fun(EvtMan) ->
         not sets:is_element(EvtMan, ExcludedEvtMans)
-    end, EvtMans).
+                 end, EvtMans).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -266,7 +289,7 @@ filter_event_managers(EvtMans, ExcludedEvtMans) ->
 send_to_event_managers(Msg, EvtMans) ->
     lists:foreach(fun(EvtMan) ->
         gen_server:cast(EvtMan, Msg)
-    end, EvtMans).
+                  end, EvtMans).
 
 %%--------------------------------------------------------------------
 %% @private

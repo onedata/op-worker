@@ -410,7 +410,7 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
                 ProxySessionId = ProxySessionId0,
                 ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
-                {Msg0#client_message{session_id = ProxySessionId}, ProxySessionId};
+                {Msg0, ProxySessionId};
             _ ->
                 {Msg0, SessId}
         end,

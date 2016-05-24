@@ -309,7 +309,7 @@ get_sequencer_out_stream(StmId, #state{session_id = SessId,
 -spec get_or_create_sequencer_out_stream(Msg :: #client_message{},
     State :: #state{}) -> {ok, SeqStm :: pid(), NewState :: #state{}}.
 get_or_create_sequencer_out_stream(#client_message{message_stream = #message_stream{
-    stream_id = StmId}}, #state{sequencer_in_streams = Stms} = State) ->
+    stream_id = StmId}}, #state{sequencer_out_streams = Stms} = State) ->
     case maps:find(StmId, Stms) of
         {ok, SeqStm} -> {ok, SeqStm, State};
         error -> create_sequencer_out_stream(StmId, State)

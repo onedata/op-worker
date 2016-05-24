@@ -29,6 +29,14 @@
     events = [] :: [#event{}]
 }).
 
+%% definition of a events container
+-record(flush_events, {
+    provider_id :: oneprovider:id(),
+    subscription_id :: subscription:id(),
+    context :: term(),
+    notify :: fun((term()) -> ok)
+}).
+
 %% definition of an event associated with a read operation in the file system
 %% file_uuid - UUID of a file associated with the read operation
 %% size      - number of bytes read

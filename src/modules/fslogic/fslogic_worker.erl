@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/events/definitions.hrl").
@@ -390,7 +391,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     end, Evts),
 
     case Ctx of
-        #{notify := Pid} -> Pid ! {handler_executed, Results};
+        #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?OK}});
         _ -> ok
     end,
 

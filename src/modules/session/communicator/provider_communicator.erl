@@ -82,8 +82,8 @@ send(StmId, #client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infini
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of
-                infinity -> communicator:send(Msg, Ref, Retry);
-                _ -> communicator:send(Msg, Ref, Retry - 1)
+                infinity -> provider_communicator:send(StmId, Msg, Ref, Retry);
+                _ -> provider_communicator:send(StmId, Msg, Ref, Retry - 1)
             end
     end;
 send(StmId, #client_message{} = Msg, Ref, 1) ->
@@ -149,7 +149,14 @@ communicate_async(Msg, Ref) ->
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
 communicate_async(#client_message{} = Msg, Ref, Recipient) ->
     {ok, MsgId} = message_id:generate(Recipient, client),
-    case send(Msg#client_message{message_id = MsgId}, Ref) of
+    NewMsg = Msg#client_message{message_id = MsgId},
+    DoSend = case Msg of
+        #client_message{message_stream = #message_stream{stream_id = StmId}} when is_integer(StmId) ->
+            fun() -> send(StmId, NewMsg, Ref, 2) end;
+        _ ->
+            fun() -> send(NewMsg, Ref, 2) end
+    end,
+    case DoSend() of
         ok -> {ok, MsgId};
         {error, Reason} -> {error, Reason}
     end;
@@ -171,10 +178,15 @@ communicate_async(Msg, Ref, Recipient) ->
 ensure_connected(Conn) when is_pid(Conn) ->
     ok;
 ensure_connected(SessId) ->
-    ProviderId = session_manager:session_id_to_provider_id(SessId),
     case session:get_random_connection(SessId, true) of
         {error, _} ->
             %% @todo: use OZ subscription based solution when available
+            ProviderId = case session:get(SessId) of
+                             {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
+                                 ProxyVia;
+                             _ ->
+                                 session_manager:session_id_to_provider_id(SessId)
+                         end,
             URLs = dbsync_utils:get_provider_urls(ProviderId),
             lists:foreach(
                 fun(URL) ->

@@ -42,11 +42,22 @@
 reroute(#fslogic_ctx{session_id = SessionId}, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
     {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
+
+    MessageStream =
+        case Request of
+            #fuse_request{fuse_request = #fsync{uuid = FileGUID}} ->
+
+                #message_stream{stream_id = sequencer:term_to_stream_id(fslogic_uuid:file_guid_to_uuid(FileGUID))};
+            _ ->
+                undefined
+        end,
+
     {ok, #server_message{message_body = MsgBody}} =
         provider_communicator:communicate(#client_message{
             message_body = Request,
             proxy_session_id = SessionId,
-            proxy_session_auth = Auth
+            proxy_session_auth = Auth,
+            message_stream = MessageStream
         }, session_manager:get_provider_session_id(outgoing, ProviderId)),
     MsgBody.
 
