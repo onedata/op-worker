@@ -17,7 +17,8 @@
 
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
-    emit_file_location_update/2, emit_permission_changed/1, emit_file_removal/1]).
+    emit_file_location_update/2, emit_file_location_update/3,
+    emit_permission_changed/1, emit_file_removal/1]).
 
 %%%===================================================================
 %%% API
@@ -65,18 +66,64 @@ emit_file_sizeless_attrs_update(FileEntry) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Sends current file location to all subscribers except for the ones present
-%% in 'ExcludedSessions' list.
-%% @end
+%% @equiv emit_file_location_update(FileEntry, ExcludedSessions, undefined)
 %%--------------------------------------------------------------------
 -spec emit_file_location_update(fslogic_worker:file(), [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_location_update(FileEntry, ExcludedSessions) ->
+    emit_file_location_update(FileEntry, ExcludedSessions, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends current file location to all subscribers except for the ones present
+%% in 'ExcludedSessions' list. The given range tells what range is requested,
+%% so we may fill the gaps within, id defaults to whole file.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_location_update(fslogic_worker:file(), [session:id()], fslogic_blocks:block() | undefined) ->
+    ok | {error, Reason :: term()}.
+emit_file_location_update(FileEntry, ExcludedSessions, Range) ->
     try
+        % get locations
         {ok, #document{} = File} = file_meta:get(FileEntry),
-        #document{value = #file_location{uuid = FileUuid} = FileLocation} = fslogic_utils:get_local_file_location(File),
-        event:emit(#event{object = #update_event{object = file_location:ensure_blocks_not_empty(FileLocation#file_location{uuid = fslogic_uuid:to_file_guid(FileUuid)})}},
+        {ok, LocationIds} = file_meta:get_locations(File),
+        Locations = lists:map(
+            fun(LocId) ->
+                {ok, Location} = file_location:get(LocId),
+                Location
+            end, LocationIds),
+        [FileLocationDoc = #document{value = FileLocation = #file_location{blocks = Blocks, uuid = FileUuid, size = Size}}] =
+            lists:filter(
+                fun(#document{value = #file_location{provider_id = ProviderId}}) ->
+                    ProviderId =:= oneprovider:get_provider_id()
+                end, Locations),
+
+        % find gaps
+        AllRanges = lists:foldl(
+            fun(#document{value = #file_location{blocks = Blocks}}, Acc) ->
+                fslogic_blocks:merge(Acc, Blocks)
+            end, [], Locations),
+        RequestedRange = utils:ensure_defined(Range, undefined, #file_block{offset = 0, size = Size}),
+        ExtendedRequestedRange = case RequestedRange of
+            #file_block{offset = O, size = S} when O + S < Size ->
+                RequestedRange#file_block{size = Size - O};
+            _ -> RequestedRange
+        end,
+        FullFile = replica_updater:fill_blocks_with_storage_info(
+            [ExtendedRequestedRange], FileLocationDoc),
+        Gaps = fslogic_blocks:consolidate(
+            fslogic_blocks:invalidate(FullFile, AllRanges)
+        ),
+        BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
+
+        % fill gaps, fill storage info, transform uid and emit
+        LocationToSend = file_location:ensure_blocks_not_empty(
+            FileLocation#file_location{
+                uuid = fslogic_uuid:to_file_guid(FileUuid),
+                blocks = BlocksWithFilledGaps
+            }),
+        event:emit(#event{object = #update_event{
+            object = LocationToSend}},
             {exclude, ExcludedSessions})
     catch
         _:Reason ->
