@@ -84,7 +84,7 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
     Level3Dir = <<Level2Dir/binary, "/", (generator:gen_name())/binary>>,
     Level4Files = lists:map(fun(Num) ->
         {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
-    end, lists:seq(1,100)),
+    end, lists:seq(1,50)),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Dir, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Level2Dir, 8#755)),
@@ -397,7 +397,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    ct:timetrap({minutes, 30}),
+    ct:timetrap({minutes, 60}),
     application:start(ssl2),
     hackney:start(),
     initializer:enable_grpca_based_communication(Config),
