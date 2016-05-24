@@ -77,6 +77,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     Verify = fun(TestFun) ->
         lists:foldl(fun(W, Acc) ->
+            ct:print("bbbb ~p", [W]),
             [TestFun(W) | Acc]
         end, [], Workers)
     end,
@@ -101,6 +102,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Level2Dir, 8#755)),
 
     VerifyStats = fun(File, IsDir) ->
+        ct:print("aaaa ~p", [{File, IsDir}]),
         VerAns = Verify(fun(W) ->
             case IsDir of
                 true ->
