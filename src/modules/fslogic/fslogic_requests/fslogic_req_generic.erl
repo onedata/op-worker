@@ -108,7 +108,7 @@ chmod(CTX, FileEntry, Mode) ->
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
-    fslogic_times:update_mtime_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
+    fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
     spawn(
         fun() ->
             fslogic_event:emit_permission_changed(FileUuid)
@@ -143,7 +143,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
             ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
-            Size = fslogic_blocks:get_file_size(File),
+            Size = fslogic_blocks:get_file_size(FileDoc),
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
@@ -152,7 +152,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 StorageType = luma_utils:get_storage_type(StorageId),
                 {fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID), SId}
             catch
-                throw:{not_a_space, _} -> {?ROOT_POSIX_CTX, undefined}
+                % TODO (VFS-2024) - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
+                _:_ -> {?ROOT_POSIX_CTX, undefined}
             end,
             FinalUID = case  session:get(SessId) of
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
@@ -456,32 +457,37 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
             ?DIRECTORY_TYPE ->
                 file_meta:list_children(FileDoc, 0, 1);
             ?REGULAR_FILE_TYPE ->
-                #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
-                ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
-                Results =
-                    lists:map( %% @todo: run this via task manager
-                        fun({StorageId, FileId}) ->
-                            case storage:get(StorageId) of
-                                {ok, Storage} ->
-                                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
-                                    case storage_file_manager:unlink(SFMHandle) of
-                                        ok -> ok;
-                                        {error, Reason1} ->
-                                            {{StorageId, FileId}, {error, Reason1}}
-                                    end ;
-                                {error, Reason2} ->
-                                    {{StorageId, FileId}, {error, Reason2}}
-                            end
-                        end, ToDelete),
-                case Results -- [ok] of
-                    [] -> ok;
-                    Errors ->
-                        lists:foreach(
-                            fun({{SID0, FID0}, {error, Reason0}}) ->
-                                ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
-                            end, Errors)
-                end,
-                {ok, []};
+                case catch fslogic_utils:get_local_file_location(File) of
+                    #document{value = #file_location{} = Location} ->
+                        ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
+                        Results =
+                            lists:map( %% @todo: run this via task manager
+                                fun({StorageId, FileId}) ->
+                                    case storage:get(StorageId) of
+                                        {ok, Storage} ->
+                                            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
+                                            case storage_file_manager:unlink(SFMHandle) of
+                                                ok -> ok;
+                                                {error, Reason1} ->
+                                                    {{StorageId, FileId}, {error, Reason1}}
+                                            end ;
+                                        {error, Reason2} ->
+                                            {{StorageId, FileId}, {error, Reason2}}
+                                    end
+                                end, ToDelete),
+                        case Results -- [ok] of
+                            [] -> ok;
+                            Errors ->
+                                lists:foreach(
+                                    fun({{SID0, FID0}, {error, Reason0}}) ->
+                                        ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
+                                    end, Errors)
+                        end,
+                        {ok, []};
+                    Reason3 ->
+                        ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p", [File, Reason3]),
+                        {ok, []}
+                end;
             _ ->
                 {ok, []}
         end,

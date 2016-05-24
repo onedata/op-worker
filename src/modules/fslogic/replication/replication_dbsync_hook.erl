@@ -33,15 +33,13 @@
 -spec on_file_location_change(space_info:id(), file_location:doc()) ->
     ok | {error, term()}.
 on_file_location_change(_SpaceId, ChangedLocationDoc =
-    #document{key = Key, value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->
+    #document{value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->
     file_location:run_synchronized(Uuid,
         fun() ->
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
-                    {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
-                    lists:foreach(fun(Id) ->
-                        ok = update_location_replica(Id, ChangedLocationDoc) end,
-                        [LocationId || LocationId <- Locations, LocationId =/= Key]);
+                    [LocalLocation] = fslogic_utils:get_local_file_locations_once({uuid, Uuid}),
+                    update_local_location_replica(LocalLocation, ChangedLocationDoc);
                 false ->
                     ok
             end
@@ -50,23 +48,6 @@ on_file_location_change(_SpaceId, ChangedLocationDoc =
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if given replica is local and updates it according to external changes.
-%% @end
-%%--------------------------------------------------------------------
--spec update_location_replica(file_location:id(), file_location:doc()) -> ok.
-update_location_replica(LocationId, ChangedLocationDoc) ->
-    LocalProviderId = oneprovider:get_provider_id(),
-    case file_location:get(LocationId) of
-        {ok, LocalLocationDoc = #document{value = #file_location{provider_id = LocalProviderId}}} ->
-            update_local_location_replica(LocalLocationDoc, ChangedLocationDoc);
-        {ok, _} ->
-            ok;
-        Error ->
-            ?error("Cannot get file_location: ~p for replica update, due to ~p", [LocationId, Error])
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

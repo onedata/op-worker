@@ -55,8 +55,8 @@ send(#client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of
-                infinity -> communicator:send(Msg, Ref, Retry);
-                _ -> communicator:send(Msg, Ref, Retry - 1)
+                infinity -> provider_communicator:send(Msg, Ref, Retry);
+                _ -> provider_communicator:send(Msg, Ref, Retry - 1)
             end
     end;
 send(#client_message{} = Msg, Ref, 1) ->
@@ -172,9 +172,10 @@ ensure_connected(Conn) when is_pid(Conn) ->
     ok;
 ensure_connected(SessId) ->
     ProviderId = session_manager:session_id_to_provider_id(SessId),
-    case session:get_random_connection(SessId) of
+    case session:get_random_connection(SessId, true) of
         {error, _} ->
-            {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
+            %% @todo: use OZ subscription based solution when available
+            URLs = dbsync_utils:get_provider_urls(ProviderId),
             lists:foreach(
                 fun(URL) ->
                     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),

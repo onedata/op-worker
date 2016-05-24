@@ -58,6 +58,9 @@ global_stream_test(MultiConfig) ->
     {SessId1P1, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
     {SessId1P2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
+    Prov2ID = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
+
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
             rpc:call(WorkerP2, dbsync_worker, apply_batch_changes, [undefined, SpaceId, BatchToSend])
@@ -95,9 +98,9 @@ global_stream_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID3)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID1, Prov1ID)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID2, Prov1ID)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID3, Prov1ID)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {FileUUID1, Rev1, LRev1}, Map0),
@@ -117,7 +120,7 @@ global_stream_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID, Prov2ID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -154,6 +157,9 @@ global_stream_document_remove_test(MultiConfig) ->
     {SessId1P1, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
     {SessId1P2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
+    Prov2ID = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
+
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
             rpc:call(WorkerP2, dbsync_worker, apply_batch_changes, [undefined, SpaceId, BatchToSend])
@@ -177,7 +183,7 @@ global_stream_document_remove_test(MultiConfig) ->
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID1]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(FileUUID1)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(FileUUID1, Prov1ID)]),
 
             Map0 = #{},
             _Map1 = maps:put(Path1, {FileUUID1, Rev1, LRev1}, Map0)
@@ -195,7 +201,7 @@ global_stream_document_remove_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(UUID, Prov2ID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -274,6 +280,8 @@ global_stream_with_proto_test(MultiConfig) ->
     {SessId1P1, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
     {SessId1P2, _} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
+    Prov2ID = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
 
     Dirs = lists:map(
         fun(N) ->
@@ -310,9 +318,9 @@ global_stream_with_proto_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID3)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID1, Prov1ID)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID2, Prov1ID)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID3, Prov1ID)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {FileUUID1, Rev1, LRev1}, Map0),
@@ -332,7 +340,7 @@ global_stream_with_proto_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID, Prov2ID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->

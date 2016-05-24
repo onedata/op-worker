@@ -19,6 +19,16 @@
             ],
             "users": [],
             "groups": {}
+        },
+        "cfg2": {
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
+                }
+            ],
+            "users": [],
+            "groups": {}
         }
     },
     "provider_domains": {
@@ -58,7 +68,7 @@
         },
         "p2": {
             "db_driver": "couchdb",
-            "os_config": "cfg1",
+            "os_config": "cfg2",
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
@@ -82,7 +92,7 @@
                             "cm"
                         ],
                         "db_nodes": [
-                            "127.0.0.1:49161"
+                            "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
                         "verify_oz_cert": false
@@ -122,7 +132,7 @@
                 ],
                 "providers": {
                     "p2": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st2"
                     }
                 }
             }
