@@ -116,7 +116,7 @@ create_record(<<"group">>, Data) ->
                 {ok, GroupId} ->
                     GroupRecord = group_record(GroupId),
                     {ok, GroupRecord};
-                _ ->
+                {error, _} ->
                     gui_error:report_warning(
                         <<"Cannot create new group due to unknown error.">>)
             end

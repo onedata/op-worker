@@ -76,7 +76,7 @@ association_to_ids(AssocId) ->
     when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
     DischargeMacaroons :: [macaroon:macaroon()]}}.
 find_all_spaces(UserAuth, UserId) ->
-    find_all_spaces(UserAuth, UserId, 500).
+    find_all_spaces(UserAuth, UserId, 100).
 
 
 %%--------------------------------------------------------------------
@@ -117,7 +117,7 @@ find_all_spaces(UserAuth, UserId, MaxRetries) ->
     when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
     DischargeMacaroons :: [macaroon:macaroon()]}}.
 find_all_groups(UserAuth, UserId) ->
-    find_all_groups(UserAuth, UserId, 500).
+    find_all_groups(UserAuth, UserId, 100).
 
 
 %%--------------------------------------------------------------------

@@ -263,46 +263,51 @@ get_spaces_dir_uuid(SessionId) ->
 -spec file_record(SessionId :: binary(), FileId :: binary()) ->
     {ok, proplists:proplist()}.
 file_record(SessionId, FileId) ->
-    SpacesDirUUID = get_spaces_dir_uuid(SessionId),
-    ParentUUID = case get_parent(SessionId, FileId) of
-        SpacesDirUUID ->
-            null;
-        Other ->
-            Other
-    end,
-    {ok, #file_attr{
-        name = Name,
-        type = TypeAttr,
-        size = SizeAttr,
-        mtime = ModificationTime,
-        mode = PermissionsAttr}} =
-        logical_file_manager:stat(SessionId, {guid, FileId}),
-    {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE -> {<<"dir">>, null};
-        _ -> {<<"file">>, SizeAttr}
-    end,
-    Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
-    Children = case Type of
-        <<"file">> ->
-            [];
-        <<"dir">> ->
-            case logical_file_manager:ls(
-                SessionId, {guid, FileId}, 0, 1000) of
-                {ok, Chldrn} ->
-                    Chldrn;
-                _ ->
-                    []
-            end
-    end,
-    ChildrenIds = [ChId || {ChId, _} <- Children],
-    Res = [
-        {<<"id">>, FileId},
-        {<<"name">>, Name},
-        {<<"type">>, Type},
-        {<<"permissions">>, Permissions},
-        {<<"modificationTime">>, ModificationTime},
-        {<<"size">>, Size},
-        {<<"parent">>, ParentUUID},
-        {<<"children">>, ChildrenIds}
-    ],
-    {ok, Res}.
+    case logical_file_manager:stat(SessionId, {guid, FileId}) of
+        {error, enoent} ->
+            gui_error:report_error(<<"No such file or directory.">>);
+        {ok, FileAttr} ->
+            #file_attr{
+                name = Name,
+                type = TypeAttr,
+                size = SizeAttr,
+                mtime = ModificationTime,
+                mode = PermissionsAttr} = FileAttr,
+
+            SpacesDirUUID = get_spaces_dir_uuid(SessionId),
+            ParentUUID = case get_parent(SessionId, FileId) of
+                SpacesDirUUID ->
+                    null;
+                Other ->
+                    Other
+            end,
+            {Type, Size} = case TypeAttr of
+                ?DIRECTORY_TYPE -> {<<"dir">>, null};
+                _ -> {<<"file">>, SizeAttr}
+            end,
+            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
+            Children = case Type of
+                <<"file">> ->
+                    [];
+                <<"dir">> ->
+                    case logical_file_manager:ls(
+                        SessionId, {guid, FileId}, 0, 1000) of
+                        {ok, Chldrn} ->
+                            Chldrn;
+                        _ ->
+                            []
+                    end
+            end,
+            ChildrenIds = [ChId || {ChId, _} <- Children],
+            Res = [
+                {<<"id">>, FileId},
+                {<<"name">>, Name},
+                {<<"type">>, Type},
+                {<<"permissions">>, Permissions},
+                {<<"modificationTime">>, ModificationTime},
+                {<<"size">>, Size},
+                {<<"parent">>, ParentUUID},
+                {<<"children">>, ChildrenIds}
+            ],
+            {ok, Res}
+    end.
