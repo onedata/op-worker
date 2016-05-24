@@ -21,6 +21,62 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
+-export([put_value/2, get_value/1, update_value/2]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Puts given Value in datastore worker's state
+%% @end
+%%--------------------------------------------------------------------
+-spec put_value(Key :: term(), Value :: term()) -> ok.
+put_value(Key, Value) ->
+    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets Value from datastore worker's state
+%% @end
+%%--------------------------------------------------------------------
+-spec get_value(Key :: term()) -> Value :: term().
+get_value(Key) ->
+    case dbsync_state:get(Key) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            Value;
+        {error, {not_found, _}} ->
+            undefined
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates Value for given Key in DBSync KV state using given function. The function gets as argument old Value and
+%% shall return new Value. The function runs in worker_host's process.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_value(Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
+    ok | no_return().
+update_value(Key, UpdateFun) when is_function(UpdateFun) ->
+    DoUpdate = fun() ->
+        OldValue = get_value(Key),
+        NewValue = UpdateFun(OldValue),
+        case OldValue of
+            NewValue ->
+                ok;
+            _ ->
+                put_value(Key, NewValue)
+        end
+               end,
+
+    datastore:run_synchronized(dbsync_state, term_to_binary(Key), DoUpdate).
+
 
 %%%===================================================================
 %%% model_behaviour callbacks

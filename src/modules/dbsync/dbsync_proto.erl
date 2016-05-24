@@ -202,9 +202,9 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
 handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, space_id = SpaceId,
                                     excluded_providers = ExclProviders} = BaseRequest) ->
     Ignore =
-        case dbsync_utils:temp_get({request, ReqId}) of
+        case dbsync_temp:get_value({request, ReqId}) of
             undefined ->
-                dbsync_utils:temp_put({request, ReqId}, erlang:system_time(), timer:minutes(1)),
+                dbsync_temp:put_value({request, ReqId}, erlang:system_time(), timer:minutes(1)),
                 false;
             _MTime ->
                 true

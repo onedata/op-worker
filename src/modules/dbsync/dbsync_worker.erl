@@ -91,7 +91,7 @@ init_stream(Since, Until, Queue) ->
             state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
         _ ->
             CTime = erlang:monotonic_time(milli_seconds),
-            dbsync_utils:temp_put(last_change, CTime, 0)
+            dbsync_temp:put_value(last_change, CTime, 0)
     end,
 
     couchdb_datastore_driver:changes_start_link(
@@ -141,18 +141,18 @@ handle({QueueKey, {cleanup, Until}}) ->
     queue_remove(QueueKey, Until);
 
 handle({clear_temp, Key}) ->
-    dbsync_utils:temp_clear(Key);
+    dbsync_temp:clear_value(Key);
 
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     case QueueKey of
         global ->
-            dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0);
+            dbsync_temp:put_value(last_change, erlang:monotonic_time(milli_seconds), 0);
         _ -> ok
     end,
 
-    Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
+    Rereplication = QueueKey =:= global andalso  dbsync_temp:get_value({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
             case get_space_id(Doc) of
@@ -387,7 +387,7 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value, rev = 
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
 
-        dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
+        dbsync_temp:put_value({replicated, Key, Rev}, true, timer:minutes(15)),
 
         spawn(
             fun() ->
@@ -415,8 +415,8 @@ apply_changes(_, []) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
-    ok.
+    Module = state_module(Key),
+    Module:put_value(Key, Value).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -425,12 +425,8 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    case dbsync_state:get(Key) of
-        {ok, #document{value = #dbsync_state{entry = Value}}} ->
-            Value;
-        {error, {not_found, _}} ->
-            undefined
-    end.
+    Module = state_module(Key),
+    Module:get_value(Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -441,25 +437,22 @@ state_get(Key) ->
 -spec state_update(Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
     ok | no_return().
 state_update(Key, UpdateFun) when is_function(UpdateFun) ->
-    DoUpdate = fun(_) ->
-        OldValue = state_get(Key),
-        NewValue = UpdateFun(OldValue),
-        case OldValue of
-            NewValue ->
-                ok;
-            _ ->
-                state_put(Key, NewValue)
-        end
-    end,
+    Module = state_module(Key),
+    Module:update_value(Key, UpdateFun).
 
-    DBSyncPid = whereis(?MODULE),
-    case self() of
-        DBSyncPid ->
-            DoUpdate(undefined);
-        _ ->
-            %% Just run in worker_host's process on any key
-            worker_host:state_update(dbsync_worker, undefined, DoUpdate)
-    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return module that shall handle state for given key.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_module(Key :: term()) -> dbsync_temp | dbsync_state.
+state_module({current_seq, _, _}) ->
+    dbsync_state;
+state_module(global_resume_seq) ->
+    dbsync_state;
+state_module(_) ->
+    dbsync_temp.
 
 
 %%--------------------------------------------------------------------
@@ -757,9 +750,9 @@ ensure_global_stream_active() ->
         true ->
             CTime = erlang:monotonic_time(milli_seconds),
             MaxIdleTime = timer:seconds(10),
-            case dbsync_utils:temp_get(last_change) of
+            case dbsync_temp:get_value(last_change) of
                 undefined ->
-                    dbsync_utils:temp_put(last_change, CTime, 0);
+                    dbsync_temp:put_value(last_change, CTime, 0);
                 Time when Time + MaxIdleTime < CTime ->
                     erlang:exit(state_get(changes_stream), force_restart);
                 _ ->
