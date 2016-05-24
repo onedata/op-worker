@@ -9,7 +9,7 @@
 %%% Tests of db_sync and proxy
 %%% @end
 %%%-------------------------------------------------------------------
--module(massive_multi_provider_file_ops_test_SUITE).
+-module(massive_multi_provider_file_ops2_test_SUITE).
 -author("Michał Wrzeszcz").
 
 -include("global_definitions.hrl").
@@ -46,9 +46,9 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, true, 30).
+    synchronization_test_base(Config, <<"user1">>, true, 30, 3, 10).
 
-synchronization_test_base(Config, User, Multisupport, Attempts) ->
+synchronization_test_base(Config, User, Multisupport, Attempts, DirsNum, FilesNum) ->
     Workers = ?config(op_worker_nodes, Config),
     Worker1 = lists:foldl(fun(W, Acc) ->
         case is_atom(Acc) of
@@ -63,8 +63,6 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
     end, [], Workers),
     timer:sleep(10000), % TODO - connection must appear after mock setup
 
-    ct:print("xxx ~p", [{Worker1, Workers}]),
-
     SessId = ?config({session_id, User}, Config),
     Prov1ID = rpc:call(Worker1, oneprovider, get_provider_id, []),
     Prov2ID = lists:foldl(fun(Worker, Acc) ->
@@ -78,7 +76,6 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
 
     Verify = fun(TestFun) ->
         lists:foldl(fun(W, Acc) ->
-            ct:print("qqqq ~p", [W]),
             [TestFun(W) | Acc]
         end, [], Workers)
     end,
@@ -89,22 +86,21 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
 
     Level3Dirs = lists:map(fun(_) ->
         <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1,10)),
+    end, lists:seq(1,DirsNum)),
     Level3Dirs2 = lists:map(fun(_) ->
         <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1,10)),
+    end, lists:seq(1,DirsNum)),
 
     Level3Dir = <<Level2Dir/binary, "/", (generator:gen_name())/binary>>,
     Level4Files = lists:map(fun(Num) ->
         {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
-    end, lists:seq(1,50)),
+    end, lists:seq(1,FilesNum)),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Dir, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Level2Dir, 8#755)),
 
     VerifyStats = fun(File, IsDir) ->
         VerAns = Verify(fun(W) ->
-            ct:print("aaaa ~p", [{File, IsDir, W}]),
             case IsDir of
                 true ->
                     ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
@@ -218,7 +214,6 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
     end,
     VerifyFile({2, Level2File}),
 
-    ct:print("zzzzz ~p", [Workers]),
     lists:foreach(fun(W) ->
         ct:print("xxxxx ~p", [W]),
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,

@@ -187,7 +187,7 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
             #status{code = ?EAGAIN}
     catch
         _:Reason0 ->
-            ?error_stacktrace("DBSync error ~p", [Reason0]),
+            ?error_stacktrace("DBSync error ~p for message ~p from ~p", [Reason0, MessageBody, ProviderId]),
             #status{code = ?EAGAIN}
     end.
 
