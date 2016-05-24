@@ -77,7 +77,6 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     Verify = fun(TestFun) ->
         lists:foldl(fun(W, Acc) ->
-            ct:print("bbbb ~p", [W]),
             [TestFun(W) | Acc]
         end, [], Workers)
     end,
@@ -102,7 +101,6 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Level2Dir, 8#755)),
 
     VerifyStats = fun(File, IsDir) ->
-        ct:print("aaaa ~p", [{File, IsDir}]),
         VerAns = Verify(fun(W) ->
             case IsDir of
                 true ->
@@ -197,13 +195,11 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     VerifyFile({2, Level2File}),
 
     lists:foreach(fun(W) ->
-        ct:print("xxxxx ~p", [W]),
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, Level2TmpDir, 8#755)),
         VerifyStats(Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
-            ct:print("yyyyy ~p", [W2]),
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, Level3TmpDir, 8#755)),
             VerifyStats(Level3TmpDir, true)
@@ -296,7 +292,6 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     end, Workers),
 
     lists:foldl(fun(W, Acc) ->
-        ct:print("aaaa ~p", [W]),
         OpenAns = lfm_proxy:open(W, SessId, {path, Level2File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -306,7 +301,6 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
-            ct:print("bbbbb ~p", [W2]),
             OpenAns2 = lfm_proxy:open(W2, SessId, {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,

@@ -92,10 +92,10 @@ get_file_size(#file_location{size = undefined} = Location) ->
     calculate_file_size(Location);
 get_file_size(#file_location{size = Size}) ->
     Size;
+get_file_size([Location]) ->
+    get_file_size(Location);
 get_file_size([Location | T]) ->
     max(get_file_size(Location), get_file_size(T));
-get_file_size([]) ->
-    0;
 get_file_size(Entry) ->
     LocalLocations = fslogic_utils:get_local_file_locations(Entry),
     get_file_size(LocalLocations).
