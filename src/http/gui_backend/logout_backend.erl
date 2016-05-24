@@ -14,8 +14,6 @@
 -author("Lukasz Opiola").
 -behaviour(page_backend_behaviour).
 
--include_lib("ctool/include/logging.hrl").
-
 %% API
 -export([page_init/0]).
 

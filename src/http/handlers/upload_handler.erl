@@ -245,6 +245,7 @@ multipart(Req, Params) ->
         {done, Req2} ->
             Req2
     end.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -258,6 +259,7 @@ stream_file(Req, FileHandle, Offset, Opts) ->
     case cowboy_req:part_body(Req, Opts) of
         {ok, Body, Req2} ->
             {ok, _, _} = logical_file_manager:write(FileHandle, Offset, Body),
+            ok = logical_file_manager:release(FileHandle),
             % @todo VFS-1815 register_chunk?
             % or send a message from client that uuid has finished?
             Req2;
