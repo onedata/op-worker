@@ -36,9 +36,9 @@ emit_file_attr_update(FileEntry, ExcludedSessions) ->
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
     FileGUID = fslogic_uuid:to_file_guid(FileUUID),
     case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
-        {ok, #file_attr{} = FileAttr} ->
-            ?debug("Sending new attributes for file ~p to all sessions except ~p",
-                [FileEntry, ExcludedSessions]),
+        {ok, #file_attr{size = Size} = FileAttr} ->
+            ?debug("Sending new attributes for file ~p to all sessions except ~p, size ~p",
+                [FileEntry, ExcludedSessions, Size]),
             event:emit(#event{object = #update_event{object = FileAttr}}, {exclude, ExcludedSessions});
         {error, Reason} ->
             ?error("Unable to get new attributes for file ~p due to: ~p", [FileEntry, Reason]),

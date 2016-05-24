@@ -139,9 +139,10 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
         end,
 
     NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
-    {ok, _} = file_meta:save(NewDoc#document{value = NewDoc#document.value#file_location{blocks = TruncatedNewBlocks, size = NewSize}}),
-    notify_block_change_if_necessary(LocalDoc, NewDoc),
-    notify_size_change_if_necessary(LocalDoc, NewDoc).
+    NewDoc2 = NewDoc#document{value = NewDoc#document.value#file_location{blocks = TruncatedNewBlocks, size = NewSize}},
+    {ok, _} = file_location:save(NewDoc2),
+    notify_block_change_if_necessary(LocalDoc, NewDoc2),
+    notify_size_change_if_necessary(LocalDoc, NewDoc2).
 
 %%--------------------------------------------------------------------
 %% @doc
