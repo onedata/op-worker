@@ -115,7 +115,6 @@
 -record(file_location, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     provider_id :: oneprovider:id(),
-    space_uuid :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],

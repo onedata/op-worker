@@ -174,8 +174,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = file_location:ensure_blocks_not_empty(#file_location{
                     uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
-                    storage_id = StorageId, file_id = FileId, blocks = [],
-                    space_uuid = SpaceUUID, handle_id = HandleId, space_id = SpaceId})}
+                    storage_id = StorageId, file_id = FileId, blocks = [], handle_id = HandleId, space_id = SpaceId})}
     catch
         T:M ->
             {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
@@ -341,8 +340,7 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = C
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
-            storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_uuid = SpaceUUID, handle_id = HandleId, space_id = SpaceId})}.
+            storage_id = StorageId, file_id = FileId, blocks = Blocks, handle_id = HandleId, space_id = SpaceId})}.
 
 %%--------------------------------------------------------------------
 %% @doc Saves file handle in user's session, returns id of saved handle

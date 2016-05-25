@@ -178,6 +178,14 @@ model_init() ->
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns total size used by given file_location.
+%% @end
+%%--------------------------------------------------------------------
+-spec count_bytes(datastore:doc() | [#file_block{}]) ->
+    Size :: non_neg_integer().
 count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
     count_bytes(Blocks, 0).
 

@@ -297,13 +297,6 @@ rename_should_unlock_space(Config) ->
     {ok, _} = create_file(P1, User1, f(<<"space2">>, File2)),
     {ok, _} = create_file(P1, User2, f(<<"space2">>, File3)),
 
-%%    tracer:start([P1, P2]),
-%%    tracer:trace_calls(space_quota, assert_write),
-%%    tracer:trace_calls(space_quota, available_size),
-%%    tracer:trace_calls(space_quota, apply_size_change),
-%%    tracer:trace_calls(fslogic_req_generic),
-%%    tracer:trace_calls(fslogic_worker, handle),
-
     %% ### Space1 ###
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:rand_bytes(16))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:rand_bytes(12))),

@@ -238,7 +238,6 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
         uuid = Record#'FileLocation'.uuid,
         provider_id = Record#'FileLocation'.provider_id,
-        space_uuid = Record#'FileLocation'.space_uuid,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
@@ -495,7 +494,6 @@ translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
         uuid = Record#file_location.uuid,
         provider_id = Record#file_location.provider_id,
-        space_uuid = Record#file_location.space_uuid,
         space_id = Record#file_location.space_id,
         storage_id = Record#file_location.storage_id,
         file_id = Record#file_location.file_id,

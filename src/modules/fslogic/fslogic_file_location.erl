@@ -155,7 +155,7 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
-        space_uuid = SpaceDirUuid, space_id = SpaceId},
+        space_id = SpaceId},
     {ok, LocId} = file_location:create(#document{value = Location}),
     file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
 

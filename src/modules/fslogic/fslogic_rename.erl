@@ -473,7 +473,6 @@ update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
         fun() ->
             file_location:save(LocationDoc#document{value = Location#file_location{
                 file_id = TargetFileId,
-                space_uuid = TargetSpaceUUID,
                 space_id = TargetSpaceId,
                 storage_id = TargetStorageId,
                 blocks = UpdatedBlocks

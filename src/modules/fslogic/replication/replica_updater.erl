@@ -35,8 +35,7 @@
 %%--------------------------------------------------------------------
 -spec update(FileUUID :: file_meta:uuid(), Blocks :: fslogic_blocks:blocks(),
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
-    {ok, {size_changed, OldSize :: non_neg_integer(), NewSize :: non_neg_integer()}} | {ok, size_not_changed} |
-    {error, Reason :: term()}.
+    {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileUUID, Blocks, FileSize, BumpVersion) ->
     fslogic_utils:wait_for_local_file_location(FileUUID),
     file_location:run_synchronized(FileUUID,
@@ -50,15 +49,14 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
                 case FileSize of
                     undefined ->
                         file_location:save(UpdatedLocation),
-                        NewSize = fslogic_blocks:upper(FullBlocks),
-                        case NewSize > OldSize of
-                            true -> {ok, {size_changed, OldSize, NewSize}};
+                        case fslogic_blocks:upper(FullBlocks) > OldSize of
+                            true -> {ok, size_changed};
                             false -> {ok, size_not_changed}
                         end;
                     _ ->
                         TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
                         file_location:save(TruncatedLocation),
-                        {ok, {size_changed, OldSize, FileSize}}
+                        {ok, size_changed}
                 end
                 % todo reconcile other local replicas according to this one
         end).
