@@ -92,16 +92,12 @@ route_message(#client_message{session_id = From, proxy_session_id = ProxySession
 route_message(Msg, Ref) ->
     send_to_sequencer_manager(Msg, Ref).
 
-message_to_direction(#message_acknowledgement{}) ->
-    outgoing;
-message_to_direction(#message_request{}) ->
-    outgoing;
-message_to_direction(#message_request{}) ->
-    outgoing;
-message_to_direction(_) ->
-    incoming.
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates stream id based on
+%% @end
+%%--------------------------------------------------------------------
 -spec term_to_stream_id(term()) -> stream_id().
 term_to_stream_id(Term) ->
     Binary = term_to_binary(Term),

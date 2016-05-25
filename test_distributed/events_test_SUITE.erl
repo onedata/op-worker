@@ -408,7 +408,8 @@ emit(Worker, SessId, Evt) ->
 -spec flush(Worker :: node(), SubId :: subscription:id(), Notify :: pid(),
     SessId :: session:id()) -> ok.
 flush(Worker, SubId, Notify, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, event, flush, [SubId, Notify, SessId])).
+    ProvId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ?assertEqual(ok, rpc:call(Worker, event, flush, [ProvId, undefined, SubId, Notify, SessId])).
 
 %%--------------------------------------------------------------------
 %% @private
