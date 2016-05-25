@@ -675,6 +675,7 @@ init_per_testcase(CaseName, Config) ->
     initializer:enable_grpca_based_communication(Config),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
     Workers = ?config(op_worker_nodes, NewConfig),
+    initializer:disable_quota_limit(NewConfig),
 
     CaseNameString = atom_to_list(CaseName),
     case lists:suffix(?LINK_AND_MV_FAILURE_SUFFIX, CaseNameString) of
@@ -701,6 +702,7 @@ init_per_testcase(CaseName, Config) ->
 end_per_testcase(CaseName, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     CaseNameString = atom_to_list(CaseName),
+    initializer:unload_quota_mocks(Config),
 
     case lists:suffix(?LINK_AND_MV_FAILURE_SUFFIX, CaseNameString) orelse
         lists:suffix(?LINK_FAILURE_SUFFIX, CaseNameString) of
