@@ -463,13 +463,12 @@ rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, SourceEntry) ->
     TargetStorageId :: storage:id()) -> ok.
 update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
     TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
-    #document{key = LocationId,
-        value = #file_location{blocks = Blocks} = Location} = LocationDoc,
+    #document{value = #file_location{uuid = FileUUID, blocks = Blocks} = Location} = LocationDoc,
     UpdatedBlocks = lists:map(
         fun(Block) ->
             Block#file_block{file_id = TargetFileId, storage_id = TargetStorageId}
         end, Blocks),
-    {ok, _} = datastore:run_synchronized(file_location, LocationId,
+    {ok, _} = datastore:run_synchronized(file_location, FileUUID,
         fun() ->
             file_location:save(LocationDoc#document{value = Location#file_location{
                 file_id = TargetFileId,

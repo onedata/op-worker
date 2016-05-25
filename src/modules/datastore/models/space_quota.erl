@@ -241,6 +241,7 @@ assert_write(SpaceId, WriteSize) ->
 %%--------------------------------------------------------------------
 -spec get_disabled_spaces() -> [space_info:id()].
 get_disabled_spaces() ->
+    %% @todo: use locally cached data after resolving VFS-2087
     {ok, SpaceIds} = oz_providers:get_spaces(provider),
     SpacesWithASize = lists:map(fun(SpaceId) ->
         {SpaceId, space_quota:available_size(SpaceId)}

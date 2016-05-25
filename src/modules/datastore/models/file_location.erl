@@ -184,7 +184,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Returns total size used by given file_location.
 %% @end
 %%--------------------------------------------------------------------
--spec count_bytes(datastore:doc() | [#file_block{}]) ->
+-spec count_bytes(datastore:doc() | fslogic_blocks:blocks()) ->
     Size :: non_neg_integer().
 count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
     count_bytes(Blocks, 0).

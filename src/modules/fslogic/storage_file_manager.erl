@@ -292,6 +292,7 @@ write(#sfm_handle{is_local = true, open_mode = undefined}, _, _) -> throw(?EPERM
 write(#sfm_handle{is_local = true, open_mode = read}, _, _) -> throw(?EPERM);
 write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, helper_handle = HelperHandle, file = File, file_size = CSize}, Offset, Buffer) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    %% @todo: VFS-2086 handle sparse files
     space_quota:soft_assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
     helpers:write(HelperHandle, File, Offset, Buffer);
 

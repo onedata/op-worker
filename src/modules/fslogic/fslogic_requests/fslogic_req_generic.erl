@@ -452,7 +452,6 @@ delete_file(CTX, File) ->
 delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
     {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, FileChildren} =
         case Type of
             ?DIRECTORY_TYPE ->
@@ -485,8 +484,6 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
                                     end, Errors)
                         end,
 
-                        Size = fslogic_blocks:get_file_size(Location),
-                        space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
                         {ok, []};
                     Reason3 ->
                         ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p", [File, Reason3]),
