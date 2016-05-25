@@ -373,14 +373,9 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
         blocks = Blocks, file_uuid = FileGUID, file_size = FileSize}}) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
         case replica_updater:update(FileUUID, Blocks, FileSize, true) of
-            {ok, {size_changed, OldSize, NewSize}} ->
+            {ok, {size_changed, _OldSize, _NewSize}} ->
                 {ok, #document{value = #session{identity = #identity{
                     user_id = UserId}}}} = session:get(SessId),
-                spawn(fun() ->
-                    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({guid, FileGUID}),
-                    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)
-%%                    space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize - OldSize)
-                end),
                 fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);

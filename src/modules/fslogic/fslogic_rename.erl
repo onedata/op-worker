@@ -302,10 +302,6 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 end,
             Size = GetSize(0),
             ok = space_quota:assert_write(TargetSpaceId, Size),
-%%            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size),
-%%            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
-
-
 
             lists:foreach(
                 fun(Snapshot) ->
@@ -345,9 +341,6 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
                     ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
                 end, FileSnapshots)
-
-%%            space_quota:apply_size_change_and_maybe_emit(SourceSpaceId, -1 * Size),
-%%            space_quota:apply_size_change_and_maybe_emit(TargetSpaceId, Size)
     end,
 
     UserId = fslogic_context:get_user_id(CTX),
