@@ -115,12 +115,7 @@ init([SessType, EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, 
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+    {reply, Reply :: term(), NewState :: #state{}}.
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, ok, State}.
