@@ -160,9 +160,9 @@ apply_size_change(SpaceId, SizeDiff) ->
 -spec apply_size_change_and_maybe_emit(SpaceId :: space_info:id(), SizeDiff :: integer()) ->
     ok | {error, Reason :: any()}.
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
-    Before = available_size(SpaceId),
-    {ok, _} = apply_size_change(SpaceId, SizeDiff),
-    After = available_size(SpaceId),
+    Before = space_quota:available_size(SpaceId),
+    {ok, _} = space_quota:apply_size_change(SpaceId, SizeDiff),
+    After = space_quota:available_size(SpaceId),
     case Before * After =< 0 of
         true -> fslogic_event:emit_quota_exeeded();
         false -> ok
@@ -198,7 +198,7 @@ available_size(SpaceId) ->
 -spec assert_write(SpaceId :: space_info:id()) ->
     ok | no_return().
 assert_write(SpaceId) ->
-    assert_write(SpaceId, 1).
+    space_quota:assert_write(SpaceId, 1).
 
 
 %%--------------------------------------------------------------------
@@ -212,7 +212,7 @@ soft_assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
 soft_assert_write(SpaceId, WriteSize) ->
     {ok, SoftQuotaSize} = application:get_env(?APP_NAME, soft_quota_limit_size),
-    case available_size(SpaceId) + SoftQuotaSize >= WriteSize of
+    case space_quota:available_size(SpaceId) + SoftQuotaSize >= WriteSize of
         true -> ok;
         false -> throw(?ENOSPC)
     end.
@@ -228,7 +228,7 @@ soft_assert_write(SpaceId, WriteSize) ->
 assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
 assert_write(SpaceId, WriteSize) ->
-    case available_size(SpaceId) >= WriteSize of
+    case space_quota:available_size(SpaceId) >= WriteSize of
         true -> ok;
         false -> throw(?ENOSPC)
     end.
