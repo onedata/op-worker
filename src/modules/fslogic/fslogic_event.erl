@@ -29,6 +29,7 @@
 %% in 'ExcludedSessions' list.
 %% @end
 %%--------------------------------------------------------------------
+% TODO - SpaceID may be forwarded from dbsync instead getting from DB
 -spec emit_file_attr_update(fslogic_worker:file(), [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_attr_update(FileEntry, ExcludedSessions) ->

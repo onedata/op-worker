@@ -116,7 +116,7 @@ send_tree_broadcast(SpaceId, SyncWith, Request, BaseRequest, Attempts) ->
         _ ->
             {LSync, RSync} = lists:split(crypto:rand_uniform(0, length(SyncWith1)), SyncWith1),
             ExclProviders = [oneprovider:get_provider_id() | BaseRequest#tree_broadcast.excluded_providers],
-            NewBaseRequest = BaseRequest#tree_broadcast{excluded_providers = lists:usort(ExclProviders), space_id = SpaceId},
+            NewBaseRequest = BaseRequest#tree_broadcast{excluded_providers = ExclProviders, space_id = SpaceId},
             do_emit_tree_broadcast(LSync, Request, NewBaseRequest, Attempts),
             do_emit_tree_broadcast(RSync, Request, NewBaseRequest, Attempts)
     end.
@@ -187,7 +187,7 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
             #status{code = ?EAGAIN}
     catch
         _:Reason0 ->
-            ?error_stacktrace("DBSync error ~p", [Reason0]),
+            ?error_stacktrace("DBSync error ~p for message ~p from ~p", [Reason0, MessageBody, ProviderId]),
             #status{code = ?EAGAIN}
     end.
 
@@ -199,7 +199,8 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
 %%--------------------------------------------------------------------
 -spec handle_impl(From :: oneprovider:id(), #tree_broadcast{} | #changes_request{} | #batch_update{}) ->
     ok | {error, Reason :: term()} | no_return().
-handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
+handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, space_id = SpaceId,
+    excluded_providers = ExclProviders} = BaseRequest) ->
     Ignore =
         case dbsync_utils:temp_get({request, ReqId}) of
             undefined ->
@@ -209,11 +210,14 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                 true
         end,
 
+    ok = dbsync_utils:validate_space_access(From, SpaceId),
+    MessageOrigin = lists:last(ExclProviders),
+
     ?debug("DBSync request (ignored: ~p) from ~p ~p", [Ignore, From, BaseRequest]),
 
     case Ignore of
         false ->
-            try handle_broadcast(From, Request, BaseRequest) of
+            try handle_broadcast(MessageOrigin, Request, BaseRequest) of
 %%                ok -> ok; %% This case should be safely ignored but is not used right now.
                 reemit ->
                     case worker_proxy:cast(dbsync_worker, {reemit, BaseRequest}) of
@@ -224,7 +228,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                     end
             catch
                 _:Reason ->
-                    ?error("Error while handling tree broadcast: ~p", [Reason]),
+                    ?error_stacktrace("Error while handling tree broadcast: ~p", [Reason]),
                     {error, Reason}
             end;
         true -> ok
