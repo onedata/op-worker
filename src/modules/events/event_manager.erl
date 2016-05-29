@@ -292,7 +292,9 @@ request_to_file_entry_or_provider(_) ->
 %% Handle request locally using given function or reroute to remote provider.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_or_reroute(RequestMessage :: term(), RequestContext :: {file, file_meta:entry()} | not_file_context, SessId :: session:id(),
+-spec handle_or_reroute(RequestMessage :: term(),
+    RequestContext :: {file, file_meta:entry()} | {provider, oneprovider:id()} | not_file_context,
+    SessId :: session:id(),
     HandleLocallyFun :: fun((NewProvMap :: #{}, IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
 handle_or_reroute(_, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(ProvMap, false);

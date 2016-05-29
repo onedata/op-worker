@@ -56,19 +56,13 @@ get_file_path(Ctx, FileUUID) ->
 %%--------------------------------------------------------------------
 -spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
     #fuse_response{} | no_return().
-fsync(Ctx, _FileUUID) ->
+fsync(Ctx, FileUUID) ->
     timer:sleep(timer:seconds(2)),
     SessId = fslogic_context:get_session_id(Ctx),
-    event:flush(?FSLOGIC_SUB_ID, self(), SessId),
+    Ref = event:flush(oneprovider:get_provider_id(), FileUUID, ?FSLOGIC_SUB_ID, self(), SessId),
     receive
-        {handler_executed, Results} ->
-            Errors = lists:filter(
-                fun
-                    ({error, _}) -> true;
-                    (_) -> false
-                end, Results),
-            [] = Errors,
-            #fuse_response{status = #status{code = ?OK}}
+        {Ref, Code} ->
+            #fuse_response{status = #status{code = Code}}
     after
         ?FSYNC_TIMEOUT ->
             #fuse_response{status = #status{code = ?EAGAIN, description = <<"fsync_timeout">>}}
