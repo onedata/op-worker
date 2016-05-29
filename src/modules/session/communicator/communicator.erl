@@ -46,8 +46,6 @@ send(Msg, Ref) ->
 %%--------------------------------------------------------------------
 -spec send(Msg :: #server_message{} | term(), Ref :: connection:ref(),
     Retry :: non_neg_integer() | infinity) -> ok | {error, Reason :: term()}.
-
-
 send(#server_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
     case connection:send(Msg, Ref) of
         ok -> ok;

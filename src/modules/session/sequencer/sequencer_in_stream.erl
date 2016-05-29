@@ -95,7 +95,7 @@ init([SeqMan, StmId, SessId]) ->
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
     {ok, #document{value = #session{type = SessionType, proxy_via = ProxyVia}}} = session:get(SessId),
-    IsProxy = SessionType =:= provider orelse SessionType =:= provider_outgoing orelse ProxyVia =/= undefined,
+    IsProxy = SessionType =:= provider_incoming orelse SessionType =:= provider_outgoing orelse ProxyVia =/= undefined,
     send_message_stream_reset(StmId, SessId, IsProxy),
     {ok, receiving, #state{
         sequencer_manager = SeqMan,
@@ -433,6 +433,13 @@ forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
     State#state{sequence_number = SeqNum + 1}.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns communicator module based on whether sequencer is working in provider or client's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicator_module(IsProxy :: boolean()) -> communicator | provider_communicator.
 communicator_module(false) ->
     communicator;
 communicator_module(true) ->

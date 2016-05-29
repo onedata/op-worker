@@ -293,7 +293,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     end, Workers),
 
     lists:foldl(fun(W, Acc) ->
-        OpenAns = lfm_proxy:open(W, SessId, {path, Level2File}, rdwr),
+        OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
         WriteBuf = atom_to_binary(W, utf8),
@@ -302,7 +302,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
-            OpenAns2 = lfm_proxy:open(W2, SessId, {path, Level2File}, rdwr),
+            OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,
             ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts)

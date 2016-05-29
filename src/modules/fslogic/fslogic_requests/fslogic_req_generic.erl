@@ -31,7 +31,7 @@
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
-    get_file_path/2, fsync/2, chmod_storage_files/3]).
+    get_file_path/2, chmod_storage_files/3]).
 
 %%%===================================================================
 %%% API functions
@@ -50,23 +50,6 @@ get_file_path(Ctx, FileUUID) ->
         fuse_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
     }.
 
-%%--------------------------------------------------------------------
-%% @doc Synchronizes file's metadata.
-%% @end
-%%--------------------------------------------------------------------
--spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
-    #fuse_response{} | no_return().
-fsync(Ctx, FileUUID) ->
-    timer:sleep(timer:seconds(2)),
-    SessId = fslogic_context:get_session_id(Ctx),
-    Ref = event:flush(oneprovider:get_provider_id(), FileUUID, ?FSLOGIC_SUB_ID, self(), SessId),
-    receive
-        {Ref, Code} ->
-            #fuse_response{status = #status{code = Code}}
-    after
-        ?FSYNC_TIMEOUT ->
-            #fuse_response{status = #status{code = ?EAGAIN, description = <<"fsync_timeout">>}}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc Changes file's access times.

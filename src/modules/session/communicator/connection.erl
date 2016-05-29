@@ -46,7 +46,7 @@
     transport :: module(),
     session_id :: session:id(),
     connection_type :: incoming | outgoing,
-    peer_type = fuse_client :: fuse_client | provider
+    peer_type = fuse_client :: fuse_client | provider_incoming
 }).
 
 -define(TIMEOUT, timer:minutes(10)).
@@ -84,7 +84,7 @@ init(Ref, Socket, Transport, _Opts) ->
     Certificate = get_cert(Socket),
 
     PeerType = case provider_auth_manager:is_provider(Certificate) of
-        true -> provider;
+        true -> provider_incoming;
         false -> fuse_client
     end,
 
@@ -128,7 +128,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
         error = Error,
         certificate = Certificate,
         connection_type = outgoing,
-        peer_type = provider
+        peer_type = provider_incoming
     }, ?TIMEOUT).
 
 %%--------------------------------------------------------------------
@@ -406,8 +406,7 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
         case {IsProvider, Msg0} of
             %% If message comes from provider and proxy session is requested - proceed
             %% with authorization and switch context to the proxy session.
-            {true, #client_message{proxy_session_id = ProxySessionId0, proxy_session_auth = Auth = #auth{}}} when ProxySessionId0 =/= undefined ->
-                ProxySessionId = ProxySessionId0,
+            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth = #auth{}}} when ProxySessionId =/= undefined ->
                 ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
                 {Msg0, ProxySessionId};
@@ -483,7 +482,7 @@ send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
             ok = Transport:send(Socket, Data)
     catch
         _:Reason ->
-            ?error_stacktrace("Unable to serialize server_message due to: ~p", [Reason]),
+            ?error_stacktrace("Unable to serialize server_message ~p due to: ~p", [ServerMsg, Reason]),
             ok
     end.
 
@@ -501,9 +500,9 @@ send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
         {ok, Data} ->
             ok = Transport:send(Socket, Data)
     catch
-       _:Reason ->
-           ?error_stacktrace("Unable to serialize client_message due to: ~p", [Reason]),
-           ok
+        _:Reason ->
+            ?error_stacktrace("Unable to serialize client_message ~p due to: ~p", [ClientMsg, Reason]),
+            ok
     end.
 
 

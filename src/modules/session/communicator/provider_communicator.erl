@@ -21,7 +21,7 @@
 -include("timeouts.hrl").
 
 %% API
--export([send/2, send/3, send/4, send_async/2, communicate/2, communicate_async/2,
+-export([send/2, send/3, stream/3, stream/4, send_async/2, communicate/2, communicate_async/2,
     communicate_async/3, ensure_connected/1]).
 
 %%%===================================================================
@@ -65,6 +65,17 @@ send(#client_message{} = Msg, Ref, 1) ->
 send(Msg, Ref, Retry) ->
     provider_communicator:send(#client_message{message_body = Msg}, Ref, Retry).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv stream(StmId, Msg, SessId, 1)
+%% @end
+%%--------------------------------------------------------------------
+-spec stream(StmId :: sequencer:stream_id(), Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
+    ok | {error, Reason :: term()}.
+stream(StmId, Msg, Ref) ->
+    provider_communicator:stream(StmId, Msg, Ref, 1).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends a message to the server using connection pool associated with server's
@@ -73,24 +84,24 @@ send(Msg, Ref, Retry) ->
 %% has been deleted in the meantime or connection does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec send(StmId :: sequencer:stream_id(), Msg :: #client_message{} | term(), Ref :: session:id(),
+-spec stream(StmId :: sequencer:stream_id(), Msg :: #client_message{} | term(), Ref :: session:id(),
     Retry :: non_neg_integer() | infinity) -> ok | {error, Reason :: term()}.
-send(StmId, #client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
+stream(StmId, #client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
     ensure_connected(Ref),
     case sequencer:send_message(Msg, StmId, Ref) of
         ok -> ok;
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of
-                infinity -> provider_communicator:send(StmId, Msg, Ref, Retry);
-                _ -> provider_communicator:send(StmId, Msg, Ref, Retry - 1)
+                infinity -> provider_communicator:stream(StmId, Msg, Ref, Retry);
+                _ -> provider_communicator:stream(StmId, Msg, Ref, Retry - 1)
             end
     end;
-send(StmId, #client_message{} = Msg, Ref, 1) ->
+stream(StmId, #client_message{} = Msg, Ref, 1) ->
     ensure_connected(Ref),
     sequencer:send_message(Msg, StmId, Ref);
-send(StmId, Msg, Ref, Retry) ->
-    provider_communicator:send(StmId, #client_message{message_body = Msg}, Ref, Retry).
+stream(StmId, Msg, Ref, Retry) ->
+    provider_communicator:stream(StmId, #client_message{message_body = Msg}, Ref, Retry).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,7 +121,7 @@ send_async(Msg, Ref) ->
 %% Sends a message to the provider and waits for a reply.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(Msg :: #client_message{} | term(), Ref :: session:id()) ->
+-spec communicate(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
     {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 communicate(#client_message{} = ClientMsg, Ref) ->
     {ok, MsgId} = communicate_async(ClientMsg, Ref, self()),
@@ -152,7 +163,7 @@ communicate_async(#client_message{} = Msg, Ref, Recipient) ->
     NewMsg = Msg#client_message{message_id = MsgId},
     DoSend = case Msg of
         #client_message{message_stream = #message_stream{stream_id = StmId}} when is_integer(StmId) ->
-            fun() -> send(StmId, NewMsg, Ref, 2) end;
+            fun() -> stream(StmId, NewMsg, Ref, 2) end;
         _ ->
             fun() -> send(NewMsg, Ref, 2) end
     end,
@@ -180,13 +191,13 @@ ensure_connected(Conn) when is_pid(Conn) ->
 ensure_connected(SessId) ->
     case session:get_random_connection(SessId, true) of
         {error, _} ->
-            %% @todo: use OZ subscription based solution when available
             ProviderId = case session:get(SessId) of
-                             {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
-                                 ProxyVia;
-                             _ ->
-                                 session_manager:session_id_to_provider_id(SessId)
-                         end,
+                {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
+                    ProxyVia;
+                _ ->
+                    session_manager:session_id_to_provider_id(SessId)
+            end,
+            %% @todo: use OZ subscription based solution when available
             URLs = dbsync_utils:get_provider_urls(ProviderId),
             lists:foreach(
                 fun(URL) ->

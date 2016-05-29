@@ -136,13 +136,13 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms,
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
-            (NewProvMap, false) ->
+            (NewProvMap, false) -> %% Request should be handled locally only
                 {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:map(
                     fun(_, EvtStm) ->
                         gen_server:cast(EvtStm, Evt),
                         EvtStm
                     end, EvtStms)}};
-            (NewProvMap, true) ->
+            (NewProvMap, true) -> %% Request was already handled remotely
                 {noreply, State#state{entry_to_provider_map = NewProvMap}}
         end,
 
@@ -153,7 +153,7 @@ handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, not
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
-            (NewProvMap, false) ->
+            (NewProvMap, false) -> %% Request should be handled locally only
                 case maps:find(SubId, EvtStms) of
                     {ok, Stm} ->
                         gen_server:cast(Stm, {flush, NotifyFun});
@@ -162,7 +162,7 @@ handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, not
                         "session ~p not found", [SubId, SessId])
                 end,
                 {noreply, State#state{entry_to_provider_map = NewProvMap}};
-            (NewProvMap, true) ->
+            (NewProvMap, true) -> %% Request was already handled remotely
                 {noreply, State#state{entry_to_provider_map = NewProvMap}}
         end,
 
@@ -258,7 +258,7 @@ start_event_streams(EvtStmSup, SessId) ->
     lists:foldl(fun(#document{key = SubId, value = Sub}, Stms) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
         maps:put(SubId, EvtStm, Stms)
-                end, #{}, Docs).
+    end, #{}, Docs).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -298,7 +298,8 @@ request_to_file_entry_or_provider(_) ->
     HandleLocallyFun :: fun((NewProvMap :: #{}, IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
 handle_or_reroute(_, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(ProvMap, false);
-handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage, {provider, ProviderId}, SessId, HandleLocallyFun, ProvMap) ->
+handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage,
+    {provider, ProviderId}, SessId, HandleLocallyFun, ProvMap) ->
     {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
     case oneprovider:get_provider_id() of
         ProviderId ->
@@ -347,7 +348,7 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
                 {_, true} ->
                     HandleLocallyFun(NewProvMap, false);
                 {[H | _], false} ->
-                    provider_communicator:send(sequencer:term_to_stream_id(FileUUID), #client_message{
+                    provider_communicator:stream(sequencer:term_to_stream_id(FileUUID), #client_message{
                         message_body = RequestMessage,
                         proxy_session_id = SessId,
                         proxy_session_auth = Auth

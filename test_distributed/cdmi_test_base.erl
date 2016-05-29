@@ -293,17 +293,6 @@ metadata(Config) ->
 
     %%-------- create file with user metadata --------
     ?assert(not object_exists(Config, FileName)),
-    tracer:start(Workers),
-%%    tracer:trace_calls(router),
-%%    tracer:trace_calls(sequencer_out_stream),
-%%    tracer:trace_calls(sequencer_in_stream),
-%%    tracer:trace_calls(router),
-%%    tracer:trace_calls(event, flush),
-%%    tracer:trace_calls(fslogic_worker, handle),
-%%    tracer:trace_calls(logical_file_manager),
-%%    tracer:trace_calls(event_manager),
-%%    tracer:trace_calls(onedata_file_api),
-%%    tracer:trace_calls(cdmi_object_handler),
 
     RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody1 = [
@@ -665,21 +654,6 @@ update_file(Config) ->
     RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody1 = [{<<"value">>, NewValue}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
-
-    tracer:start(Workers),
-%%    tracer:trace_calls(router),
-%%    tracer:trace_calls(sequencer_out_stream),
-%%    tracer:trace_calls(sequencer_in_stream),
-%%    tracer:trace_calls(event, flush),
-%%    tracer:trace_calls(fslogic_worker, handle),
-%%    tracer:trace_calls(logical_file_manager),
-%%    tracer:trace_calls(event_manager),
-%%    tracer:trace_calls(session_manager, is_provider_session_id),
-%%    tracer:trace_calls(sequencer, route_message),
-%%    tracer:trace_calls(sequencer_manager),
-%%    tracer:trace_calls(session, get_sequencer_manager),
-%%    tracer:trace_calls(onedata_file_api),
-%%    tracer:trace_calls(cdmi_object_handler),
 
     {ok, Code1, _Headers1, _Response1} = do_request(Workers, FullTestFileName, put, RequestHeaders1, RawRequestBody1),
     ?assertEqual(204, Code1),

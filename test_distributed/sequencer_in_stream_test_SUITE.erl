@@ -162,12 +162,15 @@ init_per_testcase(_, Config) ->
     initializer:remove_pending_messages(),
     mock_communicator(Worker),
     mock_router(Worker),
+    {ok, _} = rpc:call(Worker, session, save, [#document{key = <<"session_id">>, value =
+        #session{type = fuse}}]),
     set_sequencer_in_stream_timeouts(Worker),
     {ok, SeqStm} = start_sequencer_in_stream(Worker),
     [{sequencer_in_stream, SeqStm} | Config].
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    rpc:call(Worker, session, delete, [<<"session_id">>]),
     stop_sequencer_in_stream(?config(sequencer_in_stream, Config)),
     test_utils:mock_validate_and_unload(Worker, [communicator, router]).
 
