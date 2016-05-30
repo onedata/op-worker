@@ -42,7 +42,6 @@
     remote_change_without_history_should_invalidate_whole_data/1,
     remote_change_of_size_should_notify_clients/1,
     remote_change_of_blocks_should_notify_clients/1,
-    remote_irrelevant_change_should_not_notify_clients/1,
     conflicting_remote_changes_should_be_reconciled/1,
     rtransfer_config_should_work/1
 ]).
@@ -65,7 +64,6 @@ all() ->
         remote_change_without_history_should_invalidate_whole_data,
         remote_change_of_size_should_notify_clients,
         remote_change_of_blocks_should_notify_clients,
-        remote_irrelevant_change_should_not_notify_clients,
         conflicting_remote_changes_should_be_reconciled,
         rtransfer_config_should_work
     ]).
@@ -637,58 +635,6 @@ remote_change_of_blocks_should_notify_clients(Config) ->
 
     % then
     ?assert(rpc:call(W1, meck, called, [fslogic_event, emit_file_location_update, [{uuid, FileUuid}, []]])),
-    test_utils:mock_validate_and_unload(W1, fslogic_event).
-
-remote_irrelevant_change_should_not_notify_clients(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
-    SpaceId = <<"space_id1">>,
-    ExternalProviderId = <<"external_provider_id">>,
-    ExternalFileId = <<"external_file_id">>,
-
-    % create test file
-    {ok, FileGUID} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
-    FileUuid = fslogic_uuid:file_guid_to_uuid(FileGUID),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGUID}, rdwr),
-    ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
-    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
-
-    % invalidate half of file
-    LocalDoc = #document{value = LocalLoc = #file_location{blocks = [Block]}} =
-        rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
-    rpc:call(W1, file_location, save, [LocalDoc#document{value = LocalLoc#file_location{blocks = [Block#file_block{offset = 0, size = 5}]}}]),
-
-    % prepare external location
-    #document{value = #file_location{version_vector = VVLocal}} =
-        rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
-    ExternalBlocks = [#file_block{offset = 5, size = 5}],
-    ExternalSize = 10,
-    RemoteLocation = #file_location{size = ExternalSize, space_uuid = SpaceId,
-        storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
-        blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
-        version_vector = VVLocal, recent_changes = {[], [ExternalBlocks, {shrink, 7}]}},
-    {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = rpc:call(W1, file_location, get, [RemoteLocationId]),
-    UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 2),
-
-    % attach external location
-    ?assertMatch({ok, _}, rpc:call(W1, file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, rpc:call(W1, file_meta, attach_location,
-        [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
-
-    % mock events
-    test_utils:mock_new(W1, [fslogic_event]),
-    test_utils:mock_expect(W1, fslogic_event, emit_file_location_update,
-        fun(_Entry, _ExcludedSessions) -> ok end),
-
-    % when
-    rpc:call(W1, dbsync_events, change_replicated, [SpaceId,
-        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
-
-    % then
-    ?assertEqual(0, rpc:call(W1, meck, num_calls, [fslogic_event, emit_file_location_update, ['_', '_']])),
-    ?assertEqual(0, rpc:call(W1, meck, num_calls, [fslogic_event, emit_file_attr_update, ['_', '_']])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
 
