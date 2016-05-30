@@ -104,7 +104,9 @@ props_to_value(space_info, Props) ->
     };
 props_to_value(provider_info, Props) ->
     #provider_info{
-        client_name = proplists:get_value(<<"client_name">>, Props)
+        client_name = proplists:get_value(<<"client_name">>, Props),
+        urls = proplists:get_value(<<"urls">>, Props),
+        space_ids = proplists:get_value(<<"space_ids">>, Props)
     }.
 
 

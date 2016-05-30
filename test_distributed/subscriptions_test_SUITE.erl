@@ -172,7 +172,11 @@ saves_the_actual_data(Config) ->
             [<<"dad">>, <<"mom">>],
             <<"unit">>
         )),
-        update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        update(3, [<<"r2">>, <<"r1">>], P1, provider(
+            <<"diginet rulz">>,
+            [<<"url1">>, <<"url2">>],
+            [S1]
+        ))
     ]),
     expect_message([], 3, []),
 
@@ -220,7 +224,8 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, onedata_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
-        revision_history = [<<"r2">>, <<"r1">>]}}
+        revision_history = [<<"r2">>, <<"r1">>],
+        urls = [<<"url1">>, <<"url2">>], space_ids = [S1]}}
     }, fetch(Node, provider_info, P1)),
     ok.
 
@@ -519,7 +524,11 @@ updates_with_the_actual_data(Config) ->
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
         ),
-        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1,  provider(
+            <<"diginet rulz">>,
+            [<<"url1">>, <<"url2">>],
+            [S1]
+        ))
     ]),
     expect_message([], 9, []),
 
@@ -555,7 +564,8 @@ updates_with_the_actual_data(Config) ->
     }, fetch(Node, onedata_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>],
+        urls = [<<"url1">>, <<"url2">>], space_ids = [S1]}}
     }, fetch(Node, provider_info, P1)),
     ok.
 
@@ -698,7 +708,9 @@ push_update(Node, Updates) ->
     ?assertMatch({ok, _}, Result).
 
 provider(Name) ->
-    {provider, [{client_name, Name}]}.
+    provider(Name, [], []).
+provider(Name, URLs, Spaces) ->
+    {provider, [{client_name, Name}, {urls, URLs}, {space_ids, Spaces}]}.
 
 space(Name) ->
     space(Name, [], [], []).

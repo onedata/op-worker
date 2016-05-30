@@ -168,6 +168,7 @@ fetch(ProviderId) ->
     try
         {ok, #provider_details{name = Name}} =
             oz_providers:get_details(provider, ProviderId),
+            %% todo: add fields
         Doc = #document{key = ProviderId, value = #provider_info{
             client_name = Name
         }},

@@ -136,6 +136,8 @@
 %% Model for caching provider details fetched from OZ
 -record(provider_info, {
     client_name :: binary(),
+    urls = [] :: [binary()],
+    space_ids = [] :: [SpaceId :: binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 
