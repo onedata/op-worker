@@ -110,11 +110,11 @@ emit_file_removal(FileGUID) ->
 %% Send event informing subscribed client about file rename and guid change.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_renamed(OldGUID :: fslogic_worker:file_guid(),
-    NewGUID :: fslogic_worker:file_guid(), ExcludedSessions :: [session:id()]) ->
+-spec emit_file_renamed(TopEntry :: #file_renamed_entry{},
+    ChildEntries :: [#file_renamed_entry{}], ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
-emit_file_renamed(OldGUID, NewGUID, ExcludedSessions) ->
-    event:emit(#event{object = #file_renamed_event{old_uuid = OldGUID, new_uuid = NewGUID}},
+emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
+    event:emit(#event{object = #file_renamed_event{top_entry = TopEntry, child_entries = ChildEntries}},
         {exclude, ExcludedSessions}).
 
 %%%===================================================================

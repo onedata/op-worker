@@ -249,7 +249,8 @@
 }).
 
 -record(file_renamed, {
-    new_uuid :: fslogic_worker:file_guid()
+    new_uuid :: fslogic_worker:file_guid(),
+    child_entries :: [#file_renamed_entry{}]
 }).
 
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |

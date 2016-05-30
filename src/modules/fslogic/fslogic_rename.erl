@@ -286,7 +286,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
     SourceSpaceId = fslogic_spaces:get_space_id(SourceUUID),
     TargetSpaceId = fslogic_spaces:get_space_id(CTX, TargetParentPath),
 
-    case SourceDoc of
+    RenamedEntries = case SourceDoc of
         #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
             %% TODO: get all snapshots: TODO: VFS-1966
             SourceDirSnapshots = [SourceEntry],
@@ -295,7 +295,9 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                     ok = file_meta:rename(Snapshot, {path, CanonicalTargetPath})
                 end, SourceDirSnapshots),
 
-            for_each_child_file(SourceEntry,
+            {ok, UpdatedSourceEntry} = file_meta:get(SourceUUID),
+
+            for_each_child_file(UpdatedSourceEntry,
                 fun
                     (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File) ->
                         %% TODO: get all snapshots: VFS-1965
@@ -307,12 +309,10 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                     (_Dir) ->
                         ok
                 end,
-                fun(#document{key = Uuid}, _) ->
-                    spawn(fun() -> fslogic_event:emit_file_renamed(
-                        fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
-                        fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), 
-                        [SessId])
-                    end)
+                fun(#document{key = Uuid} = Entry, _) ->
+                    {ok, NewPath} = fslogic_path:gen_path(Entry, SessId),
+                    {fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
+                    fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewPath}
                 end);
 
         #document{key = Uuid} = File ->
@@ -330,11 +330,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
                     ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
                 end, FileSnapshots),
-            NewGuid =
-                fslogic_uuid:to_file_guid(Uuid, TargetSpaceId),
-            spawn(fun() -> fslogic_event:emit_file_renamed(
-                fslogic_uuid:to_file_guid(Uuid, SourceSpaceId), NewGuid, [SessId])
-            end)
+            [{fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
+                fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewPath}]
     end,
 
     UserId = fslogic_context:get_user_id(CTX),
@@ -342,7 +339,9 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
     ok = fslogic_times:update_mtime_ctime(SourceParent, UserId, CurrTime),
     ok = fslogic_times:update_ctime({path, CanonicalTargetPath}, UserId, CurrTime),
     ok = fslogic_times:update_mtime_ctime({path, CanonicalTargetParentPath}, UserId, CurrTime),
-    {ok, #file_renamed{new_uuid = fslogic_uuid:to_file_guid(SourceUUID, TargetSpaceId)}}.
+    {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} = parse_renamed_entries(RenamedEntries),
+    spawn(fun() -> fslogic_event:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
+    {ok, #file_renamed{new_uuid = NewGuid, child_entries = ChildEntries}}.
 
 %%--------------------------------------------------------------------
 %% @doc Renames file moving it to another space supported by another provider.
@@ -359,7 +358,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
     SourcePathTokens = filename:split(SourcePath),
     TargetPathTokens = filename:split(LogicalTargetPath),
 
-    NewGuids = for_each_child_file(SourceEntry,
+    RenamedEntries = for_each_child_file(SourceEntry,
         fun(#document{key = SourceUuid} = Doc) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             {ok, OldPath} = fslogic_path:gen_path(Doc, SessId),
@@ -375,26 +374,25 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
                 #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
                     {ok, TargetGuid} = logical_file_manager:mkdir(SessId, NewPath, 8#777)
             end,
-            {guid, TargetGuid}
+            {TargetGuid, NewPath}
         end,
         fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
-            mtime = MTime, ctime = CTime, mode = Mode}}, {guid, TargetGuid} = Target) ->
+            mtime = MTime, ctime = CTime, mode = Mode}}, {TargetGuid, NewPath}) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
-            ok = logical_file_manager:set_perms(SessId, Target, Mode),
-            ok = copy_file_attributes(SessId, {guid, SourceGuid}, Target),
-            ok = logical_file_manager:update_times(SessId, Target, ATime, MTime, CTime),
+            ok = logical_file_manager:set_perms(SessId, {guid, TargetGuid}, Mode),
+            ok = copy_file_attributes(SessId, {guid, SourceGuid}, {guid, TargetGuid}),
+            ok = logical_file_manager:update_times(SessId, {guid, TargetGuid}, ATime, MTime, CTime),
             ok = logical_file_manager:unlink(SessId, {guid, SourceGuid}),
-            spawn(fun() -> fslogic_event:emit_file_renamed(SourceGuid, 
-                TargetGuid, [SessId]) end),
-            Target
+            {SourceGuid, TargetGuid, NewPath}
         end),
 
     CurrTime = erlang:system_time(seconds),
     ok = fslogic_times:update_mtime_ctime(SourceParent, fslogic_context:get_user_id(CTX), CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, LogicalTargetPath}, undefined, undefined, CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, TargetParentPath}, undefined, CurrTime, CurrTime),
-    [{guid, NewSourceGuid} | _] = NewGuids,
-    {ok, #file_renamed{new_uuid = NewSourceGuid}}.
+    {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} = parse_renamed_entries(RenamedEntries),
+    spawn(fun() -> fslogic_event:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
+    {ok, #file_renamed{new_uuid = NewGuid, child_entries = ChildEntries}}.
 
 %%--------------------------------------------------------------------
 %% @doc Renames file on storage and all its locations.
@@ -645,7 +643,7 @@ get_supporting_providers(SpaceId, Client, UserId) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Converts Logical file path to canonical file path
+%% @doc Converts logical file path to canonical file path
 %%--------------------------------------------------------------------
 -spec logical_path_to_canonical(CTX :: fslogic_worker:ctx(),
     LogicalPath :: file_meta:path()) -> file_meta:path().
@@ -654,3 +652,18 @@ logical_path_to_canonical(#fslogic_ctx{session_id = SessId} = CTX, LogicalPath) 
     CanonicalEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
     {ok, CanonicalPath} = fslogic_path:gen_path(CanonicalEntry, SessId),
     CanonicalPath.
+
+%%--------------------------------------------------------------------
+%% @doc Converts list of entry tuples to records that can be sent or emitted
+%%--------------------------------------------------------------------
+-spec parse_renamed_entries([{OldUuid :: fslogic_worker:file_guid(),
+    NewUuid :: fslogic_worker:file_guid(), NewPath :: file_meta:path()}]) ->
+    {#file_renamed_entry{}, [#file_renamed_entry{}]}.
+parse_renamed_entries([TopEntryRaw | ChildEntriesRaw]) ->
+    {TopEntryOldUuid, TopEntryNewUuid, TopEntryNewPath} = TopEntryRaw,
+    ChildEntries = lists:map(
+        fun({OldUuid, NewUuid, NewPath}) ->
+            #file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}
+        end, ChildEntriesRaw),
+    {#file_renamed_entry{old_uuid = TopEntryOldUuid, new_uuid = TopEntryNewUuid,
+        new_path = TopEntryNewPath}, ChildEntries}.
