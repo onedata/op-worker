@@ -166,11 +166,14 @@ get_or_fetch(ProviderId) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(ProviderId) ->
     try
-        {ok, #provider_details{name = Name}} =
+        {ok, #provider_details{name = Name, urls = URLs}} =
             oz_providers:get_details(provider, ProviderId),
-            %% todo: add fields
+        {ok, SpaceIDs} = oz_providers:get_spaces(provider),
+
         Doc = #document{key = ProviderId, value = #provider_info{
-            client_name = Name
+            client_name = Name,
+            urls = URLs,
+            space_ids = SpaceIDs
         }},
         {ok, _} = provider_info:save(Doc),
         {ok, Doc}
