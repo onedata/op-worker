@@ -15,7 +15,8 @@
 -author("Jakub Liput").
 
 -include("proto/common/credentials.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
@@ -24,6 +25,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([space_record/1]).
 
 %%%===================================================================
 %%% API functions
@@ -54,42 +56,16 @@ terminate() ->
 %% {@link data_backend_behaviour} callback find/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Ids :: [binary()]) ->
+-spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"space">>, SpaceIds) ->
-    Res = lists:map(
-        fun(SpaceId) ->
-            space_record(SpaceId)
-        end, SpaceIds),
-    {ok, Res};
+find(<<"space">>, SpaceId) ->
+    {ok, space_record(SpaceId)};
 
-find(<<"space-user-permission">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_user_permission_record(AssocId)
-        end, AssocIds),
-    {ok, Res};
+find(<<"space-user-permission">>, AssocId) ->
+    {ok, space_user_permission_record(AssocId)};
 
-find(<<"space-user">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_user_record(AssocId)
-        end, AssocIds),
-    {ok, Res};
-
-find(<<"space-group-permission">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_group_permission_record(AssocId)
-        end, AssocIds),
-    {ok, Res};
-
-find(<<"space-group">>, AssocIds) ->
-    Res = lists:map(
-        fun(AssocId) ->
-            space_group_record(AssocId)
-        end, AssocIds),
-    {ok, Res}.
+find(<<"space-group-permission">>, AssocId) ->
+    {ok, space_group_permission_record(AssocId)}.
 
 
 %%--------------------------------------------------------------------
@@ -98,14 +74,14 @@ find(<<"space-group">>, AssocIds) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"space">>) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
-            {ok, [SpaceData]} = find(<<"space">>, [SpaceId]),
+            {ok, SpaceData} = find(<<"space">>, SpaceId),
             SpaceData
         end, SpaceIds),
     {ok, Res}.
@@ -135,17 +111,12 @@ create_record(<<"space">>, Data) ->
     case Name of
         <<"">> ->
             gui_error:report_warning(
-                <<"Cannot create space with emty name.">>);
+                <<"Cannot create space with empty name.">>);
         _ ->
             case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
                 {ok, SpaceId} ->
-                    {ok, [
-                        {<<"id">>, SpaceId},
-                        {<<"name">>, Name},
-                        {<<"isDefault">>, false},
-                        {<<"userPermissions">>, []},
-                        {<<"groupPermissions">>, []}
-                    ]};
+                    SpaceRecord = space_record(SpaceId),
+                    {ok, SpaceRecord};
                 _ ->
                     gui_error:report_warning(
                         <<"Cannot create new space due to unknown error.">>)
@@ -319,7 +290,7 @@ space_record(SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant space_user_permission record based on its id.
+%% Returns a client-compliant space-user-permission record based on its id.
 %% @end
 %%--------------------------------------------------------------------
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
@@ -331,40 +302,26 @@ space_user_permission_record(AssocId) ->
         value = #space_info{
             users = UsersAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+    UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
+    % @TODO remove to binary when Zbyszek has integrated his fix
+    UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
     PermsMapped = lists:map(
         fun(SpacePerm) ->
-            HasPerm = lists:member(SpacePerm, UserPerms),
+            % @TODO remove to binary when Zbyszek has integrated his fix
+            HasPerm = lists:member(str_utils:to_binary(SpacePerm), UserPerms),
             {perm_db_to_gui(SpacePerm), HasPerm}
-        end, all_space_perms()),
+        end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
-        {<<"user">>, UserId}
+        {<<"systemUser">>, UserId}
     ].
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant space_user record based on its id.
-%% @end
-%%--------------------------------------------------------------------
--spec space_user_record(UserId :: binary()) -> proplists:proplist().
-space_user_record(UserId) ->
-    CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, #document{value = #onedata_user{name = UserName}}} =
-        user_logic:get(CurrentUserAuth, UserId),
-    [
-        {<<"id">>, UserId},
-        {<<"name">>, UserName}
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a client-compliant space_group_permission record based on its id.
+%% Returns a client-compliant space-group-permission record based on its id.
 %% @end
 %%--------------------------------------------------------------------
 -spec space_group_permission_record(AssocId :: binary()) ->
@@ -377,49 +334,20 @@ space_group_permission_record(AssocId) ->
         value = #space_info{
             groups = GroupsAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
-    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+    GroupPermsAtoms = proplists:get_value(GroupId, GroupsAndPerms),
+    % @TODO remove to binary when Zbyszek has integrated his fix
+    GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
     PermsMapped = lists:map(
-        fun(SpacePerm) ->
-            HasPerm = lists:member(SpacePerm, GroupPerms),
-            {perm_db_to_gui(SpacePerm), HasPerm}
-        end, all_space_perms()),
+        fun(Perm) ->
+            % @TODO remove to binary when Zbyszek has integrated his fix
+            HasPerm = lists:member(str_utils:to_binary(Perm), GroupPerms),
+            {perm_db_to_gui(Perm), HasPerm}
+        end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
-        {<<"group">>, GroupId}
+        {<<"systemGroup">>, GroupId}
     ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a client-compliant space_group record based on its id.
-%% @end
-%%--------------------------------------------------------------------
--spec space_group_record(GroupId :: binary()) -> proplists:proplist().
-space_group_record(GroupId) ->
-    {ok, #document{value = #onedata_group{name = GroupName}}} =
-        onedata_group:get(GroupId),
-    [
-        {<<"id">>, GroupId},
-        {<<"name">>, GroupName}
-    ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns all allowed space permissions.
-%% @end
-%%--------------------------------------------------------------------
--spec all_space_perms() -> [atom()].
-all_space_perms() -> [
-    space_invite_user, space_remove_user,
-    space_invite_group, space_remove_group,
-    space_add_provider, space_remove_provider,
-    space_set_privileges, space_change_data,
-    space_remove, space_view_data
-].
 
 
 %%--------------------------------------------------------------------
@@ -429,16 +357,16 @@ all_space_perms() -> [
 %% @end
 %%--------------------------------------------------------------------
 -spec perm_db_to_gui(atom()) -> binary().
+perm_db_to_gui(space_view_data) -> <<"permViewSpace">>;
+perm_db_to_gui(space_change_data) -> <<"permModifySpace">>;
+perm_db_to_gui(space_remove) -> <<"permRemoveSpace">>;
+perm_db_to_gui(space_set_privileges) -> <<"permSetPrivileges">>;
 perm_db_to_gui(space_invite_user) -> <<"permInviteUser">>;
 perm_db_to_gui(space_remove_user) -> <<"permRemoveUser">>;
 perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
 perm_db_to_gui(space_remove_group) -> <<"permRemoveGroup">>;
-perm_db_to_gui(space_set_privileges) -> <<"permSetPrivileges">>;
-perm_db_to_gui(space_remove) -> <<"permRemoveSpace">>;
 perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
-perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>;
-perm_db_to_gui(space_change_data) -> <<"permModifySpace">>;
-perm_db_to_gui(space_view_data) -> <<"permViewSpace">>.
+perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>.
 
 
 %%--------------------------------------------------------------------
@@ -448,13 +376,13 @@ perm_db_to_gui(space_view_data) -> <<"permViewSpace">>.
 %% @end
 %%--------------------------------------------------------------------
 -spec perm_gui_to_db(binary()) -> atom().
+perm_gui_to_db(<<"permViewSpace">>) -> space_view_data;
+perm_gui_to_db(<<"permModifySpace">>) -> space_change_data;
+perm_gui_to_db(<<"permRemoveSpace">>) -> space_remove;
+perm_gui_to_db(<<"permSetPrivileges">>) -> space_set_privileges;
 perm_gui_to_db(<<"permInviteUser">>) -> space_invite_user;
 perm_gui_to_db(<<"permRemoveUser">>) -> space_remove_user;
 perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;
 perm_gui_to_db(<<"permRemoveGroup">>) -> space_remove_group;
-perm_gui_to_db(<<"permSetPrivileges">>) -> space_set_privileges;
-perm_gui_to_db(<<"permRemoveSpace">>) -> space_remove;
 perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
-perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider;
-perm_gui_to_db(<<"permModifySpace">>) -> space_change_data;
-perm_gui_to_db(<<"permViewSpace">>) -> space_view_data.
+perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider.

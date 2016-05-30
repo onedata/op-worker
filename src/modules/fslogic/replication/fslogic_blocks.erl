@@ -80,8 +80,8 @@ lower([]) ->
 %% For given file / location or multiple locations, reads file size assigned to those locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_size(datastore:document() | #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
-    Size :: non_neg_integer() | no_return().
+-spec get_file_size(datastore:document() | [datastore:document()] | #file_location{} | [#file_location{}] |
+    fslogic_worker:file()) -> Size :: non_neg_integer() | no_return().
 get_file_size(#document{value = #file_location{} = Value}) ->
     get_file_size(Value);
 get_file_size(#document{value = #file_meta{type = ?DIRECTORY_TYPE}}) ->
@@ -92,10 +92,12 @@ get_file_size(#file_location{size = undefined} = Location) ->
     calculate_file_size(Location);
 get_file_size(#file_location{size = Size}) ->
     Size;
+get_file_size([Location]) ->
+    get_file_size(Location);
 get_file_size([Location | T]) ->
     max(get_file_size(Location), get_file_size(T));
 get_file_size([]) ->
-    0;
+    throw(locations_not_found);
 get_file_size(Entry) ->
     LocalLocations = fslogic_utils:get_local_file_locations(Entry),
     get_file_size(LocalLocations).
