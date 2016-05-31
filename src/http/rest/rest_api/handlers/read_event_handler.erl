@@ -124,38 +124,38 @@ get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := _Aut
     {ok, ReadSubId} = event:subscribe(ReadSub),
     erlang:put(subscription_id, ReadSubId),
 
-%%    StreamFun = fun(SendChunk) ->
-%%        event_loop(SendChunk, Id, Timeout, Req2, State) %todo fix dialyzer here
-%%    end,
-%%    Req3 = cowboy_req:set_resp_body_fun(chunked, StreamFun, Req2),
-%%    {ok, Req4} = cowboy_req:reply(?HTTP_OK, [], Req4),
-    {halt, Req2, State}.
+    StreamFun = fun(SendChunk) ->
+        event_loop(SendChunk, Id, Timeout, Req2, State)
+    end,
+    Req3 = cowboy_req:set_resp_body_fun(chunked, StreamFun, Req2),
+    {ok, Req4} = cowboy_req:reply(?HTTP_OK, [], Req3),
+    {halt, Req4, State}.
 
 
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Listens for events and pushes them to the socket
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%-spec event_loop(function(), reference(), timeout(), req(), #{}) -> {ok, req()} | no_return().
-%%event_loop(SendChunk, Id, Timeout, Req, State) ->
-%%    receive
-%%        {Id, [_ | _] = Events, _Ctx} ->
-%%            lists:map(
-%%                fun(#event{counter = Counter, object = #read_event{size = Size, blocks = Blocks}}) ->
-%%                    ParsedBlocks = [[O,S] || #file_block{offset = O, size = S} <- Blocks],
-%%                    JsonEvent = json_utils:encode([
-%%                        {<<"type">>, <<"read_event">>},
-%%                        {<<"count">>, Counter},
-%%                        {<<"size">>, Size},
-%%                        {<<"blocks">>, ParsedBlocks}]),
-%%                    SendChunk(<<JsonEvent/binary, "\r\n">>)
-%%                end, Events),
-%%            event_loop(SendChunk, Id, Timeout, Req, State)
-%%    after
-%%        Timeout ->
-%%            {ok, Req}
-%%    end.
+%%--------------------------------------------------------------------
+%% @doc
+%% Listens for events and pushes them to the socket
+%% @end
+%%--------------------------------------------------------------------
+-spec event_loop(function(), reference(), timeout(), req(), #{}) -> {ok, req()} | no_return().
+event_loop(SendChunk, Id, Timeout, Req, State) ->
+    receive
+        {Id, [_ | _] = Events, _Ctx} ->
+            lists:map(
+                fun(#event{counter = Counter, object = #read_event{size = Size, blocks = Blocks}}) ->
+                    ParsedBlocks = [[O,S] || #file_block{offset = O, size = S} <- Blocks],
+                    JsonEvent = json_utils:encode([
+                        {<<"type">>, <<"read_event">>},
+                        {<<"count">>, Counter},
+                        {<<"size">>, Size},
+                        {<<"blocks">>, ParsedBlocks}]),
+                    SendChunk(<<JsonEvent/binary, "\r\n">>)
+                end, Events),
+            event_loop(SendChunk, Id, Timeout, Req, State)
+    after
+        Timeout ->
+            {ok, Req}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -42,8 +42,8 @@ all() ->
         get_simple_file_distribution,
         replicate_file,
         posix_mode_get,
-        posix_mode_put
-%%        read_event_subscription_test %todo fix dialyzer in rest_event_handler
+        posix_mode_put,
+        read_event_subscription_test
     ]).
 
 %%%===================================================================
