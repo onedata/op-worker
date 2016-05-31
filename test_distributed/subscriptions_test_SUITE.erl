@@ -175,7 +175,8 @@ saves_the_actual_data(Config) ->
         update(3, [<<"r2">>, <<"r1">>], P1, provider(
             <<"diginet rulz">>,
             [<<"url1">>, <<"url2">>],
-            [S1]
+            [S1],
+            false
         ))
     ]),
     expect_message([], 3, []),
@@ -225,7 +226,9 @@ saves_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r2">>, <<"r1">>],
-        urls = [<<"url1">>, <<"url2">>], space_ids = [S1]}}
+        urls = [<<"url1">>, <<"url2">>],
+        space_ids = [S1],
+        public_only = false}}
     }, fetch(Node, provider_info, P1)),
     ok.
 
@@ -524,10 +527,11 @@ updates_with_the_actual_data(Config) ->
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
         ),
-        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1,  provider(
+        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(
             <<"diginet rulz">>,
             [<<"url1">>, <<"url2">>],
-            [S1]
+            [S1],
+            true
         ))
     ]),
     expect_message([], 9, []),
@@ -565,7 +569,9 @@ updates_with_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>],
-        urls = [<<"url1">>, <<"url2">>], space_ids = [S1]}}
+        urls = [<<"url1">>, <<"url2">>],
+        space_ids = [S1],
+        public_only = true}}
     }, fetch(Node, provider_info, P1)),
     ok.
 
@@ -708,9 +714,10 @@ push_update(Node, Updates) ->
     ?assertMatch({ok, _}, Result).
 
 provider(Name) ->
-    provider(Name, [], []).
-provider(Name, URLs, Spaces) ->
-    {provider, [{client_name, Name}, {urls, URLs}, {space_ids, Spaces}]}.
+    provider(Name, [], [], false).
+provider(Name, URLs, Spaces, PublicOnly) ->
+    {provider, [{client_name, Name}, {urls, URLs}, {space_ids, Spaces},
+        {public_only, PublicOnly}]}.
 
 space(Name) ->
     space(Name, [], [], []).

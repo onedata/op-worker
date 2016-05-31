@@ -138,6 +138,7 @@
     client_name :: binary(),
     urls = [] :: [binary()],
     space_ids = [] :: [SpaceId :: binary()],
+    public_only = false :: boolean(), %% see comment in onedata_users
     revision_history = [] :: [subscriptions:rev()]
 }).
 
