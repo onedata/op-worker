@@ -14,6 +14,7 @@
 
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% Message ID containing recipient for remote response.
 -record(message_id, {
