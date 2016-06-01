@@ -390,7 +390,7 @@ rm_recursive_test(Config) ->
 
 file_gap_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, <<"user1">>}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     {ok, Guid} = lfm_proxy:create(W, SessId, <<"/f">>, 8#777),
     {ok, Handle} = lfm_proxy:open(W, SessId, {guid, Guid}, rdwr),
 

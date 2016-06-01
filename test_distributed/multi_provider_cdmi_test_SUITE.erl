@@ -56,11 +56,11 @@
 
 all() ->
     ?ALL([
+        delete_dir_test,
         list_dir_test,
         get_file_test,
         metadata_test,
         delete_file_test,
-        delete_dir_test,
         create_file_test,
         update_file_test,
         create_dir_test,
