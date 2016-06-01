@@ -150,6 +150,9 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_block_change_if_necessary(file_location:doc(), file_location:doc()) -> ok.
+%%notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}}, %todo VFS-2132
+%%    #document{value = #file_location{blocks = SameBlocks}}) ->
+%%    ok;
 notify_block_change_if_necessary(#document{value = #file_location{uuid = FileUuid}}, _) ->
     ok = fslogic_event:emit_file_location_update({uuid, FileUuid}, []).
 
