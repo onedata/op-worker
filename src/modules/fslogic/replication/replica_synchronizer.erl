@@ -52,7 +52,7 @@ synchronize(Uuid, Block) ->
                     replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false)
                 end, Blocks)
         end, ProvidersAndBlocks),
-    fslogic_event:emit_file_location_update({uuid, Uuid}, []).
+    fslogic_event:emit_file_location_update({uuid, Uuid}, [], Block).
 
 %%%===================================================================
 %%% Internal functions

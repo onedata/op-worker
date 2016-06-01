@@ -447,8 +447,7 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode
             WrittenBlocks = [#file_block{
                 file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
             }],
-            NewBlocks = fslogic_blocks:invalidate(CBlocks, WrittenBlocks) ++ WrittenBlocks,
-            NewBlocks1 = fslogic_blocks:consolidate(lists:sort(NewBlocks)),
+            NewBlocks = fslogic_blocks:merge(WrittenBlocks, CBlocks),
             case GenerateEvents of
                 true ->
                     ok = event:emit(#write_event{
@@ -457,7 +456,7 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode
                 false ->
                     ok
             end,
-            {ok, NewHandle#lfm_handle{file_location = Location#file_location{blocks = NewBlocks1}}, Written};
+            {ok, NewHandle#lfm_handle{file_location = Location#file_location{blocks = NewBlocks}}, Written};
         {error, Reason2} ->
             {error, Reason2}
     end.
