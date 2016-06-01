@@ -149,8 +149,8 @@ def create_storages(storages, op_nodes, op_config, bindir, storages_dockers):
             config = storages_dockers['s3'][storage['name']]
             command = ['escript', script_paths['s3'], cookie,
                        first_node, storage['name'], config['host_name'],
-                       storage['bucket'], config['access_key'],
-                       config['secret_key'],
+                       config.get('scheme', 'http'), storage['bucket'],
+                       config['access_key'], config['secret_key'],
                        config.get('iam_request_scheme', 'https'),
                        config.get('iam_host', 'iam.amazonaws.com')]
             assert 0 is docker.exec_(container, command, tty=True,

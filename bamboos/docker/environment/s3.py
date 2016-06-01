@@ -21,7 +21,7 @@ def _node_up(image, buckets, name, uid):
         detach=True)
 
     settings = docker.inspect(container)
-    ip = settings['NetworkSettings']['IPAddress']
+    ip = settings['NetworkSettings']['Networks'].items()[0][1]['IPAddress']
     port = 4569
     host_name = '{0}:{1}'.format(ip, port)
     access_key = 'AccessKey'
