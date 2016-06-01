@@ -164,6 +164,7 @@ fetch(Client) ->
     {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
         oz_users:get_spaces(Client),
     {ok, GroupIds} = oz_users:get_groups(Client),
+    {ok, EffectiveGroupIds} = oz_users:get_effective_groups(Client),
 
     Spaces = utils:pmap(fun(SpaceId) ->
         {ok, #space_details{name = SpaceName}} =
@@ -176,6 +177,7 @@ fetch(Client) ->
         spaces = Spaces,
         default_space = DefaultSpaceId,
         group_ids = GroupIds,
+        effective_group_ids = EffectiveGroupIds,
         connected_accounts = ConnectedAccounts,
         alias = Alias,
         email_list = EmailList

@@ -46,6 +46,7 @@
     node :: node(),
     supervisor :: pid(),
     event_manager :: pid(),
+    watcher :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
     proxy_via :: session:id() | undefined,
@@ -62,6 +63,7 @@
     spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
     group_ids :: [binary()],
+    effective_group_ids = [] :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],
     alias :: binary(),
     email_list :: [binary()],
@@ -77,7 +79,11 @@
 %% Local, cached version of OZ group
 -record(onedata_group, {
     name :: binary(),
+    type :: onedata_group:type(),
     users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
+    parent_groups = [] :: [binary()],
     spaces = [] :: [SpaceId :: binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).

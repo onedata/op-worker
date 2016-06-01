@@ -67,7 +67,7 @@ init(_Args) ->
     ?info("[ DBSync ]: Starting dbsync..."),
     Since = 0,
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
-    timer:send_after(timer:seconds(5), whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+    timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
     {ok, #{changes_stream => undefined}}.
 
@@ -89,7 +89,9 @@ init_stream(Since, Until, Queue) ->
                 end, dbsync_utils:get_spaces_for_provider())),
             timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
             state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
-        _ -> ok
+        _ ->
+            CTime = erlang:monotonic_time(milli_seconds),
+            dbsync_utils:temp_put(last_change, CTime, 0)
     end,
 
     couchdb_datastore_driver:changes_start_link(
@@ -144,6 +146,7 @@ handle({clear_temp, Key}) ->
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+    dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
@@ -155,7 +158,10 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     ?debug("Skipping doc ~p", [Doc]),
                     skip;
                 {ok, SpaceId} ->
-                    queue_push(QueueKey, Change, SpaceId);
+                    case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
+                        ok -> queue_push(QueueKey, Change, SpaceId);
+                        _  -> skip
+                    end;
                 {error, not_a_space} ->
                     skip;
                 {error, Reason} ->
@@ -232,7 +238,7 @@ handle({async_init_stream, Since, Until, Queue}) ->
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
-                timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {timer, {async_init_stream, Since, Until, Queue}}),
+                timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, Until, Queue}}),
                 undefined
         end
     end);
@@ -303,9 +309,16 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
-apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
-        catch consume_batches(FromProvider, SpaceId),
+
+    %% Both providers have to support this space
+    ok = dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId),
+    ok = dbsync_utils:validate_space_access(FromProvider, SpaceId),
+
+    %% Apply old changes that weren't applied previously
+    catch consume_batches(FromProvider, SpaceId),
+
     NewChanges = lists:sort(lists:flatten(Changes)),
     do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true).
 
@@ -316,20 +329,44 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Sin
 %%--------------------------------------------------------------------
 -spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean()) ->
     ok | no_return().
-do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch, ShouldRequest) ->
+do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest) ->
+    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, 4).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Apply whole batch of changes from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean(),
+    Attempts :: integer()) -> ok | no_return().
+do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch,
+    ShouldRequest, Attempts) ->
     ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
-    case CurrentUntil < Since of
+    case CurrentUntil + 1 < Since of
         true ->
-            ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p", [FromProvider, SpaceId, CurrentUntil, Since]),
-            stash_batch(FromProvider, SpaceId, Batch),
-            case ShouldRequest of
+            ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p, attempt ~p",
+                [FromProvider, SpaceId, CurrentUntil, Since, Attempts]),
+            case Attempts of
+                4 ->
+                    stash_batch(FromProvider, SpaceId, Batch),
+                    case ShouldRequest of
+                        true ->
+                            request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
+                        false ->
+                            ok
+                    end;
+                _ ->
+                   ok
+            end,
+            case Attempts > 1 of
                 true ->
-                    request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
-                false ->
+                    timer:sleep(500),
+                    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, Attempts - 1);
+                _ ->
                     ok
             end;
-        false when Until < CurrentUntil ->
+        false when Until =< CurrentUntil ->
             ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
             ok;
         false ->
@@ -585,6 +622,7 @@ get_current_seq(ProviderId, SpaceId) ->
 -spec bcast_status() ->
     ok.
 bcast_status() ->
+    ensure_global_stream_active(),
     SpaceIds = dbsync_utils:get_spaces_for_provider(),
     lists:foreach(
         fun(SpaceId) ->
@@ -604,11 +642,18 @@ bcast_status() ->
 -spec on_status_received(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
     ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
+    ensure_global_stream_active(),
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
     ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
-            do_request_changes(ProviderId, CurrentSeq, SeqNum);
+            case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
+                ok ->
+                    do_request_changes(ProviderId, CurrentSeq, SeqNum);
+                {error, space_not_supported_locally} ->
+                    ?info("Ignoring space ~p status since it's not supported locally."),
+                    ok
+            end;
         false ->
             ok
     end.
@@ -622,15 +667,15 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
 -spec do_request_changes(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 do_request_changes(ProviderId, Since, Until) ->
-    Now = erlang:system_time(milli_seconds),
+    Now = erlang:monotonic_time(milli_seconds),
     %% Wait for {X}ms + {Y}ms per one document
     MaxWaitTime = ?DIRECT_REQUEST_BASE_TIMEOUT + ?DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT * (Until - Since),
     case state_get({do_request_changes, ProviderId, Until}) of
         undefined ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            state_put({do_request_changes, ProviderId, Until}, erlang:monotonic_time(milli_seconds)),
             dbsync_proto:changes_request(ProviderId, Since, Until);
         OldTime when OldTime + MaxWaitTime < Now ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:system_time(seconds)),
+            state_put({do_request_changes, ProviderId, Until}, erlang:monotonic_time(milli_seconds)),
             dbsync_proto:changes_request(ProviderId, Since, Until);
         _ ->
             ok
@@ -717,9 +762,19 @@ is_valid_stream(_) ->
 -spec ensure_global_stream_active() -> ok.
 ensure_global_stream_active() ->
     case is_valid_stream(state_get(changes_stream)) of
-        true -> ok;
+        true ->
+            CTime = erlang:monotonic_time(milli_seconds),
+            MaxIdleTime = timer:seconds(10),
+            case dbsync_utils:temp_get(last_change) of
+                undefined ->
+                    dbsync_utils:temp_put(last_change, CTime, 0);
+                Time when Time + MaxIdleTime < CTime ->
+                    erlang:exit(state_get(changes_stream), force_restart);
+                _ ->
+                    ok
+            end;
         false ->
             Since = state_get(global_resume_seq),
-            timer:send_after(0, whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+            timer:send_after(0, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
             ok
     end.

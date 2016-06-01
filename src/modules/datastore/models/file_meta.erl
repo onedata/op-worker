@@ -125,15 +125,17 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc0) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V} = FM} = FileDoc0) ->
     ?run(begin
+             {ok, Scope} = get_scope(Parent),
+             FM1 = FM#file_meta{scope = Scope#document.key},
              FileDoc =
                  case FileDoc0 of
                      #document{key = undefined} = Doc ->
                          NewUUID = fslogic_uuid:gen_file_uuid(),
-                         Doc#document{key = NewUUID};
+                         Doc#document{key = NewUUID, value = FM1};
                      _ ->
-                         FileDoc0
+                         FileDoc0#document{value = FM1}
                  end,
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
@@ -143,12 +145,11 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                              case create(FileDoc) of
                                  {ok, UUID} ->
                                      SavedDoc = FileDoc#document{key = UUID},
-                                     {ok, Scope} = get_scope(Parent),
+
                                      set_link_context(Scope),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
-                                     set_scope(SavedDoc, Scope#document.key),
                                      {ok, UUID};
                                  {error, Reason} ->
                                      {error, Reason}
@@ -521,62 +522,57 @@ get_scope(Entry) ->
 setup_onedata_user(_Client, UserId) ->
     ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
     datastore:run_synchronized(onedata_user, UserId, fun() ->
-        try
-            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
-                onedata_user:get(UserId),
+        {ok, #document{value = #onedata_user{spaces = Spaces}}} =
+            onedata_user:get(UserId),
 
-                CTime = erlang:system_time(seconds),
+            CTime = erlang:system_time(seconds),
 
-                {ok, SpacesRootUUID} =
-                    case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
-                        {ok, #document{key = Key}} -> {ok, Key};
-                        {error, {not_found, _}} ->
-                            create({uuid, ?ROOT_DIR_UUID},
-                                #document{key = ?SPACES_BASE_DIR_UUID,
-                                    value = #file_meta{
-                                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
-                                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                                        is_scope = true
-                                    }})
-                    end,
-
-            lists:foreach(fun({SpaceId, _}) ->
-                SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                case exists({uuid, SpaceDirUuid}) of
-                    true ->
-                        fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID},
-                            {uuid, SpaceDirUuid});
-                    false ->
-                        {ok, _} = create({uuid, SpacesRootUUID},
-                            #document{key = SpaceDirUuid,
+            {ok, SpacesRootUUID} =
+                case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
+                    {ok, #document{key = Key}} -> {ok, Key};
+                    {error, {not_found, _}} ->
+                        create({uuid, ?ROOT_DIR_UUID},
+                            #document{key = ?SPACES_BASE_DIR_UUID,
                                 value = #file_meta{
-                                    name = SpaceId, type = ?DIRECTORY_TYPE,
-                                    mode = 8#1770, mtime = CTime, atime = CTime,
-                                    ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
+                                    name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
+                                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                                    is_scope = true
                                 }})
-                end
-            end, Spaces),
+                end,
 
-            {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
-                #document{key = fslogic_uuid:default_space_uuid(UserId),
-                    value = #file_meta{
-                        name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                        is_scope = true
-                    }
-                }),
-            {ok, _SpacesUUID} = create({uuid, RootUUID},
-                #document{key = fslogic_uuid:spaces_uuid(UserId),
-                    value = #file_meta{
-                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                        is_scope = true
-                    }
-                })
-        catch
-            Error:Reason ->
-                ?error_stacktrace("Cannot initialize onedata user files metadata due to: ~p:~p", [Error, Reason])
-        end
+        lists:foreach(fun({SpaceId, _}) ->
+            SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+            case exists({uuid, SpaceDirUuid}) of
+                true ->
+                    fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID},
+                        {uuid, SpaceDirUuid});
+                false ->
+                    {ok, _} = create({uuid, SpacesRootUUID},
+                        #document{key = SpaceDirUuid,
+                            value = #file_meta{
+                                name = SpaceId, type = ?DIRECTORY_TYPE,
+                                mode = 8#1770, mtime = CTime, atime = CTime,
+                                ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
+                            }})
+            end
+        end, Spaces),
+
+        {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
+            #document{key = fslogic_uuid:default_space_uuid(UserId),
+                value = #file_meta{
+                    name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1770,
+                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                    is_scope = true
+                }
+            }),
+        {ok, _SpacesUUID} = create({uuid, RootUUID},
+            #document{key = fslogic_uuid:spaces_uuid(UserId),
+                value = #file_meta{
+                    name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                    is_scope = true
+                }
+            })
     end).
 
 

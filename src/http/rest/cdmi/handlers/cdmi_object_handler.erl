@@ -84,7 +84,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
 is_authorized(Req, State) ->
-    rest_auth:is_authorized(Req, State).
+    onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2

@@ -24,6 +24,9 @@
 -export([handle/2, handle_impl/2]).
 -export([reemit/1]).
 
+%% Time between failed direct requests
+-define(DIRECT_MESSAGE_RETRY_TIME, 50).
+
 %%%==================================================================
 %%% API
 %%%===================================================================
@@ -47,9 +50,11 @@ send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Unt
     ok;
 send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
-    %% @todo: filter spaces for given provider
-    send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
-        changes_encoded = dbsync_utils:encode_term(Changes)}, 3).
+    case dbsync_utils:validate_space_access(ProviderId, SpaceId) of
+        ok -> send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
+            changes_encoded = dbsync_utils:encode_term(Changes)}, 3);
+        _ -> skip
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -84,11 +89,10 @@ status_report(SpaceId, Providers, CurrentSeq) ->
 -spec send_direct_message(ProviderId :: oneprovider:id(), Request :: term(), Attempts :: non_neg_integer()) ->
     ok | {error, Reason :: any()}.
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
-    PushTo = ProviderId,
-    case dbsync_utils:communicate(PushTo, Request) of
+    case dbsync_utils:communicate(ProviderId, Request) of
         {ok, _} -> ok;
-        {error, Reason} ->
-            ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
+        {error, _Reason} ->
+            timer:sleep(?DIRECT_MESSAGE_RETRY_TIME),
             send_direct_message(ProviderId, Request, Attempts - 1)
     end;
 send_direct_message(_ProviderId, _Request, _) ->
@@ -112,7 +116,7 @@ send_tree_broadcast(SpaceId, SyncWith, Request, BaseRequest, Attempts) ->
         _ ->
             {LSync, RSync} = lists:split(crypto:rand_uniform(0, length(SyncWith1)), SyncWith1),
             ExclProviders = [oneprovider:get_provider_id() | BaseRequest#tree_broadcast.excluded_providers],
-            NewBaseRequest = BaseRequest#tree_broadcast{excluded_providers = lists:usort(ExclProviders), space_id = SpaceId},
+            NewBaseRequest = BaseRequest#tree_broadcast{excluded_providers = ExclProviders, space_id = SpaceId},
             do_emit_tree_broadcast(LSync, Request, NewBaseRequest, Attempts),
             do_emit_tree_broadcast(RSync, Request, NewBaseRequest, Attempts)
     end.
@@ -177,10 +181,13 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
     {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle_impl(ProviderId, MessageBody) of
         ok ->
-            #status{code = ?OK}
+            #status{code = ?OK};
+        Reason1 ->
+            ?error("DBSync error ~p", [Reason1]),
+            #status{code = ?EAGAIN}
     catch
         _:Reason0 ->
-            ?error_stacktrace("DBSync error ~p", [Reason0]),
+            ?error_stacktrace("DBSync error ~p for message ~p from ~p", [Reason0, MessageBody, ProviderId]),
             #status{code = ?EAGAIN}
     end.
 
@@ -191,8 +198,9 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_impl(From :: oneprovider:id(), #tree_broadcast{} | #changes_request{} | #batch_update{}) ->
-    ok | no_return().
-handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
+    ok | {error, Reason :: term()} | no_return().
+handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, space_id = SpaceId,
+    excluded_providers = ExclProviders} = BaseRequest) ->
     Ignore =
         case dbsync_utils:temp_get({request, ReqId}) of
             undefined ->
@@ -202,11 +210,14 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                 true
         end,
 
+    ok = dbsync_utils:validate_space_access(From, SpaceId),
+    MessageOrigin = lists:last(ExclProviders),
+
     ?debug("DBSync request (ignored: ~p) from ~p ~p", [Ignore, From, BaseRequest]),
 
     case Ignore of
         false ->
-            try handle_broadcast(From, Request, BaseRequest) of
+            try handle_broadcast(MessageOrigin, Request, BaseRequest) of
 %%                ok -> ok; %% This case should be safely ignored but is not used right now.
                 reemit ->
                     case worker_proxy:cast(dbsync_worker, {reemit, BaseRequest}) of
@@ -217,7 +228,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                     end
             catch
                 _:Reason ->
-                    ?error("Error while handling tree broadcast: ~p", [Reason]),
+                    ?error_stacktrace("Error while handling tree broadcast: ~p", [Reason]),
                     {error, Reason}
             end;
         true -> ok

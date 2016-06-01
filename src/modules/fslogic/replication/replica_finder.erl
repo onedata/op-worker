@@ -50,7 +50,7 @@ get_blocks_for_sync(Locations, Blocks) ->
     SortedRemoteList = lists:sort(RemoteList),
     AggregatedRemoteList = lists:foldl(fun
         ({ProviderId, Blocks}, [{ProviderId, BlocksAcc} | Rest]) ->
-            AggregatedBlocks = aggregate(Blocks, BlocksAcc),
+            AggregatedBlocks = fslogic_blocks:merge(BlocksAcc, Blocks),
             [{ProviderId, AggregatedBlocks} | Rest];
         (ProviderIdWithBlocks, Acc) ->
             [ProviderIdWithBlocks | Acc]
@@ -72,16 +72,6 @@ get_blocks_for_sync(Locations, Blocks) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Aggregates and consolidates given blocks lists.
-%% @end
-%%--------------------------------------------------------------------
--spec aggregate(fslogic_blocks:blocks(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
-aggregate(Blocks1, Blocks2) ->
-    AggregatedBlocks = fslogic_blocks:invalidate(Blocks1, Blocks2) ++ Blocks2,
-    fslogic_blocks:consolidate(lists:sort(AggregatedBlocks)).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% For given list of mappings between provider_id -> available_blocks,
 %% returns minimized version suitable for data transfer, in which providers'
 %% available blocks are disjoint.
@@ -93,7 +83,7 @@ minimize_present_blocks([], _) ->
     [];
 minimize_present_blocks([{ProviderId, Blocks} | Rest], AlreadyPresent) ->
     MinimizedBlocks = fslogic_blocks:invalidate(Blocks, AlreadyPresent),
-    UpdatedAlreadyPresent = aggregate(AlreadyPresent, MinimizedBlocks),
+    UpdatedAlreadyPresent = fslogic_blocks:merge(MinimizedBlocks, AlreadyPresent),
     case MinimizedBlocks of
         [] ->
             minimize_present_blocks(Rest, UpdatedAlreadyPresent);

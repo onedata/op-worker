@@ -10,6 +10,7 @@
 
 #include "cephHelper.h"
 #include "directIOHelper.h"
+#include "keyValueAdapter.h"
 #include "s3Helper.h"
 
 #ifdef BUILD_PROXY_IO
@@ -24,23 +25,25 @@ namespace helpers {
 #ifdef BUILD_PROXY_IO
 
 StorageHelperFactory::StorageHelperFactory(asio::io_service &cephService,
-    asio::io_service &dioService, asio::io_service &s3Service,
+    asio::io_service &dioService, asio::io_service &kvService,
     communication::Communicator &communicator)
     : m_cephService{cephService}
     , m_dioService{dioService}
-    , m_s3Service{s3Service}
+    , m_kvService{kvService}
     , m_communicator{communicator}
 {
 }
 
 #else
+
 StorageHelperFactory::StorageHelperFactory(asio::io_service &ceph_service,
-    asio::io_service &dio_service, asio::io_service &s3Service)
+    asio::io_service &dio_service, asio::io_service &kvService)
     : m_cephService{ceph_service}
     , m_dioService{dio_service}
-    , m_s3Service{s3Service}
+    , m_kvService{kvService}
 {
 }
+
 #endif
 
 std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(
@@ -66,7 +69,8 @@ std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(
 #endif
 
     if (sh_name == S3_HELPER_NAME)
-        return std::make_shared<S3Helper>(args, m_s3Service);
+        return std::make_shared<KeyValueAdapter>(
+            std::make_unique<S3Helper>(args), m_kvService, m_kvLocks);
 
     throw std::system_error{std::make_error_code(std::errc::invalid_argument),
         "Invalid storage helper name: '" + sh_name + "'"};

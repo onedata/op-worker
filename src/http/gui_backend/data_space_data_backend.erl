@@ -16,7 +16,8 @@
 -author("Jakub Liput").
 
 -include("proto/common/credentials.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
@@ -53,9 +54,9 @@ terminate() ->
 %% {@link data_backend_behaviour} callback find/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Ids :: [binary()]) ->
+-spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space">>, [SpaceId]) ->
+find(<<"data-space">>, SpaceId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
     {ok, #document{
@@ -87,14 +88,14 @@ find(<<"data-space">>, [SpaceId]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"data-space">>) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
-            {ok, Data} = find(<<"data-space">>, [SpaceId]),
+            {ok, Data} = find(<<"data-space">>, SpaceId),
             Data
         end, SpaceIds),
     {ok, Res}.

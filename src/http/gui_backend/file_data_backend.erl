@@ -15,8 +15,8 @@
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/common_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
@@ -24,6 +24,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([file_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -54,9 +55,9 @@ terminate() ->
 %% {@link data_backend_behaviour} callback find/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Ids :: [binary()]) ->
+-spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file">>, [FileId]) ->
+find(<<"file">>, FileId) ->
     SessionId = g_session:get_session_id(),
     try
         file_record(SessionId, FileId)
@@ -74,7 +75,7 @@ find(<<"file">>, [FileId]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
+    {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"file">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
@@ -89,31 +90,28 @@ find_all(<<"file">>) ->
 find_query(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 
-
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
-    {ok, Locations} = file_meta:get_locations({uuid, FileId}),
+    SessionId = g_session:get_session_id(),
+    {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
     Res = lists:map(
-        fun(LocationId) ->
-            {ok, #document{value = #file_location{
-                provider_id = ProviderId,
-                blocks = Blocks
-            }}} = file_location:get(LocationId),
-            BlocksList = case Blocks of
-                [] ->
-                    [0, 0];
-                _ ->
-                    lists:foldl(
-                        fun(#file_block{offset = Offset, size = Size}, Acc) ->
-                            Acc ++ [Offset, Offset + Size]
-                        end, [], Blocks)
-            end,
+        fun([{<<"provider">>, ProviderId}, {<<"blocks">>, Blocks}]) ->
+            BlocksList =
+                case Blocks of
+                    [] ->
+                        [0, 0];
+                    _ ->
+                        lists:foldl(
+                            fun([Offset, Size], Acc) ->
+                                Acc ++ [Offset, Offset + Size]
+                            end, [], Blocks)
+                end,
             [
                 {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
                 {<<"blocks">>, BlocksList}
             ]
-        end, Locations),
+        end, Distributions),
     {ok, Res}.
 
 
@@ -135,12 +133,10 @@ create_record(<<"file">>, Data) ->
         Path = filename:join([ParentPath, Name]),
         FileId = case Type of
             <<"file">> ->
-                {ok, FId} = logical_file_manager:create(
-                    SessionId, Path, 8#777),
+                {ok, FId} = logical_file_manager:create(SessionId, Path),
                 FId;
             <<"dir">> ->
-                {ok, DirId} = logical_file_manager:mkdir(
-                    SessionId, Path, 8#777),
+                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
                 DirId
         end,
         {ok, #file_attr{
@@ -217,11 +213,14 @@ update_record(<<"file">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file">>, Id) ->
-    try
-        rm_rf(Id)
-    catch error:{badmatch, {error, eacces}} ->
-        gui_error:report_warning(<<"Cannot remove file - access denied.">>)
+delete_record(<<"file">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
+        ok ->
+            ok;
+        {error, eacces} ->
+            gui_error:report_warning(
+                <<"Cannot remove file or directory - access denied.">>)
     end.
 
 
@@ -258,78 +257,57 @@ get_spaces_dir_uuid(SessionId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Recursively deletes a directory and all its contents.
-%% @end
-%%--------------------------------------------------------------------
--spec rm_rf(FileId :: binary()) -> ok | no_return().
-rm_rf(FileId) ->
-    SessionId = g_session:get_session_id(),
-    {ok, #file_attr{
-        type = Type
-    }} = logical_file_manager:stat(SessionId, {guid, FileId}),
-    case Type of
-        ?DIRECTORY_TYPE ->
-            {ok, Children} = logical_file_manager:ls(
-                SessionId, {guid, FileId}, 0, 1000),
-            lists:foreach(
-                fun({ChId, _}) ->
-                    ok = rm_rf(ChId)
-                end, Children);
-        _ ->
-            ok
-    end,
-    ok = logical_file_manager:unlink(SessionId, {guid, FileId}).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Constructs a file record from given FileId.
 %% @end
 %%--------------------------------------------------------------------
 -spec file_record(SessionId :: binary(), FileId :: binary()) ->
     {ok, proplists:proplist()}.
 file_record(SessionId, FileId) ->
-    SpacesDirUUID = get_spaces_dir_uuid(SessionId),
-    ParentUUID = case get_parent(SessionId, FileId) of
-        SpacesDirUUID ->
-            null;
-        Other ->
-            Other
-    end,
-    {ok, #file_attr{
-        name = Name,
-        type = TypeAttr,
-        size = SizeAttr,
-        mtime = ModificationTime,
-        mode = PermissionsAttr}} =
-        logical_file_manager:stat(SessionId, {guid, FileId}),
-    {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE -> {<<"dir">>, null};
-        _ -> {<<"file">>, SizeAttr}
-    end,
-    Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
-    Children = case Type of
-        <<"file">> ->
-            [];
-        <<"dir">> ->
-            case logical_file_manager:ls(
-                SessionId, {guid, FileId}, 0, 1000) of
-                {ok, Chldrn} ->
-                    Chldrn;
-                _ ->
-                    []
-            end
-    end,
-    ChildrenIds = [ChId || {ChId, _} <- Children],
-    Res = [
-        {<<"id">>, FileId},
-        {<<"name">>, Name},
-        {<<"type">>, Type},
-        {<<"permissions">>, Permissions},
-        {<<"modificationTime">>, ModificationTime},
-        {<<"size">>, Size},
-        {<<"parent">>, ParentUUID},
-        {<<"children">>, ChildrenIds}
-    ],
-    {ok, Res}.
+    case logical_file_manager:stat(SessionId, {guid, FileId}) of
+        {error, enoent} ->
+            gui_error:report_error(<<"No such file or directory.">>);
+        {ok, FileAttr} ->
+            #file_attr{
+                name = Name,
+                type = TypeAttr,
+                size = SizeAttr,
+                mtime = ModificationTime,
+                mode = PermissionsAttr} = FileAttr,
+
+            SpacesDirUUID = get_spaces_dir_uuid(SessionId),
+            ParentUUID = case get_parent(SessionId, FileId) of
+                SpacesDirUUID ->
+                    null;
+                Other ->
+                    Other
+            end,
+            {Type, Size} = case TypeAttr of
+                ?DIRECTORY_TYPE -> {<<"dir">>, null};
+                _ -> {<<"file">>, SizeAttr}
+            end,
+            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
+            Children = case Type of
+                <<"file">> ->
+                    [];
+                <<"dir">> ->
+                    case logical_file_manager:ls(
+                        SessionId, {guid, FileId}, 0, 1000) of
+                        {ok, Chldrn} ->
+                            Chldrn;
+                        _ ->
+                            []
+                    end
+            end,
+            ChildrenIds = [ChId || {ChId, _} <- Children],
+            Res = [
+                {<<"id">>, FileId},
+                {<<"name">>, Name},
+                {<<"type">>, Type},
+                {<<"permissions">>, Permissions},
+                {<<"modificationTime">>, ModificationTime},
+                {<<"size">>, Size},
+                {<<"parent">>, ParentUUID},
+                {<<"children">>, ChildrenIds}
+            ],
+            {ok, Res}
+    end.

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update/4]).
+-export([update/4, fill_blocks_with_storage_info/2]).
 
 %%%===================================================================
 %%% API
@@ -40,7 +40,6 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
     fslogic_utils:wait_for_local_file_location(FileUUID),
     file_location:run_synchronized(FileUUID,
         fun() ->
-            try
                 [Location = #document{value = #file_location{size = OldSize}} | _] =
                     fslogic_utils:get_local_file_locations_once({uuid, FileUUID}), %todo get location as argument, insted operating on first one
                 FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
@@ -60,12 +59,35 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
                         {ok, size_changed}
                 end
                 % todo reconcile other local replicas according to this one
-            catch
-                _:Reason ->
-                    ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),
-                    {error, Reason}
-            end
         end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Make sure that storage_id and file_id are set (assume defaults form location
+%% if not)
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_blocks_with_storage_info(fslogic_blocks:blocks(), file_location:doc()) ->
+    fslogic_blocks:blocks().
+fill_blocks_with_storage_info(Blocks, #document{value = #file_location{storage_id = DSID, file_id = DFID}}) ->
+    FilledBlocks = lists:map(
+        fun(#file_block{storage_id = SID, file_id = FID} = B) ->
+            NewSID =
+                case SID of
+                    undefined -> DSID;
+                    _ -> SID
+                end,
+            NewFID =
+                case FID of
+                    undefined -> DFID;
+                    _ -> FID
+                end,
+
+            B#file_block{storage_id = NewSID, file_id = NewFID}
+        end, Blocks),
+
+    fslogic_blocks:consolidate(lists:usort(FilledBlocks)).
 
 %%%===================================================================
 %%% Internal functions
@@ -95,8 +117,7 @@ do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} 
 append(Doc, [], _) ->
     Doc;
 append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
-    NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks) ++ Blocks,
-    NewBlocks1 = fslogic_blocks:consolidate(lists:sort(NewBlocks)),
+    NewBlocks = fslogic_blocks:merge(Blocks, OldBlocks),
     NewSize = fslogic_blocks:upper(Blocks),
 
     case BumpVersion of
@@ -104,12 +125,12 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
             version_vector:bump_version(
                 fslogic_file_location:add_change(
                     Doc#document{value =
-                    Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}},
+                    Loc#file_location{blocks = NewBlocks, size = max(OldSize, NewSize)}},
                     Blocks
                 ));
         false ->
             Doc#document{value =
-                Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}}
+                Loc#file_location{blocks = NewBlocks, size = max(OldSize, NewSize)}}
     end.
 
 %%--------------------------------------------------------------------
@@ -129,30 +150,3 @@ shrink(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks
             {shrink, NewSize}
         )
     ).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Make sure that storage_id and file_id are set (assume defaults form location
-%% if not)
-%% @end
-%%--------------------------------------------------------------------
--spec fill_blocks_with_storage_info(fslogic_blocks:blocks(), file_location:doc()) ->
-    fslogic_blocks:blocks().
-fill_blocks_with_storage_info(Blocks, #document{value = #file_location{storage_id = DSID, file_id = DFID}}) ->
-    FilledBlocks = lists:map(
-        fun(#file_block{storage_id = SID, file_id = FID} = B) ->
-            NewSID =
-                case SID of
-                    undefined -> DSID;
-                    _ -> SID
-                end,
-            NewFID =
-                case FID of
-                    undefined -> DFID;
-                    _ -> FID
-                end,
-
-            B#file_block{storage_id = NewSID, file_id = NewFID}
-        end, Blocks),
-
-    fslogic_blocks:consolidate(lists:usort(FilledBlocks)).

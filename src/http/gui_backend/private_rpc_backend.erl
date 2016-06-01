@@ -14,6 +14,8 @@
 -author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
 
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
@@ -32,28 +34,58 @@
 %%--------------------------------------------------------------------
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
-handle(<<"fileUploadComplete">>, [{<<"fileId">>, FileId}]) ->
-    upload_handler:upload_map_delete(FileId),
+%%--------------------------------------------------------------------
+%% File upload related procedures
+%%--------------------------------------------------------------------
+handle(<<"fileUploadSuccess">>, Props) ->
+    ConnRef = proplists:get_value(<<"connectionRef">>, Props),
+    UploadId = proplists:get_value(<<"uploadId">>, Props),
+    FileId = upload_handler:upload_map_lookup(UploadId),
+    upload_handler:upload_map_delete(UploadId),
+    % @todo VFS-2051 temporary solution for model pushing during upload
+    SessionId = g_session:get_session_id(),
+    % This is sent to the client via sessionDetails object
+    ConnPid = list_to_pid(binary_to_list(base64:decode(ConnRef))),
+    {ok, FileHandle} =
+        logical_file_manager:open(SessionId, {guid, FileId}, read),
+    ok = logical_file_manager:fsync(FileHandle),
+    ok = logical_file_manager:release(FileHandle),
+    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
+    gui_async:push_created(<<"file">>, FileData, ConnPid),
+    % @todo end
     ok;
 
-handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
+handle(<<"fileUploadFailure">>, Props) ->
+    UploadId = proplists:get_value(<<"uploadId">>, Props),
+    upload_handler:upload_map_delete(UploadId),
+    ok;
+
+%%--------------------------------------------------------------------
+%% Space related procedures
+%%--------------------------------------------------------------------
+handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    % @TODO VFS-1860 should use space_info join!
-    case oz_users:join_space(UserAuth, [{<<"token">>, Token}]) of
-        {ok, SpaceID} ->
-            {ok, #space_details{
-                name = SpaceName
-            }} = oz_spaces:get_details(UserAuth, SpaceID),
-            {ok, SpaceName};
-        {error, {
-            400,
-            <<"invalid_request">>,
-            <<"invalid 'token' value: ", _/binary>>
-        }} ->
+    case space_logic:get_invite_user_token(UserAuth, SpaceId) of
+        {ok, Token} ->
+            {ok, [{<<"token">>, Token}]};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite user token due to unknown error.">>)
+    end;
+
+handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case space_logic:join_space(UserAuth, Token) of
+        {ok, SpaceId} ->
+            SpaceRecord = space_data_backend:space_record(SpaceId),
+            SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
+            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            {ok, [{<<"spaceName">>, SpaceName}]};
+        {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
 
-handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:leave_space(UserAuth, SpaceId) of
         ok ->
@@ -63,31 +95,132 @@ handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot leave space due to unknown error.">>)
     end;
 
-handle(<<"userToken">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
-    case space_logic:get_invite_user_token(UserAuth, SpaceId) of
-        {ok, Token} ->
-            {ok, Token};
-        {error, _} ->
-            gui_error:report_error(
-                <<"Cannot get invite user token due to unknown error.">>)
-    end;
-
-handle(<<"groupToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_group_token(UserAuth, SpaceId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite group token due to unknown error.">>)
     end;
 
-handle(<<"supportToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"groupJoinSpace">>, Props) ->
+    GroupId = proplists:get_value(<<"groupId">>, Props),
+    Token = proplists:get_value(<<"token">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:join_space(UserAuth, GroupId, Token) of
+        {ok, SpaceId} ->
+            SpaceRecord = space_data_backend:space_record(SpaceId),
+            SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
+            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            {ok, [{<<"spaceName">>, SpaceName}]};
+        {error, invalid_token_value} ->
+            gui_error:report_warning(<<"Invalid token value.">>)
+    end;
+
+handle(<<"groupLeaveSpace">>, Props) ->
+    GroupId = proplists:get_value(<<"groupId">>, Props),
+    SpaceId = proplists:get_value(<<"spaceId">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:leave_space(UserAuth, GroupId, SpaceId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave space due to unknown error.">>)
+    end;
+
+handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
         {ok, Token} ->
-            {ok, Token};
+            {ok, [{<<"token">>, Token}]};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite provider token due to unknown error.">>)
+    end;
+
+%%--------------------------------------------------------------------
+%% Group related procedures
+%%--------------------------------------------------------------------
+handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_invite_user_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, [{<<"token">>, Token}]};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite group token due to unknown error.">>)
+    end;
+
+handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case user_logic:join_group(UserAuth, Token) of
+        {ok, GroupId} ->
+            GroupRecord = group_data_backend:group_record(GroupId),
+            GroupName = proplists:get_value(<<"name">>, GroupRecord),
+            gui_async:push_created(<<"group">>, GroupRecord, self()),
+            {ok, [{<<"groupName">>, GroupName}]};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot join group due to unknown error.">>)
+    end;
+
+handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case user_logic:leave_group(UserAuth, GroupId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave group due to unknown error.">>)
+    end;
+
+handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_invite_group_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, [{<<"token">>, Token}]};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite user token due to unknown error.">>)
+    end;
+
+handle(<<"groupJoinGroup">>, Props) ->
+    ChildGroupId = proplists:get_value(<<"groupId">>, Props),
+    Token = proplists:get_value(<<"token">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:join_group(UserAuth, ChildGroupId, Token) of
+        {ok, ParentGroupId} ->
+            ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
+            ChildGroupRecord = group_data_backend:group_record(ChildGroupId),
+            gui_async:push_updated(<<"group">>, ParentGroupRecord, self()),
+            gui_async:push_updated(<<"group">>, ChildGroupRecord, self()),
+            PrntGroupName = proplists:get_value(<<"name">>, ParentGroupRecord),
+            {ok, [{<<"groupName">>, PrntGroupName}]};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot join group due to unknown error.">>)
+    end;
+
+handle(<<"groupLeaveGroup">>, Props) ->
+    ParentGroupId = proplists:get_value(<<"parentGroupId">>, Props),
+    ChildGroupId = proplists:get_value(<<"childGroupId">>, Props),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:leave_group(UserAuth, ParentGroupId, ChildGroupId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave group due to unknown error.">>)
+    end;
+
+handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case group_logic:get_create_space_token(UserAuth, GroupId) of
+        {ok, Token} ->
+            {ok, [{<<"token">>, Token}]};
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite provider token due to unknown error.">>)

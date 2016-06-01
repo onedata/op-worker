@@ -311,6 +311,18 @@ translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{uuid = Uuid,
     #synchronize_block_and_compute_checksum{uuid = Uuid, block = #file_block{offset = O, size = S}};
 translate_from_protobuf(#'Checksum'{value = Value}) ->
     #checksum{value = Value};
+translate_from_protobuf(#'GetFileDistribution'{uuid = Uuid}) ->
+    #get_file_distribution{uuid = Uuid};
+translate_from_protobuf(#'ReplicateFile'{uuid = Uuid, provider_id = ProviderId,
+    block = Block}) ->
+    #replicate_file{uuid = Uuid, provider_id = ProviderId,
+        block = translate_from_protobuf(Block)};
+translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, blocks = Blocks}) ->
+    TranslatedBlocks = lists:map(fun translate_from_protobuf/1, Blocks),
+    #provider_file_distribution{provider_id = ProviderId, blocks = TranslatedBlocks};
+translate_from_protobuf(#'FileDistribution'{provider_file_distributions = Distributions}) ->
+    TranslatedDistributions = lists:map(fun translate_from_protobuf/1, Distributions),
+    #file_distribution{provider_file_distributions = TranslatedDistributions};
 
 %% CDMI
 translate_from_protobuf(#'Acl'{value = Value}) ->
@@ -613,6 +625,18 @@ translate_to_protobuf(#synchronize_block_and_compute_checksum{uuid = Uuid, block
         #'SynchronizeBlockAndComputeChecksum'{uuid = Uuid, block = translate_to_protobuf(Block)}};
 translate_to_protobuf(#checksum{value = Value}) ->
     {checksum, #'Checksum'{value = Value}};
+translate_to_protobuf(#get_file_distribution{uuid = Uuid}) ->
+    {get_file_distribution, #'GetFileDistribution'{uuid = Uuid}};
+translate_to_protobuf(#replicate_file{uuid = Uuid, provider_id = ProviderId,
+    block = Block}) ->
+    {replicate_file, #'ReplicateFile'{uuid = Uuid, provider_id = ProviderId,
+        block = translate_to_protobuf(Block)}};
+translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
+    TranslatedBlocks = lists:map(fun translate_to_protobuf/1, Blocks),
+    #'ProviderFileDistribution'{provider_id = ProviderId, blocks = TranslatedBlocks};
+translate_to_protobuf(#file_distribution{provider_file_distributions = Distributions}) ->
+    TranslatedDistributions = lists:map(fun translate_to_protobuf/1, Distributions),
+    {file_distribution, #'FileDistribution'{provider_file_distributions = TranslatedDistributions}};
 
 %% CDMI
 translate_to_protobuf(#acl{value = Value}) ->

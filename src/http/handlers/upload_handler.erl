@@ -43,58 +43,59 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Inserts a Key - Value pair into upload map.
+%% Inserts a UploadId - FileId pair into upload map.
 %% Upload map is a map in session memory dedicated for handling chunked
 %% file uploads.
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_insert(Key :: term(), Value :: term()) -> ok.
-upload_map_insert(Key, Value) ->
+-spec upload_map_insert(UploadId :: term(), FileId :: term()) -> ok.
+upload_map_insert(UploadId, FileId) ->
     Map = g_session:get_value(?UPLOAD_MAP, #{}),
-    NewMap = maps:put(Key, Value, Map),
+    NewMap = maps:put(UploadId, FileId, Map),
     g_session:put_value(?UPLOAD_MAP, NewMap).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves a Value from upload map by Key.
+%% Retrieves a FileId from upload map by UploadId.
 %% Upload map is a map in session memory dedicated for handling chunked
 %% file uploads.
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_lookup(Key :: term()) -> Value :: term().
-upload_map_lookup(Key) ->
-    upload_map_lookup(Key, undefined).
+-spec upload_map_lookup(UploadId :: term()) -> FileId :: term().
+upload_map_lookup(UploadId) ->
+    upload_map_lookup(UploadId, undefined).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves a Value from upload map by Key or returns a default value.
+%% Retrieves a FileId from upload map by UploadId or returns a default value.
 %% Upload map is a map in session memory dedicated for handling chunked
 %% file uploads.
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_lookup(Key :: term(), Default :: term()) -> Value :: term().
-upload_map_lookup(Key, Default) ->
+-spec upload_map_lookup(UploadId :: term(), Default :: term()) ->
+    FileId :: term().
+upload_map_lookup(UploadId, Default) ->
     Map = g_session:get_value(?UPLOAD_MAP, #{}),
-    maps:get(Key, Map, Default).
+    maps:get(UploadId, Map, Default).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes a Key Value pair from upload map.
+%% Deletes a UploadId - FileId pair from upload map.
 %% Upload map is a map in session memory dedicated for handling chunked
 %% file uploads.
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_delete(Key :: term()) -> ok.
-upload_map_delete(Key) ->
+-spec upload_map_delete(UploadId :: term()) -> ok.
+upload_map_delete(UploadId) ->
     Map = g_session:get_value(?UPLOAD_MAP, #{}),
-    NewMap = maps:remove(Key, Map),
+    NewMap = maps:remove(UploadId, Map),
     g_session:put_value(?UPLOAD_MAP, NewMap).
 
 
@@ -244,6 +245,7 @@ multipart(Req, Params) ->
         {done, Req2} ->
             Req2
     end.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -257,6 +259,7 @@ stream_file(Req, FileHandle, Offset, Opts) ->
     case cowboy_req:part_body(Req, Opts) of
         {ok, Body, Req2} ->
             {ok, _, _} = logical_file_manager:write(FileHandle, Offset, Body),
+            ok = logical_file_manager:release(FileHandle),
             % @todo VFS-1815 register_chunk?
             % or send a message from client that uuid has finished?
             Req2;
@@ -277,7 +280,7 @@ stream_file(Req, FileHandle, Offset, Opts) ->
 %%--------------------------------------------------------------------
 -spec get_new_file_id(Params :: proplists:proplist()) -> file_meta:uuid().
 get_new_file_id(Params) ->
-    Identifier = get_bin_param(<<"resumableIdentifier">>, Params),
+    UploadId = get_bin_param(<<"resumableIdentifier">>, Params),
     ChunkNumber = get_int_param(<<"resumableChunkNumber">>, Params),
     % Create an upload handle for first chunk. Further chunks reuse the handle
     % or have to wait until it is created.
@@ -290,10 +293,10 @@ get_new_file_id(Params) ->
                 SessionId, ParentId),
             ProposedPath = filename:join([ParentPath, FileName]),
             FileId = create_unique_file(SessionId, ProposedPath),
-            upload_map_insert(Identifier, FileId),
+            upload_map_insert(UploadId, FileId),
             FileId;
         _ ->
-            wait_for_file_new_file_id(Identifier, ?MAX_WAIT_FOR_FILE_HANDLE)
+            wait_for_file_new_file_id(UploadId, ?MAX_WAIT_FOR_FILE_HANDLE)
     end.
 
 
@@ -304,17 +307,17 @@ get_new_file_id(Params) ->
 %% retrying in intervals.
 %% @end
 %%--------------------------------------------------------------------
--spec wait_for_file_new_file_id(Identifier :: binary(), Timeout :: integer()) ->
+-spec wait_for_file_new_file_id(UploadId :: binary(), Timeout :: integer()) ->
     file_meta:uuid().
 wait_for_file_new_file_id(_, Timeout) when Timeout < 0 ->
     throw(cannot_resolve_new_file_id);
 
-wait_for_file_new_file_id(Identifier, Timeout) ->
-    case upload_map_lookup(Identifier, undefined) of
+wait_for_file_new_file_id(UploadId, Timeout) ->
+    case upload_map_lookup(UploadId, undefined) of
         undefined ->
             timer:sleep(?INTERVAL_WAIT_FOR_FILE_HANDLE),
             wait_for_file_new_file_id(
-                Identifier, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE);
+                UploadId, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE);
         FileId ->
             FileId
     end.
