@@ -612,9 +612,9 @@ moving_file_onto_itself_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/file"), 8#770)),
 
-    ?assertEqual({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, filename(1, TestDir, "/file"))),
-    ?assertEqual({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, <<"/", TestDir/binary, "/file">>)),
-    ?assertEqual({ok, _}, lfm_proxy:mv(W, SessId, {path, <<"/", TestDir/binary, "/file">>}, filename(1, TestDir, "/file"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, filename(1, TestDir, "/file"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, <<"/", TestDir/binary, "/file">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, <<"/", TestDir/binary, "/file">>}, filename(1, TestDir, "/file"))),
     ok.
 
 rename_in_default_space_test(Config) ->
