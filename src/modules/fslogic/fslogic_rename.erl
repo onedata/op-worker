@@ -312,7 +312,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                     (_Dir, Ret) ->
                         Ret
                 end,
-                fun(_, Ret) ->
+                fun(_, Ret, _) ->
                     Ret
                 end, ok);
 
