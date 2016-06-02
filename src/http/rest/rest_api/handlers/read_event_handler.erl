@@ -128,7 +128,7 @@ get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := _Aut
         event_loop(SendChunk, Id, Timeout, Req2, State)
     end,
     Req3 = cowboy_req:set_resp_body_fun(chunked, StreamFun, Req2),
-    {ok, Req4} = cowboy_req:reply(?HTTP_OK, [], Req3),
+    {ok, Req4} = cowboy_req:reply(?HTTP_OK, [], same(Req3)),
     {halt, Req4, State}.
 
 
@@ -137,7 +137,7 @@ get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := _Aut
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec event_loop(function(), reference(), timeout(), req(), #{}) -> {ok, req()} | no_return().
+-spec event_loop(function(), reference(), timeout(), req(), #{}) -> ok | no_return().
 event_loop(SendChunk, Id, Timeout, Req, State) ->
     receive
         {Id, [_ | _] = Events, _Ctx} ->
@@ -154,7 +154,7 @@ event_loop(SendChunk, Id, Timeout, Req, State) ->
             event_loop(SendChunk, Id, Timeout, Req, State)
     after
         Timeout ->
-            {ok, Req}
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -171,3 +171,14 @@ get_timeout(Req) ->
         Number ->
             {binary_to_integer(Number), Req2}
     end.
+
+%%--------------------------------------------------------------------
+%% @todo fix types in cowboy_req
+%% @doc
+%% Returns the same object in a way that dialyzer will not know its type.
+%% @end
+%%--------------------------------------------------------------------
+-spec same(term()) -> term().
+same(X) ->
+    put(x, X),
+    get(x).
