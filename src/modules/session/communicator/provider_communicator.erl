@@ -195,7 +195,7 @@ ensure_connected(SessId) ->
                 end, URLs),
             ok;
         {ok, Pid} ->
-            case process_info(Pid) of
+            case utils:process_info(Pid) of
                 undefined ->
                     ok = session:remove_connection(SessId, Pid),
                     ensure_connected(SessId);

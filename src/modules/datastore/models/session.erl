@@ -348,7 +348,7 @@ get_connections(SessId, HideOverloaded) ->
                 true ->
                     NewCons = lists:foldl( %% Foreach connection
                         fun(Pid, AccIn) ->
-                            case process_info(Pid, message_queue_len) of
+                            case utils:process_info(Pid, message_queue_len) of
                                 undefined ->
                                     %% Connection died, removing from session
                                     ok = session:remove_connection(SessId, Pid),

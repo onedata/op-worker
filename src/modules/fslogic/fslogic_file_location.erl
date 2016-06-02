@@ -90,7 +90,7 @@ get_merged_changes(Doc, N) ->
 %%--------------------------------------------------------------------
 -spec create_storage_file_if_not_exists(space_info:id(), datastore:document()) -> ok.
 create_storage_file_if_not_exists(SpaceId, FileDoc) ->
-    create_storage_file_if_not_exists(SpaceId, FileDoc, 10).
+    create_storage_file_if_not_exists(SpaceId, FileDoc, 30).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -190,5 +190,5 @@ wait_for_file_meta(FileUuid, Retries) ->
 %%--------------------------------------------------------------------
 -spec wait_for_local_file_location(file_meta:uuid()) -> ok | no_return().
 wait_for_local_file_location(Uuid) ->
-    #document{} = fslogic_utils:get_local_file_location({uuid, Uuid}),
+    [#document{}] = get_local_file_locations({uuid, Uuid}, 30),
     ok.
