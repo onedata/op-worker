@@ -46,14 +46,13 @@
     LogicalTargetPath :: file_meta:path()) ->
     #fuse_response{} | no_return().
 rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
-    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
-    case SourcePath =:= LogicalTargetPath of
+    {ok, LogicalSourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
+    CanonicalSourcePath = logical_path_to_canonical(CTX, LogicalSourcePath),
+    CanonicalTargetPath = logical_path_to_canonical(CTX, LogicalTargetPath),
+    case CanonicalSourcePath =:= CanonicalTargetPath of
         true ->
             #fuse_response{status = #status{code = ?OK}};
         false ->
-            {ok, Tokens} = fslogic_path:verify_file_path(LogicalTargetPath),
-            CanonicalTargetEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-            {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalTargetEntry, SessId),
             case rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
                 ok -> #fuse_response{status = #status{code = ?OK}};
                 {error, Code} -> #fuse_response{status = #status{code = Code}}
@@ -120,8 +119,8 @@ rename_file(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 -spec check_dir_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> ok | logical_file_manager:error_reply().
-check_dir_preconditions(#fslogic_ctx{session_id = SessId}, SourceEntry, LogicalTargetPath) ->
-    case moving_into_itself(SessId, SourceEntry, LogicalTargetPath) of
+check_dir_preconditions(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
+    case moving_into_itself(CTX, SourceEntry, LogicalTargetPath) of
         true ->
             {error, ?EINVAL};
         false ->
@@ -160,13 +159,15 @@ check_reg_preconditions(#fslogic_ctx{session_id = SessId}, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Checks if renamed entry is one of target path parents.
 %%--------------------------------------------------------------------
--spec moving_into_itself(SessId :: session:id(),
+-spec moving_into_itself(CTX :: fslogic_worker:ctx(),
     SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) -> boolean().
-moving_into_itself(SessId, SourceEntry, LogicalTargetPath) ->
-    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
-    SourceTokens = fslogic_path:split(SourcePath),
-    TargetTokens = fslogic_path:split(LogicalTargetPath),
+moving_into_itself(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
+    {ok, LogicalSourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
+    CanonicalSourcePath = logical_path_to_canonical(CTX, LogicalSourcePath),
+    CanonicalTargetPath = logical_path_to_canonical(CTX, LogicalTargetPath),
+    SourceTokens = fslogic_path:split(CanonicalSourcePath),
+    TargetTokens = fslogic_path:split(CanonicalTargetPath),
     lists:prefix(SourceTokens, TargetTokens).
 
 %%--------------------------------------------------------------------
@@ -606,6 +607,7 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
         Size ->
             copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset+Size, Size);
         _ ->
+            logical_file_manager:fsync(ToHandle),
             ok
     end.
 
@@ -643,3 +645,15 @@ get_supporting_providers(SpaceId, Client, UserId) ->
     {ok, #document{value = #space_info{providers = Providers}}} =
         space_info:get_or_fetch(Client, SpaceId, UserId),
     ordsets:from_list(Providers).
+
+
+%%--------------------------------------------------------------------
+%% @doc Converts Logical file path to canonical file path
+%%--------------------------------------------------------------------
+-spec logical_path_to_canonical(CTX :: fslogic_worker:ctx(),
+    LogicalPath :: file_meta:path()) -> file_meta:path().
+logical_path_to_canonical(#fslogic_ctx{session_id = SessId} = CTX, LogicalPath) ->
+    {ok, Tokens} = fslogic_path:verify_file_path(LogicalPath),
+    CanonicalEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    {ok, CanonicalPath} = fslogic_path:gen_path(CanonicalEntry, SessId),
+    CanonicalPath.

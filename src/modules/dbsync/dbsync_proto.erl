@@ -187,7 +187,7 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
             #status{code = ?EAGAIN}
     catch
         _:Reason0 ->
-            ?error_stacktrace("DBSync error ~p", [Reason0]),
+            ?error_stacktrace("DBSync error ~p for message ~p from ~p", [Reason0, MessageBody, ProviderId]),
             #status{code = ?EAGAIN}
     end.
 
@@ -200,7 +200,7 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
 -spec handle_impl(From :: oneprovider:id(), #tree_broadcast{} | #changes_request{} | #batch_update{}) ->
     ok | {error, Reason :: term()} | no_return().
 handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, space_id = SpaceId,
-                                    excluded_providers = ExclProviders} = BaseRequest) ->
+    excluded_providers = ExclProviders} = BaseRequest) ->
     Ignore =
         case dbsync_utils:temp_get({request, ReqId}) of
             undefined ->
@@ -228,7 +228,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, sp
                     end
             catch
                 _:Reason ->
-                    ?error("Error while handling tree broadcast: ~p", [Reason]),
+                    ?error_stacktrace("Error while handling tree broadcast: ~p", [Reason]),
                     {error, Reason}
             end;
         true -> ok

@@ -125,15 +125,17 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc0) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V} = FM} = FileDoc0) ->
     ?run(begin
+             {ok, Scope} = get_scope(Parent),
+             FM1 = FM#file_meta{scope = Scope#document.key},
              FileDoc =
                  case FileDoc0 of
                      #document{key = undefined} = Doc ->
                          NewUUID = fslogic_uuid:gen_file_uuid(),
-                         Doc#document{key = NewUUID};
+                         Doc#document{key = NewUUID, value = FM1};
                      _ ->
-                         FileDoc0
+                         FileDoc0#document{value = FM1}
                  end,
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
@@ -143,12 +145,11 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                              case create(FileDoc) of
                                  {ok, UUID} ->
                                      SavedDoc = FileDoc#document{key = UUID},
-                                     {ok, Scope} = get_scope(Parent),
+
                                      set_link_context(Scope),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
-                                     set_scope(SavedDoc, Scope#document.key),
                                      {ok, UUID};
                                  {error, Reason} ->
                                      {error, Reason}

@@ -597,9 +597,11 @@ moving_dir_into_itself_test(Config) ->
     SessId = ?config({session_id, <<"user1">>}, Config),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
-    {_, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
 
-    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {guid, DirGuid}, filename(1, TestDir, "/dir/dir_target"))),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")}, filename(1, TestDir, "/dir/dir_target"))),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, <<"/", TestDir/binary, "/dir">>}, filename(1, TestDir, "/dir/dir_target"))),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")}, <<"/", TestDir/binary, "/dir/dir_target">>)),
     ok.
 
 moving_file_onto_itself_test(Config) ->
@@ -608,9 +610,11 @@ moving_file_onto_itself_test(Config) ->
     SessId = ?config({session_id, <<"user1">>}, Config),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
-    {_, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/file"), 8#770)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/file"), 8#770)),
 
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, FileGuid}, filename(1, TestDir, "/file"))),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, filename(1, TestDir, "/file"))),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, <<"/", TestDir/binary, "/file">>)),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {path, <<"/", TestDir/binary, "/file">>}, filename(1, TestDir, "/file"))),
     ok.
 
 rename_in_default_space_test(Config) ->

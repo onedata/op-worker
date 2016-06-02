@@ -20,7 +20,7 @@
 
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("gui/include/gui.hrl").
 
 -export([route/1, data_backend/2, private_rpc_backend/0, public_rpc_backend/0]).
@@ -82,13 +82,16 @@ route(<<"/index.html">>) -> ?INDEX.
     HandlerModule :: module().
 data_backend(true, <<"file">>) -> file_data_backend;
 data_backend(true, <<"file-distribution">>) -> file_data_backend;
-data_backend(true, <<"provider">>) -> provider_data_backend;
 data_backend(true, <<"data-space">>) -> data_space_data_backend;
 data_backend(true, <<"space">>) -> space_data_backend;
-data_backend(true, <<"space-user">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
-data_backend(true, <<"space-group">>) -> space_data_backend;
-data_backend(true, <<"space-group-permission">>) -> space_data_backend.
+data_backend(true, <<"space-group-permission">>) -> space_data_backend;
+data_backend(true, <<"group">>) -> group_data_backend;
+data_backend(true, <<"group-user-permission">>) -> group_data_backend;
+data_backend(true, <<"group-group-permission">>) -> group_data_backend;
+data_backend(true, <<"system-provider">>) -> system_data_backend;
+data_backend(true, <<"system-user">>) -> system_data_backend;
+data_backend(true, <<"system-group">>) -> system_data_backend.
 
 
 %%--------------------------------------------------------------------

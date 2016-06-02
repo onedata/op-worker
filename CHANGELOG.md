@@ -4,6 +4,36 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta5
+
+* VFS-2050, Get file size update
+* VFS-2050, Repair errors in connections usage and dbsync batch applying
+* VFS-1987 group privileges as atoms
+* VFS-1772 unify imports in gui backend, add returned value to group join group
+* Increase limit for cdmi_id, as guid of default space in production environment has 199 bytes.
+* VFS-1772 add relation to child groups in group record
+* VFS-2050, Extend multiprovider tests
+* Cache provider info pulled from onezone
+* Allow for zombie-file delete
+* Hotfix: Ignore sequencer messages that are received from provider
+* Hotfix: Fix sending changes of unsupported spaces
+* Ignore proxied subscription messages in router.
+* Ignore dbsync changes from unsupported spaces. Do not catch exceptions inside mnesia transactions (mnesia does not like it).
+* VFS-1772 update group logic concerning privileges
+* VFS-1772 align group logic with new group API
+* VFS-1987 set & get for nested group privileges
+* VFS-2059 change default create modes for files and directories
+* VFS-2059 use recursive remove in gui backend
+* VFS-2003 Add read_event subscription to rest api.
+* VFS-1987 nested groups via fetch
+* VFS-1987 nested groups in subscriptions
+* VFS-2003 Add replicate_file rest handler.
+* VFS-2003 Add rtransfer management api to fslogic.
+* VFS-1772 add backend for groups
+* VFS-2003 Reorganize rest modules.
+* VFS-1772 introduce models for system-user system-group system-provider
+
+
 ### 3.0.0-beta4
 
 * VFS-1995 Syncing locations update

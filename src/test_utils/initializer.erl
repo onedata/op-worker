@@ -692,6 +692,12 @@ oz_users_mock_setup(Workers, Users) ->
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
+    end),
+
+    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun({user, {Macaroon, _}}) ->
+        {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
+        {GroupIds, _} = lists:unzip(Groups),
+        {ok, GroupIds}
     end).
 
 %%--------------------------------------------------------------------
@@ -758,9 +764,19 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
     test_utils:mock_expect(Workers, oz_groups, get_users,
         fun(_, GroupId) ->
             {ok, proplists:get_value(GroupId, Users)} end),
+    test_utils:mock_expect(Workers, oz_groups, get_effective_users,
+        fun(_, GroupId) ->
+            {ok, proplists:get_value(GroupId, Users)} end),
+
+    test_utils:mock_expect(Workers, oz_groups, get_parents,
+        fun(_, _) -> {ok, []} end),
+    test_utils:mock_expect(Workers, oz_groups, get_nested,
+        fun(_, _) -> {ok, []} end),
     test_utils:mock_expect(Workers, oz_groups, get_spaces,
         fun(_, _) -> {ok, []} end),
 
+    test_utils:mock_expect(Workers, oz_groups, get_effective_user_privileges,
+        fun(_, _, _) -> {ok, privileges:space_privileges()} end),
     test_utils:mock_expect(Workers, oz_groups, get_user_privileges,
         fun(_, _, _) -> {ok, privileges:space_privileges()} end).
 

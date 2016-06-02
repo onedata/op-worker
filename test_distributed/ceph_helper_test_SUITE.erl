@@ -261,17 +261,23 @@ new_helper(Config) ->
     HelperArgs = #{
         <<"mon_host">> => atom_to_binary(?config(host_name, CephConfig), utf8),
         <<"cluster_name">> => ?CEPH_CLUSTER_NAME,
-        <<"pool_name">> => ?CEPH_POOL_NAME,
-        <<"user_name">> => atom_to_binary(?config(username, CephConfig), utf8),
-        <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
+        <<"pool_name">> => ?CEPH_POOL_NAME
     },
-    spawn_link(Node, fun() -> helper_loop(?CEPH_HELPER_NAME, HelperArgs) end).
+    UserCtx = #ceph_user_ctx{
+        user_name = atom_to_binary(?config(username, CephConfig), utf8),
+        user_key = atom_to_binary(?config(key, CephConfig), utf8)
+    },
+
+    spawn_link(Node, fun() ->
+        helper_loop(?CEPH_HELPER_NAME, HelperArgs, UserCtx)
+    end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(HelperName, HelperArgs) ->
+helper_loop(HelperName, HelperArgs, UserCtx) ->
     Ctx = helpers:new_handle(HelperName, HelperArgs),
+    helpers:set_user_ctx(Ctx, UserCtx),
     helper_loop(Ctx).
 
 helper_loop(Ctx) ->

@@ -26,6 +26,7 @@
 -export([
     db_sync_test/1, proxy_test1/1, proxy_test2/1
 ]).
+-export([synchronization_test_base/6]).
 
 all() ->
     ?ALL([
@@ -46,28 +47,34 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, true, 15).
+%%    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 15, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 15, 10, 50).
 
 proxy_test1(Config) ->
-    synchronization_test_base(Config, <<"user2">>, false, 0).
+    synchronization_test_base(Config, <<"user2">>, {0,2,1}, 0, 10, 100).
 
 proxy_test2(Config) ->
-    synchronization_test_base(Config, <<"user3">>, false, 0).
+    synchronization_test_base(Config, <<"user3">>, {0,2,1}, 0, 10, 100).
 
-synchronization_test_base(Config, User, Multisupport, Attempts) ->
-    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
+    Workers = ?config(op_worker_nodes, Config),
+    Worker1 = lists:foldl(fun(W, Acc) ->
+        case is_atom(Acc) of
+            true ->
+                Acc;
+            _ ->
+                case string:str(atom_to_list(W), "p1") of
+                    0 -> Acc;
+                    _ -> W
+                end
+        end
+    end, [], Workers),
     timer:sleep(10000), % TODO - connection must appear after mock setup
 
     SessId = ?config({session_id, User}, Config),
-    Prov1ID = rpc:call(Worker1, oneprovider, get_provider_id, []),
-    Prov2ID = lists:foldl(fun(Worker, Acc) ->
-        case rpc:call(Worker, oneprovider, get_provider_id, []) of
-            Prov1ID ->
-                Acc;
-            ProvID ->
-                ProvID
-        end
-    end, Prov1ID, Workers),
+    ProvIDs = lists:map(fun(Worker) ->
+        rpc:call(Worker, oneprovider, get_provider_id, [])
+    end, Workers),
 
     Verify = fun(TestFun) ->
         lists:foldl(fun(W, Acc) ->
@@ -81,15 +88,15 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
 
     Level3Dirs = lists:map(fun(_) ->
         <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1,10)),
+    end, lists:seq(1,DirsNum)),
     Level3Dirs2 = lists:map(fun(_) ->
         <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1,10)),
+    end, lists:seq(1,DirsNum)),
 
     Level3Dir = <<Level2Dir/binary, "/", (generator:gen_name())/binary>>,
     Level4Files = lists:map(fun(Num) ->
         {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
-    end, lists:seq(1,100)),
+    end, lists:seq(1,FilesNum)),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Dir, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, Level2Dir, 8#755)),
@@ -113,14 +120,8 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
         NotFoundList = lists:filter(fun({error, {not_found, _}}) -> true; (_) -> false end, VerAns),
         OKList = lists:filter(fun({ok, _}) -> true; (_) -> false end, VerAns),
 
-        case Multisupport of
-            true ->
-                ?assertEqual(0, length(NotFoundList)),
-                ?assertEqual(length(Workers), length(OKList));
-            _ ->
-                ?assertEqual(length(Workers) div 2, length(NotFoundList)),
-                ?assertEqual(length(Workers) div 2, length(OKList))
-        end
+        ?assertEqual(ProxyNodes - ProxyNodesWritten, length(NotFoundList)),
+        ?assertEqual(SyncNodes + ProxyNodesWritten, length(OKList))
     end,
     VerifyStats(Dir, true),
     VerifyStats(Level2Dir, true),
@@ -159,23 +160,16 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
                 {ok, #file_attr{uuid = FileGUID}} = StatAns,
                 FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
-                S1 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov1ID)]) of
-                         {error, {not_found, _}} ->
-                             0;
-                         Get1Ans ->
-                             ?assertMatch({ok, #document{value = #links{}}}, Get1Ans),
-                             {ok, #document{value = Links1}} = Get1Ans,
-                             verify_locations(W, Links1)
-                     end,
-                S2 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov2ID)]) of
-                         {error, {not_found, _}} ->
-                             0;
-                         Get2Ans ->
-                             ?assertMatch({ok, #document{value = #links{}}}, Get2Ans),
-                             {ok, #document{value = Links2}} = Get2Ans,
-                             verify_locations(W, Links2)
-                     end,
-                [S1, S2]
+                lists:map(fun(ProvID) ->
+                    case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
+                        {error, {not_found, _}} ->
+                            0;
+                        GetAns ->
+                            ?assertMatch({ok, #document{value = #links{}}}, GetAns),
+                            {ok, #document{value = Links}} = GetAns,
+                            verify_locations(W, Links)
+                    end
+                end, ProvIDs)
             end)
         end,
 
@@ -196,14 +190,8 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
 
-        case Multisupport of
-            true ->
-                ?assertEqual(2*length(Workers), length(ZerosList) + length(LocationsList)),
-                ?assert(length(Workers) * 3 div 2 =< length(LocationsList));
-            _ ->
-                ?assertEqual(length(Workers) * 3 div 2, length(ZerosList)),
-                ?assertEqual(length(Workers) div 2, length(LocationsList))
-        end
+        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes - ProxyNodesWritten, length(ZerosList)),
+        ?assertEqual(SyncNodes*SyncNodes + ProxyNodesWritten, length(LocationsList))
     end,
     VerifyFile({2, Level2File}),
 
@@ -218,23 +206,6 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
             VerifyStats(Level3TmpDir, true)
         end, Workers)
     end, Workers),
-
-    % TODO - repair rtransfer during tests
-%%    lists:foreach(fun(W) ->
-%%        OpenAns = lfm_proxy:open(W, SessId, {path, Level2File}, rdwr),
-%%        ?assertMatch({ok, _}, OpenAns),
-%%        {ok, Handle} = OpenAns,
-%%        WriteBuf = atom_to_binary(W, utf8),
-%%        WriteSize = size(WriteBuf),
-%%        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(W, Handle, 0, WriteBuf)),
-%%
-%%        Verify(fun(W2) ->
-%%            OpenAns2 = lfm_proxy:open(W2, SessId, {path, Level2File}, rdwr),
-%%            ?assertMatch({ok, _}, OpenAns2),
-%%            {ok, Handle2} = OpenAns2,
-%%            ?match({ok, WriteBuf}, lfm_proxy:read(W2, Handle2, 0, WriteSize), Attempts)
-%%        end)
-%%    end, Workers),
 
     lists:map(fun(D) ->
         ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId, D, 8#755))
@@ -267,23 +238,17 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
             ?assertMatch({ok, #file_attr{}}, StatAns),
             {ok, #file_attr{uuid = FileGUID}} = StatAns,
             FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-            S1 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov1ID)]) of
-                {error, {not_found, _}} ->
-                    0;
-                Get1Ans ->
-                    ?assertMatch({ok, #document{value = #links{}}}, Get1Ans),
-                    {ok, #document{value = Links1}} = Get1Ans,
-                    count_links(W, Links1)
-            end,
-            S2 = case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, Prov2ID)]) of
-                {error, {not_found, _}} ->
-                     0;
-                Get2Ans ->
-                    ?assertMatch({ok, #document{value = #links{}}}, Get2Ans),
-                    {ok, #document{value = Links2}} = Get2Ans,
-                    count_links(W, Links2)
-            end,
-            [S1, S2]
+
+            lists:map(fun(ProvID) ->
+                case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
+                    {error, {not_found, _}} ->
+                        0;
+                    GetAns ->
+                        ?assertMatch({ok, #document{value = #links{}}}, GetAns),
+                        {ok, #document{value = Links}} = GetAns,
+                        count_links(W, Links)
+                end
+            end, ProvIDs)
         end),
         Flattened = lists:flatten(VerAns),
         ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
@@ -291,14 +256,8 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, Flattened),
 
-        case Multisupport of
-            true ->
-                ?assertEqual(length(Workers), length(ZerosList)),
-                ?assertEqual(length(Workers), length(SList));
-            _ ->
-                ?assertEqual(length(Workers) * 3 div 2, length(ZerosList)),
-                ?assertEqual(length(Workers) div 2, length(SList))
-        end
+        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes - ProxyNodesWritten, length(ZerosList)),
+        ?assertEqual(SyncNodes + ProxyNodesWritten, length(SList))
     end,
     VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
 
@@ -327,12 +286,77 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
     VerifyDirSize(Level3Dir, 0, length(Level4Files)),
     VerifyDirSize(Level2Dir, length(Level3Dirs) + 1, length(Level3Dirs2)),
 
-    % TODO - repair rtransfer during tests
+    lists:foreach(fun(W) ->
+        Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+        CreateFileOnWorker(4, Level2TmpFile, W),
+        VerifyFile({4, Level2TmpFile})
+    end, Workers),
+
+    lists:foldl(fun(W, Acc) ->
+        OpenAns = lfm_proxy:open(W, SessId, {path, Level2File}, rdwr),
+        ?assertMatch({ok, _}, OpenAns),
+        {ok, Handle} = OpenAns,
+        WriteBuf = atom_to_binary(W, utf8),
+        Offset = size(Acc),
+        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
+        NewAcc = <<Acc/binary, WriteBuf/binary>>,
+
+        Verify(fun(W2) ->
+            OpenAns2 = lfm_proxy:open(W2, SessId, {path, Level2File}, rdwr),
+            ?assertMatch({ok, _}, OpenAns2),
+            {ok, Handle2} = OpenAns2,
+            ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts)
+        end),
+        NewAcc
+    end, <<>>, Workers),
+
+%%    Master = self(),
 %%    lists:foreach(fun(W) ->
-%%        Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%        CreateFileOnWorker(4, Level2TmpFile, W),
-%%        VerifyFile({4, Level2TmpFile})
+%%        spawn_link(fun() ->
+%%            Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+%%            MkAns = lfm_proxy:mkdir(W, SessId, Level2TmpDir, 8#755),
+%%            Master ! {mkdir_ans, Level2TmpDir, MkAns}
+%%        end)
 %%    end, Workers),
+%%
+%%    Level2TmpDirs = lists:foldl(fun(_, Acc) ->
+%%        MkAnsCheck =
+%%            receive
+%%                {mkdir_ans, ReceivedLevel2TmpDir, MkAns} ->
+%%                    {ReceivedLevel2TmpDir, MkAns}
+%%            after timer:seconds(2*Attempts+2) ->
+%%                {error, timeout}
+%%            end,
+%%        ?assertMatch({_, {ok, _}}, MkAnsCheck),
+%%        {Level2TmpDir, _} = MkAnsCheck,
+%%        VerifyStats(Level2TmpDir, true),
+%%        [Level2TmpDir | Acc]
+%%    end, [], Workers),
+%%
+%%    lists:foreach(fun(Level2TmpDir) ->
+%%        lists:foreach(fun(W2) ->
+%%            spawn_link(fun() ->
+%%                Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
+%%                MkAns = lfm_proxy:mkdir(W2, SessId, Level3TmpDir, 8#755),
+%%                Master ! {mkdir_ans, Level3TmpDir, MkAns}
+%%            end)
+%%        end, Workers)
+%%    end, Level2TmpDirs),
+%%
+%%    lists:foreach(fun(_) ->
+%%        lists:foreach(fun(_) ->
+%%            MkAnsCheck =
+%%                receive
+%%                    {mkdir_ans, ReceivedLevel2TmpDirLevel3TmpDir, MkAns} ->
+%%                        {ReceivedLevel2TmpDirLevel3TmpDir, MkAns}
+%%                after timer:seconds(2*Attempts+2) ->
+%%                    {error, timeout}
+%%                end,
+%%            ?assertMatch({_, {ok, _}}, MkAnsCheck),
+%%            {Level3TmpDir, _} = MkAnsCheck,
+%%            VerifyStats(Level3TmpDir, true)
+%%        end, Workers)
+%%    end, Level2TmpDirs),
 
     ok.
 
@@ -341,11 +365,9 @@ synchronization_test_base(Config, User, Multisupport, Attempts) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
