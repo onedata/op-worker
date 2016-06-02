@@ -32,6 +32,7 @@
 -export([
     get_simple_file_distribution/1,
     replicate_file/1,
+    replicate_dir/1,
     posix_mode_get/1,
     posix_mode_put/1,
     read_event_subscription_test/1
@@ -41,6 +42,7 @@ all() ->
     ?ALL([
         get_simple_file_distribution,
         replicate_file,
+        replicate_dir,
         posix_mode_get,
         posix_mode_put,
         read_event_subscription_test
@@ -88,6 +90,49 @@ replicate_file(Config) ->
             [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
             [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
+
+replicate_dir(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    Dir1 = <<"/spaces/space3/dir1">>,
+    Dir2 = <<"/spaces/space3/dir1/dir2">>,
+    File1 = <<"/spaces/space3/dir1/file1">>,
+    File2 = <<"/spaces/space3/dir1/file2">>,
+    File3 = <<"/spaces/space3/dir1/dir2/file3">>,
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
+    {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
+    {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle1),
+    {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
+    {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, File2Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle2),
+    {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionId, File3, 8#700),
+    {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionId, {guid, File3Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle3),
+
+    % when
+    timer:sleep(timer:seconds(10)),
+    {ok, 204, _, _} = do_request(WorkerP1, <<"replicate_file/spaces/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+
+    % then
+    timer:sleep(timer:seconds(5)),
+    {ok, 200, _, Body1} = do_request(WorkerP1, <<"file_distribution/spaces/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"file_distribution/spaces/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP1, <<"file_distribution/spaces/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    DecodedBody1 = json_utils:decode(Body1),
+    DecodedBody2 = json_utils:decode(Body2),
+    DecodedBody3 = json_utils:decode(Body3),
+    Distribution = [
+        [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+        [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+    ],
+    ?assertEqual(Distribution, DecodedBody1),
+    ?assertEqual(Distribution, DecodedBody2),
+    ?assertEqual(Distribution, DecodedBody3).
 
 posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

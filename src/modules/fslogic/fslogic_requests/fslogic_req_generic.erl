@@ -31,7 +31,7 @@
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
-    get_file_path/2, fsync/2, chmod_storage_files/3]).
+    get_file_path/2, fsync/2, chmod_storage_files/3, replicate_file/3]).
 
 %%%===================================================================
 %%% API functions
@@ -420,6 +420,48 @@ set_mimetype(CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @equiv replicate_file(Ctx, {uuid, Uuid}, Block, 0)
+%%--------------------------------------------------------------------
+-spec replicate_file(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
+    #fuse_response{}.
+replicate_file(Ctx, {uuid, Uuid}, Block) ->
+    replicate_file(Ctx, {uuid, Uuid}, Block, 0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Replicate given dir or file on current provider
+%% (the space has to be locally supported).
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_file(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
+    fslogic_blocks:block(), non_neg_integer()) ->
+    #fuse_response{}.
+replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
+    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+    case file_meta:get({uuid, Uuid}) of
+        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
+            case fslogic_req_special:read_dir(Ctx, {uuid, Uuid}, Offset, Chunk) of
+                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}}
+                    when length(ChildLinks) < Chunk ->
+                    utils:pforeach(
+                        fun(#child_link{uuid = ChildGuid}) ->
+                            replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ChildGuid)}, Block)
+                        end, ChildLinks),
+                    #fuse_response{status = #status{code = ?OK}};
+                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}}->
+                    utils:pforeach(
+                        fun(#child_link{uuid = ChildGuid}) ->
+                            replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ChildGuid)}, Block)
+                        end, ChildLinks),
+                    replicate_file(Ctx, {uuid, Uuid}, Block, Offset + Chunk);
+                Other ->
+                    Other
+            end;
+        {ok, _} ->
+            fslogic_req_regular:synchronize_block(Ctx, {uuid, Uuid}, Block)
     end.
 
 %%%===================================================================
