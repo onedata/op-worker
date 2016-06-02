@@ -792,7 +792,6 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    tracer:start(Workers),
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

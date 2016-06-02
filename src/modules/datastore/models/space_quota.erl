@@ -186,36 +186,20 @@ available_size(SpaceId) ->
     catch
         _:Reason ->
             ?error_stacktrace("Unable to calculate quota due to: ~p", [Reason]),
-            0
+            throw({unable_to_calc_quota, Reason})
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if any non-empty write operation is permitted for given space.
+%% @equiv assert_write(SpaceId, 1)
 %% @end
 %%--------------------------------------------------------------------
 -spec assert_write(SpaceId :: space_info:id()) ->
     ok | no_return().
 assert_write(SpaceId) ->
     space_quota:assert_write(SpaceId, 1).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if any non-empty write operation is permitted for given space.
-%% @end
-%%--------------------------------------------------------------------
--spec soft_assert_write(SpaceId :: space_info:id(), WriteSize :: integer()) ->
-    ok | no_return().
-soft_assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
-    ok;
-soft_assert_write(SpaceId, WriteSize) ->
-    {ok, SoftQuotaSize} = application:get_env(?APP_NAME, soft_quota_limit_size),
-    case space_quota:available_size(SpaceId) + SoftQuotaSize >= WriteSize of
-        true -> ok;
-        false -> throw(?ENOSPC)
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -236,6 +220,24 @@ assert_write(SpaceId, WriteSize) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Checks if write operation with given size is permitted for given space while taking into
+%% consideration soft quota limit set in op_worker configuration.
+%% @end
+%%--------------------------------------------------------------------
+-spec soft_assert_write(SpaceId :: space_info:id(), WriteSize :: integer()) ->
+    ok | no_return().
+soft_assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
+    ok;
+soft_assert_write(SpaceId, WriteSize) ->
+    {ok, SoftQuotaSize} = application:get_env(?APP_NAME, soft_quota_limit_size),
+    case space_quota:available_size(SpaceId) + SoftQuotaSize >= WriteSize of
+        true -> ok;
+        false -> throw(?ENOSPC)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns list of spaces that are currently over quota limit.
 %% @end
 %%--------------------------------------------------------------------
@@ -244,7 +246,8 @@ get_disabled_spaces() ->
     %% @todo: use locally cached data after resolving VFS-2087
     {ok, SpaceIds} = oz_providers:get_spaces(provider),
     SpacesWithASize = lists:map(fun(SpaceId) ->
-        {SpaceId, space_quota:available_size(SpaceId)}
+        {SpaceId, catch space_quota:available_size(SpaceId)}
                                 end, SpaceIds),
 
-    [SpaceId || {SpaceId, AvailableSize} <- SpacesWithASize, AvailableSize =< 0].
+    [SpaceId || {SpaceId, AvailableSize} <- SpacesWithASize,
+        AvailableSize =< 0 orelse not is_integer(AvailableSize)].
