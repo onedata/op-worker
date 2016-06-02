@@ -31,9 +31,12 @@ routes() ->
     [
         {"/rest/:version/file_distribution/[...]", #{handler => file_distribution_handler}},
         {"/rest/:version/replicate_file/[...]", #{handler => replicate_file_handler}},
-        {"/rest/:version/posix_mode/[...]", #{handler => posix_mode_handler}},
-        {"/rest/:version/read_event/[...]", #{handler => read_event_handler}},
-        {"/rest/:version/[...]", #{handler => rest_handler}}
+        {"/rest/:version/metrics/provider/:id", #{handler => metrics_handler,
+            handler_initial_opts => #{subject_type => provider}}},
+        {"/rest/:version/metrics/space/:id", #{handler => metrics_handler,
+            handler_initial_opts => #{subject_type => space}}},
+        {"/rest/:version/metrics/user/:id", #{handler => metrics_handler,
+            handler_initial_opts => #{subject_type => user}}}
     ].
 
 

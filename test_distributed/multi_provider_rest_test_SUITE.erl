@@ -35,7 +35,8 @@
     replicate_dir/1,
     posix_mode_get/1,
     posix_mode_put/1,
-    read_event_subscription_test/1
+    read_event_subscription_test/1,
+    metric_get/1
 ]).
 
 all() ->
@@ -45,7 +46,8 @@ all() ->
         replicate_dir,
         posix_mode_get,
         posix_mode_put,
-        read_event_subscription_test
+        read_event_subscription_test,
+        metric_get
     ]).
 
 %%%===================================================================
@@ -194,6 +196,14 @@ read_event_subscription_test(Config) ->
     ?assertEqual(<<"{\"type\":\"read_event\",\"count\":3,\"size\":0,\"blocks\":[[0,4]]}\r\n">>, % todo check size
         RespBody).
 
+metric_get(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/user/id?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
+
+    % then
+    ?assertEqual(<<"gzip_data">>, Body).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
