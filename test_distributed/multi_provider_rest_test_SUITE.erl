@@ -36,7 +36,9 @@
     posix_mode_get/1,
     posix_mode_put/1,
     read_event_subscription_test/1,
-    metric_get/1
+    metric_get/1,
+    list_file/1,
+    list_dir/1
 ]).
 
 all() ->
@@ -47,7 +49,9 @@ all() ->
         posix_mode_get,
         posix_mode_put,
         read_event_subscription_test,
-        metric_get
+        metric_get,
+        list_file,
+        list_dir
     ]).
 
 %%%===================================================================
@@ -209,6 +213,40 @@ metric_get(Config) ->
 
     % then
     ?assertEqual(<<"gzip_data">>, Body).
+
+list_file(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/spaces/space3/file1">>,
+    Mode = 8#700,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"files/spaces/space3/file1">>, get, [user_1_token_header(Config)], []),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [[{<<"id">>, FileGuid}, {<<"path">>, File}]],
+        DecodedBody
+    ).
+
+list_dir(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"files/spaces">>, get, [user_1_token_header(Config)], []),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            [{<<"id">>, _}, {<<"path">>, <<"/spaces/space1">>}],
+            [{<<"id">>, _}, {<<"path">>, <<"/spaces/space2">>}],
+            [{<<"id">>, _}, {<<"path">>, <<"/spaces/space3">>}]
+        ],
+        DecodedBody
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -21,6 +21,8 @@
   {?BAD_REQUEST, [{<<"error_invalid_attribute_body">>, <<"Request's body is malformed, provide one valid attribute with its value.">>}]}).
 -define(ERROR_INVALID_MODE,
   {?BAD_REQUEST, [{<<"error_invalid_mode">>, <<"Given mode is invalid, it should be provided in octal form.">>}]}).
+-define(ERROR_TOO_MANY_ENTRIES,
+  {?BAD_REQUEST, [{<<"error_too_many_entries">>, <<"The directory contains too many entries to list them all, ask for specific range.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED,

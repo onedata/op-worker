@@ -6,11 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for file_distribution allowing to check and change data distribution
-%%% in file replicas.
+%%% Handler for listing files.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_distribution_handler).
+-module(files).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -18,13 +17,17 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("http/rest/http_status.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+
+-define(MAX_ENTRIES, 1000).
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
-    is_authorized/2, resource_exists/2, content_types_provided/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_provided/2]).
 
 %% resource functions
--export([get_file_distribution/2]).
+-export([list_files/2]).
 
 %%%===================================================================
 %%% API
@@ -52,13 +55,6 @@ allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:malformed_request/2
-%%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
-malformed_request(Req, State) ->
-    validator:malformed_request(Req, State).
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
@@ -66,19 +62,12 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:resource_exists/2
-%%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
-resource_exists(Req, State) ->
-    rest_existence_checker:resource_exists(Req, State).
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/json">>, get_file_distribution}
+        {<<"application/json">>, list_files}
     ], Req, State}.
 
 %%%===================================================================
@@ -86,10 +75,35 @@ content_types_provided(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Handles GET with "application/json" content-type
+%% '/api/v3/oneprovider/files/{path}'
+%% @doc Returns the list of folders and files directly under specified path.
+%% If the path points to a file, the result array will consist only of the
+%% single item with the path to the file requested, confirming it exists.\n
+%%
+%% HTTP method: GET
+%%
+%% @param path Directory path (e.g. &#39;/My Private Space/testfiles&#39;)
 %%--------------------------------------------------------------------
--spec get_file_distribution(req(), #{}) -> {term(), req(), #{}}.
-get_file_distribution(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth} = State) ->
-    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {guid, Guid}),
-    Response = json_utils:encode(Distribution),
-    {Response, Req, State}.
+-spec list_files(req(), #{}) -> {term(), req(), #{}}.
+list_files(Req, State) ->
+    {State2, Req2} = validator:parse_path(Req, State),
+
+    #{auth := Auth, path := Path} = State2,
+
+    Response =
+        case onedata_file_api:stat(Auth, {path, Path}) of
+            {ok, #file_attr{type = ?DIRECTORY_TYPE, uuid = Guid}} ->
+                case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
+                    {ok, ChildNum} when ChildNum > ?MAX_ENTRIES ->
+                        throw(?ERROR_TOO_MANY_ENTRIES);
+                    {ok, ChildNum} ->
+                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, 0, ?MAX_ENTRIES),
+                        json_utils:encode(
+                            lists:map(fun({Guid, ChildPath}) ->
+                                [{<<"id">>, Guid}, {<<"path">>, filename:join(Path, ChildPath)}]
+                            end, Children))
+                end;
+            {ok, #file_attr{uuid = Guid}} ->
+                json_utils:encode([[{<<"id">>, Guid}, {<<"path">>, Path}]])
+        end,
+    {Response, Req2, State2}.
