@@ -38,7 +38,8 @@
     read_event_subscription_test/1,
     metric_get/1,
     list_file/1,
-    list_dir/1
+    list_dir/1,
+    replicate_file_by_id/1
 ]).
 
 all() ->
@@ -51,7 +52,8 @@ all() ->
         read_event_subscription_test,
         metric_get,
         list_file,
-        list_dir
+        list_dir,
+        replicate_file_by_id
     ]).
 
 %%%===================================================================
@@ -85,8 +87,8 @@ replicate_file(Config) ->
 
     % when
     timer:sleep(timer:seconds(10)),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/spaces/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
-    DecodedBody0 = json_utils:decode(Body),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/spaces/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode(Body0),
     ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
     % then
@@ -247,6 +249,32 @@ list_dir(Config) ->
         ],
         DecodedBody
     ).
+
+replicate_file_by_id(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/spaces/space3/file">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    timer:sleep(timer:seconds(10)),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode(Body0),
+    ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
+
+    % then
+    timer:sleep(timer:seconds(5)),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [
+            [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+        ], DecodedBody).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

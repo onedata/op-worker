@@ -37,7 +37,9 @@ routes() ->
             handler_initial_opts => #{subject_type => space}}},
         {"/api/v3/oneprovider/metrics/user/:id", #{handler => metrics_handler,
             handler_initial_opts => #{subject_type => user}}},
-        {"/api/v3/oneprovider/replicas/[...]", #{handler => replicas}}
+        {"/api/v3/oneprovider/replicas/[...]", #{handler => replicas}},
+        {"/api/v3/oneprovider/replicas-id/:id", #{handler => replicas,
+            handler_initial_opts => #{resource_type => id}}}
     ].
 
 

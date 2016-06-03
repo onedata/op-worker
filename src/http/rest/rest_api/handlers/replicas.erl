@@ -32,8 +32,8 @@
 %% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
+rest_init(Req, State) ->
+    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -96,17 +96,18 @@ content_types_provided(Req, State) ->
 %%    which will be called when the transfer is complete\n
 %%--------------------------------------------------------------------
 -spec replicate_file(req(), #{}) -> {term(), req(), #{}}.
+replicate_file(Req, State = #{resource_type := id}) ->
+    {State2, Req2} = validator:parse_id(Req, State),
+    {State3, Req3} = validator:parse_provider_id(Req2, State2),
+    {State4, Req4} = validator:parse_callback(Req3, State3),
+
+    replicate_file_internal(Req4, State4);
 replicate_file(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_callback(Req3, State3),
 
-    #{auth := Auth, path := Path, provider_id := ProviderId, callback := Callback} = State4,
-    ok = onedata_file_api:replicate_file(Auth, {path, Path}, ProviderId),
-
-    Response = json_utils:encode([{<<"transferId">>, <<"">>}]), %todo start async transfer
-    {ok, Req5} = cowboy_req:reply(?HTTP_OK, [], Response, Req4),
-    {Response, Req5, State4}.
+    replicate_file_internal(Req4, State4).
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/replicas/{path}'
@@ -117,15 +118,47 @@ replicate_file(Req, State) ->
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
 %%--------------------------------------------------------------------
 -spec get_file_replicas(req(), #{}) -> {term(), req(), #{}}.
+get_file_replicas(Req, State = #{resource_type := id}) ->
+    {State2, Req2} = validator:parse_id(Req, State),
+
+    get_file_replicas_internal(Req2, State2);
 get_file_replicas(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
 
-    #{auth := Auth, path := Path} = State2,
-
-    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {path, Path}),
-    Response = json_utils:encode(Distribution),
-    {Response, Req2, State2}.
+    get_file_replicas_internal(Req2, State2).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc internal version of replicate_file/2
+%%--------------------------------------------------------------------
+-spec replicate_file_internal(req(), #{}) -> {term(), req(), #{}}.
+replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback := Callback} = State) ->
+    File = get_file(State),
+    ok = onedata_file_api:replicate_file(Auth, File, ProviderId),
+    Response = json_utils:encode([{<<"transferId">>, <<"">>}]), %todo start async transfer
+    {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
+    {Response, Req2, State}.
+
+%%--------------------------------------------------------------------
+%% @doc internal version of get_file_replicas/2
+%%--------------------------------------------------------------------
+-spec get_file_replicas_internal(req(), #{}) -> {term(), req(), #{}}.
+get_file_replicas_internal(Req, #{auth := Auth} = State) ->
+    File = get_file(State),
+    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, File),
+    Response = json_utils:encode(Distribution),
+    {Response, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file entry from state
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file(#{}) -> {guid, binary()} | {path, binary()}.
+get_file(#{id := Id}) ->
+    {guid, Id};
+get_file(#{path := Path}) ->
+    {path, Path}.

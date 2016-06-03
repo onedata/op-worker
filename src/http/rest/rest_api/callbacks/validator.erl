@@ -51,7 +51,12 @@ malformed_request(Req, State) ->
     {#{path => onedata_file_api:file_path()}, cowboy_req:req()}.
 parse_path(Req, State) ->
     {Path, NewReq} = cowboy_req:path_info(Req),
-    {State#{path => filename:join([<<"/">> | Path])}, NewReq}.
+    case Path of
+        undefined ->
+            throw(?ERROR_NOT_FOUND);
+        _ ->
+            {State#{path => filename:join([<<"/">> | Path])}, NewReq}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,8 +66,8 @@ parse_path(Req, State) ->
 -spec parse_id(cowboy_req:req(), #{}) ->
     {#{id => binary()}, cowboy_req:req()}.
 parse_id(Req, State) ->
-    {Version, NewReq} = cowboy_req:binding(id, Req),
-    {State#{id => Version}, NewReq}.
+    {Id, NewReq} = cowboy_req:binding(id, Req),
+    {State#{id => Id}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
