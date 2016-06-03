@@ -20,7 +20,7 @@
 %% API
 -export([gen_path/2, gen_storage_path/1]).
 -export([verify_file_path/1, get_canonical_file_entry/2]).
--export([basename/1, split/1, join/1, is_space_dir/1, basename_and_parent/1]).
+-export([basename/1, split/1, join/1, basename_and_parent/1]).
 -export([dirname/1]).
 
 %%%===================================================================
@@ -136,12 +136,8 @@ get_canonical_file_entry(#fslogic_ctx{session_id = ?ROOT_SESS_ID}, Tokens) ->
     {path, Path};
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    {uuid, fslogic_uuid:default_space_uuid(UserId)};
-get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME]) ->
-    UserId = fslogic_context:get_user_id(Ctx),
-    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME]),
-    {path, Path};
-get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
+    {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
+get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
 
@@ -154,11 +150,10 @@ get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_
             throw(?ENOENT);
         [{SpaceId, _}] ->
             {path, fslogic_path:join(
-                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | Tokens])}
     end;
 get_canonical_file_entry(Ctx, Tokens) ->
-    {ok, DefaultSpaceId} = fslogic_spaces:get_default_space_id(Ctx),
-    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, DefaultSpaceId | Tokens]),
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens]),
     {path, Path}.
 
 %%--------------------------------------------------------------------
@@ -198,19 +193,6 @@ basename_and_parent(Path) ->
         _ -> {<<"">>, <<?DIRECTORY_SEPARATOR>>}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc Returns true when Path points to space directory (or space root directory)
-%% @end
-%%--------------------------------------------------------------------
--spec is_space_dir(Path :: file_meta:path()) -> boolean().
-is_space_dir(Path) ->
-    case split(Path) of
-        [] -> true;
-        [?SPACES_BASE_DIR_NAME] -> true;
-        [?SPACES_BASE_DIR_NAME, _SpaceName] -> true;
-        _ -> false
-    end.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -225,16 +207,13 @@ is_space_dir(Path) ->
 -spec gen_path(file_meta:entry(), onedata_user:id(), [file_meta:name()]) ->
     {ok, file_meta:path()} | datastore:generic_error() | no_return().
 gen_path(Entry, UserId, Tokens) ->
-    SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
     {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
         {ok, #document{key = ?ROOT_DIR_UUID}} ->
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
-        {ok, #document{key = SpaceBaseDirUUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
             {ok, #document{value = #space_info{name = SpaceName}}} =
                 space_info:get(SpaceId, UserId),
-            gen_path({uuid, SpaceBaseDirUUID}, UserId, [SpaceName | Tokens]);
+            fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]);
         {ok, #document{key = ParentUUID}} ->
             gen_path({uuid, ParentUUID}, UserId, [Name | Tokens])
     end.

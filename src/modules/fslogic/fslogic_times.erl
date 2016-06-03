@@ -110,7 +110,7 @@ update_times_and_emit(Entry, TimesMap, UserId) ->
     {ok, UUID} = file_meta:update(Entry, TimesMap),
     spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, UUID}) end),
 
-    RootSpaceUUID = fslogic_uuid:default_space_uuid(UserId),
+    RootSpaceUUID = fslogic_uuid:user_root_dir_uuid(UserId),
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(UserId),
 
     case UUID of

@@ -39,8 +39,7 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     rename/2, setup_onedata_user/2]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
--export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1,
-    is_spaces_base_dir/1, is_spaces_dir/2]).
+-export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1]).
 
 -type uuid() :: datastore:key().
@@ -439,11 +438,10 @@ resolve_path(Path) ->
 resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
     ?run(begin
              {ok, #document{key = RootUUID} = Root} = get(ParentEntry),
-             SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
              case fslogic_path:split(Path) of
                  [] ->
                      {ok, {Root, [RootUUID]}};
-                 [First | Rest] when RootUUID =:= ?ROOT_DIR_UUID; RootUUID =:= SPACES_BASE_DIR_UUID ->
+                 [First | Rest] when RootUUID =:= ?ROOT_DIR_UUID ->
                    set_link_context(Root),
                    case datastore:fetch_link_target(?LINK_STORE_LEVEL, Root, First) of
                      {ok, NewRoot} ->
@@ -531,29 +529,16 @@ setup_onedata_user(_Client, UserId) ->
         {ok, #document{value = #onedata_user{spaces = Spaces}}} =
             onedata_user:get(UserId),
 
-            CTime = erlang:system_time(seconds),
-
-            {ok, SpacesRootUUID} =
-                case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
-                    {ok, #document{key = Key}} -> {ok, Key};
-                    {error, {not_found, _}} ->
-                        create({uuid, ?ROOT_DIR_UUID},
-                            #document{key = ?SPACES_BASE_DIR_UUID,
-                                value = #file_meta{
-                                    name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
-                                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                                    is_scope = true
-                                }})
-                end,
+        CTime = erlang:system_time(seconds),
 
         lists:foreach(fun({SpaceId, _}) ->
             SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             case exists({uuid, SpaceDirUuid}) of
                 true ->
-                    fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID},
+                    fix_parent_links({uuid, ?ROOT_DIR_UUID},
                         {uuid, SpaceDirUuid});
                 false ->
-                    {ok, _} = create({uuid, SpacesRootUUID},
+                    {ok, _} = create({uuid, ?ROOT_DIR_UUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
                                 name = SpaceId, type = ?DIRECTORY_TYPE,
@@ -563,18 +548,10 @@ setup_onedata_user(_Client, UserId) ->
             end
         end, Spaces),
 
-        {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
-            #document{key = fslogic_uuid:default_space_uuid(UserId),
+        {ok, _RootUUID} = create({uuid, ?ROOT_DIR_UUID},
+            #document{key = fslogic_uuid:user_root_dir_uuid(UserId),
                 value = #file_meta{
-                    name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                    is_scope = true
-                }
-            }),
-        {ok, _SpacesUUID} = create({uuid, RootUUID},
-            #document{key = fslogic_uuid:spaces_uuid(UserId),
-                value = #file_meta{
-                    name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                    name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1550,
                     mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
                     is_scope = true
                 }
@@ -631,24 +608,6 @@ to_uuid({path, Path}) ->
 -spec is_root_dir(datastore:document()) -> boolean().
 is_root_dir(#document{key = Key}) ->
     Key =:= ?ROOT_DIR_UUID.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if given file doc represents "spaces" directory dedicated for user.
-%% @end
-%%--------------------------------------------------------------------
--spec is_spaces_dir(datastore:document(), onedata_user:id()) -> boolean().
-is_spaces_dir(#document{key = Key}, UserId) ->
-    Key =:= fslogic_uuid:spaces_uuid(UserId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if given file doc represents "spaces" directory.
-%% @end
-%%--------------------------------------------------------------------
--spec is_spaces_base_dir(datastore:document()) -> boolean().
-is_spaces_base_dir(#document{key = Key}) ->
-    Key =:= ?SPACES_BASE_DIR_UUID.
 
 %%%===================================================================
 %%% Internal functions
@@ -929,9 +888,9 @@ location_ref(ProviderId) ->
 -spec set_link_context(Doc :: datastore:document() | datastore:key()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
 set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, scope = MotherScope}}) ->
-  SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
+  ROOT_DIR_UUID = ?ROOT_DIR_UUID,
   case MotherScope of
-    SPACES_BASE_DIR_UUID ->
+      ROOT_DIR_UUID ->
       set_link_context(ScopeUUID);
     _ ->
       erlang:put(mother_scope, oneprovider:get_provider_id()),

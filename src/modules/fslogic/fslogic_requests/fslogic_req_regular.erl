@@ -133,16 +133,7 @@ get_file_location(CTX, File, rdwr) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
 get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags) ->
-    NormalizedParentUUID =
-        case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
-            true ->
-                {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-                DefaultSpaceUUID;
-            false ->
-                ParentUUID
-        end,
-
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
@@ -154,11 +145,11 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         uid = fslogic_context:get_user_id(CTX)
     }},
 
-    {ok, FileUUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
+    {ok, FileUUID} = file_meta:create({uuid, ParentUUID}, File),
 
     try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         {StorageId, FileId} ->
-            fslogic_times:update_mtime_ctime({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
+            fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
 
             {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
                 false ->
@@ -213,7 +204,7 @@ get_parent(CTX, File) ->
             #fuse_response{
                 status = #status{code = ?OK},
                 fuse_response = #dir{uuid =
-                    fslogic_uuid:to_file_guid(fslogic_uuid:spaces_uuid(fslogic_context:get_user_id(CTX)), undefined)}
+                    fslogic_uuid:to_file_guid(fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(CTX)), undefined)}
             };
         _ ->
             #fuse_response{

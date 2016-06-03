@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
+-export([user_root_dir_uuid/1, path_to_uuid/2, uuid_to_path/2,
     guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2,
     default_space_owner/1]).
 -export([gen_file_uuid/1, gen_file_uuid/0]).
@@ -151,11 +151,9 @@ ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
 -spec uuid_to_path(fslogic_worker:ctx(), file_meta:uuid()) -> file_meta:path().
 uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
     identity = #identity{user_id = UserId}}}, FileUuid) ->
-    UserRoot = default_space_uuid(UserId),
-    UserSpacesRoot = spaces_uuid(UserId),
+    UserRoot = user_root_dir_uuid(UserId),
     case FileUuid of
         UserRoot -> <<"/">>;
-        UserSpacesRoot -> <<"/", ?SPACES_BASE_DIR_NAME/binary>>;
         _ ->
             {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
@@ -193,19 +191,11 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns UUID of user's main 'spaces' directory.
+%% @doc Returns UUID of user's root directory.
 %% @end
 %%--------------------------------------------------------------------
--spec spaces_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
-spaces_uuid(UserId) ->
-    http_utils:base64url_encode(term_to_binary({UserId, ?SPACES_BASE_DIR_NAME})).
-
-%%--------------------------------------------------------------------
-%% @doc Returns UUID of user's default space directory.
-%% @end
-%%--------------------------------------------------------------------
--spec default_space_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
-default_space_uuid(UserId) ->
+-spec user_root_dir_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
+user_root_dir_uuid(UserId) ->
     http_utils:base64url_encode(term_to_binary({root_space, UserId})).
 
 

@@ -207,10 +207,7 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
 %%--------------------------------------------------------------------
 -spec validate_scope_access(FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_scope_access(FileDoc, UserId) ->
-    case file_meta:is_root_dir(FileDoc)
-        orelse file_meta:is_spaces_base_dir(FileDoc)
-        orelse file_meta:is_spaces_dir(FileDoc, UserId)
-    of
+    case file_meta:is_root_dir(FileDoc) of
         true -> ok;
         false ->
             try fslogic_spaces:get_space(FileDoc, UserId) of
