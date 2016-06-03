@@ -281,7 +281,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
 
     Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
 
-    SessId = Name("session_id", UserId),
+    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     UserId = UserId,
     Iden = #identity{user_id = UserId},
 
@@ -304,7 +304,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         {{user_id, UserId}, UserId},
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
-        {{session_id, UserId}, SessId},
+        {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
         {{fslogic_ctx, UserId}, #fslogic_ctx{session = Session}}
         | setup_session(Worker, R, Config)
     ].

@@ -56,11 +56,11 @@
 
 all() ->
     ?ALL([
+        delete_dir_test,
         list_dir_test,
         get_file_test,
-%%        metadata_test,
+        metadata_test,
         delete_file_test,
-        delete_dir_test,
         create_file_test,
         update_file_test,
         create_dir_test,
@@ -71,7 +71,7 @@ all() ->
         moved_permanently_test,
         objectid_test,
         request_format_check_test,
-%%        mimetype_and_encoding_test,
+        mimetype_and_encoding_test,
         out_of_range_test,
         partial_upload_test,
         acl_test,

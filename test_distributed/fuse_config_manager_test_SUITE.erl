@@ -54,7 +54,7 @@ get_configuration_test(Config) ->
 create_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
@@ -78,7 +78,7 @@ create_storage_test_file_test(Config) ->
 verify_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     test_utils:set_env(Worker, ?APP_NAME, verify_storage_test_file_delay_seconds, 1),
     test_utils:set_env(Worker, ?APP_NAME, remove_storage_test_file_attempts, 1),
 

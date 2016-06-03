@@ -137,7 +137,7 @@ remove_session(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
 get_provider_session_id(Type, ProviderId) ->
-    <<?PROVIDER_SESSION_PREFIX, (http_utils:base64url_encode(term_to_binary({Type, provider, ProviderId})))/binary>>.
+    <<?PROVIDER_SESSION_PREFIX, (http_utils:base64url_encode(term_to_binary({Type, provider_incoming, ProviderId})))/binary>>.
 
 
 %%--------------------------------------------------------------------

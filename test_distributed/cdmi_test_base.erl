@@ -199,6 +199,7 @@ get_file(Config) ->
 
     {ok, _} = create_file(Config, FileName),
     ?assert(object_exists(Config, FileName)),
+
     {ok, _} = write_to_file(Config, FileName, FileContent, ?FILE_BEGINNING),
     ?assertEqual(FileContent, get_file_content(Config, FileName)),
 
@@ -653,6 +654,7 @@ update_file(Config) ->
     RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     RequestBody1 = [{<<"value">>, NewValue}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
+
     {ok, Code1, _Headers1, _Response1} = do_request(Workers, FullTestFileName, put, RequestHeaders1, RawRequestBody1),
     ?assertEqual(204, Code1),
 
@@ -1753,7 +1755,7 @@ create_test_dir_and_file(Config) ->
 
 object_exists(Config, Path) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
 
     case lfm_proxy:stat(WorkerP1, SessionId,
         {path, absolute_binary_path(Path)}) of
@@ -1765,11 +1767,11 @@ object_exists(Config, Path) ->
 
 create_file(Config, Path) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path), ?DEFAULT_FILE_MODE).
 
 open_file(Worker, Config, Path, OpenMode) ->
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     lfm_proxy:open(Worker, SessionId, {path, absolute_binary_path(Path)}, OpenMode).
 
 write_to_file(Config, Path, Data, Offset) ->
@@ -1791,29 +1793,29 @@ get_file_content(Config, Path) ->
 
 mkdir(Config, Path) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lfm_proxy:mkdir(WorkerP1, SessionId, absolute_binary_path(Path)).
 
 set_acl(Config, Path, Acl) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lfm_proxy:set_acl(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Acl).
 
 get_acl(Config, Path) ->
     [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     lfm_proxy:get_acl(WorkerP2, SessionId, {path, absolute_binary_path(Path)}).
 
 add_xattrs(Config, Path, Xattrs) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lists:foreach(fun(Xattr) ->
         ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Xattr)
     end, Xattrs).
 
 get_xattrs(Config, Path) ->
     [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     {ok, Xattrs} = lfm_proxy:list_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}),
     lists:filtermap(
         fun
