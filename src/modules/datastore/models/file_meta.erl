@@ -371,15 +371,19 @@ list_children(Entry, Offset, Count) ->
 -spec get_locations(entry()) -> {ok, [datastore:key()]} | datastore:get_error().
 get_locations(Entry) ->
     ?run(begin
-             {ok, #document{} = File} = get(Entry),
-             set_link_context(File),
-             datastore:foreach_link(?LINK_STORE_LEVEL, File,
-                 fun
-                     (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
-                         [Key | AccIn];
-                     (_LinkName, _LinkTarget, AccIn) ->
-                         AccIn
-                 end, [])
+             case get(Entry) of
+                 {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
+                     {ok, []};
+                 {ok, File} ->
+                     set_link_context(File),
+                     datastore:foreach_link(?LINK_STORE_LEVEL, File,
+                         fun
+                             (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
+                                 [Key | AccIn];
+                             (_LinkName, _LinkTarget, AccIn) ->
+                                 AccIn
+                         end, [])
+             end
          end).
 
 %%--------------------------------------------------------------------

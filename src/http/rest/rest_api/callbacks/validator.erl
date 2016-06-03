@@ -20,7 +20,7 @@
 
 %% API
 -export([malformed_metrics_request/2, malformed_request/2, parse_path/2, parse_id/2, parse_attribute/2,
-    parse_attribute_body/2]).
+    parse_attribute_body/2, parse_provider_id/2, parse_callback/2]).
 
 %%%===================================================================
 %%% API
@@ -111,6 +111,31 @@ parse_attribute_body(Req, State) ->
         {_Attr, _Value} ->
             throw(?ERROR_INVALID_ATTRIBUTE)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's provider_id parameter and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_provider_id(cowboy_req:req(), #{}) ->
+    {#{provider_id => binary()}, cowboy_req:req()}.
+parse_provider_id(Req, State) ->
+    {ProviderId, NewReq} = cowboy_req:qs_val(<<"provider_id">>, Req, oneprovider:get_provider_id()),
+    {State#{provider_id => ProviderId}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's callback body and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_callback(cowboy_req:req(), #{}) ->
+    {#{callback => binary()}, cowboy_req:req()}.
+parse_callback(Req, State) ->
+    {ok, Body, NewReq} = cowboy_req:body(Req),
+
+    Json = json_utils:decode(Body),
+    Callback = proplists:get_value(<<"url">>, Json),
+    {State#{callback => Callback}, NewReq}.
 
 %%%===================================================================
 %%% Internal functions

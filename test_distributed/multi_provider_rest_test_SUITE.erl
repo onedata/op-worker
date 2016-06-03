@@ -64,7 +64,7 @@ get_simple_file_distribution(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"file_distribution/file">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/file">>, get, [user_1_token_header(Config)], []),
 
     % then
     DecodedBody = json_utils:decode(Body),
@@ -81,11 +81,13 @@ replicate_file(Config) ->
 
     % when
     timer:sleep(timer:seconds(10)),
-    {ok, 204, _, _} = do_request(WorkerP1, <<"replicate_file/spaces/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/spaces/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode(Body),
+    ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
     % then
     timer:sleep(timer:seconds(5)),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"file_distribution/spaces/space3/file">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/spaces/space3/file">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         [
@@ -118,13 +120,15 @@ replicate_dir(Config) ->
 
     % when
     timer:sleep(timer:seconds(10)),
-    {ok, 204, _, _} = do_request(WorkerP1, <<"replicate_file/spaces/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/spaces/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch([{<<"transferId">>, _}], DecodedBody),
 
     % then
     timer:sleep(timer:seconds(5)),
-    {ok, 200, _, Body1} = do_request(WorkerP1, <<"file_distribution/spaces/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"file_distribution/spaces/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP1, <<"file_distribution/spaces/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas/spaces/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/spaces/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP1, <<"replicas/spaces/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
     DecodedBody1 = json_utils:decode(Body1),
     DecodedBody2 = json_utils:decode(Body2),
     DecodedBody3 = json_utils:decode(Body3),

@@ -30,14 +30,14 @@
 routes() ->
     [
         {"/api/v3/oneprovider/attributes/[...]", #{handler => attributes}},
-        {"/api/v3/oneprovider/file_distribution/[...]", #{handler => file_distribution_handler}},
-        {"/api/v3/oneprovider/replicate_file/[...]", #{handler => replicate_file_handler}},
+        {"/api/v3/oneprovider/files/[...]", #{handler => files}},
         {"/api/v3/oneprovider/metrics/provider/:id", #{handler => metrics_handler,
             handler_initial_opts => #{subject_type => provider}}},
         {"/api/v3/oneprovider/metrics/space/:id", #{handler => metrics_handler,
             handler_initial_opts => #{subject_type => space}}},
         {"/api/v3/oneprovider/metrics/user/:id", #{handler => metrics_handler,
-            handler_initial_opts => #{subject_type => user}}}
+            handler_initial_opts => #{subject_type => user}}},
+        {"/api/v3/oneprovider/replicas/[...]", #{handler => replicas}}
     ].
 
 

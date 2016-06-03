@@ -6,25 +6,23 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for file attribute read and modification.
+%%% Handler allowing for managing file replicas
 %%% @end
 %%%--------------------------------------------------------------------
--module(attributes).
+-module(replicas).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2, content_types_accepted/2]).
+    content_types_accepted/2, content_types_provided/2]).
 
 %% resource functions
--export([get_file_attributes/2, set_file_attribute/2]).
+-export([replicate_file/2, get_file_replicas/2]).
 
 %%%===================================================================
 %%% API
@@ -49,7 +47,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"PUT">>], Req, State}.
+    {[<<"GET">>, <<"POST">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -59,22 +57,22 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:content_types_accepted/2
+%%--------------------------------------------------------------------
+-spec content_types_accepted(req(), #{}) ->
+    {[{atom() | binary(), atom()}], req(), #{}}.
+content_types_accepted(Req, State) ->
+    {[
+        {'*', replicate_file}
+    ], Req, State}.
+
+%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/json">>, get_file_attributes}
-    ], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
-%%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
-content_types_accepted(Req, State) ->
-    {[
-        {<<"application/json">>, set_file_attribute}
+        {<<"application/json">>, get_file_replicas}
     ], Req, State}.
 
 
@@ -83,43 +81,50 @@ content_types_accepted(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/attributes/{path}'
-%% @doc This method returns selected file attributes.
+%% '/api/v3/oneprovider/replicas/{path}'
+%% @doc Replicates a file to a specified provider. This operation is asynchronous
+%% as it can  take a long time depending on the size of the data to move.
+%% If the &#x60;path&#x60; parameter specifies a folder, entire folder is
+%% replicated to  requested provider.
+%%
+%% HTTP method: POST
+%%
+%% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
+%% @param provider_id The ID of the provider to which the file should be replicated.
+%%    By default the file will be replicated to the provided handling this REST call.\n
+%% @param callback This parameter allows the user to specify a REST callback URL,
+%%    which will be called when the transfer is complete\n
+%%--------------------------------------------------------------------
+-spec replicate_file(req(), #{}) -> {term(), req(), #{}}.
+replicate_file(Req, State) ->
+    {State2, Req2} = validator:parse_path(Req, State),
+    {State3, Req3} = validator:parse_provider_id(Req2, State2),
+    {State4, Req4} = validator:parse_callback(Req3, State3),
+
+    #{auth := Auth, path := Path, provider_id := ProviderId, callback := Callback} = State4,
+    ok = onedata_file_api:replicate_file(Auth, {path, Path}, ProviderId),
+
+    Response = json_utils:encode([{<<"transferId">>, <<"">>}]), %todo start async transfer
+    {ok, Req5} = cowboy_req:reply(?HTTP_OK, [], Response, Req4),
+    {Response, Req5, State4}.
+
+%%--------------------------------------------------------------------
+%% '/api/v3/oneprovider/replicas/{path}'
+%% @doc Returns file distribution information about a specific file replicated at this provider.\n
 %%
 %% HTTP method: GET
 %%
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
-%% @param attribute Type of attribute to query for.
 %%--------------------------------------------------------------------
--spec get_file_attributes(req(), #{}) -> {term(), req(), #{}}.
-get_file_attributes(Req, State) ->
+-spec get_file_replicas(req(), #{}) -> {term(), req(), #{}}.
+get_file_replicas(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_attribute(Req2, State2),
 
-    #{auth := Auth, path := Path, attribute := <<"posix_mode">>} = State3,
+    #{auth := Auth, path := Path} = State2,
 
-    {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
-    Response = json_utils:encode([{<<"name">>, <<"posix_mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
-    {Response, Req3, State3}.
-
-%%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/attributes/{path}'
-%% @doc This method allows to set a value of a specific file attribute (e.g. posix_mode).
-%%
-%% HTTP method: PUT
-%%
-%% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
-%% @param attribute Attribute name and value.
-%%--------------------------------------------------------------------
--spec set_file_attribute(req(), #{}) -> {term(), req(), #{}}.
-set_file_attribute(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_attribute_body(Req2, State2),
-
-    #{attribute_body := {<<"posix_mode">>, Mode}, path := Path, auth := Auth} = State3,
-
-    ok = onedata_file_api:set_perms(Auth, {path, Path}, Mode),
-    {true, Req3, State3}.
+    {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, {path, Path}),
+    Response = json_utils:encode(Distribution),
+    {Response, Req2, State2}.
 
 %%%===================================================================
 %%% Internal functions
