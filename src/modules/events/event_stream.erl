@@ -145,9 +145,9 @@ handle_cast(#event{} = Evt, #state{subscription_id = SubId, session_id = SessId,
         false -> {noreply, State}
     end;
 
-handle_cast({flush, Pid}, #state{ctx = Ctx} = State) ->
+handle_cast({flush, NotifyFun}, #state{ctx = Ctx} = State) ->
     #state{ctx = NewCtx} = NewState = execute_event_handler(
-        State#state{ctx = Ctx#{notify => Pid}}
+        State#state{ctx = Ctx#{notify => NotifyFun}}
     ),
     {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
 

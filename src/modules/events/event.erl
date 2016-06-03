@@ -15,10 +15,11 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit/1, emit/2, flush/2, flush/3, subscribe/1, subscribe/2,
+-export([emit/1, emit/2, flush/2, flush/4, flush/5, subscribe/1, subscribe/2,
     unsubscribe/1, unsubscribe/2]).
 
 -export_type([key/0, object/0, update_object/0, counter/0, subscription/0,
@@ -77,9 +78,19 @@ emit(EvtObject, Ref) ->
 %% IMPORTANT! Event handler is responsible for notifying the awaiting process.
 %% @end
 %%--------------------------------------------------------------------
--spec flush(SubId :: subscription:id(), Notify :: pid()) -> ok.
-flush(SubId, Notify) ->
-    send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers()).
+-spec flush(#flush_events{}, Ref :: event:manager_ref()) -> ok.
+flush(#flush_events{} = FlushMsg, Ref) ->
+    send_to_event_managers(FlushMsg, get_event_managers(as_list(Ref))).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv flush(ProviderId, Context, SubId, Notify, get_event_managers())
+%% @end
+%%--------------------------------------------------------------------
+-spec flush(ProviderId :: oneprovider:id(), Context :: term(), SubId :: subscription:id(),
+    Notify :: pid()) -> term().
+flush(ProviderId, Context, SubId, Notify) ->
+    flush(ProviderId, Context, SubId, Notify, get_event_managers()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -89,9 +100,21 @@ flush(SubId, Notify) ->
 %% IMPORTANT! Event handler is responsible for notifying the awaiting process.
 %% @end
 %%--------------------------------------------------------------------
--spec flush(SubId :: subscription:id(), Notify :: pid(), Ref :: event:manager_ref()) -> ok.
-flush(SubId, Notify, Ref) ->
-    send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers(as_list(Ref))).
+-spec flush(ProviderId :: oneprovider:id(), Context :: term(), SubId :: subscription:id(),
+    Notify :: pid(), Ref :: event:manager_ref()) -> reference().
+flush(ProviderId, Context, SubId, Notify, Ref) ->
+    RecvRef = make_ref(),
+    ok = send_to_event_managers(#flush_events{
+        provider_id = ProviderId, subscription_id = SubId,
+        context = Context,
+        notify = fun
+            (#server_message{message_body = #status{code = ?OK}}) ->
+                Notify ! {RecvRef, ok};
+            (#server_message{message_body = #status{code = Code}}) ->
+                Notify ! {RecvRef, {error, Code}}
+        end
+    }, get_event_managers(as_list(Ref))),
+    RecvRef.
 
 %%--------------------------------------------------------------------
 %% @doc

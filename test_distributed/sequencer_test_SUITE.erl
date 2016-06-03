@@ -90,7 +90,7 @@ send_message_should_inject_stream_id_into_message(Config) ->
 
 route_message_should_forward_message(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Msg = client_message(1, 0),
+    Msg = client_message(?config(session_id, Config), 1, 0),
     route_message(Worker, ?config(session_id, Config), Msg),
     ?assertReceivedMatch(Msg, ?TIMEOUT).
 
@@ -98,7 +98,7 @@ route_message_should_forward_messages_to_the_same_stream(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Msgs = lists:map(fun(SeqNum) ->
-        Msg = client_message(1, SeqNum),
+        Msg = client_message(SessId, 1, SeqNum),
         route_message(Worker, SessId, Msg),
         Msg
     end, lists:seq(9, 0, -1)),
@@ -110,7 +110,7 @@ route_message_should_forward_messages_to_different_streams(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Msgs = lists:map(fun(StmId) ->
-        Msg = client_message(StmId, 0),
+        Msg = client_message(SessId, StmId, 0),
         route_message(Worker, SessId, Msg),
         Msg
     end, lists:seq(1, 10)),
@@ -263,10 +263,10 @@ route_message(Worker, SessId, Msg) ->
 %% Returns client message as part of messages stream.
 %% @end
 %%--------------------------------------------------------------------
--spec client_message(StmId :: sequencer:stream_id(),
+-spec client_message(SessId :: session:id(), StmId :: sequencer:stream_id(),
     SeqNum :: sequencer:sequence_number()) -> Msg :: #client_message{}.
-client_message(StmId, SeqNum) ->
-    #client_message{message_stream = #message_stream{
+client_message(SessId, StmId, SeqNum) ->
+    #client_message{session_id = SessId, message_stream = #message_stream{
         stream_id = StmId, sequence_number = SeqNum
     }}.
 

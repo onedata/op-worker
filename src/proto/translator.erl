@@ -40,6 +40,8 @@
 -spec translate_from_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
+translate_from_protobuf(#'FlushEvents'{provider_id = ProviderId, subscription_id = SubId, context = Context}) ->
+    #flush_events{provider_id = ProviderId, subscription_id = SubId, context = binary_to_term(Context)};
 translate_from_protobuf(#'Events'{events = Evts}) ->
     #events{events = [translate_from_protobuf(Evt) || Evt <- Evts]};
 translate_from_protobuf(#'Event'{counter = Counter, object = {_, Record}}) ->
@@ -359,6 +361,8 @@ translate_from_protobuf(undefined) ->
 -spec translate_to_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
+translate_to_protobuf(#'flush_events'{provider_id = ProviderId, subscription_id = SubId, context = Context}) ->
+    {flush_events, #'FlushEvents'{provider_id = ProviderId, subscription_id = SubId, context = term_to_binary(Context)}};
 translate_to_protobuf(#events{events = Evts}) ->
     {events, #'Events'{events = [translate_to_protobuf(Evt) || Evt <- Evts]}};
 translate_to_protobuf(#event{counter = Counter, object = Type}) ->

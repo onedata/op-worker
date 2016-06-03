@@ -16,6 +16,7 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/common/credentials.hrl").
@@ -127,8 +128,8 @@ flush_should_notify_awaiting_process(Config) ->
     Evt = read_event(1, [{0, 1}]),
     SessId = ?config(session_id, Config),
     emit(Worker, SessId, Evt),
-    flush(Worker, ?config(subscription_id, Config), self(), SessId),
-    ?assertReceivedEqual(event_handler, ?TIMEOUT).
+    Ref = flush(Worker, ?config(subscription_id, Config), self(), SessId),
+    ?assertReceivedMatch({Ref, ok}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -354,7 +355,7 @@ forward_events_event_handler() ->
 -spec notify_event_handler() -> Handler :: event_stream:event_handler().
 notify_event_handler() ->
     fun
-        (_, #{notify := Notify}) -> Notify ! event_handler;
+        (_, #{notify := NotifyFun}) -> NotifyFun(#server_message{message_body = #status{code = ?OK}});
         (_, _) -> ok
     end.
 
@@ -408,7 +409,8 @@ emit(Worker, SessId, Evt) ->
 -spec flush(Worker :: node(), SubId :: subscription:id(), Notify :: pid(),
     SessId :: session:id()) -> ok.
 flush(Worker, SubId, Notify, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, event, flush, [SubId, Notify, SessId])).
+    ProvId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    rpc:call(Worker, event, flush, [ProvId, undefined, SubId, Notify, SessId]).
 
 %%--------------------------------------------------------------------
 %% @private
