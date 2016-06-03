@@ -461,6 +461,7 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
                                         ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
                                     end, Errors)
                         end,
+
                         {ok, []};
                     Reason3 ->
                         ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p", [File, Reason3]),
