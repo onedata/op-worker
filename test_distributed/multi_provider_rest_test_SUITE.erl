@@ -144,12 +144,12 @@ posix_mode_get(Config) ->
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"posix_mode/file1">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes/file1?attribute=posix_mode">>, get, [user_1_token_header(Config)], []),
 
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
-        [{<<"posix_mode">>, Mode}],
+        [{<<"name">>, <<"posix_mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}],
         DecodedBody
     ).
 
@@ -162,15 +162,16 @@ posix_mode_put(Config) ->
 
     % when
     NewMode = 8#777,
-    Body = json_utils:encode([{<<"posix_mode">>, NewMode}]),
-    {ok, 204, _, _} = do_request(WorkerP1, <<"posix_mode/file2">>, put,
+    Body = json_utils:encode([{<<"name">>, <<"posix_mode">>}, {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>}]),
+    {ok, 204, _, _} = do_request(WorkerP1, <<"attributes/file2">>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
     % then
-    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"posix_mode/file2">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes/file2?attribute=posix_mode">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
-        [{<<"posix_mode">>, NewMode}],
+        [{<<"name">>, <<"posix_mode">>},
+        {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>}],
         DecodedBody
     ).
 
@@ -248,7 +249,7 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    <<"https://", (list_to_binary(utils:get_host(Node)))/binary, ":", Port/binary, "/rest/latest/">>.
+    <<"https://", (list_to_binary(utils:get_host(Node)))/binary, ":", Port/binary, "/api/v3/oneprovider/">>.
 
 
 user_1_token_header(Config) ->

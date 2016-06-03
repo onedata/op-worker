@@ -61,7 +61,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
 malformed_request(Req, State) ->
-    rest_arg_parser:malformed_metrics_request(Req, State).
+    validator:malformed_metrics_request(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2

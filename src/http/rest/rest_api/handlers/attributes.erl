@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for posix mode read and modification.
+%%% Handler for file attribute read and modification.
 %%% @end
 %%%--------------------------------------------------------------------
--module(posix_mode_handler).
+-module(attributes).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -20,12 +20,11 @@
 -include("http/rest/http_status.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
-    is_authorized/2, resource_exists/2, content_types_provided/2,
-    content_types_accepted/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_provided/2, content_types_accepted/2]).
 
 %% resource functions
--export([get_mode/2, put_mode/2]).
+-export([get_file_attributes/2, set_file_attribute/2]).
 
 %%%===================================================================
 %%% API
@@ -53,13 +52,6 @@ allowed_methods(Req, State) ->
     {[<<"GET">>, <<"PUT">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:malformed_request/2
-%%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
-malformed_request(Req, State) ->
-    rest_arg_parser:malformed_request(Req, State).
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
@@ -67,19 +59,12 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:resource_exists/2
-%%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
-resource_exists(Req, State) ->
-    rest_existence_checker:resource_exists(Req, State).
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/json">>, get_mode}
+        {<<"application/json">>, get_file_attributes}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -89,7 +74,7 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/json">>, put_mode}
+        {<<"application/json">>, set_file_attribute}
     ], Req, State}.
 
 
@@ -98,24 +83,52 @@ content_types_accepted(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Handles GET with "application/json" content-type
+%% '/api/v3/oneprovider/attributes/{path}'
+%% @doc This method returns selected file attributes.
+%%
+%% HTTP method: GET
+%%
+%% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
+%% @param attribute Type of attribute to query for.
 %%--------------------------------------------------------------------
--spec get_mode(req(), #{}) -> {term(), req(), #{}}.
-get_mode(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth} = State) ->
-    {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {guid, Guid}),
-    Response = json_utils:encode([{<<"posix_mode">>, Mode}]),
+-spec get_file_attributes(req(), #{}) -> {term(), req(), #{}}.
+get_file_attributes(Req, State) ->
+    {State2, Req2} = validator:parse_path(Req, State),
+    {State3, Req3} = validator:parse_attribute(Req2, State2),
+    response(Req3, State3).
+
+%%--------------------------------------------------------------------
+%% '/api/v3/oneprovider/attributes/{path}'
+%% @doc This method allows to set a value of a specific file attribute (e.g. posix_mode).
+%%
+%% HTTP method: PUT
+%%
+%% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
+%% @param attribute Attribute name and value.
+%%--------------------------------------------------------------------
+-spec set_file_attribute(req(), #{}) -> {term(), req(), #{}}.
+set_file_attribute(Req, State) ->
+    {State2, Req2} = validator:parse_path(Req, State),
+    {State3, Req3} = validator:parse_attribute_body(Req2, State2),
+    set_posix_mode(Req3, State3).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Prepare response
+%%--------------------------------------------------------------------
+-spec response(req(), #{}) -> {binary(), req(), #{}}.
+response(Req, State = #{auth := Auth, path := Path, attribute := <<"posix_mode">>}) ->
+    {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
+    Response = json_utils:encode([{<<"name">>, <<"posix_mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
     {Response, Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc Handles PUT with "application/json" content-type
+%% @doc Set posix mode of file
 %%--------------------------------------------------------------------
--spec put_mode(req(), #{}) -> {term(), req(), #{}}.
-put_mode(Req, #{auth := Auth, path := Path} = State) ->
-    {ok, Body, Req2} = cowboy_req:body(Req),
-    case json_utils:decode(Body) of
-        [{<<"posix_mode">>, Mode}] ->
-            ok = onedata_file_api:set_perms(Auth, {path, Path}, Mode),
-            {true, Req2, State};
-        _ ->
-            throw(?BAD_REQUEST)
-    end.
+-spec set_posix_mode(req(), #{}) -> {binary(), req(), #{}}.
+set_posix_mode(Req, State = #{attribute_body := {<<"posix_mode">>, Mode}, path := Path, auth := Auth}) ->
+    ok = onedata_file_api:set_perms(Auth, {path, Path}, Mode),
+    {true, Req, State}.

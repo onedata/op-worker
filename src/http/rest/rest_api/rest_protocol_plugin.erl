@@ -29,13 +29,14 @@
 -spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
 routes() ->
     [
-        {"/rest/:version/file_distribution/[...]", #{handler => file_distribution_handler}},
-        {"/rest/:version/replicate_file/[...]", #{handler => replicate_file_handler}},
-        {"/rest/:version/metrics/provider/:id", #{handler => metrics_handler,
+        {"/api/v3/oneprovider/attributes/[...]", #{handler => attributes}},
+        {"/api/v3/oneprovider/file_distribution/[...]", #{handler => file_distribution_handler}},
+        {"/api/v3/oneprovider/replicate_file/[...]", #{handler => replicate_file_handler}},
+        {"/api/v3/oneprovider/metrics/provider/:id", #{handler => metrics_handler,
             handler_initial_opts => #{subject_type => provider}}},
-        {"/rest/:version/metrics/space/:id", #{handler => metrics_handler,
+        {"/api/v3/oneprovider/metrics/space/:id", #{handler => metrics_handler,
             handler_initial_opts => #{subject_type => space}}},
-        {"/rest/:version/metrics/user/:id", #{handler => metrics_handler,
+        {"/api/v3/oneprovider/metrics/user/:id", #{handler => metrics_handler,
             handler_initial_opts => #{subject_type => user}}}
     ].
 
