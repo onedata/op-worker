@@ -211,7 +211,7 @@ set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid};
 
 set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
-    Evt#event{key = <<"quota_exeeded">>}.
+    Evt#event{key = <<"quota_exeeded">>};
 
 set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid}.

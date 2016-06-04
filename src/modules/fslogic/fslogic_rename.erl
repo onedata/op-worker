@@ -286,22 +286,22 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
     SourceSpaceId = fslogic_spaces:get_space_id(SourceUUID),
     TargetSpaceId = fslogic_spaces:get_space_id(CTX, TargetParentPath),
 
-    {_, RenamedEntries} = case SourceDoc of
+    RenamedEntries = case SourceDoc of
         #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
             %% TODO: get all snapshots: TODO: VFS-1966
             SourceDirSnapshots = [SourceEntry],
 
             %% Quota
-            {Size, _} = for_each_child_file(SourceEntry,
+            Size = for_each_child_file(SourceEntry,
                 fun
-                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File, CSize) ->
+                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File, AccSize) ->
                         Size = fslogic_blocks:get_file_size(File),
-                        CSize + Size;
-                    (_Dir, CSize) ->
-                        CSize
+                        {AccSize + Size, undefined};
+                    (_Dir, AccSize) ->
+                        {AccSize, undefined}
                 end,
-                fun(_, _, CSize) ->
-                    CSize
+                fun(_, AccSize, _) ->
+                    AccSize
                 end, 0),
             ok = space_quota:assert_write(TargetSpaceId, Size),
 
@@ -314,22 +314,22 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
 
             for_each_child_file(UpdatedSourceEntry,
                 fun
-                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File, Ret) ->
+                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File, Acc) ->
                         %% TODO: get all snapshots: VFS-1965
                         FileSnapshots = [File],
                         lists:foreach(
                             fun(Snapshot) ->
                                 ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
                             end, FileSnapshots),
-                        Ret;
-                    (_Dir, Ret) ->
-                        Ret
+                        {Acc, undefined};
+                    (_Dir, Acc) ->
+                        {Acc, undefined}
                 end,
-                fun(#document{key = Uuid} = Entry, Ret, _) ->
-                    ok, NewPath} = fslogic_path:gen_path(Entry, SessId),
-                    {fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
-                    {fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewPath}, Ret}
-                end, ok);
+                fun(#document{key = Uuid} = Entry, Acc, _) ->
+                    {ok, NewPath} = fslogic_path:gen_path(Entry, SessId),
+                    [{fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
+                    fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewPath} | Acc]
+                end, []);
 
         #document{key = Uuid} = File ->
             SourcePathTokens = filename:split(SourcePath),
@@ -348,8 +348,10 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
                     ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
                 end, FileSnapshots),
+
+            {ok, NewLogicalPath} = fslogic_path:gen_path({uuid, Uuid}, SessId),
             [{fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
-                fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewPath}]
+                fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewLogicalPath}]
     end,
 
     UserId = fslogic_context:get_user_id(CTX),
@@ -376,8 +378,8 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
     SourcePathTokens = filename:split(SourcePath),
     TargetPathTokens = filename:split(LogicalTargetPath),
 
-    {_, RenamedEntries} = for_each_child_file(SourceEntry,
-        fun(#document{key = SourceUuid} = Doc, _) ->
+    RenamedEntries = for_each_child_file(SourceEntry,
+        fun(#document{key = SourceUuid} = Doc, Acc) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             {ok, OldPath} = fslogic_path:gen_path(Doc, SessId),
             OldTokens = filename:split(OldPath),
@@ -392,17 +394,17 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
                 #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
                     {ok, TargetGuid} = logical_file_manager:mkdir(SessId, NewPath, 8#777)
             end,
-            {TargetGuid, NewPath}
+            {Acc, {TargetGuid, NewPath}}
         end,
         fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
-            mtime = MTime, ctime = CTime, mode = Mode}}, {TargetGuid, NewPath}, _) ->
+            mtime = MTime, ctime = CTime, mode = Mode}}, Acc, {TargetGuid, NewPath}) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, {guid, TargetGuid}, Mode),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, {guid, TargetGuid}),
             ok = logical_file_manager:update_times(SessId, {guid, TargetGuid}, ATime, MTime, CTime),
             ok = logical_file_manager:unlink(SessId, {guid, SourceGuid}),
-            {SourceGuid, TargetGuid, NewPath}
-        end, undefined),
+            [{SourceGuid, TargetGuid, NewPath} | Acc]
+        end, []),
 
     CurrTime = erlang:system_time(seconds),
     ok = fslogic_times:update_mtime_ctime(SourceParent, fslogic_context:get_user_id(CTX), CurrTime),
@@ -509,29 +511,34 @@ ensure_deleted(SessId, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Traverses files tree depth first, executing Pre function before
 %% descending into children and executing Post function after returning
-%% from children. Value returned from Pre function will be passed to Post
-%% function as second argument for the same file doc, values returned from
-%% Post function will be collected and returned as list in order of entering.
+%% from children.
+%% Data flow:
+%% - Input accumulator passed as third argument is passed to Pre function which
+%%   returns tuple {first intermediate accumulator, memorized value}.
+%% - First intermediate accumulator is passed to all children recursive calls
+%%   using foldl which returns second intermediate accumulator.
+%% - Second intermediate accumulator and memorized value are passed to Post
+%%   function which returns output accumulator.
+%% - Output Accumulator is returned
 %%--------------------------------------------------------------------
 -spec for_each_child_file(Entry :: fslogic_worker:file(),
-    PreFun :: fun((fslogic_worker:file(), AccIn :: term()) -> term()),
-    PostFun :: fun((fslogic_worker:file(), ShallowAccIn :: term(), AccIn :: term()) -> term()),
-    AccIn :: term()) -> {ShallowAccOut :: term(), AccOut :: term()}.
+    PreFun :: fun((fslogic_worker:file(), AccIn :: term()) -> {AccInt1 :: term(), Mem :: term()}),
+    PostFun :: fun((fslogic_worker:file(), AccInt2 :: term(), Mem :: term()) -> AccOut ::term()),
+    AccIn :: term()) -> AccOut :: term().
 for_each_child_file(Entry, PreFun, PostFun, AccIn) ->
     {ok, Doc} = file_meta:get(Entry),
-    AccPre = PreFun(Doc, AccIn),
-    AccPost = case Doc of
+    {AccInt1, Mem} = PreFun(Doc, AccIn),
+    AccInt2 = case Doc of
         #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
             {ok, ChildrenLinks} = list_all_children(Doc),
             lists:foldl(
                 fun(#child_link{uuid = ChildUUID}, AccIn0) ->
                     for_each_child_file({uuid, ChildUUID}, PreFun, PostFun, AccIn0)
-                end, AccPre, ChildrenLinks);
+                end, AccInt1, ChildrenLinks);
         _ ->
-            AccPre
+            AccInt1
     end,
-    PostFun(Doc, AccPre, AccPost)
-    [Res2 | Acc].
+    PostFun(Doc, AccInt2, Mem).
 
 %%--------------------------------------------------------------------
 %% @doc Lists all children of given entry
