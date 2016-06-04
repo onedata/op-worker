@@ -52,7 +52,7 @@ get_configuration() ->
         (#document{value = #subscription{object = undefined}}) -> false;
         (#document{value = #subscription{} = Sub}) -> {true, Sub}
     end, Docs),
-    #configuration{subscriptions = Subs}.
+    #configuration{subscriptions = Subs, disabled_spaces = space_quota:get_disabled_spaces()}.
 
 %%--------------------------------------------------------------------
 %% @doc

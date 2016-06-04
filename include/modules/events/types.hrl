@@ -31,6 +31,14 @@
     events = [] :: [#event{}]
 }).
 
+%% definition of a events container
+-record(flush_events, {
+    provider_id :: oneprovider:id(),
+    subscription_id :: subscription:id(),
+    context :: term(),
+    notify :: fun((term()) -> ok)
+}).
+
 %% definition of an event associated with a read operation in the file system
 %% file_uuid - UUID of a file associated with the read operation
 %% size      - number of bytes read
@@ -69,6 +77,11 @@
 %% file_uuid - UUID of a file
 -record(file_removal_event, {
     file_uuid :: file_meta:uuid()
+}).
+
+%% definition of an event triggered when any of spaces becomes (un)available
+-record(quota_exeeded_event, {
+   spaces = [] :: [space_info:id()]
 }).
 
 %% definition of an event triggered when file is renamed

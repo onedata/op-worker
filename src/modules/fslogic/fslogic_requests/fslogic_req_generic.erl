@@ -31,7 +31,7 @@
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
-    get_file_path/2, fsync/2, chmod_storage_files/3]).
+    get_file_path/2, chmod_storage_files/3]).
 
 %%%===================================================================
 %%% API functions
@@ -50,28 +50,6 @@ get_file_path(Ctx, FileUUID) ->
         fuse_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
     }.
 
-%%--------------------------------------------------------------------
-%% @doc Synchronizes file's metadata.
-%% @end
-%%--------------------------------------------------------------------
--spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
-    #fuse_response{} | no_return().
-fsync(Ctx, _FileUUID) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    event:flush(?FSLOGIC_SUB_ID, self(), SessId),
-    receive
-        {handler_executed, Results} ->
-            Errors = lists:filter(
-                fun
-                    ({error, _}) -> true;
-                    (_) -> false
-                end, Results),
-            [] = Errors,
-            #fuse_response{status = #status{code = ?OK}}
-    after
-        ?FSYNC_TIMEOUT ->
-            #fuse_response{status = #status{code = ?EAGAIN, description = <<"fsync_timeout">>}}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc Changes file's access times.
@@ -483,6 +461,7 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
                                         ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
                                     end, Errors)
                         end,
+
                         {ok, []};
                     Reason3 ->
                         ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p", [File, Reason3]),

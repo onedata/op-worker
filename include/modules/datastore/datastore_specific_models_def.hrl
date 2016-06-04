@@ -120,13 +120,13 @@
 -record(file_location, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     provider_id :: oneprovider:id(),
-    space_uuid :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     handle_id :: binary() | undefined,
+    space_id :: space_info:id(),
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
@@ -179,6 +179,11 @@
 %% Model that maps onedata user to POSIX user
 -record(posix_user, {
     credentials :: #{storage:id() => posix_user:credentials()}
+}).
+
+%% Model for holding current quota state for spaces
+-record(space_quota, {
+    current_size = 0 :: non_neg_integer()
 }).
 
 -endif.

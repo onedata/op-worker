@@ -33,7 +33,7 @@
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
 -type auth() :: #auth{}.
--type type() :: fuse | rest | gui | provider_outgoing | provider.
+-type type() :: fuse | rest | gui | provider_outgoing | provider_incoming.
 -type status() :: active | inactive.
 -type identity() :: #identity{}.
 
@@ -337,7 +337,7 @@ get_connections(SessId) ->
     {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId, HideOverloaded) ->
     case session:const_get(SessId) of
-        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),
             get_connections(ProxyViaSession, HideOverloaded);
@@ -406,7 +406,7 @@ get_auth(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_rest_session_id(session:identity()) -> id().
 get_rest_session_id(#identity{user_id = Uid}) ->
-    <<Uid/binary, "_rest_session">>.
+    <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
 
 %%%===================================================================
 %%% Internal functions

@@ -18,11 +18,26 @@
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_file_location_update/3,
-    emit_permission_changed/1, emit_file_removal/1, emit_file_renamed/3]).
+    emit_permission_changed/1, emit_file_removal/1, emit_file_renamed/3,
+    emit_quota_exeeded/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends list of currently disabled spaces due to exeeded quota.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_quota_exeeded() ->
+    ok | {error, Reason :: term()}.
+emit_quota_exeeded() ->
+    BlockedSpaces = space_quota:get_disabled_spaces(),
+    ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
+    event:emit(#event{object = #quota_exeeded_event{spaces = BlockedSpaces}}).
+
 
 %%--------------------------------------------------------------------
 %% @doc

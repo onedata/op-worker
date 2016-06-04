@@ -250,11 +250,13 @@ init_per_testcase(ceph_user_provider_test, Config) ->
 init_per_testcase(ceph_user_proxy_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     %% mock LUMA server response for ceph ctx
-    test_utils:mock_new(Worker, http_client),
+    test_utils:mock_new(Worker, [file_meta, http_client]),
     test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
         {ok, 200, [],
             json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
                 [{<<"user_name">>, ?USER_NAME}, {<<"user_key">>, ?USER_KEY}]}])} end),
+    test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
+        {ok, #document{value = #file_meta{name = ?CEPH_SPACE_NAME}}} end),
     Config;
 
 init_per_testcase(s3_user_provider_test, Config) ->
@@ -275,12 +277,14 @@ init_per_testcase(s3_user_provider_test, Config) ->
 
 init_per_testcase(s3_user_proxy_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, http_client),
+    test_utils:mock_new(Worker, [file_meta, http_client]),
     test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
         {ok, 200, [],
             json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
                 [{<<"access_key">>, ?ACCESS_KEY},
                     {<<"secret_key">>, ?SECRET_KEY}]}])} end),
+    test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
+        {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
     Config.
 
 end_per_testcase(Case, Config) when
@@ -299,7 +303,7 @@ end_per_testcase(Case, Config) when
     Case =:= ceph_user_proxy_test;
     Case =:= s3_user_proxy_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Worker, http_client),
+    test_utils:mock_validate_and_unload(Worker, [file_meta, http_client]),
     end_per_testcase(all, Config);
 
 end_per_testcase(s3_user_provider_test, Config) ->

@@ -40,6 +40,13 @@
 truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(Entry),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+
+    %% START -> Quota check
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    OldSize = fslogic_blocks:get_file_size(FileDoc),
+    ok = space_quota:assert_write(SpaceId, Size - OldSize),
+    %% END   -> Quota check
+
     Results = lists:map(
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),
@@ -167,8 +174,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = file_location:ensure_blocks_not_empty(#file_location{
                     uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
-                    storage_id = StorageId, file_id = FileId, blocks = [],
-                    space_uuid = SpaceUUID, handle_id = HandleId})}
+                    storage_id = StorageId, file_id = FileId, blocks = [], handle_id = HandleId, space_id = SpaceId})}
     catch
         T:M ->
             {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
@@ -334,8 +340,7 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = C
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
-            storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_uuid = SpaceUUID, handle_id = HandleId})}.
+            storage_id = StorageId, file_id = FileId, blocks = Blocks, handle_id = HandleId, space_id = SpaceId})}.
 
 %%--------------------------------------------------------------------
 %% @doc Saves file handle in user's session, returns id of saved handle

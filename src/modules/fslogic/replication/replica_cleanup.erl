@@ -35,8 +35,9 @@ clean_replica_files(FileUUID) ->
         fun(LocationId) ->
             case file_location:get(LocationId) of
                 {ok, #document{value = #file_location{storage_id = StorageId, file_id = FileId,
-                    provider_id = LocalProviderId, space_uuid = SpaceUUID}}} ->
+                    provider_id = LocalProviderId, space_id = SpaceId}}} ->
                     {ok, Storage} = storage:get(StorageId),
+                    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                     SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUUID, Storage, FileId),
                     storage_file_manager:unlink(SFMHandle),
                     file_location:delete(LocationId);
