@@ -52,8 +52,8 @@ db_sync_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
             [{name, dirs_num}, {value, 10}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 100}, {description, "Number of files with single parent."}],
-            [{name, attempts}, {value, 15}, {description, "Attempts param for assertion macros"}]
+            [{name, files_num}, {value, 50}, {description, "Number of files with single parent."}],
+            [{name, attempts}, {value, 30}, {description, "Attempts param for assertion macros"}]
         ]},
         {description, "Performs multiple file operations on space 1."}
     ]).
@@ -69,7 +69,7 @@ proxy_test1(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
             [{name, dirs_num}, {value, 10}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 100}, {description, "Number of files with single parent."}]
+            [{name, files_num}, {value, 50}, {description, "Number of files with single parent."}]
         ]},
         {description, "Performs multiple file operations on space 2."}
     ]).
@@ -84,7 +84,7 @@ proxy_test2(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
             [{name, dirs_num}, {value, 10}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 100}, {description, "Number of files with single parent."}]
+            [{name, files_num}, {value, 50}, {description, "Number of files with single parent."}]
         ]},
         {description, "Performs multiple file operations on space 3."}
     ]).
