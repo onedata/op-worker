@@ -23,6 +23,10 @@
   {?BAD_REQUEST, [{<<"error_invalid_mode">>, <<"Given mode is invalid, it should be provided in octal form.">>}]}).
 -define(ERROR_TOO_MANY_ENTRIES,
   {?BAD_REQUEST, [{<<"error_too_many_entries">>, <<"The directory contains too many entries to list them all, ask for specific range.">>}]}).
+-define(ERROR_INVALID_METRIC,
+  {?BAD_REQUEST, [{<<"error_invalid_metric">>, <<"Requested metric is invalid.">>}]}).
+-define(ERROR_INVALID_STEP,
+  {?BAD_REQUEST, [{<<"error_invalid_step">>, <<"Requested step is invalid.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED,

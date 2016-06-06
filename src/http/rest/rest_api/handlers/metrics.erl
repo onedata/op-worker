@@ -16,6 +16,7 @@
 -include("http/http_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("http/rest/http_status.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 
 -define(AVAILABLE_METRICS, [storage_quota, storage_used, data_access_kbs,
     block_access_iops, block_access_latency, remote_transfer_kbs,
@@ -102,14 +103,14 @@ get_metric(Req, #{auth := Auth, subject_type := Type, id:= Id} = State) ->
 %%--------------------------------------------------------------------
 -spec transform_metric(binary() | undefined) -> onedata_metrics_api:metric_type().
 transform_metric(undefined) ->
-    throw(?BAD_REQUEST); %todo error
+    throw(?ERROR_INVALID_METRIC);
 transform_metric(MetricType) ->
     MetricTypeAtom = binary_to_atom(MetricType, utf8),
     case lists:member(MetricTypeAtom, ?AVAILABLE_METRICS) of
         true ->
             MetricTypeAtom;
         false ->
-            throw(?BAD_REQUEST) %todo error
+            throw(?ERROR_INVALID_METRIC)
     end.
 
 %%--------------------------------------------------------------------
@@ -126,5 +127,5 @@ transform_step(Step) ->
         true ->
             StepAtom;
         false ->
-            throw(?BAD_REQUEST) %todo error
+            throw(?ERROR_INVALID_STEP)
     end.
