@@ -70,7 +70,7 @@ fslogic_new_file_test(Config) ->
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
-    RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name1">>),
+    RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name2">>),
 
     Resp11 = ?req(Worker, SessId1, #get_new_file_location{parent_uuid = RootUUID1, name = <<"test">>}),
     Resp21 = ?req(Worker, SessId2, #get_new_file_location{parent_uuid = RootUUID2, name = <<"test">>}),
@@ -105,10 +105,10 @@ lfm_create_and_access_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    FilePath1 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
-    FilePath2 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
-    FilePath3 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
-    FilePath4 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+    FilePath1 = <<"/space_name3/", (generator:gen_name())/binary>>,
+    FilePath2 = <<"/space_name3/", (generator:gen_name())/binary>>,
+    FilePath3 = <<"/space_name3/", (generator:gen_name())/binary>>,
+    FilePath4 = <<"/space_name3/", (generator:gen_name())/binary>>,
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath1, 8#240)),
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath2, 8#640)),
@@ -164,28 +164,27 @@ lfm_create_and_unlink_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
-    _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
+    FilePath11 = <<"/space_name2/", (generator:gen_name())/binary>>,
+    FilePath12 = <<"/space_name2/", (generator:gen_name())/binary>>,
+    FilePath21 = <<"/space_name2/", (generator:gen_name())/binary>>,
+    FilePath22 = <<"/space_name2/", (generator:gen_name())/binary>>,
 
-    FilePath1 = <<"/", (generator:gen_name())/binary>>,
-    FilePath2 = <<"/", (generator:gen_name())/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath12, 8#755)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId1, FilePath11, 8#755)),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath1, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath2, 8#755)),
-    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId1, FilePath1, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath22, 8#755)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId2, FilePath21, 8#755)),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath1, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath2, 8#755)),
-    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId2, FilePath1, 8#755)),
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath11})),
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId2, {path, FilePath21})),
 
-    ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath1})),
-    ?assertMatch(ok, lfm_proxy:unlink(W, SessId2, {path, FilePath2})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId1, {path, FilePath11})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId2, {path, FilePath21})),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId1, {path, FilePath1})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId2, {path, FilePath2})),
-
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath1, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath2, 8#755)).
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, 8#755)).
 
 lfm_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -193,17 +192,14 @@ lfm_write_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
-    _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test3">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test4">>, 8#755)),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test3">>, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test4">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/test3">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/test4">>, 8#755)),
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/test3">>, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/test4">>, 8#755)),
-
-    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test3">>}, rdwr),
-    O12 = lfm_proxy:open(W, SessId1, {path, <<"/test4">>}, rdwr),
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name1/test3">>}, rdwr),
+    O12 = lfm_proxy:open(W, SessId1, {path, <<"/space_name1/test4">>}, rdwr),
 
     ?assertMatch({ok, _}, O11),
     ?assertMatch({ok, _}, O12),
@@ -247,40 +243,40 @@ lfm_stat_test(Config) ->
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test5">>, 8#755)),
 
-    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test5">>}, rdwr),
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test5">>}, rdwr),
 
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
 
-    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>})),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
-    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 3, <<"abc">>)),
-    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 2, <<"abc">>)),
-    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
-    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10).
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10).
 
 lfm_synch_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test6">>, 8#755)),
 
-    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test5">>}, rdwr),
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test6">>}, rdwr),
 
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
 
-    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test6">>})),
 
     ?assertMatch({ok, 3, {ok, #file_attr{size = 3}}}, lfm_proxy:write_and_check(W, Handle11, 0, <<"abc">>)),
 
@@ -295,31 +291,31 @@ lfm_truncate_test(Config) ->
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test6">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test7">>, 8#755)),
 
-    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test6">>}, rdwr),
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test7">>}, rdwr),
 
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
 
-    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test7">>})),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
-    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test7">>}), 10),
 
-    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 1)),
-    ?assertMatch({ok, #file_attr{size = 1}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/space_name2/test7">>}, 1)),
+    ?assertMatch({ok, #file_attr{size = 1}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test7">>}), 10),
     ?assertMatch({ok, <<"a">>}, lfm_proxy:read(W, Handle11, 0, 10)),
 
-    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 10)),
-    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/space_name2/test7">>}, 10)),
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test7">>}), 10),
     ?assertMatch({ok, <<"a">>}, lfm_proxy:read(W, Handle11, 0, 1)),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 1, <<"abc">>)),
-    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test7">>}), 10),
 
-    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 5)),
-    ?assertMatch({ok, #file_attr{size = 5}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/space_name2/test7">>}, 5)),
+    ?assertMatch({ok, #file_attr{size = 5}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test7">>}), 10),
     ?assertMatch({ok, <<"aabc">>}, lfm_proxy:read(W, Handle11, 0, 4)).
 
 lfm_acl_test(Config) ->
@@ -328,8 +324,8 @@ lfm_acl_test(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     [{GroupId1, _GroupName1} | _] = ?config({groups, <<"user1">>}, Config),
-    FileName = <<"/test_file_acl">>,
-    DirName = <<"/test_dir_acl">>,
+    FileName = <<"/space_name2/test_file_acl">>,
+    DirName = <<"/space_name2/test_dir_acl">>,
 
     {ok, FileGUID} = lfm_proxy:create(W, SessId1, FileName, 8#755),
     {ok, _} = lfm_proxy:mkdir(W, SessId1, DirName),
@@ -347,17 +343,17 @@ lfm_acl_test(Config) ->
 rm_recursive_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    DirA =  <<"/a">>,
-    DirB =    <<"/a/b">>,
-    DirC =    <<"/a/c">>,
-    FileG =     <<"/a/c/g">>,
-    FileH =     <<"/a/c/h">>,
-    DirD =    <<"/a/d">>,
-    FileI =     <<"/a/d/i">>,
-    DirE =      <<"/a/d/e">>,
-    FileF =   <<"/a/f">>,
-    DirX =    <<"/a/x">>,
-    FileJ =     <<"/a/x/j">>,
+    DirA =  <<"/space_name1/a">>,
+    DirB =    <<"/space_name1/a/b">>,
+    DirC =    <<"/space_name1/a/c">>,
+    FileG =     <<"/space_name1/a/c/g">>,
+    FileH =     <<"/space_name1/a/c/h">>,
+    DirD =    <<"/space_name1/a/d">>,
+    FileI =     <<"/space_name1/a/d/i">>,
+    DirE =      <<"/space_name1/a/d/e">>,
+    FileF =   <<"/space_name1/a/f">>,
+    DirX =    <<"/space_name1/a/x">>,
+    FileJ =     <<"/space_name1/a/x/j">>,
     {ok, DirAGuid} = lfm_proxy:mkdir(W, SessId, DirA, 8#700),
     {ok, DirBGuid} = lfm_proxy:mkdir(W, SessId, DirB, 8#300),
     {ok, DirCGuid} = lfm_proxy:mkdir(W, SessId, DirC, 8#700),
@@ -391,7 +387,7 @@ rm_recursive_test(Config) ->
 file_gap_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/f">>, 8#777),
+    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/space_name2/f">>, 8#777),
     {ok, Handle} = lfm_proxy:open(W, SessId, {guid, Guid}, rdwr),
 
     % when
