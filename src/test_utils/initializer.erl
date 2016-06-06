@@ -635,6 +635,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         rpc:multicall(MasterWorkers, space_info, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
     end, Spaces),
 
+    %% Set expiration time for session to 1d.
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 24 * 60 * 60]),
+
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).
