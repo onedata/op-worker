@@ -43,7 +43,6 @@ get(ProviderID) ->
     {ok, [datastore:document()]} | {error, Reason :: term()}.
 get_providers_with_common_support() ->
     GetIdsOfProvidersWithCommonSupport = get_ids_of_providers_with_common_support(),
-    ?emergency("QQQQ ~p", [GetIdsOfProvidersWithCommonSupport]),
     case GetIdsOfProvidersWithCommonSupport of
         {ok, ProviderIDs} -> get_providers(ProviderIDs);
         Error -> Error
