@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, ]).
+-export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([stress_test/1, file_meta_basic_operations_test/1, file_meta_basic_operations_test_base/1, stress_test_base/1,
     many_files_creation_test/1, many_files_creation_test_base/1]).
 
