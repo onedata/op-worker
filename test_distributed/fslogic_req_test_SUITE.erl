@@ -479,7 +479,6 @@ get_guid_privileged(Worker, SessId, Path) ->
                       SessId;
                   _ ->
                       {ok, [_, SpaceName | _]} = fslogic_path:verify_file_path(Path),
-                      ct:print("~p", [SpaceName]),
                       hd(get(SpaceName))
               end,
     get_guid(Worker, SessId1, Path).
