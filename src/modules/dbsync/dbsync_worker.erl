@@ -99,7 +99,7 @@ init_stream(Since, Until, Queue) ->
             (_, stream_ended, _) ->
                 worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
             (Seq, Doc, Model) ->
-                worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
+                worker_proxy:call(dbsync_worker, {Queue, #change{seq = dbsync_utils:normalize_seq(Seq), doc = Doc, model = Model}})
         end, Since, Until).
 
 %%--------------------------------------------------------------------
@@ -296,8 +296,9 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
                 end,
             BatchMap = Queue1#queue.batch_map,
             Since = Queue1#queue.since,
-            Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
-            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = Until},
+            Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = max(Until, Since)}),
+            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes],
+                until = max(Until, Batch0#batch.until)},
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap)}
         end).
 
