@@ -15,8 +15,8 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
--define(ALLOWED_ATTRIBUTES, [<<"posix_mode">>]).
--define(DEFAULT_ATTRIBUTE, <<"posix_mode">>).
+-define(ALLOWED_ATTRIBUTES, [<<"mode">>]).
+-define(DEFAULT_ATTRIBUTE, <<"mode">>).
 
 %% API
 -export([malformed_metrics_request/2, malformed_request/2, parse_path/2, parse_id/2, parse_attribute/2,
@@ -101,10 +101,10 @@ parse_attribute_body(Req, State) ->
         proplists:get_value(<<"name">>, Json),
         proplists:get_value(<<"value">>, Json)
     } of
-        {<<"posix_mode">>, Value} ->
+        {<<"mode">>, Value} ->
             try binary_to_integer(Value, 8) of
                 Mode ->
-                    {State#{attribute_body => {<<"posix_mode">>, Mode}}, Req2}
+                    {State#{attribute_body => {<<"mode">>, Mode}}, Req2}
             catch
                _:_ ->
                    throw(?ERROR_INVALID_MODE)
