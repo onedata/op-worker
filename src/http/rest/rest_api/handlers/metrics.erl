@@ -9,7 +9,7 @@
 %%% Handler serving metrics.
 %%% @end
 %%%--------------------------------------------------------------------
--module(metrics_handler).
+-module(metrics).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
