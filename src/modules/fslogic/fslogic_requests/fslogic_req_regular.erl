@@ -197,7 +197,7 @@ release(#fslogic_ctx{session_id = SessId}, HandleId) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_parent(CTX, File) ->
-    SpacesBaseDirUUID = ?SPACES_BASE_DIR_UUID,
+    SpacesBaseDirUUID = ?ROOT_DIR_UUID,
     {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
     case ParentUUID of
         SpacesBaseDirUUID ->

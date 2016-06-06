@@ -183,9 +183,6 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
     case binary_to_term(http_utils:base64url_decode(SpaceUuid)) of
         {space, SpaceId} ->
             SpaceId;
-        {root_space, UserId} ->
-            {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(UserId),
-            fslogic_uuid:space_dir_uuid_to_spaceid(DefaultSpaceUUID);
         _ ->
             throw({not_a_space, {uuid, SpaceUuid}})
     end.

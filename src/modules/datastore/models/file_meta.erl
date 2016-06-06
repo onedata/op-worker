@@ -551,7 +551,7 @@ setup_onedata_user(_Client, UserId) ->
         {ok, _RootUUID} = create({uuid, ?ROOT_DIR_UUID},
             #document{key = fslogic_uuid:user_root_dir_uuid(UserId),
                 value = #file_meta{
-                    name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1550,
+                    name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
                     mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
                     is_scope = true
                 }
@@ -907,6 +907,8 @@ set_link_context(ScopeUUID) ->
     OtherScopes = dbsync_utils:get_providers_for_space(SpaceId) -- [MyProvID],
     erlang:put(other_scopes, OtherScopes)
   catch
+    throw:{not_a_space, _} ->
+        erlang:put(other_scopes, []);
     E1:E2 ->
       ?error_stacktrace("Cannot set other_scopes for uuid ~p, error: ~p:~p", [ScopeUUID, E1, E2]),
       erlang:put(other_scopes, [])

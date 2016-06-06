@@ -567,7 +567,7 @@ create_file(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     ToCreate = "file.txt",
-    ToCreate2 = filename:join(["spaces", binary_to_list(SpaceName), "file1.txt"]),
+    ToCreate2 = filename:join([binary_to_list(SpaceName), "file1.txt"]),
     ToCreate4 = "file2",
     ToCreate5 = "file3",
     FileContent = <<"File content!">>,
@@ -606,7 +606,7 @@ create_file(Config) ->
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
     ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
-    ?assertEqual(<<"/spaces/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
+    ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse2)),
     ?assert(proplists:get_value(<<"metadata">>, CdmiResponse2) =/= <<>>),
 
@@ -1735,9 +1735,10 @@ cdmi_endpoint(Node) ->
     string:join(["https://", utils:get_host(Node), ":", Port, "/cdmi/"], "").
 
 create_test_dir_and_file(Config) ->
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     TestDirName = "dir",
     TestFileName = "file.txt",
-    FullTestFileName = filename:join(["/",TestDirName, TestFileName]),
+    FullTestFileName = filename:join(["/", binary_to_list(SpaceName), TestDirName, TestFileName]),
     TestFileContent = <<"test_file_content">>,
 
     case object_exists(Config, TestDirName) of

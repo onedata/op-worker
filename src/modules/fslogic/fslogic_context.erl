@@ -48,8 +48,12 @@ set_space_id(#fslogic_ctx{} = CTX, {guid, FileGUID}) ->
             CTX#fslogic_ctx{space_id = SpaceId}
     end;
 set_space_id(#fslogic_ctx{} = CTX, Entry) ->
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)),
-    CTX#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}.
+    case catch fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)) of
+        {not_a_space, _} ->
+            CTX#fslogic_ctx{space_id = undefined};
+        {ok, #document{key = SpaceUUID}} ->
+            CTX#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}
+    end.
 
 
 %% gen_global_session_id/1

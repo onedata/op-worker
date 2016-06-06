@@ -247,11 +247,11 @@ get_parent(SessionId, FileGUID) ->
 %% Returns the UUID of user's /spaces dir.
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces_dir_uuid(SessionId :: binary()) -> binary().
-get_spaces_dir_uuid(SessionId) ->
-    {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
-        SessionId, {path, <<"/spaces">>}),
-    SpacesDirUUID.
+-spec get_user_root_dir_uuid(SessionId :: binary()) -> binary().
+get_user_root_dir_uuid(SessionId) ->
+    {ok, #file_attr{uuid = UserRootDirUUID}} = logical_file_manager:stat(
+        SessionId, {path, <<"/">>}),
+    UserRootDirUUID.
 
 
 %%--------------------------------------------------------------------
@@ -274,9 +274,9 @@ file_record(SessionId, FileId) ->
                 mtime = ModificationTime,
                 mode = PermissionsAttr} = FileAttr,
 
-            SpacesDirUUID = get_spaces_dir_uuid(SessionId),
+            UserRootDirUUID = get_user_root_dir_uuid(SessionId),
             ParentUUID = case get_parent(SessionId, FileId) of
-                SpacesDirUUID ->
+                UserRootDirUUID ->
                     null;
                 Other ->
                     Other

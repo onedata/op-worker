@@ -213,7 +213,7 @@ gen_path(Entry, UserId, Tokens) ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
             {ok, #document{value = #space_info{name = SpaceName}}} =
                 space_info:get(SpaceId, UserId),
-            fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]);
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUUID}} ->
             gen_path({uuid, ParentUUID}, UserId, [Name | Tokens])
     end.

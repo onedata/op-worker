@@ -69,8 +69,8 @@ fslogic_new_file_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
-    RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
+    RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
+    RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name1">>),
 
     Resp11 = ?req(Worker, SessId1, #get_new_file_location{parent_uuid = RootUUID1, name = <<"test">>}),
     Resp21 = ?req(Worker, SessId2, #get_new_file_location{parent_uuid = RootUUID2, name = <<"test">>}),
