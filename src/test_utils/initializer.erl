@@ -171,11 +171,6 @@ provider_id_to_domain(ProviderId) ->
 -spec create_test_users_and_spaces(ConfigPath :: string(), JsonConfig :: list()) -> list().
 create_test_users_and_spaces(ConfigPath, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-
-    lists:foreach(fun(W) ->
-        ?assertEqual(ok, test_utils:set_env(W, ?APP_NAME, fuse_session_ttl_seconds, timer:hours(24)))
-    end, Workers),
-
     create_test_users_and_spaces(Workers, ConfigPath, Config).
 
 %%--------------------------------------------------------------------
