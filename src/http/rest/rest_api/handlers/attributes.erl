@@ -96,15 +96,15 @@ get_file_attributes(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_attribute(Req2, State2),
 
-    #{auth := Auth, path := Path, attribute := <<"posix_mode">>} = State3,
+    #{auth := Auth, path := Path, attribute := <<"mode">>} = State3,
 
     {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
-    Response = json_utils:encode([{<<"name">>, <<"posix_mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
+    Response = json_utils:encode([{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
     {Response, Req3, State3}.
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/attributes/{path}'
-%% @doc This method allows to set a value of a specific file attribute (e.g. posix_mode).
+%% @doc This method allows to set a value of a specific file attribute (e.g. mode).
 %%
 %% HTTP method: PUT
 %%
@@ -116,7 +116,7 @@ set_file_attribute(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_attribute_body(Req2, State2),
 
-    #{attribute_body := {<<"posix_mode">>, Mode}, path := Path, auth := Auth} = State3,
+    #{attribute_body := {<<"mode">>, Mode}, path := Path, auth := Auth} = State3,
 
     ok = onedata_file_api:set_perms(Auth, {path, Path}, Mode),
     {true, Req3, State3}.
