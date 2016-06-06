@@ -44,6 +44,7 @@
 -record(queue, {
     key :: queue(),
     since = 0 :: non_neg_integer(),
+    until = 0 :: non_neg_integer(),
     batch_map = #{} :: #{},
     removed = false :: boolean()
 }).
@@ -145,12 +146,12 @@ handle({clear_temp, Key}) ->
 
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
-    ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
-            case get_space_id(Doc) of
+            Ans = case get_space_id(Doc) of
                 {ok, <<"spaces">>} ->
                     ?debug("Skipping doc ~p", [Doc]),
                     skip;
@@ -167,7 +168,9 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                 {error, Reason} ->
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
-            end;
+            end,
+            queue_update_until(QueueKey, Seq),
+            Ans;
         {true, true} ->
             ?debug("Rereplication detected, skipping ~p", [Doc]),
             ok;
@@ -178,21 +181,34 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 
 %% Push changes from queue to providers
 handle({flush_queue, QueueKey}) ->
-    ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
+    try
+    ?info("[ DBSync ] Flush queue ~p", [QueueKey]),
     ensure_global_stream_active(),
-    state_update({queue, QueueKey},
-        fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
+    ?info("[ DBSync ] Flush queue2 ~p", [QueueKey]),
+    Ans = state_update({queue, QueueKey},
+        fun(#queue{batch_map = BatchMap, removed = IsRemoved, until = QUntil} = Queue) ->
+            ?info("[ DBSync ] mmmmm2 ~p", [{QueueKey, BatchMap}]),
+            OldSeq = case state_get(global_resume_seq) of
+                         undefined -> 0;
+                         OS -> OS
+                     end,
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
                     spawn(fun() -> dbsync_proto:send_batch(QueueKey, SpaceId, B) end),
                     set_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    ?info("[ DBSync ] mmmmm3 ~p", [{QueueKey, B}]),
                     case QueueKey of
-                        global -> state_put(global_resume_seq, Until);
+                        global -> state_put(global_resume_seq, max(Until, OldSeq));
                         _ -> ok
                     end,
                     #batch{since = Until, until = Until}
                 end,
                 BatchMap),
+
+            case QueueKey of
+                global -> state_put(global_resume_seq, max(QUntil, OldSeq));
+                _ -> ok
+            end,
 
             case IsRemoved of
                 true ->
@@ -203,12 +219,20 @@ handle({flush_queue, QueueKey}) ->
                     Queue#queue{batch_map = NewBatchMap}
             end;
             (undefined) when QueueKey =:= global ->
+                ?info("[ DBSync ] mmmmm ~p", [QueueKey]),
                 timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
                 undefined;
             (undefined) ->
                 ?warning("Unknown operation on empty queue ~p", [QueueKey]),
                 undefined
-        end);
+        end),
+    ?info("[ DBSync ] Flush queue4 ~p", [{QueueKey, Ans}]),
+    Ans
+    catch
+        E1:E2 ->
+            ?info("[ DBSync ] Flush queue3 ~p", [{QueueKey, E1,E2}]),
+            throw(E2)
+    end ;
 
 %% Handle external dbsync requests
 handle({dbsync_request, SessId, DBSyncRequest}) ->
@@ -297,9 +321,27 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
             BatchMap = Queue1#queue.batch_map,
             Since = Queue1#queue.since,
             Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
-            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = Until},
-            Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap)}
+            ?debug("aaaaa ~p", [{Batch0#batch.until, Until, Since}]),
+            UntilToSet = max(Batch0#batch.until, Until),
+            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = UntilToSet},
+            Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
+                until = queue_calculate_until(UntilToSet, Queue1)}
         end).
+
+queue_update_until(QueueKey, Until) ->
+    state_update({queue, QueueKey},
+        fun(Queue) ->
+            Queue1 =
+                case Queue of
+                    undefined ->
+                        #queue{batch_map = #{}};
+                    #queue{} = Q -> Q
+                end,
+            Queue1#queue{until = queue_calculate_until(Until, Queue1)}
+        end).
+
+queue_calculate_until(NewUntil, Queue) ->
+    max(NewUntil, Queue#queue.until).
 
 
 %%--------------------------------------------------------------------
@@ -424,7 +466,9 @@ apply_changes(_, []) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
+    ?error("qqqqq2 ~p", [{Key, Value}]),
     {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
+    ?error("qqqqq3 ~p", [{Key, Value}]),
     ok.
 
 %%--------------------------------------------------------------------
@@ -436,6 +480,7 @@ state_put(Key, Value) ->
 state_get(Key) ->
     case dbsync_state:get(Key) of
         {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            ?error("qqqqq1 ~p", [{Key, Value}]),
             Value;
         {error, {not_found, _}} ->
             undefined
@@ -450,8 +495,11 @@ state_get(Key) ->
 -spec state_update(Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
     ok | no_return().
 state_update(Key, UpdateFun) when is_function(UpdateFun) ->
+    ?error("ooooo1 ~p", [{Key}]),
     DoUpdate = fun() ->
+        ?error("oooo2 ~p", [{Key}]),
         OldValue = state_get(Key),
+        ?error("oooo22 ~p", [{Key, OldValue}]),
         NewValue = UpdateFun(OldValue),
         case OldValue of
             NewValue ->
@@ -464,8 +512,10 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
     DBSyncPid = whereis(?MODULE),
     case self() of
         DBSyncPid ->
+            ?error("oooo3 ~p", [{Key}]),
             DoUpdate();
         _ ->
+            ?error("oooo4 ~p", [{Key}]),
             datastore:run_synchronized(dbsync_state, term_to_binary(Key), DoUpdate)
     end.
 
@@ -763,17 +813,22 @@ is_valid_stream(_) ->
 ensure_global_stream_active() ->
     case is_valid_stream(state_get(changes_stream)) of
         true ->
+            ?error("zzzz1 ~p", [ok]),
             CTime = erlang:monotonic_time(milli_seconds),
             MaxIdleTime = timer:seconds(10),
             case dbsync_utils:temp_get(last_change) of
                 undefined ->
+                    ?error("zzzz3 ~p", [ok]),
                     dbsync_utils:temp_put(last_change, CTime, 0);
                 Time when Time + MaxIdleTime < CTime ->
+                    ?error("zzzz4 ~p", [{Time, MaxIdleTime, CTime}]),
                     erlang:exit(state_get(changes_stream), force_restart);
-                _ ->
+                X ->
+                    ?error("zzzz5 ~p", [{X, MaxIdleTime, CTime}]),
                     ok
             end;
         false ->
+            ?error("zzzz2 ~p", [ok]),
             Since = state_get(global_resume_seq),
             timer:send_after(0, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
             ok
