@@ -37,7 +37,8 @@
     lfm_synch_stat_test/1,
     lfm_truncate_test/1,
     lfm_acl_test/1,
-    rm_recursive_test/1
+    rm_recursive_test/1,
+    file_gap_test/1
 ]).
 
 all() ->
@@ -50,7 +51,8 @@ all() ->
         lfm_synch_stat_test,
         lfm_truncate_test,
         lfm_acl_test,
-        rm_recursive_test
+        rm_recursive_test,
+        file_gap_test
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -64,8 +66,8 @@ all() ->
 fslogic_new_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
@@ -100,8 +102,8 @@ fslogic_new_file_test(Config) ->
 lfm_create_and_access_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     FilePath1 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
     FilePath2 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
@@ -159,8 +161,8 @@ lfm_create_and_access_test(Config) ->
 lfm_create_and_unlink_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
     _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
@@ -188,8 +190,8 @@ lfm_create_and_unlink_test(Config) ->
 lfm_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
     _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
@@ -243,7 +245,7 @@ lfm_write_test(Config) ->
 lfm_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
 
@@ -269,7 +271,7 @@ lfm_stat_test(Config) ->
 lfm_synch_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
 
@@ -291,7 +293,7 @@ lfm_synch_stat_test(Config) ->
 lfm_truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test6">>, 8#755)),
 
@@ -323,7 +325,7 @@ lfm_truncate_test(Config) ->
 lfm_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    SessId1 = ?config({session_id, <<"user1">>}, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     [{GroupId1, _GroupName1} | _] = ?config({groups, <<"user1">>}, Config),
     FileName = <<"/test_file_acl">>,
@@ -344,7 +346,7 @@ lfm_acl_test(Config) ->
 
 rm_recursive_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, <<"user1">>}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirA =  <<"/a">>,
     DirB =    <<"/a/b">>,
     DirC =    <<"/a/c">>,
@@ -384,6 +386,31 @@ rm_recursive_test(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileHGuid})),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileIGuid})),
     ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, FileJGuid})).
+
+
+file_gap_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/f">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, Guid}, rdwr),
+
+    % when
+    {ok, 3} = lfm_proxy:write(W, Handle, 3, <<"abc">>),
+    ok = lfm_proxy:fsync(W, Handle),
+
+    % then
+    ?assertEqual({ok, <<0, 0, 0, $a, $b, $c>>},
+        lfm_proxy:read(W, Handle, 0, 6)),
+    ?assertEqual({ok, <<0, 0, 0, $a, $b, $c>>},
+        lfm_proxy:read(W, Handle, 0, 100)),
+
+    % when
+    {ok, 4} = lfm_proxy:write(W, Handle, 8, <<"defg">>),
+    ok = lfm_proxy:fsync(W, Handle),
+
+    % then
+    ?assertEqual({ok, <<0, 0, 0, $a, $b, $c, 0, 0, $d, $e, $f, $g>>},
+        lfm_proxy:read(W, Handle, 0, 12)).
 
 
 %%%===================================================================

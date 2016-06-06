@@ -12,6 +12,7 @@
 -author("Konrad Zemek").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -61,6 +62,11 @@ write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     #proxyio_response{}.
 read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
+
+    UUID = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
+    lfm_utils:call_fslogic(SessionId, #synchronize_block{
+        uuid = UUID, block = #file_block{offset = Offset, size = Size}
+    }, fun(_) -> ok end),
 
     {Status, Response} =
         case get_handle(SessionId, Parameters, StorageId, FileId, read) of

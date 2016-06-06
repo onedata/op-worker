@@ -90,7 +90,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             }

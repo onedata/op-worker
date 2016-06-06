@@ -48,6 +48,24 @@ check({owner_if_parent_sticky, Doc, UserDoc, Acl}) ->
         false ->
             ok
     end;
+check({{owner, 'or', ?write_attributes}, Doc, #document{key = UserId} = User, Acl}) ->
+    case Doc#document.value#file_meta.uid of
+        UserId ->
+            ok;
+        _ ->
+            check({?write_attributes, Doc, User, Acl})
+    end;
+check({{AccessType1, 'or', AccessType2}, Doc, User, Acl}) ->
+    case
+        {
+            catch check({AccessType1, Doc, User, Acl}),
+            catch check({AccessType2, Doc, User, Acl})
+        }
+    of
+        {ok, _} -> ok;
+        {_, ok} -> ok;
+        _ -> throw(?EACCES)
+    end;
 check({AccessType, #document{value = #file_meta{is_scope = true}} = Doc, #document{key = UserId}, undefined}) when
     AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
     ok = validate_scope_access(Doc, UserId),

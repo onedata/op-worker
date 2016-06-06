@@ -59,8 +59,8 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
                 gid = posix_user:gid(Credentials)
             };
         _ ->
-            {ok, Response} = get_credentials_from_luma(UserId,
-                ?DIRECTIO_HELPER_NAME, ?DIRECTIO_HELPER_NAME, SessionIdOrIdentity),
+            {ok, Response} = get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
+                undefined, SessionIdOrIdentity, SpaceUUID),
 
             UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
@@ -95,7 +95,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
         undefined ->
             StorageType = luma_utils:get_storage_type(StorageId),
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionId),
+                StorageId, SessionId, SpaceUUID),
 
             UserName = proplists:get_value(<<"user_name">>, Response),
             UserKey = proplists:get_value(<<"user_key">>, Response),
@@ -125,7 +125,7 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
         _ ->
             StorageType = luma_utils:get_storage_type(StorageId),
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionId),
+                StorageId, SessionId, SpaceUUID),
 
             AccessKey = proplists:get_value(<<"access_key">>, Response),
             SecretKey = proplists:get_value(<<"secret_key">>, Response),
@@ -160,7 +160,7 @@ new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
             StorageType = luma_utils:get_storage_type(StorageId),
 
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionIdOrIdentity),
+                StorageId, SessionIdOrIdentity, SpaceUUID),
 
             UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
@@ -174,13 +174,15 @@ new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
-    StorageId :: storage:id() | helpers:name(), SessionIdOrIdentity :: session:id() | session:identity()) ->
+    StorageId :: storage:id() | undefined, SessionIdOrIdentity :: session:id() | session:identity(),
+    SpaceUUID :: file_meta:uuid()) ->
     {ok, proplists:proplist()} | {error, binary()}.
-get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity) ->
+get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, SpaceUUID) ->
     {ok, LUMAHostname} = application:get_env(?APP_NAME, luma_hostname),
     {ok, LUMAPort} = application:get_env(?APP_NAME, luma_port),
     {ok, Hostname} = inet:gethostname(),
     {ok, {hostent, FullHostname, _, inet, _, IPList}} = inet:gethostbyname(Hostname),
+    {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
 
     IPListParsed = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IPList),
 
@@ -209,15 +211,23 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity) -
             json_utils:encode(UserDetailsList)
     end,
 
+    StorageIdParam = case StorageId of
+        undefined ->
+            <<"">>;
+        _ ->
+            <<"&storage_id=", StorageId/binary>>
+    end,
+
     case http_client:get(
         <<(atom_to_binary(LUMAHostname, latin1))/binary, ":",
             (integer_to_binary(LUMAPort))/binary,
             "/get_user_credentials?"
             "global_id=", UserId/binary,
             "&storage_type=", StorageType/binary,
-            "&storage_id=", StorageId/binary,
+            StorageIdParam/binary,
             "&source_ips=", (json_utils:encode(IPListParsed))/binary,
             "&source_hostname=", (list_to_binary(FullHostname))/binary,
+            "&space_name=", SpaceName/binary,
             "&user_details=", (http_utils:url_encode(UserDetailsJSON))/binary>>,
         [],
         [],

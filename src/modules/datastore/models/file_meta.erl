@@ -230,6 +230,12 @@ delete(#document{value = #file_meta{name = FileName}, key = Key} = Doc) ->
                  _ ->
                      ok
              end,
+             case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, location_ref(oneprovider:get_provider_id())) of
+                 {ok, {LocKey, LocationModel}} ->
+                     LocationModel:delete(LocKey);
+                 _ ->
+                     ok
+             end,
              datastore:delete(?STORE_LEVEL, ?MODULE, Key)
          end);
 delete({path, Path}) ->

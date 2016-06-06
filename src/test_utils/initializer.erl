@@ -32,6 +32,7 @@
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
 -export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
+-export([unload_quota_mocks/1, disable_quota_limit/1]).
 
 -record(user_config, {
     id :: onedata_user:id(),
@@ -79,6 +80,7 @@
                 {<<"groups">>, [<<"group1">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
@@ -89,7 +91,9 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
+
                     ]}
                 ]}
             ]},
@@ -99,6 +103,7 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
@@ -109,6 +114,7 @@
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
                 {<<"providers">>, [
                     {<<"p1">>, [
+                        {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
                     ]}
                 ]}
@@ -275,7 +281,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
 
     Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
 
-    SessId = Name("session_id", UserId),
+    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     UserId = UserId,
     Iden = #identity{user_id = UserId},
 
@@ -298,7 +304,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         {{user_id, UserId}, UserId},
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
-        {{session_id, UserId}, SessId},
+        {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
         {{fslogic_ctx, UserId}, #fslogic_ctx{session = Session}}
         | setup_session(Worker, R, Config)
     ].
@@ -440,6 +446,37 @@ disable_grpca_based_communication(Config) ->
 
 
 
+%%--------------------------------------------------------------------
+%% @doc Disables all quota checks. Should be unloaded via unload_quota_mocks/1.
+%%--------------------------------------------------------------------
+-spec disable_quota_limit(Config :: list()) -> ok.
+disable_quota_limit(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [space_quota]),
+    test_utils:mock_expect(Workers, space_quota, assert_write,
+        fun(_, _) -> ok end),
+    test_utils:mock_expect(Workers, space_quota, assert_write,
+        fun(_) -> ok end),
+    test_utils:mock_expect(Workers, space_quota, soft_assert_write,
+        fun(_, _) -> ok end),
+
+    test_utils:mock_expect(Workers, space_quota, available_size,
+        fun(_) -> 100000000000000000 end),
+    test_utils:mock_expect(Workers, space_quota, apply_size_change,
+        fun(ID, _) -> {ok, ID} end),
+
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc Unloads space_quota mock.
+%%--------------------------------------------------------------------
+-spec unload_quota_mocks(Config :: list()) -> ok.
+unload_quota_mocks(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [space_quota]).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -559,9 +596,12 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     end, #{}, GroupUsers),
 
     SpacesToProviders = lists:map(fun({SpaceId, SpaceConfig}) ->
-        Providers = proplists:get_value(<<"providers">>, SpaceConfig),
-        ProviderIds = [domain_to_provider_id(proplists:get_value(CPid, DomainMappings)) || {CPid, _} <- Providers],
-        {SpaceId, ProviderIds}
+        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+        Providers1 = [{domain_to_provider_id(proplists:get_value(CPid, DomainMappings)), Provider} || {CPid, Provider} <- Providers0],
+        ProviderSupp = lists:map(fun({PID, Info}) ->
+            {PID, proplists:get_value(<<"supported_size">>, Info, 0)}
+        end, Providers1),
+        {SpaceId, ProviderSupp}
     end, SpacesSetup),
 
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
@@ -585,8 +625,12 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
 
+    lists:foreach(fun({SpaceId, _}) ->
+        rpc:multicall(MasterWorkers, space_info, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
+    end, Spaces),
+
     proplists:compact(
-        lists:flatten([initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
+        lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).
 
 %%--------------------------------------------------------------------
@@ -664,7 +708,7 @@ oz_users_mock_setup(Workers, Users) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [binary()]}]) ->
+    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}]) ->
     ok.
 oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
@@ -672,13 +716,19 @@ oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
-            {ok, #space_details{id = SpaceId, name = SpaceName}}
+            {ok, #space_details{id = SpaceId, name = SpaceName,
+                providers_supports = proplists:get_value(SpaceId, SpacesToProviders, [{domain_to_provider_id(D), 1000000000} || D <- Domains])}}
         end
     ),
 
     test_utils:mock_expect(Workers, oz_spaces, get_providers,
         fun(_, SpaceId) ->
-            {ok, proplists:get_value(SpaceId, SpacesToProviders, [domain_to_provider_id(D) || D <- Domains])}
+            PIDs = lists:map(
+                fun({PID, _}) ->
+                    PID
+                end, proplists:get_value(SpaceId, SpacesToProviders, [{domain_to_provider_id(D), 1000000000} || D <- Domains])),
+            {ok, PIDs}
+
         end
     ),
 

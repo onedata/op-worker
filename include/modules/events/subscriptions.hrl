@@ -86,4 +86,8 @@
     file_uuid :: file_meta:uuid()
 }).
 
+%% definition of a subscription for quota watcher
+-record(quota_subscription, {
+}).
+
 -endif.

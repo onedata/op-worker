@@ -78,7 +78,7 @@ get_merged_changes(Doc, N) ->
         (_) -> true
     end, Changes),
     AggregatedBlocks = lists:foldl(fun(Blocks, Acc) ->
-        aggregate(Acc, Blocks)
+        fslogic_blocks:merge(Blocks, Acc)
     end, [], BlockChanges),
     {AggregatedBlocks, Shrink}.
 
@@ -155,7 +155,7 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
-        space_uuid = SpaceDirUuid},
+        space_id = SpaceId},
     {ok, LocId} = file_location:create(#document{value = Location}),
     file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
 
@@ -177,13 +177,3 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Aggregates and consolidates given blocks lists.
-%% @end
-%%--------------------------------------------------------------------
--spec aggregate(fslogic_blocks:blocks(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
-aggregate(Blocks1, Blocks2) ->
-    AggregatedBlocks = fslogic_blocks:invalidate(Blocks1, Blocks2) ++ Blocks2,
-    fslogic_blocks:consolidate(lists:sort(AggregatedBlocks)).

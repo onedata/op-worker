@@ -61,8 +61,8 @@ all() ->
 fslogic_get_file_attr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
@@ -87,8 +87,8 @@ fslogic_get_file_attr_test(Config) ->
 
 fslogic_mkdir_and_rmdir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
     RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
@@ -144,10 +144,10 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
 fslogic_read_dir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     ValidateReadDir = fun({SessId, Path, NameList}) ->
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
@@ -220,10 +220,10 @@ fslogic_read_dir_test(Config) ->
 
 chmod_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     lists:foreach(
         fun(SessId) ->
@@ -245,10 +245,10 @@ chmod_test(Config) ->
 
 default_permissions_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     lists:foreach(
         fun({Path, SessIds}) ->
@@ -386,10 +386,10 @@ default_permissions_test(Config) ->
 
 simple_rename_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
-    {_SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
-    {_SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {_SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {_SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     test_utils:mock_expect(Worker, oz_spaces, get_providers,
         fun
@@ -444,10 +444,10 @@ simple_rename_test(Config) ->
 
 update_times_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     GetTimes =
         fun(Entry, SessId) ->
