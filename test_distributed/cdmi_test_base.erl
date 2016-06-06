@@ -73,7 +73,7 @@ user_1_token_header(Config) ->
 % Tests cdmi container GET request (also refered as LIST)
 list_dir(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     %%------ list basic dir --------
@@ -96,14 +96,14 @@ list_dir(Config) ->
     ?assert(proplists:get_value(<<"metadata">>, CdmiResponse1) =/= <<>>),
     %%------------------------------
 
-    %%------ list root dir ---------
+    %%------ list root space dir ---------
     {ok, Code2, _Headers2, Response2} =
-        do_request(WorkerP2, [], get,
+        do_request(WorkerP2, SpaceName ++ "/", get,
             [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
-    ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
-    ?assertEqual([<<"spaces/">>, <<"dir/">>],
+    ?assertEqual(list_to_binary(SpaceName ++ "/"), proplists:get_value(<<"objectName">>, CdmiResponse2)),
+    ?assertEqual([<<"dir/">>],
         proplists:get_value(<<"children">>, CdmiResponse2)),
     %%------------------------------
 
@@ -128,7 +128,7 @@ list_dir(Config) ->
     %%------------------------------
 
     %%---- childrenrange list ------
-    ChildrangeDir = "childrange/",
+    ChildrangeDir = SpaceName ++ "/childrange/",
     mkdir(Config, ChildrangeDir),
     Childs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
         "12", "13", "14"],
@@ -193,7 +193,9 @@ list_dir(Config) ->
 %%  contains json string of type: application/cdmi-object, and we can specify what
 %%  parameters we need by listing then as ';' separated list after '?' in URL )
 get_file(Config) ->
-    FileName = "toRead.txt",
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "toRead.txt"]),
+
     FileContent = <<"Some content...">>,
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
@@ -211,7 +213,7 @@ get_file(Config) ->
 
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse1)),
     ?assertEqual(<<"toRead.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse1)),
-    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>, CdmiResponse1)),
+    ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
     ?assertEqual(<<"base64">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse1)),
     ?assertEqual(<<"application/octet-stream">>, proplists:get_value(<<"mimetype">>, CdmiResponse1)),
@@ -226,7 +228,7 @@ get_file(Config) ->
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
 
-    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
+    ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse2)),
     ?assertEqual(2, length(CdmiResponse2)),
     %%------------------------------
@@ -287,9 +289,10 @@ get_file(Config) ->
 % Tests cdmi metadata read on object GET request.
 metadata(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    FileName = "metadataTest.txt",
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "metadataTest.txt"]),
     FileContent = <<"Some content...">>,
-    DirName = "metadataTestDir/",
+    DirName = filename:join([binary_to_list(SpaceName), "metadataTestDir"]) ++ "/",
 
     %%-------- create file with user metadata --------
     ?assert(not object_exists(Config, FileName)),
@@ -417,7 +420,7 @@ metadata(Config) ->
     %%------ write acl metadata ----------
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     UserName1 = ?config({user_name, <<"user1">>}, Config),
-    FileName2 = "acl_test_file.txt",
+    FileName2 = filename:join([binary_to_list(SpaceName), "acl_test_file.txt"]),
     Ace1 = [
         {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
@@ -478,11 +481,12 @@ metadata(Config) ->
 
 % Tests cdmi object DELETE requests
 delete_file(Config) ->
-    FileName = "toDelete",
-    [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "toDelete.txt"]),
+
+    [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     GroupFileName =
-        filename:join(["spaces", binary_to_list(SpaceName), "groupFile"]),
+        filename:join([binary_to_list(SpaceName), "groupFile"]),
 
     %%----- basic delete -----------
     {ok, _} = create_file(Config, "/" ++ FileName),
@@ -511,9 +515,9 @@ delete_file(Config) ->
 % Tests cdmi container DELETE requests
 delete_dir(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    DirName = "toDelete/",
-    ChildDirName = "toDelete/child/",
-    SpacesDirName = "spaces/",
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    DirName =  filename:join([binary_to_list(SpaceName), "toDelete"]) ++ "/",
+    ChildDirName =  filename:join([binary_to_list(SpaceName), "toDelete", "child"]) ++ "/",
 
     %%----- basic delete -----------
     mkdir(Config, DirName),
@@ -550,15 +554,15 @@ delete_dir(Config) ->
     ?assert(not object_exists(Config, ChildDirName)),
     %%------------------------------
 
-    %%----- delete group dir -------
-    ?assert(object_exists(Config, SpacesDirName)),
+    %%----- delete root dir -------
+    ?assert(object_exists(Config, "")),
 
     RequestHeaders3 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
-    ?assert(object_exists(Config, SpacesDirName)),
+    ?assert(object_exists(Config, "")),
     {ok, Code3, _Headers3, _Response3} =
-        do_request(Workers, SpacesDirName, delete, RequestHeaders3, []),
+        do_request(Workers, "", delete, RequestHeaders3, []),
     ?assertEqual(403, Code3),
-    ?assert(object_exists(Config, SpacesDirName)).
+    ?assert(object_exists(Config, "")).
 %%------------------------------
 
 % Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
@@ -566,10 +570,10 @@ delete_dir(Config) ->
 create_file(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ToCreate = "file.txt",
-    ToCreate2 = filename:join([binary_to_list(SpaceName), "file1.txt"]),
-    ToCreate4 = "file2",
-    ToCreate5 = "file3",
+    ToCreate = filename:join([binary_to_list(SpaceName), "file1.txt"]),
+    ToCreate2 = filename:join([binary_to_list(SpaceName), "file2.txt"]),
+    ToCreate5 = filename:join([binary_to_list(SpaceName), "file3.txt"]),
+    ToCreate4 = filename:join([binary_to_list(SpaceName), "file4.txt"]),
     FileContent = <<"File content!">>,
 
     %%-------- basic create --------
@@ -583,8 +587,8 @@ create_file(Config) ->
     ?assertEqual(201, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse1)),
-    ?assertEqual(<<"file.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse1)),
-    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>, CdmiResponse1)),
+    ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse1)),
+    ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
     Metadata1 = proplists:get_value(<<"metadata">>, CdmiResponse1),
     ?assertNotEqual([], Metadata1),
@@ -605,7 +609,7 @@ create_file(Config) ->
     ?assertEqual(201, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
-    ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
+    ?assertEqual(<<"file2.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
     ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse2)),
     ?assert(proplists:get_value(<<"metadata">>, CdmiResponse2) =/= <<>>),
@@ -642,7 +646,7 @@ create_file(Config) ->
 % Tests cdmi object PUT requests (updating content)
 update_file(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {_TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
+    {_SpaceName, _TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
         create_test_dir_and_file(Config),
     NewValue = <<"New Value!">>,
     UpdatedValue = <<"123 Value!">>,
@@ -755,9 +759,11 @@ use_unsupported_cdmi_version(Config) ->
 % with '/'
 create_dir(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    DirName = "toCreate/",
-    DirName2 = "toCreate2/",
-    MissingParentName = "unknown/",
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    DirName = filename:join([binary_to_list(SpaceName), "toCreate1"]) ++ "/",
+    DirName2 = filename:join([binary_to_list(SpaceName), "toCreate2"]) ++ "/",
+    MissingParentName = filename:join([binary_to_list(SpaceName), "unknown"]) ++ "/",
     DirWithoutParentName = filename:join(MissingParentName, "dir") ++ "/",
 
     %%------ non-cdmi create -------
@@ -779,8 +785,8 @@ create_dir(Config) ->
     ?assertEqual(201, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
-    ?assertEqual(list_to_binary(DirName2), proplists:get_value(<<"objectName">>, CdmiResponse2)),
-    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
+    ?assertEqual(<<"toCreate2/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
+    ?assertEqual(<<"/", SpaceName/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse2)),
     ?assertEqual([], proplists:get_value(<<"children">>, CdmiResponse2)),
     ?assert(proplists:get_value(<<"metadata">>, CdmiResponse2) =/= <<>>),
@@ -817,13 +823,19 @@ create_dir(Config) ->
 % tests access to file by objectid
 objectid(Config) ->
     [WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    {TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     %%-------- / objectid ----------
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code1, Headers1, Response1} = do_request(WorkerP2, "", get, RequestHeaders1, []),
     ?assertEqual(200, Code1),
+
+    RequestHeaders0 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
+    {ok, Code0, _Headers0, Response0} = do_request(WorkerP2, SpaceName ++ "/", get, RequestHeaders0, []),
+    ?assertEqual(200, Code0),
+    CdmiResponse0 = json_utils:decode(Response0),
+    SpaceRootId = proplists:get_value(<<"objectID">>, CdmiResponse0),
 
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"content-type">>, Headers1)),
     CdmiResponse1 = json_utils:decode(Response1),
@@ -846,8 +858,8 @@ objectid(Config) ->
     DirId = proplists:get_value(<<"objectID">>, CdmiResponse2),
     ?assertNotEqual(DirId, undefined),
     ?assert(is_binary(DirId)),
-    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
-    ?assertEqual(RootId, proplists:get_value(<<"parentID">>, CdmiResponse2)),
+    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
+    ?assertEqual(SpaceRootId, proplists:get_value(<<"parentID">>, CdmiResponse2)),
     ?assertEqual(<<"cdmi_capabilities/container/">>, proplists:get_value(<<"capabilitiesURI">>, CdmiResponse2)),
     %%------------------------------
 
@@ -861,7 +873,7 @@ objectid(Config) ->
     FileId = proplists:get_value(<<"objectID">>, CdmiResponse3),
     ?assertNotEqual(FileId, undefined),
     ?assert(is_binary(FileId)),
-    ?assertEqual(<<"/dir/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
+    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/dir/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
     ?assertEqual(DirId, proplists:get_value(<<"parentID">>, CdmiResponse3)),
     ?assertEqual(<<"cdmi_capabilities/dataobject/">>, proplists:get_value(<<"capabilitiesURI">>, CdmiResponse3)),
     %%------------------------------
@@ -987,10 +999,14 @@ capabilities(Config) ->
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path
 moved_permanently(Config) ->
     [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    DirName = "somedir/",
-    DirNameWithoutSlash = "somedir",
-    FileName = "somedir/somefile.txt",
-    FileNameWithSlash = "somedir/somefile.txt/",
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "somedir", "somefile.txt"]),
+    DirNameWithoutSlash = filename:join([binary_to_list(SpaceName), "somedir"]),
+
+    DirName = DirNameWithoutSlash ++ "/",
+    FileNameWithSlash = FileName ++ "/",
+
     mkdir(Config, DirName),
     ?assert(object_exists(Config, DirName)),
     create_file(Config, FileName),
@@ -1042,8 +1058,11 @@ moved_permanently(Config) ->
 % tests req format checking
 request_format_check(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    FileToCreate = "file.txt",
-    DirToCreate = "dir/",
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileToCreate =  filename:join([binary_to_list(SpaceName), "file.txt"]),
+    DirToCreate = filename:join([binary_to_list(SpaceName), "dir"]) ++ "/",
+
     FileContent = <<"File content!">>,
 
     %%-- obj missing content-type --
@@ -1066,8 +1085,10 @@ request_format_check(Config) ->
 % and should be changeble
 mimetype_and_encoding(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
+    {_SpaceName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     %% get mimetype and valuetransferencoding of non-cdmi file
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
@@ -1092,7 +1113,7 @@ mimetype_and_encoding(Config) ->
     %%------------------------------
 
     %% create file with given mime and encoding
-    FileName4 = "mime_file.txt",
+    FileName4 = filename:join([binary_to_list(SpaceName), "mime_file.txt"]),
     FileContent4 = <<"some content">>,
     RequestHeaders4 = [?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, user_1_token_header(Config)],
     RawBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>}, {<<"value">>, FileContent4}]),
@@ -1111,7 +1132,7 @@ mimetype_and_encoding(Config) ->
     %%------------------------------
 
     %% create file with given mime and encoding using non-cdmi request
-    FileName6 = "mime_file_noncdmi.txt",
+    FileName6 = filename:join([binary_to_list(SpaceName), "mime_file_noncdmi.txt"]),
     FileContent6 = <<"some content">>,
     RequestHeaders6 = [{<<"Content-Type">>, <<"text/plain; charset=utf-8">>}, user_1_token_header(Config)],
     {ok, Code6, _Headers6, _Response6} = do_request(Workers, FileName6, put, RequestHeaders6, FileContent6),
@@ -1129,9 +1150,12 @@ mimetype_and_encoding(Config) ->
 % tests reading&writing file at random ranges
 out_of_range(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {_SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
-    FileName = "random_range_file.txt",
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "random_range_file.txt"]),
+
     {ok, _} = create_file(Config, FileName),
 
     %%---- reading out of range ---- (shuld return empty binary)
@@ -1176,8 +1200,10 @@ out_of_range(Config) ->
 copy_move(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
-    FileName = "move_test_file.txt",
-    DirName = "move_test_dir/",
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "move_test_file.txt"]),
+    DirName = filename:join([binary_to_list(SpaceName), "move_test_dir"]) ++ "/",
+
     FileUri = list_to_binary(filename:join("/", FileName)),
     FileData = <<"data">>,
     create_file(Config, FileName),
@@ -1228,7 +1254,7 @@ copy_move(Config) ->
 
     %%---------- file cp ----------- (copy file, with xattrs and acl)
     % create file to copy
-    FileName2 = "copy_test_file.txt",
+    FileName2 =  filename:join([binary_to_list(SpaceName), "copy_test_file.txt"]),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     create_file(Config, FileName2),
     FileData2 = <<"data">>,
@@ -1243,7 +1269,7 @@ copy_move(Config) ->
     write_to_file(Config, FileName2, FileData2, 0),
 
     % assert source file is created and destination does not exist
-    NewFileName2 = "copy_test_file2.txt",
+    NewFileName2 =  filename:join([binary_to_list(SpaceName), "copy_test_file2.txt"]),
     ?assert(object_exists(Config, FileName2)),
     ?assert(not object_exists(Config, NewFileName2)),
     ?assertEqual(FileData2, get_file_content(Config, FileName2)),
@@ -1265,10 +1291,11 @@ copy_move(Config) ->
 
     %%---------- dir cp ------------
     % create dir to copy (with some subdirs and subfiles)
-    DirName2 = "copy_dir/",
+    DirName2 =  filename:join([binary_to_list(SpaceName), "copy_dir"]) ++ "/",
+    NewDirName2 =  filename:join([binary_to_list(SpaceName), "new_copy_dir"]) ++ "/",
+
     mkdir(Config, DirName2),
     ?assert(object_exists(Config, DirName2)),
-    NewDirName2 = "new_copy_dir/",
     set_acl(Config, DirName2, Acl),
     add_xattrs(Config, DirName2, Xattrs),
     mkdir(Config, filename:join(DirName2, "dir1")),
@@ -1314,8 +1341,10 @@ copy_move(Config) ->
 % tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
 partial_upload(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    FileName = "partial.txt",
-    FileName2 = "partial2.txt",
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "partial.txt"]),
+    FileName2 =  filename:join([binary_to_list(SpaceName), "partial2.txt"]),
+
     Chunk1 = <<"some">>,
     Chunk2 = <<"_">>,
     Chunk3 = <<"value">>,
@@ -1400,8 +1429,10 @@ partial_upload(Config) ->
 % tests access control lists
 acl(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    Filename1 = "acl_test_file1",
-    Dirname1 = "acl_test_dir1/",
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Filename1 =  filename:join([binary_to_list(SpaceName), "acl_test_file1"]),
+    Dirname1 =  filename:join([binary_to_list(SpaceName), "acl_test_dir1"]) ++ "/",
+
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
@@ -1545,7 +1576,7 @@ acl(Config) ->
 % test error handling
 errors(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     %%---- unauthorized access -----
@@ -1561,7 +1592,7 @@ errors(Config) ->
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code2, _Headers2, _Response2} =
-        do_request(Workers, "test_dir", put, RequestHeaders2, []),
+        do_request(Workers, SpaceName ++ "/test_dir", put, RequestHeaders2, []),
     ?assertEqual(400, Code2),
     %%------------------------------
 
@@ -1572,7 +1603,7 @@ errors(Config) ->
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
     {ok, Code3, _Headers3, _Response3} =
-        do_request(Workers, "test_dir/", put, RequestHeaders3, []),
+        do_request(Workers, SpaceName ++ "/test_dir/", put, RequestHeaders3, []),
     ?assertEqual(400, Code3),
     %%------------------------------
 
@@ -1584,7 +1615,7 @@ errors(Config) ->
     ],
     RequestBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
     {ok, Code4, _Headers4, _Response4} =
-        do_request(Workers, "some_file_b64", put, RequestHeaders4, RequestBody4),
+        do_request(Workers, SpaceName ++ "/some_file_b64", put, RequestHeaders4, RequestBody4),
     ?assertEqual(400, Code4),
     %%------------------------------
 
@@ -1597,7 +1628,7 @@ errors(Config) ->
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code5, _Headers5, Response5} =
-        do_request(Workers, "dir_dupl/", put, RequestHeaders5, RequestBody5),
+        do_request(Workers, SpaceName ++ "/dir_dupl/", put, RequestHeaders5, RequestBody5),
     ?assertEqual(400, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
     ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5),
@@ -1609,7 +1640,7 @@ errors(Config) ->
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
     {ok, Code6, _Headers6, _Response6} =
-        do_request(WorkerP2, "nonexistent_file", get, RequestHeaders6),
+        do_request(WorkerP2, SpaceName ++ "/nonexistent_file", get, RequestHeaders6),
     ?assertMatch(404, Code6),
     %%------------------------------
 
@@ -1620,12 +1651,12 @@ errors(Config) ->
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code7, _Headers7, _Response7} =
-        do_request(WorkerP2, "nonexisting_dir/", get, RequestHeaders7),
+        do_request(WorkerP2, SpaceName ++ "/nonexisting_dir/", get, RequestHeaders7),
     ?assertEqual(404, Code7),
     %%------------------------------
 
     %%--- open binary file without permission -----
-    File8 = "file",
+    File8 = filename:join([SpaceName, "file8"]),
     FileContent8 = <<"File content...">>,
     create_file(Config, File8),
     ?assertEqual(object_exists(Config, File8), true),
@@ -1641,7 +1672,7 @@ errors(Config) ->
     %%------------------------------
 
     %%--- open cdmi file without permission -----
-    File9 = "file",
+    File9 = filename:join([SpaceName, "file9"]),
     FileContent9 = <<"File content...">>,
     create_file(Config, File9),
     ?assertEqual(object_exists(Config, File9), true),
@@ -1738,13 +1769,14 @@ create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     TestDirName = "dir",
     TestFileName = "file.txt",
+    FullTestDirName = filename:join([binary_to_list(SpaceName), TestDirName]),
     FullTestFileName = filename:join(["/", binary_to_list(SpaceName), TestDirName, TestFileName]),
     TestFileContent = <<"test_file_content">>,
 
     case object_exists(Config, TestDirName) of
         false ->
-            {ok, _} = mkdir(Config, TestDirName),
-            ?assert(object_exists(Config, TestDirName)),
+            {ok, _} = mkdir(Config, FullTestDirName),
+            ?assert(object_exists(Config, FullTestDirName)),
             {ok, _} = create_file(Config, FullTestFileName),
             ?assert(object_exists(Config, FullTestFileName)),
             {ok, _} = write_to_file(Config, FullTestFileName, TestFileContent, 0),
@@ -1752,7 +1784,7 @@ create_test_dir_and_file(Config) ->
         true -> ok
     end,
 
-    {TestDirName, TestFileName, FullTestFileName, TestFileContent}.
+    {binary_to_list(SpaceName), FullTestDirName, TestFileName, FullTestFileName, TestFileContent}.
 
 object_exists(Config, Path) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),

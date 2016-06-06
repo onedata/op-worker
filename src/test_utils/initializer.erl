@@ -24,6 +24,7 @@
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("global_definitions.hrl").
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1, clean_test_users_and_spaces/1,
@@ -624,6 +625,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     lists:foreach(fun({SpaceId, _}) ->
         rpc:multicall(MasterWorkers, space_info, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
     end, Spaces),
+
+    %% Set expiration time for session to 1d.
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 24 * 60 * 60]),
 
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])

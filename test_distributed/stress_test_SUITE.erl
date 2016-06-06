@@ -119,9 +119,9 @@ many_files_creation_test_base(Config) ->
     SpaceNameString = "Space" ++ AnswerDesc,
     ct:print("Space name: ~p", [SpaceNameString]),
     SpaceName = list_to_binary(SpaceNameString),
-    FullSpaceNameString = "/spaces/" ++ SpaceNameString,
+    FullSpaceNameString = "/" ++ SpaceNameString,
     FullSpaceName = list_to_binary(FullSpaceNameString),
-    ?assertMatch({ok, _}, ?call(Worker2, create, [{path, <<"/spaces">>},
+    ?assertMatch({ok, _}, ?call(Worker2, create, [{path, <<"/">>},
             #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
                 value = #file_meta{name = SpaceName, is_scope = true}}])),
 

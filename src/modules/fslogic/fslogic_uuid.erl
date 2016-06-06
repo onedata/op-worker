@@ -47,8 +47,13 @@ to_file_guid(FileUUID, SpaceId) ->
 -spec to_file_guid(file_meta:uuid()) ->
     fslogic_worker:file_guid().
 to_file_guid(FileUUID) ->
-    SpaceId = fslogic_spaces:get_space_id(FileUUID),
-    to_file_guid(FileUUID, SpaceId).
+    try fslogic_spaces:get_space_id(FileUUID) of
+        SpaceId ->
+            to_file_guid(FileUUID, SpaceId)
+    catch
+        {not_a_space, _} ->
+            to_file_guid(FileUUID, undefined)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
