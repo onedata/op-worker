@@ -183,7 +183,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
     ensure_global_stream_active(),
-    Ans = state_update({queue, QueueKey},
+    state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved, until = QUntil} = Queue) ->
             OldSeq = case state_get(global_resume_seq) of
                          undefined -> 0;
@@ -800,7 +800,7 @@ ensure_global_stream_active() ->
                     dbsync_utils:temp_put(last_change, CTime, 0);
                 Time when Time + MaxIdleTime < CTime ->
                     erlang:exit(state_get(changes_stream), force_restart);
-                X ->
+                _ ->
                     ok
             end;
         false ->
