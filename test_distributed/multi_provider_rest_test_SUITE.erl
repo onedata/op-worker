@@ -39,7 +39,8 @@
     metric_get/1,
     list_file/1,
     list_dir/1,
-    replicate_file_by_id/1
+    replicate_file_by_id/1,
+    metadata_changes_subscription_test/1
 ]).
 
 all() ->
@@ -53,7 +54,8 @@ all() ->
         metric_get,
         list_file,
         list_dir,
-        replicate_file_by_id
+        replicate_file_by_id,
+        metadata_changes_subscription_test
     ]).
 
 %%%===================================================================
@@ -275,7 +277,27 @@ replicate_file_by_id(Config) ->
             [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
 
+metadata_changes_subscription_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, <<"user1">>}, Config),
+    File = <<"/file3">>,
+    Mode = 8#700,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, rdwr),
 
+    % when
+    spawn(fun() ->
+        timer:sleep(500),
+        lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>),
+        lfm_proxy:fsync(WorkerP1, Handle),
+        lfm_proxy:read(WorkerP1, Handle, 0, 2),
+        lfm_proxy:read(WorkerP1, Handle, 0, 2),
+        lfm_proxy:read(WorkerP1, Handle, 2, 2),
+        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
+        lfm_proxy:fsync(WorkerP1, Handle)
+    end),
+    {ok, 200, _, _} = do_request(WorkerP1, <<"changes/metadata/some_id?timeout=3000">>,
+        get, [user_1_token_header(Config)], []).
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -308,7 +330,7 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 do_request(Node, URL, Method, Headers, Body) ->
-    http_client:request(Method, <<(rest_endpoint(Node))/binary,  URL/binary>>, Headers, Body, [insecure]).
+    http_client:request(Method, <<(rest_endpoint(Node))/binary,  URL/binary>>, Headers, Body, [insecure, {recv_timeout, 15000}]).
 
 rest_endpoint(Node) ->
     Port =

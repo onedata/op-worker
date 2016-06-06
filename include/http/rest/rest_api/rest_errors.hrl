@@ -27,6 +27,10 @@
   {?BAD_REQUEST, [{<<"error_invalid_metric">>, <<"Requested metric is invalid.">>}]}).
 -define(ERROR_INVALID_STEP,
   {?BAD_REQUEST, [{<<"error_invalid_step">>, <<"Requested step is invalid.">>}]}).
+-define(ERROR_INVALID_TIMEOUT,
+  {?BAD_REQUEST, [{<<"error_invalid_timeout">>, <<"Requested timeout is invalid, it must be of integer type.">>}]}).
+-define(ERROR_INVALID_LAST_SEQ,
+  {?BAD_REQUEST, [{<<"error_invalid_last_seq">>, <<"Requested last_seq is invalid, it must be of integer type.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED,

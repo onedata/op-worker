@@ -30,7 +30,8 @@
 routes() ->
     [
         {"/api/v3/oneprovider/attributes/[...]", #{handler => attributes}},
-        {"/api/v3/oneprovider/files/[...]", #{handler => files}},
+        {"/api/v3/oneprovider/changes/metadata/:sid", #{handler => changes}},
+            {"/api/v3/oneprovider/files/[...]", #{handler => files}},
         {"/api/v3/oneprovider/metrics/provider/:id", #{handler => metrics,
             handler_initial_opts => #{subject_type => provider}}},
         {"/api/v3/oneprovider/metrics/space/:id", #{handler => metrics,
