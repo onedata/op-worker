@@ -52,7 +52,7 @@ db_sync_test(Config) ->
         {parameters, [
             [{name, dirs_num}, {value, 3}, {description, "Number of directorines with single parent."}],
             [{name, files_num}, {value, 10}, {description, "Number of files with single parent."}],
-            [{name, attempts}, {value, 30}, {description, "Attempts param for assertion macros"}]
+            [{name, attempts}, {value, 60}, {description, "Attempts param for assertion macros"}]
         ]},
         {description, "Performs multiple file operations on space 1."}
     ]).

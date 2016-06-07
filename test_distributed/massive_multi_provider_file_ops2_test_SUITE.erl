@@ -37,7 +37,7 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 30, 3, 10).
+    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 60, 3, 10).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
