@@ -218,12 +218,17 @@ fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_i
     lists:foreach(fun({_, SFMHandle}) ->
         ok = storage_file_manager:fsync(SFMHandle)
     end, maps:values(SFMHandles));
-fsync(#lfm_handle{file_guid = FileGUID, sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+fsync(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID, sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     lists:foreach(fun({_, SFMHandle}) ->
             ok = storage_file_manager:fsync(SFMHandle)
         end, maps:values(SFMHandles)),
-    lfm_utils:call_fslogic(SessId, provider_request, #fsync{uuid = FileGUID},
-        fun(_) -> ok end).
+    RecvRef = event:flush(ProviderId, fslogic_uuid:file_guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
+    receive
+        {RecvRef, Response} ->
+            Response
+    after ?DEFAULT_REQUEST_TIMEOUT ->
+        {error, timeout}
+    end.
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)

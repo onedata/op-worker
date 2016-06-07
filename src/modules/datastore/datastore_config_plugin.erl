@@ -43,5 +43,6 @@ models() -> [
     dbsync_state,
     files_to_chown,
     posix_user,
-    message_id
+    message_id,
+    space_quota
 ].

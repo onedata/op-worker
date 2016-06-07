@@ -18,6 +18,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/common/credentials.hrl").
@@ -387,8 +388,6 @@ handle_provider_request(Ctx, #provider_request{provider_request = #set_mimetype{
     fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
 handle_provider_request(Ctx, #provider_request{provider_request = #get_file_path{uuid = FileGUID}}) ->
     fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
-handle_provider_request(Ctx, #provider_request{provider_request = #fsync{uuid = FileGUID}}) ->
-    fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_provider_request(Ctx, #provider_request{provider_request = #get_file_distribution{uuid = FileGUID}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 handle_provider_request(Ctx, #provider_request{provider_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
@@ -450,7 +449,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     end, Evts),
 
     case Ctx of
-        #{notify := Pid} -> Pid ! {handler_executed, Results};
+        #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?OK}});
         _ -> ok
     end,
 

@@ -53,8 +53,10 @@ init([SessId, SessType]) ->
     SupFlags = #{strategy => one_for_all, intensity => 0, period => 1},
     {ok, SessId} = session:update(SessId, #{supervisor => self(), node => node()}),
 
-    case SessType of
-        fuse ->
+    SequencerEnabled = [fuse, provider_outgoing],
+
+    case lists:member(SessType, SequencerEnabled) of
+        true ->
             {ok, {SupFlags, [
                 session_watcher_spec(SessId, SessType),
                 sequencer_manager_sup_spec(SessId),
