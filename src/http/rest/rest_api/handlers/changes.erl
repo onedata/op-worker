@@ -19,6 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
 -include("modules/dbsync/common.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
@@ -121,20 +122,8 @@ init_stream(State = #{last_seq := Since}) ->
     Ref = make_ref(),
     Pid = self(),
 
-    NewSince =
-        case Since of
-            <<"now">> ->
-                0; %todo get current seq
-            _ ->
-                Since
-        end,
     {ok, Stream} = couchdb_datastore_driver:changes_start_link(
-        fun
-            (_, stream_ended, _) ->
-                Pid ! {Ref, stream_ended};
-            (Seq, Doc, Model) ->
-                Pid ! {Ref, #change{seq = Seq, doc = Doc, model = Model}}
-        end, NewSince, infinity),
+        couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity),
     State#{changes_stream => Stream, ref => Ref}.
 
 %%--------------------------------------------------------------------
@@ -143,17 +132,113 @@ init_stream(State = #{last_seq := Since}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_loop(function(), #{}) -> ok | no_return().
-stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref}) ->
+stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := SpaceId}) ->
     receive
         {Ref, stream_ended} ->
             ok;
-        {Ref, Change = #change{seq = Seq, doc = Doc, model = Model}} ->
-            ?info("CHANGE: ~p", [Change]),
+        {Ref, Change} ->
+            try
+                send_change(SendChunk, Change, SpaceId)
+            catch
+                _:E ->
+                    ?error_stacktrace("Cannot stream change of ~p due to: ~p", [Change, E])
+            end,
             stream_loop(SendChunk, State)
     after
         Timeout ->
             ok
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Parse and send change received from db stream, to the client.
+%%--------------------------------------------------------------------
+-spec send_change(function(), #change{}, space_info:id()) -> ok.
+send_change(SendChunk, #change{seq = Seq, doc = #document{
+    key = XattrUuid, value = #xattr{}}}, RequestedSpaceId) ->
+    FileUuid = xattr:get_file_uuid(XattrUuid),
+    {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
+    send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
+        RequestedSpaceId);
+send_change(SendChunk, Change, RequestedSpaceId) ->
+    Scope =
+        case Change#change.doc#document.value#file_meta.is_scope of
+            true ->
+                Change#change.doc#document.key;
+            false ->
+                Change#change.doc#document.value#file_meta.scope
+        end,
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Scope),
+
+    case SpaceId =:= RequestedSpaceId of
+        true ->
+            Json = prepare_response(Change),
+            SendChunk(<<Json/binary, "\r\n">>);
+        false ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Prepare response in json format
+%%--------------------------------------------------------------------
+-spec prepare_response(#change{}) -> binary().
+prepare_response(#change{seq = Seq, doc = #document{
+    key = Uuid, deleted = Deleted,
+    value = #file_meta{
+        atime = Atime, ctime = Ctime, is_scope = IsScope, mode = Mode,
+        mtime = Mtime, scope = Scope, size = Size, type = Type, uid = Uid,
+        version = Version, name = Name}}}) ->
+    Ctx = fslogic_context:new(?ROOT_SESS_ID),
+    Guid =
+        try
+            fslogic_uuid:to_file_guid(Uuid)
+        catch
+            _:Error ->
+                ?error("Cannot fetch guid for changes, error: ~p", [Error]),
+                <<>>
+        end,
+    Path =
+        try
+            fslogic_uuid:uuid_to_path(Ctx, Uuid)
+        catch
+            _:Error2 ->
+                ?error("Cannot fetch Path for changes, error: ~p", [Error2]),
+                <<>>
+        end,
+    Xattrs =
+        try
+            {ok, XattrNames} = xattr:list(Uuid),
+            lists:map(fun(Name) ->
+                {ok, #document{value = #xattr{value = Value}}} = xattr:get_by_name(Uuid, Name),
+                {Name, Value}
+            end, XattrNames)
+        catch
+            _:Error3 ->
+                ?error("Cannot fetch xattrs for changes, error: ~p", [Error3]),
+                <<"fetching_error">>
+        end,
+
+    Response =
+        [
+            {<<"changes">>, [
+                {<<"atime">>, Atime},
+                {<<"ctime">>, Ctime},
+                {<<"is_scope">>, IsScope},
+                {<<"mode">>, Mode},
+                {<<"mtime">>, Mtime},
+                {<<"scope">>, fslogic_uuid:space_dir_uuid_to_spaceid(Scope)},
+                {<<"size">>, Size},
+                {<<"type">>, Type},
+                {<<"uid">>, Uid},
+                {<<"version">>, Version},
+                {<<"xattrs">>, Xattrs}
+            ]},
+            {<<"deleted">>, Deleted},
+            {<<"file_id">>, Guid},
+            {<<"file_path">>, Path},
+            {<<"name">>, Name},
+            {<<"seq">>, Seq}
+        ],
+    json_utils:encode(Response).
 
 %%--------------------------------------------------------------------
 %% @todo fix types in cowboy_req

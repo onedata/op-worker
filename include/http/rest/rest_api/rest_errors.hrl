@@ -45,5 +45,7 @@
 %% HTTP 404 errors
 -define(ERROR_NOT_FOUND,
   {?NOT_FOUND, [{<<"error_not_found">>, <<"The resource could not be found.">>}]}).
+-define(ERROR_SPACE_NOT_FOUND,
+  {?NOT_FOUND, [{<<"error_space_not_found">>, <<"The space could not be found.">>}]}).
 
 -endif.

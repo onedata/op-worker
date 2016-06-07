@@ -289,15 +289,62 @@ metadata_changes_subscription_test(Config) ->
     spawn(fun() ->
         timer:sleep(500),
         lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>),
-        lfm_proxy:fsync(WorkerP1, Handle),
         lfm_proxy:read(WorkerP1, Handle, 0, 2),
-        lfm_proxy:read(WorkerP1, Handle, 0, 2),
-        lfm_proxy:read(WorkerP1, Handle, 2, 2),
         lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
-        lfm_proxy:fsync(WorkerP1, Handle)
+        lfm_proxy:fsync(WorkerP1, Handle),
+        lfm_proxy:create(WorkerP1, SessionId, <<"/file4">>, Mode)
     end),
-    {ok, 200, _, _} = do_request(WorkerP1, <<"changes/metadata/some_id?timeout=3000">>,
-        get, [user_1_token_header(Config)], []).
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=3000">>,
+        get, [user_1_token_header(Config)], []),
+
+    ct:print("~s", [Body]).
+
+%%    [<<>>, Change1Data, Change2Data] = binary:split(Body, <<"\r\n">>, [global]),
+%%    Change1 = json_utils:decode(Change1Data),
+%%    Change2 = json_utils:decode(Change2Data),
+%%    ?assertMatch(
+%%        [
+%%            {<<"changes">>, [
+%%                {<<"atime">>, _},
+%%                {<<"ctime">>, _},
+%%                {<<"is_scope">>, false},
+%%                {<<"mode">>, 8#700},
+%%                {<<"mtime">>, _},
+%%                {<<"scope">>, <<"space1">>},
+%%                {<<"size">>, 0},
+%%                {<<"type">>, <<"REG">>},
+%%                {<<"uid">>, <<"user1">>},
+%%                {<<"version">>, 1},
+%%                {<<"xattrs">>, []}
+%%            ]},
+%%            {<<"deleted">>, false},
+%%            {<<"file_id">>, FileGuid},
+%%            {<<"file_path">>, <<"/spaces/space1/file3">>},
+%%            {<<"name">>, <<"file3">>},
+%%            {<<"seq">>, _}
+%%        ], Change1),
+%%    ?assertMatch(
+%%        [
+%%            {<<"changes">>, [
+%%                {<<"atime">>, _},
+%%                {<<"ctime">>, _},
+%%                {<<"is_scope">>, false},
+%%                {<<"mode">>, 8#777},
+%%                {<<"mtime">>, _},
+%%                {<<"scope">>, <<"space1">>},
+%%                {<<"size">>, 0},
+%%                {<<"type">>, <<"REG">>},
+%%                {<<"uid">>, <<"user1">>},
+%%                {<<"version">>, 1},
+%%                {<<"xattrs">>, []}
+%%            ]},
+%%            {<<"deleted">>, false},
+%%            {<<"file_id">>, FileGuid},
+%%            {<<"file_path">>, <<"/spaces/space1/file3">>},
+%%            {<<"name">>, <<"file3">>},
+%%            {<<"seq">>, _}
+%%        ], Change2).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================

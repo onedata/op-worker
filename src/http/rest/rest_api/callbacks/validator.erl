@@ -20,7 +20,7 @@
 
 -define(DEFAULT_TIMEOUT, infinity).
 
--define(DEFAULT_LAST_SEQ, <<"now">>).
+-define(DEFAULT_LAST_SEQ, now).
 
 %% API
 -export([malformed_metrics_request/2, malformed_request/2, parse_path/2,
@@ -154,9 +154,15 @@ parse_callback(Req, State) ->
 %%--------------------------------------------------------------------
 -spec parse_space_id(cowboy_req:req(), #{}) ->
     {#{id => binary()}, cowboy_req:req()}.
-parse_space_id(Req, State) ->
+parse_space_id(Req, State = #{auth := Auth}) ->
     {Id, NewReq} = cowboy_req:binding(sid, Req),
-    {State#{space_id => Id}, NewReq}.
+    {ok, UserId} = session:get_user_id(Auth),
+    case space_info:get(Id, UserId) of
+        {ok, _} ->
+            {State#{space_id => Id}, NewReq};
+        {error, {not_found, space_info}} ->
+            throw(?ERROR_SPACE_NOT_FOUND)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -190,8 +196,8 @@ parse_timeout(Req, State) ->
 parse_last_seq(Req, State) ->
     {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
-        <<"now">> ->
-            {State#{last_seq => <<"now">>}, NewReq};
+        now ->
+            {State#{last_seq => dbsync_worker:state_get(global_resume_seq)}, NewReq};
         Number ->
             try binary_to_integer(Number) of
                 LastSeq ->
