@@ -136,8 +136,8 @@ handle_info(check_session_status, #state{session_id = SessId,
         true ->
             schedule_session_removal(0),
             {noreply, State};
-        {false, {error, Reason} } ->
-            {stop, Reason, State};         
+        {false, {error, Reason}} ->
+            {stop, Reason, State};
         {false, RemainingTime} ->
             schedule_session_status_checkup(RemainingTime),
             {noreply, State, hibernate}
@@ -228,7 +228,7 @@ get_session_ttl(fuse) ->
 get_session_ttl(rest) ->
     {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
     timer:seconds(Period);
-get_session_ttl(provider) ->
+get_session_ttl(provider_incoming) ->
     {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
     timer:seconds(Period);
 get_session_ttl(provider_outgoing) ->

@@ -254,7 +254,7 @@ session_teardown(Worker, SessId) ->
 %%--------------------------------------------------------------------
 -spec client_message() -> Msg :: #client_message{}.
 client_message() ->
-    #client_message{message_stream = #message_stream{stream_id = 1}}.
+    #client_message{message_stream = #message_stream{stream_id = 1, sequence_number = 0}}.
 
 %%--------------------------------------------------------------------
 %% @private

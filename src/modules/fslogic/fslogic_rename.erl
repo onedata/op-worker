@@ -279,6 +279,21 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
             %% TODO: get all snapshots: TODO: VFS-1966
             SourceDirSnapshots = [SourceEntry],
+
+            %% Quota
+            Size = for_each_child_file(SourceEntry,
+                fun
+                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File, CSize) ->
+                        Size = fslogic_blocks:get_file_size(File),
+                        CSize + Size;
+                    (_Dir, CSize) ->
+                        CSize
+                end,
+                fun(_, _, CSize) ->
+                    CSize
+                end, 0),
+            ok = space_quota:assert_write(TargetSpaceId, Size),
+
             lists:foreach(
                 fun(Snapshot) ->
                     ok = file_meta:rename(Snapshot, {path, CanonicalTargetPath})
@@ -286,19 +301,20 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
 
             for_each_child_file(SourceEntry,
                 fun
-                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File) ->
+                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File, Ret) ->
                         %% TODO: get all snapshots: VFS-1965
                         FileSnapshots = [File],
                         lists:foreach(
                             fun(Snapshot) ->
                                 ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
-                            end, FileSnapshots);
-                    (_Dir) ->
-                        ok
+                            end, FileSnapshots),
+                        Ret;
+                    (_Dir, Ret) ->
+                        Ret
                 end,
-                fun(_, _) ->
-                    ok
-                end);
+                fun(_, Ret, _) ->
+                    Ret
+                end, ok);
 
         {ok, File} ->
             SourcePathTokens = filename:split(SourcePath),
@@ -307,6 +323,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
+            Size = fslogic_blocks:get_file_size(File),
+            space_quota:assert_write(TargetSpaceId, Size),
 
             %% TODO: get all snapshots: VFS-1965
             FileSnapshots = [File],
@@ -339,7 +357,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
     TargetPathTokens = filename:split(LogicalTargetPath),
 
     for_each_child_file(SourceEntry,
-        fun(#document{key = SourceUuid} = Doc) ->
+        fun(#document{key = SourceUuid} = Doc, _) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             {ok, OldPath} = fslogic_path:gen_path(Doc, SessId),
             OldTokens = filename:split(OldPath),
@@ -357,13 +375,13 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
             {guid, TargetGuid}
         end,
         fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
-            mtime = MTime, ctime = CTime, mode = Mode}}, Target) ->
+            mtime = MTime, ctime = CTime, mode = Mode}}, Target, _) ->
             SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, Target, Mode),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, Target),
             ok = logical_file_manager:update_times(SessId, Target, ATime, MTime, CTime),
             ok = logical_file_manager:unlink(SessId, {guid, SourceGuid})
-        end),
+        end, undefined),
 
     CurrTime = erlang:system_time(seconds),
     ok = fslogic_times:update_mtime_ctime(SourceParent, fslogic_context:get_user_id(CTX), CurrTime),
@@ -436,18 +454,21 @@ rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, SourceEntry) ->
     TargetFileId :: helpers:file(), TargetSpaceUUID :: binary(),
     TargetStorageId :: storage:id()) -> ok.
 update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
-    #document{key = LocationId,
-        value = #file_location{blocks = Blocks}} = LocationDoc,
+    TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
+    #document{value = #file_location{uuid = FileUUID, blocks = Blocks} = Location} = LocationDoc,
     UpdatedBlocks = lists:map(
         fun(Block) ->
             Block#file_block{file_id = TargetFileId, storage_id = TargetStorageId}
         end, Blocks),
-    file_location:update(LocationId, #{
-        file_id => TargetFileId,
-        space_uuid => TargetSpaceUUID,
-        storage_id => TargetStorageId,
-        blocks => UpdatedBlocks
-    }),
+    {ok, _} = datastore:run_synchronized(file_location, FileUUID,
+        fun() ->
+            file_location:save(LocationDoc#document{value = Location#file_location{
+                file_id = TargetFileId,
+                space_id = TargetSpaceId,
+                storage_id = TargetStorageId,
+                blocks = UpdatedBlocks
+            }})
+        end),
     ok.
 
 %%--------------------------------------------------------------------
@@ -466,26 +487,26 @@ ensure_deleted(SessId, LogicalTargetPath) ->
 %% @doc Traverses files tree depth first, executing Pre function before
 %% descending into children and executing Post function after returning
 %% from children. Value returned from Pre function will be passed to Post
-%% function for the same file doc.
+%% function as second argument for the same file doc.
 %%--------------------------------------------------------------------
 -spec for_each_child_file(Entry :: fslogic_worker:file(),
-    PreFun :: fun((fslogic_worker:file()) -> term()),
-    PostFun :: fun((fslogic_worker:file(), term()) -> term())) -> ok.
-for_each_child_file(Entry, PreFun, PostFun) ->
+    PreFun :: fun((fslogic_worker:file(), AccIn :: term()) -> term()),
+    PostFun :: fun((fslogic_worker:file(), ShallowAccIn :: term(), AccIn :: term()) -> term()),
+    AccIn :: term()) -> AccOut :: term().
+for_each_child_file(Entry, PreFun, PostFun, AccIn) ->
     {ok, Doc} = file_meta:get(Entry),
-    Mem = PreFun(Doc),
-    case Doc of
+    AccPre = PreFun(Doc, AccIn),
+    AccPost = case Doc of
         #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
             {ok, ChildrenLinks} = list_all_children(Doc),
-            lists:foreach(
-                fun(#child_link{uuid = ChildUUID}) ->
-                    for_each_child_file({uuid, ChildUUID}, PreFun, PostFun)
-                end, ChildrenLinks);
+            lists:foldl(
+                fun(#child_link{uuid = ChildUUID}, AccIn0) ->
+                    for_each_child_file({uuid, ChildUUID}, PreFun, PostFun, AccIn0)
+                end, AccPre, ChildrenLinks);
         _ ->
-            ok
+            AccPre
     end,
-    PostFun(Doc, Mem),
-    ok.
+    PostFun(Doc, AccPre, AccPost).
 
 %%--------------------------------------------------------------------
 %% @doc Lists all children of given entry
@@ -503,7 +524,7 @@ list_all_children(Entry, Offset, Size, AccIn) ->
     {ok, ChildrenLinks} = file_meta:list_children(Entry, Offset, Size),
     case length(ChildrenLinks) of
         Size ->
-            list_all_children(Entry, Offset+Size, Size, AccIn ++ ChildrenLinks);
+            list_all_children(Entry, Offset + Size, Size, AccIn ++ ChildrenLinks);
         _ ->
             {ok, AccIn ++ ChildrenLinks}
     end.
@@ -575,7 +596,7 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
     {ok, NewToHandle, DataSize} = logical_file_manager:write(ToHandle, Offset, Data),
     case DataSize of
         Size ->
-            copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset+Size, Size);
+            copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset + Size, Size);
         _ ->
             logical_file_manager:fsync(ToHandle),
             ok
@@ -601,7 +622,7 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
     {ok, DataSize} = storage_file_manager:write(ToHandle, Offset, Data),
     case DataSize of
         Size ->
-            copy_file_contents_sfm(FromHandle, ToHandle, Offset+Size, Size);
+            copy_file_contents_sfm(FromHandle, ToHandle, Offset + Size, Size);
         _ ->
             ok
     end.

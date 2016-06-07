@@ -93,7 +93,7 @@ route_message_should_forward_messages_in_right_order_base(Config) ->
   % Send 'MsgNum' messages in 'MsgOrd' order.
   {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
     lists:foreach(fun(SeqNum) ->
-      route_message(Worker, SessId, client_message(StmId, SeqNum))
+      route_message(Worker, SessId, client_message(SessId, StmId, SeqNum))
     end, SeqNums)
   end),
 
@@ -151,7 +151,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
       utils:pforeach(fun(StmId) ->
         lists:foreach(fun(Msg) ->
           [Wrk | _] = utils:random_shuffle(Workers),
-          route_message(Wrk, SessId, #client_message{
+          route_message(Wrk, SessId, #client_message{session_id = SessId,
             message_stream = Msg#message_stream{stream_id = StmId}
           })
         end, utils:random_shuffle(Msgs))
@@ -166,7 +166,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
     % from each stream.
     {MsgsMap, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
       lists:foldl(fun(_, Map) ->
-        #client_message{message_stream = #message_stream{
+        #client_message{session_id = SessId, message_stream = #message_stream{
           stream_id = StmId, sequence_number = SeqNum}
         } = ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
         StmMsgs = maps:get(StmId, Map),
@@ -260,10 +260,10 @@ route_message(Worker, SessId, Msg) ->
 %% Returns client message as part of messages stream.
 %% @end
 %%--------------------------------------------------------------------
--spec client_message(StmId :: sequencer:stream_id(),
+-spec client_message(SessId :: session:id(), StmId :: sequencer:stream_id(),
     SeqNum :: sequencer:sequence_number()) -> Msg :: #client_message{}.
-client_message(StmId, SeqNum) ->
-    #client_message{message_stream = #message_stream{
+client_message(SessId, StmId, SeqNum) ->
+    #client_message{session_id = SessId, message_stream = #message_stream{
         stream_id = StmId, sequence_number = SeqNum
     }}.
 

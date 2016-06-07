@@ -213,14 +213,17 @@ fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_i
     lists:foreach(fun({_, SFMHandle}) ->
         ok = storage_file_manager:fsync(SFMHandle)
     end, maps:values(SFMHandles));
-fsync(#lfm_handle{file_guid = FileGUID, sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+fsync(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID, sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     lists:foreach(fun({_, SFMHandle}) ->
             ok = storage_file_manager:fsync(SFMHandle)
         end, maps:values(SFMHandles)),
-    lfm_utils:call_fslogic(SessId, #fsync{uuid = FileGUID},
-        fun(_) ->
-            ok
-        end).
+    RecvRef = event:flush(ProviderId, fslogic_uuid:file_guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
+    receive
+        {RecvRef, Response} ->
+            Response
+    after ?DEFAULT_REQUEST_TIMEOUT ->
+        {error, timeout}
+    end.
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)
@@ -447,8 +450,7 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode
             WrittenBlocks = [#file_block{
                 file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
             }],
-            NewBlocks = fslogic_blocks:invalidate(CBlocks, WrittenBlocks) ++ WrittenBlocks,
-            NewBlocks1 = fslogic_blocks:consolidate(lists:sort(NewBlocks)),
+            NewBlocks = fslogic_blocks:merge(WrittenBlocks, CBlocks),
             case GenerateEvents of
                 true ->
                     ok = event:emit(#write_event{
@@ -457,7 +459,7 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode
                 false ->
                     ok
             end,
-            {ok, NewHandle#lfm_handle{file_location = Location#file_location{blocks = NewBlocks1}}, Written};
+            {ok, NewHandle#lfm_handle{file_location = Location#file_location{blocks = NewBlocks}}, Written};
         {error, Reason2} ->
             {error, Reason2}
     end.

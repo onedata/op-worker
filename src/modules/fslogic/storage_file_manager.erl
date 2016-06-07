@@ -46,10 +46,21 @@
 %% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
   Storage :: datastore:document(), FileId :: helpers:file()) ->
     handle().
 new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
+    FSize =
+        case FileUUID of
+            undefined ->
+                0;
+            _ ->
+                case catch fslogic_blocks:get_file_size({uuid, FileUUID}) of
+                    Size when is_integer(Size) ->
+                        Size;
+                    _ -> 0
+                end
+        end,
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,
@@ -57,7 +68,8 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
         file = FileId,
         provider_id = oneprovider:get_provider_id(),
         is_local = true,
-        storage = Storage
+        storage = Storage,
+        file_size = FSize
     }.
 
 %%--------------------------------------------------------------------
@@ -73,13 +85,20 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
     StorageId :: storage:id(), FileId :: helpers:file(), oneprovider:id()) ->
     handle().
 new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
-    {IsLocal, Storage} = case oneprovider:get_provider_id() of
-        ProviderId ->
-            {ok, S} = storage:get(StorageId),
-            {true, S};
-        _ ->
-            {false, undefined}
-    end,
+    {IsLocal, Storage, Size} =
+        case oneprovider:get_provider_id() of
+            ProviderId ->
+                {ok, S} = storage:get(StorageId),
+                FSize =
+                    case catch fslogic_blocks:get_file_size({uuid, FileUUID}) of
+                        Size0 when is_integer(Size0) ->
+                            Size0;
+                        _ -> 0
+                    end,
+                {true, S, FSize};
+            _ ->
+                {false, undefined, undefined}
+        end,
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,
@@ -88,7 +107,8 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
         provider_id = ProviderId,
         is_local = IsLocal,
         storage = Storage,
-        storage_id = StorageId
+        storage_id = StorageId,
+        file_size = Size
     }.
 
 %%--------------------------------------------------------------------
@@ -270,7 +290,10 @@ stat(_FileHandle) ->
     {ok, non_neg_integer()} | logical_file_manager:error_reply().
 write(#sfm_handle{is_local = true, open_mode = undefined}, _, _) -> throw(?EPERM);
 write(#sfm_handle{is_local = true, open_mode = read}, _, _) -> throw(?EPERM);
-write(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
+write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, helper_handle = HelperHandle, file = File, file_size = CSize}, Offset, Buffer) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    %% @todo: VFS-2086 handle sparse files
+    space_quota:soft_assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
     helpers:write(HelperHandle, File, Offset, Buffer);
 
 write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Data) ->

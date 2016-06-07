@@ -26,7 +26,8 @@
     open_mode :: helpers:open_mode(),
     needs_root_privileges :: boolean(),
     is_local = false :: boolean(),
-    provider_id :: oneprovider:id()
+    provider_id :: oneprovider:id(),
+    file_size :: non_neg_integer() %% Available only if file is_local
 }).
 
 -endif.

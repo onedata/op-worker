@@ -123,7 +123,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1"
+                        "storage": "/mnt/st1",
+                        "supported_size": 1000000000
                     }
                 }
             },
@@ -136,7 +137,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 1000000000
                     }
                 }
             },
@@ -149,7 +151,8 @@
                 ],
                 "providers": {
                     "p2": {
-                        "storage": "/mnt/st3"
+                        "storage": "/mnt/st3",
+                        "supported_size": 1000000000
                     }
                 }
             }

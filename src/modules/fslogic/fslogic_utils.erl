@@ -40,7 +40,7 @@ session_to_rest_client(SessId) ->
     {ok, #document{value = #session{auth = Auth, type = Type}}} = session:get(SessId),
     case Type of
         provider_outgoing -> provider;
-        provider -> provider;
+        provider_incoming -> provider;
         _ ->
             case Auth of
                 #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc} ->

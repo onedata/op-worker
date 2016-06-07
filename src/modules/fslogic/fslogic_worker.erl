@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/events/definitions.hrl").
@@ -358,8 +359,6 @@ handle_fuse_request(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file
     fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = FileGUID}}) ->
     fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #fsync{uuid = FileGUID}}) ->
-    fslogic_req_generic:fsync(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = FileGUID}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
@@ -390,7 +389,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     end, Evts),
 
     case Ctx of
-        #{notify := Pid} -> Pid ! {handler_executed, Results};
+        #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?OK}});
         _ -> ok
     end,
 
