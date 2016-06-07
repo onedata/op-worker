@@ -21,6 +21,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -185,6 +186,18 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, Connection)
+    end),
+    ok;
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
+    message_body = #provider_request{} = ProviderRequest}) ->
+    ?debug("Provider request ~p ~p", [ProviderRequest, SessId]),
+    Connection = self(),
+    spawn(fun() ->
+        ProviderResponse = worker_proxy:call(fslogic_worker,
+            {provider_request, effective_session_id(Msg), ProviderRequest}),
+        ?debug("Provider response ~p", [ProviderResponse]),
+        communicator:send(#server_message{message_id = Id,
+            message_body = ProviderResponse}, Connection)
     end),
     ok;
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = _SessId,

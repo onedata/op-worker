@@ -39,14 +39,15 @@ mkdir(SessId, Path) ->
     {ok, DirGUID :: fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mkdir(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, ParentPath}}, fun
-        (#file_attr{uuid = ParentGUID}) ->
-            lfm_utils:call_fslogic(SessId,
+    lfm_utils:call_fslogic(SessId, fuse_request,
+        #get_file_attr{entry = {path, ParentPath}},
+        fun(#file_attr{uuid = ParentGUID}) ->
+            lfm_utils:call_fslogic(SessId, fuse_request,
                 #create_dir{parent_uuid = ParentGUID, name = Name, mode = Mode},
                 fun(#dir{uuid = DirUUID}) ->
                     {ok, DirUUID}
                 end)
-    end).
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -62,7 +63,7 @@ mkdir(SessId, Path, Mode) ->
 ls(SessId, FileKey, Offset, Limit) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId,
+    lfm_utils:call_fslogic(SessId, fuse_request,
         #get_file_children{uuid = FileGUID, offset = Offset, size = Limit},
         fun({file_children, List}) ->
             {ok, [{UUID_, FileName} || {_, UUID_, FileName} <- List]}

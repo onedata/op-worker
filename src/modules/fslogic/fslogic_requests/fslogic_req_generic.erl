@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/events/types.hrl").
 -include("timeouts.hrl").
@@ -43,11 +44,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_path(fslogic_worker:ctx(), file_meta:uuid()) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 get_file_path(Ctx, FileUUID) ->
-    #fuse_response{
+    #provider_response{
         status = #status{code = ?OK},
-        fuse_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
+        provider_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
     }.
 
 %%--------------------------------------------------------------------
@@ -55,7 +56,7 @@ get_file_path(Ctx, FileUUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(fslogic_worker:ctx(), file_meta:uuid()) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 fsync(Ctx, _FileUUID) ->
     SessId = fslogic_context:get_session_id(Ctx),
     event:flush(?FSLOGIC_SUB_ID, self(), SessId),
@@ -67,10 +68,10 @@ fsync(Ctx, _FileUUID) ->
                     (_) -> false
                 end, Results),
             [] = Errors,
-            #fuse_response{status = #status{code = ?OK}}
+            #provider_response{status = #status{code = ?OK}}
     after
         ?FSYNC_TIMEOUT ->
-            #fuse_response{status = #status{code = ?EAGAIN, description = <<"fsync_timeout">>}}
+            #provider_response{status = #status{code = ?EAGAIN, description = <<"fsync_timeout">>}}
     end.
 
 %%--------------------------------------------------------------------
@@ -178,7 +179,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
-                         FuseResponse :: #fuse_response{} | no_return().
+    FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 delete(#fslogic_ctx{space_id = SpaceId} = CTX, File) ->
     {ok, FileUUID} = file_meta:to_uuid(File),
@@ -203,17 +204,17 @@ delete(#fslogic_ctx{space_id = SpaceId} = CTX, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_xattr(_CTX, _, <<"cdmi_", _/binary>>) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:get_by_name(FileUuid, XattrName) of
         {ok, #document{value = Xattr}} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = Xattr};
+            #provider_response{status = #status{code = ?OK}, provider_response = Xattr};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}};
+            #provider_response{status = #status{code = ?ENOENT}};
         {error, {not_found, xattr}} ->
-            #fuse_response{status = #status{code = ?ENOATTR}}
+            #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 %%--------------------------------------------------------------------
@@ -222,16 +223,16 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
 set_xattr(CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
-            #fuse_response{status = #status{code = ?OK}};
+            #provider_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------
@@ -240,15 +241,15 @@ set_xattr(CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_xattr(CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
-            #fuse_response{status = #status{code = ?OK}};
+            #provider_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------
@@ -257,37 +258,37 @@ remove_xattr(CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 list_xattr(_CTX, {uuid, FileUuid}) ->
     case xattr:list(FileUuid) of
         {ok, List} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #xattr_list{names = List}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = List}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Get access control list of file.
 %%--------------------------------------------------------------------
 -spec get_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
 get_acl(_CTX, {uuid, FileUuid})  ->
     case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #acl{value = Val}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Val}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}};
+            #provider_response{status = #status{code = ?ENOENT}};
         {error, {not_found, xattr}} ->
-            #fuse_response{status = #status{code = ?ENOATTR}}
+            #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Sets access control list of file.
 %%--------------------------------------------------------------------
 -spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
@@ -297,16 +298,16 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
                 {uuid, FileUuid}, 8#000
             ),
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
-            #fuse_response{status = #status{code = ?OK}};
+            #provider_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Removes access control list of file.
 %%--------------------------------------------------------------------
 -spec remove_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
-    #fuse_response{} | no_return().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
@@ -318,41 +319,40 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
             ),
             ok = fslogic_event:emit_permission_changed(FileUuid),
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
-            #fuse_response{status = #status{code = ?OK}};
+            #provider_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #transfer_encoding{value = Val}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}};
+            #provider_response{status = #status{code = ?ENOENT}};
         {error, {not_found, xattr}} ->
-            #fuse_response{status = #status{code = ?ENOATTR}}
+            #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:transfer_encoding()) ->
-    ok | logical_file_manager:error_reply().
+    xattr:transfer_encoding()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
-            #fuse_response{status = #status{code = ?OK}};
+            #provider_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 %%--------------------------------------------------------------------
 %% @doc
@@ -361,16 +361,16 @@ set_transfer_encoding(CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:cdmi_completion_status()} | logical_file_manager:error_reply().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #cdmi_completion_status{value = Val}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Val}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}};
+            #provider_response{status = #status{code = ?ENOENT}};
         {error, {not_found, xattr}} ->
-            #fuse_response{status = #status{code = ?ENOATTR}}
+            #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 %%--------------------------------------------------------------------
@@ -380,46 +380,44 @@ get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:cdmi_completion_status()) ->
-    ok | logical_file_manager:error_reply().
+    xattr:cdmi_completion_status()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
     case xattr:save(FileUuid, #xattr{name = ?CDMI_COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
         {ok, _} ->
-            #fuse_response{status = #status{code = ?OK}};
+            #provider_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
 -spec get_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:mimetype()} | logical_file_manager:error_reply().
+    #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #mimetype{value = Val}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}};
+            #provider_response{status = #status{code = ?ENOENT}};
         {error, {not_found, xattr}} ->
-            #fuse_response{status = #status{code = ?ENOATTR}}
+            #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
 -spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:mimetype()) ->
-    ok | logical_file_manager:error_reply().
+    xattr:mimetype()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
-            #fuse_response{status = #status{code = ?OK}};
+            #provider_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            #provider_response{status = #status{code = ?ENOENT}}
     end.
 
 %%%===================================================================
