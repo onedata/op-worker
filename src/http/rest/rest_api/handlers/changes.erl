@@ -44,7 +44,6 @@ rest_init(Req, _Opts) ->
 -spec terminate(Reason :: term(), req(), #{}) -> ok.
 terminate(_, _, #{changes_stream := Stream}) ->
     gen_changes:stop(Stream).
-%%    ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
@@ -78,7 +77,6 @@ content_types_accepted(Req, State) ->
     {[
         {<<"application/json">>, set_file_attribute}
     ], Req, State}.
-
 
 %%%===================================================================
 %%% Content type handler functions
@@ -139,13 +137,6 @@ init_stream(State = #{last_seq := Since}) ->
         end, NewSince, infinity),
     State#{changes_stream => Stream, ref => Ref}.
 
-%%        {ok, {_, Db}} = couchdb_datastore_driver:get_db(),
-%%        {ok, Ref} = couchbeam_changes:follow(Db, [continuous, include_docs, {since, 0}]),
-%%        State#{ref => Ref}.
-
-
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Listens for events and pushes them to the socket
@@ -159,15 +150,6 @@ stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref}) ->
         {Ref, Change = #change{seq = Seq, doc = Doc, model = Model}} ->
             ?info("CHANGE: ~p", [Change]),
             stream_loop(SendChunk, State)
-%%        {Ref, {done, LastSeq}} ->
-%%            ?info("CHANGE DONE ~p", [LastSeq]),
-%%            ok;
-%%        {Ref, {change, Row}} ->
-%%            ?info("CHANGE ~p", [Row]),
-%%            stream_loop(SendChunk, State);
-%%        {Ref, {error, Msg}} ->
-%%            ?info("CHANGE ERROR ~p", [Msg]),
-%%            ok
     after
         Timeout ->
             ok
