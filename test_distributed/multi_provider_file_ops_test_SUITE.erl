@@ -181,15 +181,18 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts)
         end),
 
-        VerAns = VerifyLocation(),
-        Flattened = lists:flatten(VerAns),
-        ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+        AssertLocations = fun() ->
+            VerAns = VerifyLocation(),
+            Flattened = lists:flatten(VerAns),
+            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
 
-        ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
-        LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
-
-        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes - ProxyNodesWritten, length(ZerosList)),
-        ?assertEqual(SyncNodes*SyncNodes + ProxyNodesWritten, length(LocationsList))
+            ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
+            LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
+            {length(ZerosList), length(LocationsList)}
+        end,
+        ToMatch = {(SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes - ProxyNodesWritten,
+            SyncNodes*SyncNodes + ProxyNodesWritten},
+        ?match(ToMatch, AssertLocations(), Attempts)
     end,
     VerifyFile({2, Level2File}),
 
@@ -296,7 +299,8 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         {ok, Handle} = OpenAns,
         WriteBuf = atom_to_binary(W, utf8),
         Offset = size(Acc),
-        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
+        WriteSize = size(WriteBuf),
+        ?assertMatch({ok, WriteSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
@@ -420,8 +424,10 @@ check_locations(W, Map) ->
     maps:fold(fun(_, V, Acc) ->
         case V of
             {ID, file_location} ->
-                ?assertMatch({ok, _}, rpc:call(W, file_location, get, [ID])),
-                Acc + 1;
+                case rpc:call(W, file_location, get, [ID]) of
+                    {ok, _} -> Acc + 1;
+                    _ -> Acc
+                end;
             _ ->
                 Acc
         end
