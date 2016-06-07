@@ -312,7 +312,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     lists:foreach(fun(W) ->
         spawn_link(fun() ->
             Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-            MkAns = lfm_proxy:mkdir(W, SessId, Level2TmpDir, 8#755),
+            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755),
             Master ! {mkdir_ans, Level2TmpDir, MkAns}
         end)
     end, Workers),
@@ -335,7 +335,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         lists:foreach(fun(W2) ->
             spawn_link(fun() ->
                 Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-                MkAns = lfm_proxy:mkdir(W2, SessId, Level3TmpDir, 8#755),
+                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755),
                 Master ! {mkdir_ans, Level3TmpDir, MkAns}
             end)
         end, Workers)
