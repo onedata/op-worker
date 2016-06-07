@@ -555,14 +555,14 @@ delete_dir(Config) ->
     %%------------------------------
 
     %%----- delete root dir -------
-    ?assert(object_exists(Config, "")),
+    ?assert(object_exists(Config, "/")),
 
     RequestHeaders3 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER],
-    ?assert(object_exists(Config, "")),
+    ?assert(object_exists(Config, "/")),
     {ok, Code3, _Headers3, _Response3} =
-        do_request(Workers, "", delete, RequestHeaders3, []),
+        do_request(Workers, "/", delete, RequestHeaders3, []),
     ?assertEqual(403, Code3),
-    ?assert(object_exists(Config, "")).
+    ?assert(object_exists(Config, "/")).
 %%------------------------------
 
 % Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object

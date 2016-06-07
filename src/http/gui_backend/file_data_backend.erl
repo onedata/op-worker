@@ -244,7 +244,7 @@ get_parent(SessionId, FileGUID) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns the UUID of user's /spaces dir.
+%% Returns the UUID of user's root dir.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_root_dir_uuid(SessionId :: binary()) -> binary().
