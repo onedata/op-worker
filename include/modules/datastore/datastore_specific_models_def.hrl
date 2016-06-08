@@ -14,6 +14,7 @@
 
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% Message ID containing recipient for remote response.
 -record(message_id, {
@@ -136,6 +137,9 @@
 %% Model for caching provider details fetched from OZ
 -record(provider_info, {
     client_name :: binary(),
+    urls = [] :: [binary()],
+    space_ids = [] :: [SpaceId :: binary()],
+    public_only = false :: boolean(), %% see comment in onedata_users
     revision_history = [] :: [subscriptions:rev()]
 }).
 

@@ -521,8 +521,8 @@ rename(Worker, SessionId, Path, Target) ->
 
 gen_test_env(Config) ->
     [P1, P2] = ?config(op_worker_nodes, Config),
-    User1 = ?config({session_id, <<"user1">>}, Config),
-    User2 = ?config({session_id, <<"user2">>}, Config),
+    User1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
+    User2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(P1)}}, Config),
 
     #env{
         p1 = P1,
