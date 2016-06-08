@@ -85,7 +85,7 @@ list(FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Get file Uuid from xattr uuid
 %%--------------------------------------------------------------------
--spec get_file_uuid(datastore:key()) -> file_meta:uuid().
+-spec get_file_uuid(datastore:key()) -> {ok, file_meta:uuid()}.
 get_file_uuid(XattrUuid) ->
     {Uuid, _Name} = decode_key(XattrUuid),
     {ok, Uuid}.

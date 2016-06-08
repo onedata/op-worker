@@ -175,7 +175,7 @@ parse_timeout(Req, State) ->
     {RawTimeout, NewReq} = cowboy_req:qs_val(<<"timeout">>, Req, ?DEFAULT_TIMEOUT),
     case RawTimeout of
         infinity ->
-            {infinity, NewReq};
+            {State#{timeout => infinity}, NewReq};
         Number ->
             try binary_to_integer(Number) of
                 Timeout ->

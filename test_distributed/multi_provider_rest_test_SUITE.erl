@@ -35,12 +35,12 @@
     replicate_dir/1,
     posix_mode_get/1,
     posix_mode_put/1,
-    read_event_subscription_test/1,
     metric_get/1,
     list_file/1,
     list_dir/1,
     replicate_file_by_id/1,
-    metadata_changes_subscription_test/1
+    changes_stream_file_meta_test/1,
+    changes_stream_xattr_test/1
 ]).
 
 all() ->
@@ -50,12 +50,12 @@ all() ->
         replicate_dir,
         posix_mode_get,
         posix_mode_put,
-        read_event_subscription_test,
         metric_get,
         list_file,
         list_dir,
         replicate_file_by_id,
-        metadata_changes_subscription_test
+        changes_stream_file_meta_test,
+        changes_stream_xattr_test
     ]).
 
 %%%===================================================================
@@ -105,7 +105,7 @@ replicate_file(Config) ->
 
 replicate_dir(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     Dir1 = <<"/spaces/space3/dir1">>,
     Dir2 = <<"/spaces/space3/dir1/dir2">>,
     File1 = <<"/spaces/space3/dir1/file1">>,
@@ -187,28 +187,6 @@ posix_mode_put(Config) ->
         DecodedBody
     ).
 
-read_event_subscription_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    File = <<"/file3">>,
-    Mode = 8#700,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, rdwr),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>),
-    lfm_proxy:fsync(WorkerP1, Handle),
-
-    % when
-    spawn(fun() ->
-        timer:sleep(500),
-        lfm_proxy:read(WorkerP1, Handle, 0, 2),
-        lfm_proxy:read(WorkerP1, Handle, 0, 2),
-        lfm_proxy:read(WorkerP1, Handle, 2, 2),
-        lfm_proxy:fsync(WorkerP1, Handle)
-    end),
-    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"read_event/file3?timeout=3000">>, get, [user_1_token_header(Config)], []),
-    ?assertEqual(<<"{\"type\":\"read_event\",\"count\":3,\"size\":0,\"blocks\":[[0,4]]}\r\n">>, % todo check size
-        RespBody).
-
 metric_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
@@ -220,7 +198,7 @@ metric_get(Config) ->
 
 list_file(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     File = <<"/spaces/space3/file1">>,
     Mode = 8#700,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
@@ -254,7 +232,7 @@ list_dir(Config) ->
 
 replicate_file_by_id(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     File = <<"/spaces/space3/file">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
@@ -277,9 +255,9 @@ replicate_file_by_id(Config) ->
             [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
 
-metadata_changes_subscription_test(Config) ->
+changes_stream_file_meta_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, <<"user1">>}, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     File = <<"/file3">>,
     Mode = 8#700,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
@@ -294,56 +272,38 @@ metadata_changes_subscription_test(Config) ->
         lfm_proxy:fsync(WorkerP1, Handle),
         lfm_proxy:create(WorkerP1, SessionId, <<"/file4">>, Mode)
     end),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=3000">>,
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=4000">>,
         get, [user_1_token_header(Config)], []),
 
-    ct:print("~s", [Body]).
+    ct:print("~s", [Body]),
+    ?assertNotEqual(<<>>, Body),
+    ?assert(length(binary:split(Body, <<"\r\n">>, [global])) >= 2).
 
-%%    [<<>>, Change1Data, Change2Data] = binary:split(Body, <<"\r\n">>, [global]),
-%%    Change1 = json_utils:decode(Change1Data),
-%%    Change2 = json_utils:decode(Change2Data),
-%%    ?assertMatch(
-%%        [
-%%            {<<"changes">>, [
-%%                {<<"atime">>, _},
-%%                {<<"ctime">>, _},
-%%                {<<"is_scope">>, false},
-%%                {<<"mode">>, 8#700},
-%%                {<<"mtime">>, _},
-%%                {<<"scope">>, <<"space1">>},
-%%                {<<"size">>, 0},
-%%                {<<"type">>, <<"REG">>},
-%%                {<<"uid">>, <<"user1">>},
-%%                {<<"version">>, 1},
-%%                {<<"xattrs">>, []}
-%%            ]},
-%%            {<<"deleted">>, false},
-%%            {<<"file_id">>, FileGuid},
-%%            {<<"file_path">>, <<"/spaces/space1/file3">>},
-%%            {<<"name">>, <<"file3">>},
-%%            {<<"seq">>, _}
-%%        ], Change1),
-%%    ?assertMatch(
-%%        [
-%%            {<<"changes">>, [
-%%                {<<"atime">>, _},
-%%                {<<"ctime">>, _},
-%%                {<<"is_scope">>, false},
-%%                {<<"mode">>, 8#777},
-%%                {<<"mtime">>, _},
-%%                {<<"scope">>, <<"space1">>},
-%%                {<<"size">>, 0},
-%%                {<<"type">>, <<"REG">>},
-%%                {<<"uid">>, <<"user1">>},
-%%                {<<"version">>, 1},
-%%                {<<"xattrs">>, []}
-%%            ]},
-%%            {<<"deleted">>, false},
-%%            {<<"file_id">>, FileGuid},
-%%            {<<"file_path">>, <<"/spaces/space1/file3">>},
-%%            {<<"name">>, <<"file3">>},
-%%            {<<"seq">>, _}
-%%        ], Change2).
+changes_stream_xattr_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/file4">>,
+    Mode = 8#700,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+
+    % when
+    spawn(fun() ->
+        timer:sleep(500),
+        lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"name">>, value = <<"value">>})
+    end),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=4000">>,
+        get, [user_1_token_header(Config)], []),
+
+    ct:print("~s", [Body]),
+    ?assertNotEqual(<<>>, Body),
+    Changes = binary:split(Body, <<"\r\n">>, [global]),
+    ?assert(length(Changes) >= 1),
+    LastChangeJson = lists:last(Changes),
+    LastChange = json_utils:decode(LastChangeJson),
+    Changes = proplists:get_value(<<"changes">>, LastChange),
+    ?assertEqual([{<<"name">>, <<"value">>}], proplists:get_value(<<"xattrs">>, Changes)).
+
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

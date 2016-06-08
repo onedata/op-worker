@@ -43,8 +43,13 @@ rest_init(Req, _Opts) ->
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), #{}) -> ok.
+terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
+    gen_changes:stop(Stream),
+    Pid ! {Ref, stream_ended};
 terminate(_, _, #{changes_stream := Stream}) ->
-    gen_changes:stop(Stream).
+    gen_changes:stop(Stream);
+terminate(_, _, #{}) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
@@ -124,7 +129,7 @@ init_stream(State = #{last_seq := Since}) ->
 
     {ok, Stream} = couchdb_datastore_driver:changes_start_link(
         couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity),
-    State#{changes_stream => Stream, ref => Ref}.
+    State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -155,7 +160,7 @@ stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := Spa
 -spec send_change(function(), #change{}, space_info:id()) -> ok.
 send_change(SendChunk, #change{seq = Seq, doc = #document{
     key = XattrUuid, value = #xattr{}}}, RequestedSpaceId) ->
-    FileUuid = xattr:get_file_uuid(XattrUuid),
+    {ok, FileUuid} = xattr:get_file_uuid(XattrUuid),
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
     send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
         RequestedSpaceId);
@@ -171,7 +176,7 @@ send_change(SendChunk, Change, RequestedSpaceId) ->
 
     case SpaceId =:= RequestedSpaceId of
         true ->
-            Json = prepare_response(Change),
+            Json = prepare_response(Change, SpaceId),
             SendChunk(<<Json/binary, "\r\n">>);
         false ->
             ok
@@ -180,13 +185,13 @@ send_change(SendChunk, Change, RequestedSpaceId) ->
 %%--------------------------------------------------------------------
 %% @doc Prepare response in json format
 %%--------------------------------------------------------------------
--spec prepare_response(#change{}) -> binary().
-prepare_response(#change{seq = Seq, doc = #document{
+-spec prepare_response(#change{}, SpaceId :: binary()) -> binary().
+prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     key = Uuid, deleted = Deleted,
     value = #file_meta{
         atime = Atime, ctime = Ctime, is_scope = IsScope, mode = Mode,
-        mtime = Mtime, scope = Scope, size = Size, type = Type, uid = Uid,
-        version = Version, name = Name}}}) ->
+        mtime = Mtime, type = Type, uid = Uid,
+        version = Version, name = Name}}}, SpaceId) ->
     Ctx = fslogic_context:new(?ROOT_SESS_ID),
     Guid =
         try
@@ -216,6 +221,14 @@ prepare_response(#change{seq = Seq, doc = #document{
                 ?error("Cannot fetch xattrs for changes, error: ~p", [Error3]),
                 <<"fetching_error">>
         end,
+    Size =
+        try
+            fslogic_blocks:get_file_size(FileDoc)
+        catch
+            _:Error4 ->
+                ?error("Cannot fetch size for changes, error: ~p", [Error4]),
+                <<"fetching_error">>
+        end,
 
     Response =
         [
@@ -225,7 +238,7 @@ prepare_response(#change{seq = Seq, doc = #document{
                 {<<"is_scope">>, IsScope},
                 {<<"mode">>, Mode},
                 {<<"mtime">>, Mtime},
-                {<<"scope">>, fslogic_uuid:space_dir_uuid_to_spaceid(Scope)},
+                {<<"scope">>, SpaceId},
                 {<<"size">>, Size},
                 {<<"type">>, Type},
                 {<<"uid">>, Uid},
