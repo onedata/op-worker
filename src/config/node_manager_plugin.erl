@@ -95,7 +95,11 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
 -spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
 before_init([]) ->
     try
-        ok
+        ensure_correct_hostname(),
+
+        %% Load NIFs
+        ok = helpers_nif:init(),
+        ok = luma_nif:init()
     catch
         _:Error ->
             ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
