@@ -79,6 +79,8 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec init_stream(Since :: non_neg_integer(), Until :: non_neg_integer() | infinity, Queue :: queue()) ->
     {ok, pid()} | {error, Reason :: term()}.
+init_stream(undefined, Until, Queue) ->
+    init_stream(0, Until, Queue);
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
     case Queue of
@@ -180,6 +182,24 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
     ensure_global_stream_active(),
+
+    FlushInterval = ?FLUSH_QUEUE_INTERVAL,
+    FlushAgainAfter = FlushInterval + crypto:rand_uniform(0, round(?FLUSH_QUEUE_INTERVAL / 2)),
+
+    case QueueKey of
+        global ->
+            CTime = erlang:monotonic_time(milli_seconds),
+            case dbsync_utils:temp_get(last_global_flush) of
+                FTime when  is_integer(FTime),
+                            FTime + FlushInterval / 2 > CTime ->
+                    ?info("[ DBSync ] Flush loop is too fast, breaking this one."),
+                    throw({too_many_flush_loops, {flush_queue, QueueKey}});
+                _ ->
+                    dbsync_utils:temp_put(last_global_flush, CTime, 0)
+            end;
+        _ -> ok
+    end,
+
     state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
@@ -199,11 +219,11 @@ handle({flush_queue, QueueKey}) ->
                     ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
                     undefined;
                 false ->
-                    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
+                    timer:send_after(FlushAgainAfter, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
                     Queue#queue{batch_map = NewBatchMap}
             end;
             (undefined) when QueueKey =:= global ->
-                timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
+                timer:send_after(FlushAgainAfter, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
                 undefined;
             (undefined) ->
                 ?warning("Unknown operation on empty queue ~p", [QueueKey]),
@@ -761,9 +781,22 @@ is_valid_stream(_) ->
 %%--------------------------------------------------------------------
 -spec ensure_global_stream_active() -> ok.
 ensure_global_stream_active() ->
+    CTime = erlang:monotonic_time(milli_seconds),
+
+    %% Check if flush loop works
+    MaxFlushDelay = ?FLUSH_QUEUE_INTERVAL * 4,
+    case dbsync_utils:temp_get(last_global_flush) of
+        LastFlushTime when  is_integer(LastFlushTime),
+                            LastFlushTime + MaxFlushDelay > CTime ->
+            ok;
+        LastFlushTime ->
+            %% Initialize new flush loop
+            ?info("[ DBSync ] Flush loop is too slow (last timestamp: ~p vs current: ~p), starting new one.", [LastFlushTime, CTime]),
+            timer:send_after(0, whereis(dbsync_worker), {timer, {flush_queue, global}})
+    end,
+
     case is_valid_stream(state_get(changes_stream)) of
         true ->
-            CTime = erlang:monotonic_time(milli_seconds),
             MaxIdleTime = timer:seconds(10),
             case dbsync_utils:temp_get(last_change) of
                 undefined ->
