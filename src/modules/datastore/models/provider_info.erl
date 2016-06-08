@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([create_or_update/2, get_or_fetch/1, fetch/1]).
@@ -166,10 +167,21 @@ get_or_fetch(ProviderId) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(ProviderId) ->
     try
-        {ok, #provider_details{name = Name}} =
+        {ok, #provider_details{name = Name, urls = URLs}} =
             oz_providers:get_details(provider, ProviderId),
+        {PublicOnly, SpaceIDs} = case oz_providers:get_spaces(provider) of
+            {ok, SIDs} -> {false, SIDs};
+            {error, Res} ->
+                ?warning("Unable to fecth public info for provider ~p due to ~p", [
+                    ProviderId, Res]),
+                {true, []}
+        end,
+
         Doc = #document{key = ProviderId, value = #provider_info{
-            client_name = Name
+            client_name = Name,
+            urls = URLs,
+            space_ids = SpaceIDs,
+            public_only = PublicOnly
         }},
         {ok, _} = provider_info:save(Doc),
         {ok, Doc}
