@@ -619,9 +619,10 @@ translate_to_protobuf(#'proxyio_request'{parameters = Parameters, storage_id = S
     {proxyio_request, #'ProxyIORequest'{parameters = ParametersProto, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#provider_request{provider_request = Record}) ->
     {provider_request, #'ProviderRequest'{provider_request = translate_to_protobuf(Record)}};
-translate_to_protobuf(#provider_response{status = Status, provider_response = ProviderResponse}) ->
+translate_to_protobuf(#provider_response{status = #status{code = Code,
+    description = Description}, provider_response = ProviderResponse}) ->
     {provider_response, #'ProviderResponse'{
-        status = translate_to_protobuf(Status),
+        status = #'Status'{code = Code, description = Description},
         provider_response = translate_to_protobuf(ProviderResponse)
     }};
 translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
