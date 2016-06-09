@@ -52,14 +52,14 @@ token_auth(Config) ->
     Endpoint = rest_endpoint(Worker),
 
     % when
-    AuthFail = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, <<"invalid">>}]),
-    AuthSuccess1 = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, ?MACAROON}]),
-    AuthSuccess2 = do_request(get, Endpoint ++ "random_path", [{<<"Macaroon">>, ?MACAROON}]),
+    AuthFail = do_request(get, Endpoint ++ "files", [{<<"X-Auth-Token">>, <<"invalid">>}]),
+    AuthSuccess1 = do_request(get, Endpoint ++ "files", [{<<"X-Auth-Token">>, ?MACAROON}]),
+    AuthSuccess2 = do_request(get, Endpoint ++ "files", [{<<"Macaroon">>, ?MACAROON}]),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
-    ?assertMatch({ok, 404, _, _}, AuthSuccess1),
-    ?assertMatch({ok, 404, _, _}, AuthSuccess2).
+    ?assertMatch({ok, 200, _, _}, AuthSuccess1),
+    ?assertMatch({ok, 200, _, _}, AuthSuccess2).
 
 cert_auth(Config) ->
     % given
@@ -71,12 +71,12 @@ cert_auth(Config) ->
     KnownCertOpt = {ssl_options, [{certfile, CertKnown}, {reuse_sessions, false}]},
 
     % then - unauthorized access
-    {ok, 307, Headers, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [UnknownCertOpt]),
+    {ok, 307, Headers, _} = do_request(get, Endpoint ++ "files", [], <<>>, [UnknownCertOpt]),
     Loc = proplists:get_value(<<"location">>, Headers),
     ?assertMatch({ok, 401, _, _}, do_request(get, Loc, [], <<>>, [UnknownCertOpt])),
 
     % then - authorized access
-    {ok, 307, Headers2, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [KnownCertOpt]),
+    {ok, 307, Headers2, _} = do_request(get, Endpoint ++ "files", [], <<>>, [KnownCertOpt]),
     Loc2 = proplists:get_value(<<"location">>, Headers2),
     {ok, 307, Headers3, _} = do_request(get, Loc2, [], <<>>, [KnownCertOpt]),
     Loc3 = proplists:get_value(<<"location">>, Headers3),
@@ -86,10 +86,10 @@ internal_error_when_handler_crashes(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_crash/2),
+    test_utils:mock_expect(Workers, files, is_authorized, fun test_crash/2),
 
     % when
-    {ok, Status, _, _} = do_request(get, Endpoint ++ "random_path"),
+    {ok, Status, _, _} = do_request(get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(500, Status).
@@ -98,10 +98,10 @@ custom_code_when_handler_throws_code(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400/2),
+    test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400/2),
 
     % when
-    {ok, Status, _, _} = do_request(get, Endpoint ++ "random_path"),
+    {ok, Status, _, _} = do_request(get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(400, Status).
@@ -110,10 +110,10 @@ custom_error_when_handler_throws_error(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400_with_description/2),
+    test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400_with_description/2),
 
     % when
-    {ok, Status, _, Body} = do_request(get, Endpoint ++ "random_path"),
+    {ok, Status, _, Body} = do_request(get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(400, Status),
@@ -140,7 +140,7 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     application:start(ssl2),
     hackney:start(),
-    test_utils:mock_new(Workers, rest_handler),
+    test_utils:mock_new(Workers, files),
     Config;
 init_per_testcase(_, Config) ->
     application:start(ssl2),
@@ -154,7 +154,7 @@ end_per_testcase(Case, Config) when
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, rest_handler),
+    test_utils:mock_unload(Workers, files),
     hackney:stop(),
     application:stop(ssl2);
 end_per_testcase(_, Config) ->
@@ -188,7 +188,7 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    string:join(["https://", utils:get_host(Node), ":", Port, "/rest/latest/"], "").
+    string:join(["https://", utils:get_host(Node), ":", Port, "/api/v3/oneprovider/"], "").
 
 mock_oz_spaces(Config) ->
     Workers = ?config(op_worker_nodes, Config),
