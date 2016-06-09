@@ -114,14 +114,7 @@ before_init([]) ->
 %%--------------------------------------------------------------------
 -spec after_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
 after_init([]) ->
-    try
-        ok
-    catch
-        _:Error ->
-            ?error_stacktrace("Error in node_manager_plugin:after_init: ~p",
-                [Error]),
-            {error, cannot_start_node_manager_plugin}
-    end.
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
