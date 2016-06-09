@@ -293,7 +293,7 @@ get_file_distribution(SessId, FileKey) ->
             Distribution =
                 lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
                     [
-                        {<<"provider">>, ProviderId},
+                        {<<"providerId">>, ProviderId},
                         {<<"blocks">>, lists:map(fun(#file_block{offset = O, size = S}) ->
                             [O, S] end, Blocks)}
                     ]
