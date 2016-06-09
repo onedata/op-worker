@@ -59,7 +59,6 @@
     times_update_test/1,
     moving_dir_into_itself_test/1,
     moving_file_onto_itself_test/1,
-    rename_in_default_space_test/1,
     reading_from_open_file_after_rename_test/1]).
 
 all() ->
@@ -90,7 +89,6 @@ all() ->
         times_update_test,
         moving_dir_into_itself_test,
         moving_file_onto_itself_test,
-        rename_in_default_space_test,
         reading_from_open_file_after_rename_test
     ]).
 
@@ -605,8 +603,6 @@ moving_dir_into_itself_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
 
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")}, filename(1, TestDir, "/dir/dir_target"))),
-    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, <<"/", TestDir/binary, "/dir">>}, filename(1, TestDir, "/dir/dir_target"))),
-    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")}, <<"/", TestDir/binary, "/dir/dir_target">>)),
     ok.
 
 moving_file_onto_itself_test(Config) ->
@@ -618,17 +614,6 @@ moving_file_onto_itself_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/file"), 8#770)),
 
     ?assertEqual(ok, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, filename(1, TestDir, "/file"))),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")}, <<"/", TestDir/binary, "/file">>)),
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {path, <<"/", TestDir/binary, "/file">>}, filename(1, TestDir, "/file"))),
-    ok.
-
-rename_in_default_space_test(Config) ->
-    [W | _] = sorted_workers(Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-
-    {_, Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/file_to_rename">>, 8#770)),
-
-    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {guid, Guid}, <<"/renamed_file">>)),
     ok.
 
 reading_from_open_file_after_rename_test(Config) ->
@@ -732,7 +717,7 @@ end_per_testcase(CaseName, Config) ->
 filename(SpaceNo, TestDir, Suffix) ->
     SpaceNoBinary = integer_to_binary(SpaceNo),
     SuffixBinary = list_to_binary(Suffix),
-    <<"/spaces/space_name", SpaceNoBinary/binary, "/", TestDir/binary, SuffixBinary/binary>>.
+    <<"/space_name", SpaceNoBinary/binary, "/", TestDir/binary, SuffixBinary/binary>>.
 
 get_times(W, SessId, IdType, Ids) ->
     lists:map(

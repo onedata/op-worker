@@ -56,7 +56,7 @@ create_storage_test_file_test(Config) ->
     StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
 
     Response1 = ?req(Worker, SessId1, #create_storage_test_file{
@@ -82,7 +82,7 @@ verify_storage_test_file_test(Config) ->
     test_utils:set_env(Worker, ?APP_NAME, verify_storage_test_file_delay_seconds, 1),
     test_utils:set_env(Worker, ?APP_NAME, remove_storage_test_file_attempts, 1),
 
-    FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
     FileUuid = fslogic_uuid:file_guid_to_uuid(FileGuid),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId1, {guid, FileGuid}, write)),
