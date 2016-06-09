@@ -84,7 +84,7 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     ]},
     {subscriptions_worker, []},
     {fslogic_worker, []},
-    {dbsync_worker, []}
+    {singleton, dbsync_worker, []}
 ].
 
 %%--------------------------------------------------------------------

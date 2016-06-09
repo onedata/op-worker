@@ -72,17 +72,15 @@ fslogic_get_file_attr_test(Config) ->
             }
         }, ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}))
     end, [
-        {SessId1, UserId1, 8#1770, 0, <<"/">>},
-        {SessId2, UserId2, 8#1770, 0, <<"/">>},
-        {SessId1, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
-        {SessId2, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
-        {SessId1, <<"space_id1">>, 8#1770, 0, <<"/spaces/space_name1">>},
-        {SessId2, <<"space_id2">>, 8#1770, 0, <<"/spaces/space_name2">>},
-        {SessId1, <<"space_id3">>, 8#1770, 0, <<"/spaces/space_name3">>},
-        {SessId2, <<"space_id4">>, 8#1770, 0, <<"/spaces/space_name4">>}
+        {SessId1, UserId1, 8#1755, 0, <<"/">>},
+        {SessId2, UserId2, 8#1755, 0, <<"/">>},
+        {SessId1, <<"space_id1">>, 8#1770, 0, <<"/space_name1">>},
+        {SessId2, <<"space_id2">>, 8#1770, 0, <<"/space_name2">>},
+        {SessId1, <<"space_id3">>, 8#1770, 0, <<"/space_name3">>},
+        {SessId2, <<"space_id4">>, 8#1770, 0, <<"/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
-        SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/t1_dir">>}}
+        SessId1, #get_file_attr{entry = {path, <<"/space_name1/t1_dir">>}}
     )).
 
 fslogic_mkdir_and_rmdir_test(Config) ->
@@ -90,8 +88,8 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
-    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
+    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/space_name1">>}}),
+    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/space_name2">>}}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
@@ -107,7 +105,6 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, NewPath}}),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-        ?assertEqual(FileAttr, ?req(Worker, SessId, #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
         #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
         {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
@@ -121,12 +118,12 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     )),
 
 
-    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []},
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<"/space_name1">>, RootUUID1, []},
         [<<"t2_dir1">>, <<"t2_dir2">>, <<"t2_dir3">>]),
-    {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<>>, RootUUID2, []},
+    {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<"/space_name2">>, RootUUID2, []},
         [<<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
 
-    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, <<"space_name2">>,
+    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name2">>,
         <<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
     FileAttr = ?req(Worker, SessId1, #get_file_attr{entry = {path, TestPath1}}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
@@ -184,18 +181,14 @@ fslogic_read_dir_test(Config) ->
     end,
 
     lists:foreach(ValidateReadDir, [
-        {SessId1, <<"/spaces">>, [<<"space_name1">>, <<"space_name2">>, <<"space_name3">>, <<"space_name4">>]},
-        {SessId2, <<"/spaces">>, [<<"space_name2">>, <<"space_name3">>, <<"space_name4">>]},
-        {SessId3, <<"/spaces">>, [<<"space_name3">>, <<"space_name4">>]},
-        {SessId4, <<"/spaces">>, [<<"space_name4">>]},
-        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME]},
-        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME]},
-        {SessId3, <<"/">>, [?SPACES_BASE_DIR_NAME]},
-        {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]}
+        {SessId1, <<"/">>, [<<"space_name1">>, <<"space_name2">>, <<"space_name3">>, <<"space_name4">>]},
+        {SessId2, <<"/">>, [<<"space_name2">>, <<"space_name3">>, <<"space_name4">>]},
+        {SessId3, <<"/">>, [<<"space_name3">>, <<"space_name4">>]},
+        {SessId4, <<"/">>, [<<"space_name4">>]}
     ]),
 
-    RootUUID1 = get_guid_privileged(Worker, SessId1, <<"/">>),
-    RootUUID2 = get_guid_privileged(Worker, SessId2, <<"/">>),
+    RootUUID1 = get_guid_privileged(Worker, SessId1, <<"/space_name1">>),
+    RootUUID2 = get_guid_privileged(Worker, SessId2, <<"/space_name2">>),
 
     lists:foreach(fun({SessId, RootUUID, Dirs}) ->
         lists:foreach(fun(Name) ->
@@ -209,11 +202,9 @@ fslogic_read_dir_test(Config) ->
     ]),
 
     lists:foreach(ValidateReadDir, [
-        {SessId1, <<"/spaces/space_name1">>, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
-        {SessId1, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
-        {SessId2, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
-        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
-        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]}
+        {SessId1, <<"/space_name1">>, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
+        {SessId1, <<"/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId2, <<"/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]}
     ]),
 
     ok.
@@ -227,10 +218,10 @@ chmod_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = <<"/t4_test">>,
-            ParentUUID = get_guid_privileged(Worker, SessId, <<"/">>),
+            Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name4">>, SessId]),
+            ParentUUID = get_guid_privileged(Worker, SessId, <<"/space_name4">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"t4_test">>, mode = 8#000})),
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = SessId, mode = 8#000})),
             GUID = get_guid(Worker, SessId, Path),
 
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
@@ -260,11 +251,10 @@ default_permissions_test(Config) ->
 
         end, [
             {<<"/">>, [SessId1, SessId2, SessId3, SessId4]},
-            {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
-            {<<"/spaces/space_name1">>, [SessId1]},
-            {<<"/spaces/space_name2">>, [SessId1, SessId2]},
-            {<<"/spaces/space_name3">>, [SessId1, SessId2, SessId3]},
-            {<<"/spaces/space_name4">>, [SessId1, SessId2, SessId3, SessId4]}
+            {<<"/space_name1">>, [SessId1]},
+            {<<"/space_name2">>, [SessId1, SessId2]},
+            {<<"/space_name3">>, [SessId1, SessId2, SessId3]},
+            {<<"/space_name4">>, [SessId1, SessId2, SessId3, SessId4]}
         ]),
 
 
@@ -278,9 +268,9 @@ default_permissions_test(Config) ->
                 end, SessIds)
 
         end, [
-            {<<"/spaces/space_name1">>, [SessId2, SessId3, SessId4]},
-            {<<"/spaces/space_name2">>, [SessId3, SessId4]},
-            {<<"/spaces/space_name3">>, [SessId4]}
+            {<<"/space_name1">>, [SessId2, SessId3, SessId4]},
+            {<<"/space_name2">>, [SessId3, SessId4]},
+            {<<"/space_name3">>, [SessId4]}
         ]),
 
     lists:foreach( %% File
@@ -293,7 +283,7 @@ default_permissions_test(Config) ->
                 end, SessIds)
 
         end, [
-            {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]}
+            {<<"/">>, [SessId1, SessId2, SessId3, SessId4]}
         ]),
 
     lists:foreach( %% File
@@ -306,10 +296,10 @@ default_permissions_test(Config) ->
                 end, SessIds)
 
         end, [
-            {<<"/spaces/space_name1">>, [SessId2, SessId3, SessId4]},
-            {<<"/spaces/space_name2">>, [SessId3, SessId4]},
-            {<<"/spaces/space_name3">>, [SessId4]},
-            {<<"/spaces/space_name4">>, []}
+            {<<"/space_name1">>, [SessId2, SessId3, SessId4]},
+            {<<"/space_name2">>, [SessId3, SessId4]},
+            {<<"/space_name3">>, [SessId4]},
+            {<<"/space_name4">>, []}
         ]),
 
     lists:foreach(fun %% File
@@ -349,38 +339,37 @@ default_permissions_test(Config) ->
                 end, SessIds)
     end,
         [
-            {mkdir, <<"/spaces/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
-            {mkdir, <<"/spaces/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
-            {mkdir, <<"/spaces/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
-            {get_attr, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {get_attr, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {get_attr, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {get_attr, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {mkdir, <<"/spaces/space_name4">>, <<"test">>, 8#740, [SessId4], ?OK},
-            {mkdir, <<"/spaces/space_name4/test">>, <<"test">>, 8#1770, [SessId4], ?OK},
-            {mkdir, <<"/spaces/space_name4/test/test">>, <<"test">>, 8#730, [SessId4], ?OK},
-            {readdir, <<"/spaces/space_name4/test/test/test">>, [SessId4], ?OK},
-            {readdir, <<"/spaces/space_name4/test/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
-            {delete, <<"/spaces/space_name4/test/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
-            {delete, <<"/spaces/space_name4/test/test/test">>, [SessId4], ?OK},
-            {delete, <<"/spaces/space_name4/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
-            {delete, <<"/spaces/space_name4/test/test">>, [SessId4], ?OK},
-            {delete, <<"/spaces/space_name4/test">>, [SessId1, SessId2, SessId3], ?EACCES},
-            {delete, <<"/spaces/space_name4/test">>, [SessId4], ?OK},
+            {mkdir, <<"/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
+            {mkdir, <<"/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
+            {mkdir, <<"/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
+            {get_attr, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {get_attr, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {get_attr, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {get_attr, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId4], ?OK},
+            {mkdir, <<"/space_name4/test">>, <<"test">>, 8#1770, [SessId4], ?OK},
+            {mkdir, <<"/space_name4/test/test">>, <<"test">>, 8#730, [SessId4], ?OK},
+            {readdir, <<"/space_name4/test/test/test">>, [SessId4], ?OK},
+            {readdir, <<"/space_name4/test/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/space_name4/test/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/space_name4/test/test/test">>, [SessId4], ?OK},
+            {delete, <<"/space_name4/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/space_name4/test/test">>, [SessId4], ?OK},
+            {delete, <<"/space_name4/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/space_name4/test">>, [SessId4], ?OK},
             {chmod, <<"/">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
-            {chmod, <<"/spaces">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
-            {chmod, <<"/spaces/space_name1">>, 8#123, [SessId1], ?EACCES},
-            {chmod, <<"/spaces/space_name2">>, 8#123, [SessId1, SessId2], ?EACCES},
-            {chmod, <<"/spaces/space_name3">>, 8#123, [SessId1, SessId2, SessId3], ?EACCES},
-            {chmod, <<"/spaces/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
-            {mkdir, <<"/spaces/space_name4">>, <<"test">>, 8#740, [SessId3], ?OK},
-            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId1, SessId2], ?EACCES},
-            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId4], ?EACCES},
-            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId3], ?OK}
+            {chmod, <<"/space_name1">>, 8#123, [SessId1], ?EACCES},
+            {chmod, <<"/space_name2">>, 8#123, [SessId1, SessId2], ?EACCES},
+            {chmod, <<"/space_name3">>, 8#123, [SessId1, SessId2, SessId3], ?EACCES},
+            {chmod, <<"/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId3], ?OK},
+            {chmod, <<"/space_name4/test">>, 8#123, [SessId1, SessId2], ?EACCES},
+            {chmod, <<"/space_name4/test">>, 8#123, [SessId4], ?EACCES},
+            {chmod, <<"/space_name4/test">>, 8#123, [SessId3], ?OK}
         ]).
 
 
@@ -399,8 +388,8 @@ simple_rename_test(Config) ->
                 meck:passthrough([_Client, _SpaceId])
         end),
 
-    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
-    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
+    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/space_name1">>}}),
+    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/space_name2">>}}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
 
@@ -416,24 +405,22 @@ simple_rename_test(Config) ->
 
             FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, NewPath}}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-            ?assertEqual(FileAttr, ?req(Worker, SessId,
-                #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
             #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
             {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
         end,
 
-    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []},
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<"/space_name1">>, RootUUID1, []},
         [<<"t6_dir1">>, <<"t6_dir2">>, <<"t6_dir3">>]),
     [_, ToMove | _] = lists:reverse(UUIDs1),
 
-    RenameResp1 = ?req(Worker, SessId1, #rename{uuid = ToMove, target_path = <<"/spaces/space_name2/t6_dir4">>}),
+    RenameResp1 = ?req(Worker, SessId1, #rename{uuid = ToMove, target_path = <<"/space_name2/t6_dir4">>}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RenameResp1),
 
-    MovedFileAttr1 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/t6_dir4">>}}),
-    MovedFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/t6_dir4/t6_dir3">>}}),
-    MovedFileAttr3 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/t6_dir1/t6_dir2">>}}),
-    MovedFileAttr4 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/t6_dir1/t6_dir2/t6_dir3">>}}),
+    MovedFileAttr1 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/space_name2/t6_dir4">>}}),
+    MovedFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/space_name2/t6_dir4/t6_dir3">>}}),
+    MovedFileAttr3 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/space_name1/t6_dir1/t6_dir2">>}}),
+    MovedFileAttr4 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/space_name1/t6_dir1/t6_dir2/t6_dir3">>}}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr2),
@@ -459,10 +446,11 @@ update_times_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = <<"/t7_test">>,
-            ParentUUID = get_guid_privileged(Worker, SessId, <<"/">>),
+            FileName = <<"file_", SessId/binary>>,
+            Path = <<"/space_name4/", FileName/binary>>,
+            ParentUUID = get_guid_privileged(Worker, SessId, <<"/space_name4">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"t7_test">>, mode = 8#000})),
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = FileName, mode = 8#000})),
             GUID = get_guid(Worker, SessId, Path),
 
             {_OldATime, OldMTime, OldCTime} = GetTimes({guid, GUID}, SessId),
@@ -489,10 +477,8 @@ get_guid_privileged(Worker, SessId, Path) ->
     SessId1 = case Path of
                   <<"/">> ->
                       SessId;
-                  <<"/spaces">> ->
-                      SessId;
                   _ ->
-                      {ok, [_, _, SpaceName | _]} = fslogic_path:verify_file_path(Path),
+                      {ok, [_, SpaceName | _]} = fslogic_path:verify_file_path(Path),
                       hd(get(SpaceName))
               end,
     get_guid(Worker, SessId1, Path).

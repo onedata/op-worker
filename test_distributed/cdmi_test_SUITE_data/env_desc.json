@@ -82,7 +82,7 @@
         },
         "spaces": {
             "space1": {
-                "displayed_name": "space1",
+                "displayed_name": "space_name1",
                 "users": [
                     "user1"
                 ],

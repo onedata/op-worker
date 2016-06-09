@@ -327,9 +327,9 @@ handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = Request
     end;
 handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
     {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
-    SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+    UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
     case file_meta:to_uuid(Entry) of
-        {ok, SpacesDir} ->
+        {ok, UserRootDir} ->
             HandleLocallyFun(ProvMap, false);
         {ok, FileUUID} ->
             CurrentTime = erlang:system_time(seconds),

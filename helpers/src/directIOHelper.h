@@ -40,9 +40,9 @@ public:
     ~PosixHelperCTX();
 
     /**
-    * @copydoc IStorageHelper::setUserCtx
-    * It should contain 'uid' and 'gid' values.
-    */
+     * @copydoc IStorageHelper::setUserCtx
+     * It should contain 'uid' and 'gid' values.
+     */
     void setUserCTX(std::unordered_map<std::string, std::string> args) override;
 
     std::unordered_map<std::string, std::string> getUserCTX() override;
@@ -152,7 +152,7 @@ public:
     std::size_t sh_write(CTXPtr ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset) override;
 
-    bool needsDataConsistencyCheck();
+    bool needsDataConsistencyCheck() override;
 
 protected:
     template <class Result, typename... Args1, typename... Args2>

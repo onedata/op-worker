@@ -536,7 +536,7 @@ gen_test_env(Config) ->
     }.
 
 f(Space, FileName) ->
-    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"spaces">>, Space, FileName]).
+    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]).
 
 f(Space, Dirs, FileName) ->
-    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"spaces">>, Space] ++ Dirs ++ [FileName]).
+    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]).
