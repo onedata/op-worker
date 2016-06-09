@@ -172,7 +172,12 @@ saves_the_actual_data(Config) ->
             [<<"dad">>, <<"mom">>],
             <<"unit">>
         )),
-        update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        update(3, [<<"r2">>, <<"r1">>], P1, provider(
+            <<"diginet rulz">>,
+            [<<"url1">>, <<"url2">>],
+            [S1],
+            false
+        ))
     ]),
     expect_message([], 3, []),
 
@@ -220,7 +225,10 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, onedata_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
-        revision_history = [<<"r2">>, <<"r1">>]}}
+        revision_history = [<<"r2">>, <<"r1">>],
+        urls = [<<"url1">>, <<"url2">>],
+        space_ids = [S1],
+        public_only = false}}
     }, fetch(Node, provider_info, P1)),
     ok.
 
@@ -237,7 +245,7 @@ check_file_operations_test_base(Config, UpdateFun, IdExt) ->
     UpdateFun(Node, S1, U1, P1, Priv1, G1),
 
     %% then
-    FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
     OpenResult = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
     ?assertMatch({ok, _}, OpenResult),
@@ -474,7 +482,7 @@ space_without_support_test(Config) ->
     expect_message([U1], 4, []),
 
     %% then
-    FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
     ?assertMatch({error, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
     ok.
 
@@ -519,7 +527,12 @@ updates_with_the_actual_data(Config) ->
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
         ),
-        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(
+            <<"diginet rulz">>,
+            [<<"url1">>, <<"url2">>],
+            [S1],
+            true
+        ))
     ]),
     expect_message([], 9, []),
 
@@ -555,7 +568,10 @@ updates_with_the_actual_data(Config) ->
     }, fetch(Node, onedata_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
-        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>],
+        urls = [<<"url1">>, <<"url2">>],
+        space_ids = [S1],
+        public_only = true}}
     }, fetch(Node, provider_info, P1)),
     ok.
 
@@ -698,7 +714,10 @@ push_update(Node, Updates) ->
     ?assertMatch({ok, _}, Result).
 
 provider(Name) ->
-    {provider, [{client_name, Name}]}.
+    provider(Name, [], [], false).
+provider(Name, URLs, Spaces, PublicOnly) ->
+    {provider, [{client_name, Name}, {urls, URLs}, {space_ids, Spaces},
+        {public_only, PublicOnly}]}.
 
 space(Name) ->
     space(Name, [], [], []).

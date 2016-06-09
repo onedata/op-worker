@@ -58,8 +58,8 @@ check({{owner, 'or', ?write_attributes}, Doc, #document{key = UserId} = User, Ac
 check({{AccessType1, 'or', AccessType2}, Doc, User, Acl}) ->
     case
         {
-            catch check({AccessType1, Doc, User, Acl}),
-            catch check({AccessType2, Doc, User, Acl})
+                catch check({AccessType1, Doc, User, Acl}),
+                catch check({AccessType2, Doc, User, Acl})
         }
     of
         {ok, _} -> ok;
@@ -207,10 +207,9 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
 %%--------------------------------------------------------------------
 -spec validate_scope_access(FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_scope_access(FileDoc, UserId) ->
+    RootDirUUID = fslogic_uuid:user_root_dir_uuid(UserId),
     case file_meta:is_root_dir(FileDoc)
-        orelse file_meta:is_spaces_base_dir(FileDoc)
-        orelse file_meta:is_spaces_dir(FileDoc, UserId)
-    of
+        orelse RootDirUUID =:= FileDoc#document.key of
         true -> ok;
         false ->
             try fslogic_spaces:get_space(FileDoc, UserId) of

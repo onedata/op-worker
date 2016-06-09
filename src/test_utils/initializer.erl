@@ -328,11 +328,7 @@ teardown_sesion(Worker, Config) ->
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:default_space_uuid(UserId)])),
-            ?assertEqual(ok,
-                rpc:call(Worker, file_meta, delete,
-                    [fslogic_uuid:spaces_uuid(UserId)]
-                )),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:user_root_dir_uuid(UserId)])),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
             Acc;
