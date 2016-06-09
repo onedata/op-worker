@@ -1,12 +1,12 @@
 %%%--------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Unit tests for fslogic_acl module.
+%%% Unit tests for dbsync_utils module.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dbsync_utils_tests).
