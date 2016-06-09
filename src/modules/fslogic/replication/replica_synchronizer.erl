@@ -45,7 +45,6 @@ synchronize(Uuid, Block) ->
 %%--------------------------------------------------------------------
 -spec synchronize(file_meta:uuid(), fslogic_blocks:block(), boolean()) -> ok.
 synchronize(Uuid, Block = #file_block{size = RequestedSize}, Prefetch) ->
-    ?info("SYNCHRONIZE ~p ~p", [Uuid, Block]),
     EnlargedBlock = Block#file_block{size = max(RequestedSize, ?MINIMAL_SYNC_REQUEST)},
     trigger_prefetching(Uuid, EnlargedBlock, Prefetch),
     {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
@@ -100,7 +99,6 @@ trigger_prefetching(_, _, _) ->
 prefetch_data_fun(FileUuid, #file_block{offset = O, size = S}) ->
     fun() ->
         try
-            ?info("PREFETCH ~p ~p", [FileUuid, #file_block{offset = O + S, size = ?PREFETCH_SIZE - S}]),
             replica_synchronizer:synchronize(FileUuid, #file_block{offset = O + S, size = ?PREFETCH_SIZE - S}, false)
         catch
             _:Error ->
@@ -127,8 +125,7 @@ contains_trigger_byte(#file_block{offset = O, size = S}) ->
 %%--------------------------------------------------------------------
 -spec notify_fun(any(), any(), any()) -> ok.
 notify_fun(Ref, Offset, Size) ->
-    ?info("NOTIFY ~p ~p ~p", [Ref, Offset, Size]).
-
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -139,7 +136,6 @@ notify_fun(Ref, Offset, Size) ->
 on_complete_fun() ->
     Self = self(),
     fun(Ref, Status) ->
-        ?info("COMPLETE ~p, ~p", [Ref, Status]),
         Self ! {Ref, Status}
     end.
 
