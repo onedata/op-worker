@@ -46,7 +46,8 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 30, 10, 100).
+%%    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 30, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 30, 10, 35).
 
 proxy_test1(Config) ->
     synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
