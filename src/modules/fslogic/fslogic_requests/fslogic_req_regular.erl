@@ -20,7 +20,7 @@
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3,
     get_helper_params/3, release/2]).
--export([get_parent/2, synchronize_block/3, synchronize_block_and_compute_checksum/3,
+-export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
 %%%===================================================================
@@ -219,13 +219,13 @@ get_parent(CTX, File) ->
 %% Synchronizes given block with remote replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
+-spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block(), boolean()) ->
     #fuse_response{}.
-synchronize_block(CTX, {uuid, FileUUID}, undefined)  ->
+synchronize_block(CTX, {uuid, FileUUID}, undefined, Prefetch)  ->
     Size = fslogic_blocks:get_file_size({uuid, FileUUID}),
-    synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size});
-synchronize_block(_CTX, {uuid, FileUUID}, Block)  ->
-    ok = replica_synchronizer:synchronize(FileUUID, Block),
+    synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size}, Prefetch);
+synchronize_block(_CTX, {uuid, FileUUID}, Block, Prefetch)  ->
+    ok = replica_synchronizer:synchronize(FileUUID, Block, Prefetch),
     #fuse_response{status = #status{code = ?OK}}.
 
 
