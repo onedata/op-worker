@@ -37,7 +37,9 @@ new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_posix_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_s3_user_ctx(SessionId, SpaceUUID).
+    new_s3_user_ctx(SessionId, SpaceUUID);
+new_user_ctx(#helper_init{name = ?SWIFT_HELPER_NAME}, SessionId, SpaceUUID) ->
+    new_swift_user_ctx(SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -136,6 +138,28 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
                 secret_key = SecretKey
             }
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for Swift storage helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_swift_user_ctx(SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+new_swift_user_ctx(SessionId, SpaceUUID) ->
+    %% TODO VFS-2117 call luma service
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
+        space_storage:get(SpaceId),
+    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
+        storage:get(StorageId),
+
+    #swift_user_ctx{
+        user_name = maps:get(<<"user_name">>, Args),
+        password = maps:get(<<"password">>, Args)
+    }.
 
 
 %%--------------------------------------------------------------------
