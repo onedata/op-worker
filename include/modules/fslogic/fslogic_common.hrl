@@ -21,8 +21,6 @@
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).
 
 %% Common names
--define(SPACES_BASE_DIR_NAME, <<"spaces">>).
--define(SPACES_BASE_DIR_UUID, base64:encode(?SPACES_BASE_DIR_NAME)).
 -define(DIRECTORY_SEPARATOR, "/").
 -define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
 

@@ -169,7 +169,7 @@ cleanup() ->
     fuse_request | proxyio_request) -> #fuse_response{} | #proxyio_response{}.
 run_and_catch_exceptions(Function, Context, Request, Type) ->
     try
-        SpacesDir = fslogic_uuid:spaces_uuid(fslogic_context:get_user_id(Context)),
+        UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)),
         {NextCTX, Providers} =
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
@@ -186,7 +186,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                     end;
                 {file, Entry} ->
                     case file_meta:to_uuid(Entry) of
-                        {ok, SpacesDir} ->
+                        {ok, UserRootDir} ->
                             {Context, [oneprovider:get_provider_id()]};
                         _ ->
                             #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
@@ -434,10 +434,10 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_at
         {path, P} = FileEntry ->
             {ok, Tokens1} = fslogic_path:verify_file_path(P),
             case Tokens1 of
-                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId] ->
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId] ->
                     %% Handle root space dir locally
                     {provider, oneprovider:get_provider_id()};
-                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | _] ->
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
                     {space, SpaceId};
                 _ ->
                     {file, FileEntry}

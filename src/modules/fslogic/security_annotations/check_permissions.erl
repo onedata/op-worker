@@ -120,14 +120,7 @@ get_validation_subject(UserId, {guid, FileGUID}) ->
     get_validation_subject(UserId, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 get_validation_subject(UserId, FileEntry) ->
     {ok, #document{key = FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
-    DefaultSpaceDirUuid = fslogic_uuid:default_space_uuid(UserId),
-    case FileId of
-        DefaultSpaceDirUuid ->
-            {ok, #document{} = SpaceDoc} = fslogic_spaces:get_default_space(UserId),
-            SpaceDoc;
-        _ ->
-            FileDoc
-    end.
+    FileDoc.
 
 %%--------------------------------------------------------------------
 %% @doc Extracts file() from argument list (Inputs) based on Item description.
