@@ -38,6 +38,7 @@
     metric_get/1,
     list_file/1,
     list_dir/1,
+    list_dir_range/1,
     replicate_file_by_id/1,
     changes_stream_file_meta_test/1,
     changes_stream_xattr_test/1
@@ -53,6 +54,7 @@ all() ->
         metric_get,
         list_file,
         list_dir,
+        list_dir_range,
         replicate_file_by_id,
         changes_stream_file_meta_test,
         changes_stream_xattr_test
@@ -233,6 +235,22 @@ list_dir(Config) ->
         DecodedBody
     ).
 
+list_dir_range(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"files?offset=1&limit=1">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            [{<<"id">>, _}, {<<"path">>, <<"/space2">>}]
+        ],
+        DecodedBody
+    ).
+
 replicate_file_by_id(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
@@ -277,7 +295,7 @@ changes_stream_file_meta_test(Config) ->
         lfm_proxy:fsync(WorkerP1, Handle),
         lfm_proxy:create(WorkerP1, SessionId, File2, Mode)
     end),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=4000">>,
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
         get, [user_1_token_header(Config)], []),
 
     ct:print("~s", [Body]),
@@ -297,7 +315,7 @@ changes_stream_xattr_test(Config) ->
         timer:sleep(500),
         lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"name">>, value = <<"value">>})
     end),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=4000">>,
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
         get, [user_1_token_header(Config)], []),
 
     ct:print("~s", [Body]),

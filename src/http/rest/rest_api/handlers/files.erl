@@ -87,17 +87,19 @@ content_types_provided(Req, State) ->
 -spec list_files(req(), #{}) -> {term(), req(), #{}}.
 list_files(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
+    {State3, Req3} = validator:parse_offset(Req2, State2),
+    {State4, Req4} = validator:parse_limit(Req3, State3),
 
-    #{auth := Auth, path := Path} = State2,
+    #{auth := Auth, path := Path, offset := Offset, limit := Limit} = State4,
 
     Response =
         case onedata_file_api:stat(Auth, {path, Path}) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE, uuid = Guid}} ->
                 case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
-                    {ok, ChildNum} when ChildNum > ?MAX_ENTRIES ->
+                    {ok, ChildNum} when Limit > ?MAX_ENTRIES andalso ChildNum > ?MAX_ENTRIES ->
                         throw(?ERROR_TOO_MANY_ENTRIES);
                     {ok, ChildNum} ->
-                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, 0, ?MAX_ENTRIES),
+                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, Limit),
                         json_utils:encode(
                             lists:map(fun({Guid, ChildPath}) ->
                                 [{<<"id">>, Guid}, {<<"path">>, filename:join(Path, ChildPath)}]
@@ -106,4 +108,4 @@ list_files(Req, State) ->
             {ok, #file_attr{uuid = Guid}} ->
                 json_utils:encode([[{<<"id">>, Guid}, {<<"path">>, Path}]])
         end,
-    {Response, Req2, State2}.
+    {Response, Req4, State4}.

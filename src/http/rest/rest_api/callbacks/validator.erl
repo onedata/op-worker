@@ -18,14 +18,19 @@
 -define(ALLOWED_ATTRIBUTES, [<<"mode">>]).
 -define(DEFAULT_ATTRIBUTE, <<"mode">>).
 
--define(DEFAULT_TIMEOUT, infinity).
+-define(DEFAULT_TIMEOUT, <<"infinity">>).
 
--define(DEFAULT_LAST_SEQ, now).
+-define(DEFAULT_LAST_SEQ, <<"now">>).
+
+-define(MAX_LIMIT, 1000).
+-define(DEFAULT_LIMIT, <<"1001">>).
+
+-define(DEFAULT_OFFSET, <<"0">>).
 
 %% API
 -export([malformed_metrics_request/2, malformed_request/2, parse_path/2,
     parse_id/2, parse_attribute/2, parse_attribute_body/2, parse_provider_id/2,
-    parse_callback/2, parse_space_id/2, parse_timeout/2, parse_last_seq/2]).
+    parse_callback/2, parse_space_id/2, parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_limit/2]).
 
 %%%===================================================================
 %%% API
@@ -174,7 +179,7 @@ parse_space_id(Req, State = #{auth := Auth}) ->
 parse_timeout(Req, State) ->
     {RawTimeout, NewReq} = cowboy_req:qs_val(<<"timeout">>, Req, ?DEFAULT_TIMEOUT),
     case RawTimeout of
-        infinity ->
+        <<"infinity">> ->
             {State#{timeout => infinity}, NewReq};
         Number ->
             try binary_to_integer(Number) of
@@ -196,7 +201,7 @@ parse_timeout(Req, State) ->
 parse_last_seq(Req, State) ->
     {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
-        now ->
+        <<"now">> ->
             {State#{last_seq => dbsync_worker:state_get(global_resume_seq)}, NewReq};
         Number ->
             try binary_to_integer(Number) of
@@ -205,6 +210,50 @@ parse_last_seq(Req, State) ->
             catch
                 _:_ ->
                     throw(?ERROR_INVALID_LAST_SEQ)
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's offset and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_offset(cowboy_req:req(), #{}) ->
+    {#{id => binary()}, cowboy_req:req()}.
+parse_offset(Req, State) ->
+    {RawOffset, NewReq} = cowboy_req:qs_val(<<"offset">>, Req, ?DEFAULT_OFFSET),
+    try binary_to_integer(RawOffset) of
+        Offset ->
+            {State#{offset => Offset}, NewReq}
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_OFFSET)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's limit and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_limit(cowboy_req:req(), #{}) ->
+    {#{id => binary()}, cowboy_req:req()}.
+parse_limit(Req, State) ->
+    {RawLimit, NewReq} = cowboy_req:qs_val(<<"limit">>, Req, ?DEFAULT_LIMIT),
+    case RawLimit of
+        <<"infinity">> ->
+            {State#{limit => infinity}, NewReq};
+        _ ->
+            try binary_to_integer(RawLimit) of
+                Limit ->
+                    case Limit > ?MAX_LIMIT of
+                        true ->
+                            throw(?ERROR_LIMIT_TOO_LARGE(?MAX_LIMIT));
+                        false ->
+                            {State#{limit => Limit}, NewReq}
+                    end
+            catch
+                _:_ ->
+                    throw(?ERROR_INVALID_LIMIT)
             end
     end.
 

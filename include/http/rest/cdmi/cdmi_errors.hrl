@@ -26,7 +26,8 @@
 -define(ERROR_INVALID_CHILDRENRANGE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_childrenrange">>},
     {<<"error_description">>, <<"Requested childrenrange is invalid.">>}]}).
 -define(ERROR_TOO_LARGE_CHILDRENRANGE(MaxChildren), {?BAD_REQUEST, [{<<"error">>, <<"too_large_childrenrange">>},
-    {<<"error_description">>, <<"Requested childrenrange exceeds the limit of ", MaxChildren/integer, " entries.">>}]}).
+    {<<"error_description">>, <<"Requested childrenrange exceeds the limit of ",
+        (integer_to_binary(MaxChildren))/binary, " entries.">>}]}).
 -define(ERROR_INVALID_RANGE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_range">>},
     {<<"error_description">>, <<"Given range is invalid.">>}]}).
 -define(ERROR_INVALID_BASE64, {?BAD_REQUEST, [{<<"error">>, <<"invalid_base64">>},

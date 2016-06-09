@@ -30,6 +30,12 @@
     {<<"error_description">>, <<"Requested timeout is invalid, it must be of integer type.">>}]}).
 -define(ERROR_INVALID_LAST_SEQ, {?BAD_REQUEST, [{<<"error">>, <<"invalid_last_seq">>},
     {<<"error_description">>, <<"Requested last_seq is invalid, it must be of integer type.">>}]}).
+-define(ERROR_INVALID_OFFSET, {?BAD_REQUEST, [{<<"error">>, <<"invalid_offset">>},
+    {<<"error_description">>, <<"Requested offset is invalid, it must be of integer type.">>}]}).
+-define(ERROR_INVALID_LIMIT, {?BAD_REQUEST, [{<<"error">>, <<"invalid_limit">>},
+    {<<"error_description">>, <<"Requested limit is invalid, it must be of integer type.">>}]}).
+-define(ERROR_LIMIT_TOO_LARGE(Max), {?BAD_REQUEST, [{<<"error">>, <<"limit_too_large">>},
+    {<<"error_description">>, <<"Requested limit exceeds maximal value of ", (integer_to_binary(Max))/binary, ".">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},
