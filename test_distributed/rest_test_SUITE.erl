@@ -53,11 +53,13 @@ token_auth(Config) ->
 
     % when
     AuthFail = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, <<"invalid">>}]),
-    AuthSuccess = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, ?MACAROON}]),
+    AuthSuccess1 = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, ?MACAROON}]),
+    AuthSuccess2 = do_request(get, Endpoint ++ "random_path", [{<<"Macaroon">>, ?MACAROON}]),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
-    ?assertMatch({ok, 404, _, _}, AuthSuccess).
+    ?assertMatch({ok, 404, _, _}, AuthSuccess1),
+    ?assertMatch({ok, 404, _, _}, AuthSuccess2).
 
 cert_auth(Config) ->
     % given

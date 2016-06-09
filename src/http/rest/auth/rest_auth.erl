@@ -66,7 +66,12 @@ is_authorized(Req, State) ->
 authenticate(Req) ->
     case cowboy_req:header(<<"x-auth-token">>, Req) of
         {undefined, Req2} ->
-            authenticate_using_cert(Req2);
+            case cowboy_req:header(<<"macaroon">>, Req2) of
+                {undefined, Req3} ->
+                    authenticate_using_cert(Req3);
+                {Token, Req3} ->
+                    authenticate_using_token(Req3, Token)
+            end;
         {Token, Req2} ->
             authenticate_using_token(Req2, Token)
     end.
