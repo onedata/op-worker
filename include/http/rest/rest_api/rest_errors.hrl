@@ -13,39 +13,38 @@
 
 -ifndef(REST_ERRORS_HRL).
 -define(REST_ERRORS_HRL, 1).
-
 %% HTTP 400 errors
--define(ERROR_INVALID_ATTRIBUTE,
-  {?BAD_REQUEST, [{<<"error_invalid_attribute">>, <<"Given attribute is not valid">>}]}).
--define(ERROR_INVALID_ATTRIBUTE_BODY,
-  {?BAD_REQUEST, [{<<"error_invalid_attribute_body">>, <<"Request's body is malformed, provide one valid attribute with its value.">>}]}).
--define(ERROR_INVALID_MODE,
-  {?BAD_REQUEST, [{<<"error_invalid_mode">>, <<"Given mode is invalid, it should be provided in octal form.">>}]}).
--define(ERROR_TOO_MANY_ENTRIES,
-  {?BAD_REQUEST, [{<<"error_too_many_entries">>, <<"The directory contains too many entries to list them all, ask for specific range.">>}]}).
--define(ERROR_INVALID_METRIC,
-  {?BAD_REQUEST, [{<<"error_invalid_metric">>, <<"Requested metric is invalid.">>}]}).
--define(ERROR_INVALID_STEP,
-  {?BAD_REQUEST, [{<<"error_invalid_step">>, <<"Requested step is invalid.">>}]}).
--define(ERROR_INVALID_TIMEOUT,
-  {?BAD_REQUEST, [{<<"error_invalid_timeout">>, <<"Requested timeout is invalid, it must be of integer type.">>}]}).
--define(ERROR_INVALID_LAST_SEQ,
-  {?BAD_REQUEST, [{<<"error_invalid_last_seq">>, <<"Requested last_seq is invalid, it must be of integer type.">>}]}).
+-define(ERROR_INVALID_ATTRIBUTE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_attribute">>},
+    {<<"error_description">>, <<"Given attribute is not valid">>}]}).
+-define(ERROR_INVALID_ATTRIBUTE_BODY, {?BAD_REQUEST, [{<<"error">>, <<"invalid_attribute_body">>},
+    {<<"error_description">>, <<"Request's body is malformed, provide one valid attribute with its value.">>}]}).
+-define(ERROR_INVALID_MODE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_mode">>},
+    {<<"error_description">>, <<"Given mode is invalid, it should be provided in octal form.">>}]}).
+-define(ERROR_TOO_MANY_ENTRIES, {?BAD_REQUEST, [{<<"error">>, <<"too_many_entries">>},
+    {<<"error_description">>, <<"The directory contains too many entries to list them all, ask for specific range.">>}]}).
+-define(ERROR_INVALID_METRIC, {?BAD_REQUEST, [{<<"error">>, <<"invalid_metric">>},
+    {<<"error_description">>, <<"Requested metric is invalid.">>}]}).
+-define(ERROR_INVALID_STEP, {?BAD_REQUEST, [{<<"error">>, <<"invalid_step">>},
+    {<<"error_description">>, <<"Requested step is invalid.">>}]}).
+-define(ERROR_INVALID_TIMEOUT, {?BAD_REQUEST, [{<<"error">>, <<"invalid_timeout">>},
+    {<<"error_description">>, <<"Requested timeout is invalid, it must be of integer type.">>}]}).
+-define(ERROR_INVALID_LAST_SEQ, {?BAD_REQUEST, [{<<"error">>, <<"invalid_last_seq">>},
+    {<<"error_description">>, <<"Requested last_seq is invalid, it must be of integer type.">>}]}).
 
 %% HTTP 401 errors
--define(ERROR_UNAUTHORIZED,
-  {?NOT_AUTHORIZED, [{<<"error_unauthorized">>, <<"Error unauthorized.">>}]}).
+-define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},
+    {<<"error_description">>, <<"Error unauthorized.">>}]}).
 
 %% HTTP 403 errors
--define(ERROR_PERMISSION_DENIED,
-  {?FORBIDDEN, [{<<"error_permission_denied">>, <<"Permission denied.">>}]}).
--define(ERROR_FORBIDDEN,
-  {?FORBIDDEN, [{<<"error_forbidden">>, <<"Operation not permitted.">>}]}).
+-define(ERROR_PERMISSION_DENIED, {?FORBIDDEN, [{<<"error">>, <<"permission_denied">>},
+    {<<"error_description">>, <<"Permission denied.">>}]}).
+-define(ERROR_FORBIDDEN, {?FORBIDDEN, [{<<"error">>, <<"forbidden">>},
+    {<<"error_description">>, <<"Operation not permitted.">>}]}).
 
 %% HTTP 404 errors
--define(ERROR_NOT_FOUND,
-  {?NOT_FOUND, [{<<"error_not_found">>, <<"The resource could not be found.">>}]}).
--define(ERROR_SPACE_NOT_FOUND,
-  {?NOT_FOUND, [{<<"error_space_not_found">>, <<"The space could not be found.">>}]}).
+-define(ERROR_NOT_FOUND, {?NOT_FOUND, [{<<"error">>, <<"not_found">>},
+    {<<"error_description">>, <<"The resource could not be found.">>}]}).
+-define(ERROR_SPACE_NOT_FOUND, {?NOT_FOUND, [{<<"error">>, <<"space_not_found">>},
+    {<<"error_description">>, <<"The space could not be found.">>}]}).
 
 -endif.
