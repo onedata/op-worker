@@ -96,10 +96,11 @@ list_files(Req, State) ->
         case onedata_file_api:stat(Auth, {path, Path}) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE, uuid = Guid}} ->
                 case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
-                    {ok, ChildNum} when Limit > ?MAX_ENTRIES andalso ChildNum > ?MAX_ENTRIES ->
+                    {ok, ChildNum} when Limit =:= undefined andalso ChildNum > ?MAX_ENTRIES ->
                         throw(?ERROR_TOO_MANY_ENTRIES);
                     {ok, ChildNum} ->
-                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, Limit),
+                        DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
+                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
                         json_utils:encode(
                             lists:map(fun({Guid, ChildPath}) ->
                                 [{<<"id">>, Guid}, {<<"path">>, filename:join(Path, ChildPath)}]

@@ -16,6 +16,10 @@
 %% HTTP 400 errors
 -define(ERROR_INVALID_ATTRIBUTE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_attribute">>},
     {<<"error_description">>, <<"Given attribute is not valid">>}]}).
+-define(ERROR_UNDEFINED_ATTRIBUTE, {?BAD_REQUEST, [{<<"error">>, <<"undefined_attribute">>},
+    {<<"error_description">>, <<"You must define attribute name when requesting for extended attribute.">>}]}).
+-define(ERROR_INVALID_EXTENDED_FLAG, {?BAD_REQUEST, [{<<"error">>, <<"invalid_extended_flag">>},
+    {<<"error_description">>, <<"Given extended flag is not a valid boolean.">>}]}).
 -define(ERROR_INVALID_ATTRIBUTE_BODY, {?BAD_REQUEST, [{<<"error">>, <<"invalid_attribute_body">>},
     {<<"error_description">>, <<"Request's body is malformed, provide one valid attribute with its value.">>}]}).
 -define(ERROR_INVALID_MODE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_mode">>},

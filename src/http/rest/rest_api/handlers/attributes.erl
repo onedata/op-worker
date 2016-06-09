@@ -94,13 +94,29 @@ content_types_accepted(Req, State) ->
 -spec get_file_attributes(req(), #{}) -> {term(), req(), #{}}.
 get_file_attributes(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_attribute(Req2, State2),
+    {State3, Req3} = validator:parse_extended(Req2, State2),
+    {State4, Req4} = validator:parse_attribute(Req3, State3),
 
-    #{auth := Auth, path := Path, attribute := <<"mode">>} = State3,
+    #{auth := Auth, path := Path, attribute := Attribute, extended := Extended} = State4,
 
-    {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
-    Response = json_utils:encode([{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
-    {Response, Req3, State3}.
+    case {Attribute, Extended} of
+        {ModeOrUndefined, false} when ModeOrUndefined =:= <<"mode">> ; ModeOrUndefined =:= undefined ->
+            {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
+            Response = json_utils:encode([[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]]),
+            {Response, Req4, State4};
+        {undefined, true} ->
+            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}),
+            RawResponse = lists:map(fun(XattrName) ->
+                {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName),
+                [{<<"name">>, XattrName}, {<<"value">>, Value}]
+            end, Xattrs),
+            Response = json_utils:encode(RawResponse),
+            {Response, Req4, State4};
+        {XattrName, true} ->
+            {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName),
+            Response = json_utils:encode([[{<<"name">>, XattrName}, {<<"value">>, Value}]]),
+            {Response, Req4, State4}
+    end.
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/attributes/{path}'
@@ -114,12 +130,18 @@ get_file_attributes(Req, State) ->
 -spec set_file_attribute(req(), #{}) -> {term(), req(), #{}}.
 set_file_attribute(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_attribute_body(Req2, State2),
+    {State3, Req3} = validator:parse_extended(Req2, State2),
+    {State4, Req4} = validator:parse_attribute_body(Req3, State3),
 
-    #{attribute_body := {<<"mode">>, Mode}, path := Path, auth := Auth} = State3,
+    #{attribute_body := {Attribute, Value}, path := Path, auth := Auth, extended := Extended} = State4,
 
-    ok = onedata_file_api:set_perms(Auth, {path, Path}, Mode),
-    {true, Req3, State3}.
+    case {Attribute, Extended} of
+        {<<"mode">>, false} ->
+            ok = onedata_file_api:set_perms(Auth, {path, Path}, Value);
+        {_, true} ->
+            ok = onedata_file_api:set_xattr(Auth, {path, Path}, #xattr{name = Attribute, value = Value})
+    end,
+    {true, Req4, State4}.
 
 %%%===================================================================
 %%% Internal functions

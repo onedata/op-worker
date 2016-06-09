@@ -15,22 +15,22 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
--define(ALLOWED_ATTRIBUTES, [<<"mode">>]).
--define(DEFAULT_ATTRIBUTE, <<"mode">>).
+-define(ALLOWED_ATTRIBUTES, [<<"mode">>, undefined]).
+-define(DEFAULT_EXTENDED, <<"false">>).
 
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
 
 -define(DEFAULT_LAST_SEQ, <<"now">>).
 
 -define(MAX_LIMIT, 1000).
--define(DEFAULT_LIMIT, <<"1001">>).
 
 -define(DEFAULT_OFFSET, <<"0">>).
 
 %% API
 -export([malformed_metrics_request/2, malformed_request/2, parse_path/2,
-    parse_id/2, parse_attribute/2, parse_attribute_body/2, parse_provider_id/2,
-    parse_callback/2, parse_space_id/2, parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_limit/2]).
+    parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
+    parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_timeout/2,
+    parse_last_seq/2, parse_offset/2, parse_limit/2]).
 
 %%%===================================================================
 %%% API
@@ -81,20 +81,40 @@ parse_id(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Retrieves request's xattr flag and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_extended(cowboy_req:req(), #{}) ->
+    {#{extended => binary()}, cowboy_req:req()}.
+parse_extended(Req, State) ->
+    {Extended, NewReq} = cowboy_req:qs_val(<<"extended">>, Req, ?DEFAULT_EXTENDED),
+    case Extended of
+        <<"true">> ->
+            {State#{extended => true}, NewReq};
+        <<"false">> ->
+            {State#{extended => false}, NewReq};
+        _ ->
+            throw(?ERROR_INVALID_EXTENDED_FLAG)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Retrieves request's attribute and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_attribute(cowboy_req:req(), #{}) ->
     {#{attribute => binary()}, cowboy_req:req()}.
+parse_attribute(Req, State = #{extended := true}) ->
+    {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
+    {State#{attribute => Attribute}, NewReq};
 parse_attribute(Req, State) ->
-    {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req, ?DEFAULT_ATTRIBUTE),
+    {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
     case lists:member(Attribute, ?ALLOWED_ATTRIBUTES) of
         true ->
             {State#{attribute => Attribute}, NewReq};
         false ->
             throw(?ERROR_INVALID_ATTRIBUTE)
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,15 +123,20 @@ parse_attribute(Req, State) ->
 %%--------------------------------------------------------------------
 -spec parse_attribute_body(cowboy_req:req(), #{}) ->
     {#{attribute_body => {binary(), binary()}}, cowboy_req:req()}.
-parse_attribute_body(Req, State) ->
+parse_attribute_body(Req, State = #{extended := Extended}) ->
     {ok, Body, Req2} = cowboy_req:body(Req),
 
     Json = json_utils:decode(Body),
     case {
         proplists:get_value(<<"name">>, Json),
-        proplists:get_value(<<"value">>, Json)
+        proplists:get_value(<<"value">>, Json),
+        Extended
     } of
-        {<<"mode">>, Value} ->
+        {undefined, _, _} ->
+            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
+        {_, undefined, _} ->
+            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
+        {<<"mode">>, Value, false} ->
             try binary_to_integer(Value, 8) of
                 Mode ->
                     {State#{attribute_body => {<<"mode">>, Mode}}, Req2}
@@ -119,12 +144,10 @@ parse_attribute_body(Req, State) ->
                _:_ ->
                    throw(?ERROR_INVALID_MODE)
             end;
-        {undefined, _} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
-        {_, undefined} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
-        {_Attr, _Value} ->
-            throw(?ERROR_INVALID_ATTRIBUTE)
+        {_Attr, _Value, false} ->
+            throw(?ERROR_INVALID_ATTRIBUTE);
+        {Attr, Value, true} ->
+            {State#{attribute_body => {Attr, Value}}, Req2}
     end.
 
 %%--------------------------------------------------------------------
@@ -238,10 +261,10 @@ parse_offset(Req, State) ->
 -spec parse_limit(cowboy_req:req(), #{}) ->
     {#{id => binary()}, cowboy_req:req()}.
 parse_limit(Req, State) ->
-    {RawLimit, NewReq} = cowboy_req:qs_val(<<"limit">>, Req, ?DEFAULT_LIMIT),
+    {RawLimit, NewReq} = cowboy_req:qs_val(<<"limit">>, Req),
     case RawLimit of
-        <<"infinity">> ->
-            {State#{limit => infinity}, NewReq};
+        undefined ->
+            {State#{limit => undefined}, NewReq};
         _ ->
             try binary_to_integer(RawLimit) of
                 Limit ->
