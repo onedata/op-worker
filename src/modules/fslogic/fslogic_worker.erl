@@ -362,7 +362,7 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = File
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = FileGUID}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
-    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block, false);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

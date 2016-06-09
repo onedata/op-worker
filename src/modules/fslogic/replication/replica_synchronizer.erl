@@ -112,7 +112,7 @@ prefetch_data_fun(FileUuid, #file_block{offset = O, size = S}) ->
 %% Returns true if given blocks contains trigger byte.
 %% @end
 %%--------------------------------------------------------------------
--spec contains_trigger_byte(fslogic_blocks:block()) -> function().
+-spec contains_trigger_byte(fslogic_blocks:block()) -> boolean().
 contains_trigger_byte(#file_block{offset = O, size = S}) ->
     ((O rem ?TRIGGER_BYTE) == 0) orelse
         ((O rem ?TRIGGER_BYTE) + S >= ?TRIGGER_BYTE).
@@ -124,7 +124,7 @@ contains_trigger_byte(#file_block{offset = O, size = S}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_fun(any(), any(), any()) -> ok.
-notify_fun(Ref, Offset, Size) ->
+notify_fun(_Ref, _Offset, _Size) ->
     ok.
 
 %%--------------------------------------------------------------------
