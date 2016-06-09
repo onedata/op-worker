@@ -24,34 +24,11 @@
 -export([get_provider_url/1, get_provider_urls/1, encode_term/1, decode_term/1, gen_request_id/0]).
 -export([communicate/2]).
 -export([temp_get/1, temp_put/3, temp_clear/1]).
--export([validate_space_access/2, normalize_seq/1]).
+-export([validate_space_access/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Normalizes given sequence number to non negative integer.
-%% @end
-%%--------------------------------------------------------------------
--spec normalize_seq(Seq :: non_neg_integer() | binary()) -> non_neg_integer().
-normalize_seq(Seq) when is_integer(Seq) ->
-    Seq;
-normalize_seq(SeqBin) when is_binary(SeqBin) ->
-    try binary_to_integer(SeqBin, 10) of
-        Seq -> Seq
-    catch
-        _:_ ->
-            try
-                [SeqStable, _SeqCurrent] = binary:split(SeqBin, <<"::">>),
-                normalize_seq(SeqStable)
-            catch
-                _:_ ->
-                    throw({invalid_seq_format, SeqBin})
-            end
-    end.
-
 
 %%--------------------------------------------------------------------
 %% @doc

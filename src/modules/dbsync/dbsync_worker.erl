@@ -101,7 +101,8 @@ init_stream(Since, Until, Queue) ->
             (_, stream_ended, _) ->
                 worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
             (Seq, Doc, Model) ->
-                worker_proxy:call(dbsync_worker, {Queue, #change{seq = dbsync_utils:normalize_seq(Seq), doc = Doc, model = Model}})
+                worker_proxy:call(dbsync_worker, {Queue,
+                    #change{seq = couchdb_datastore_driver:normalize_seq(Seq), doc = Doc, model = Model}})
         end, Since, Until).
 
 %%--------------------------------------------------------------------
