@@ -46,7 +46,7 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 15, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 30, 10, 100).
 
 proxy_test1(Config) ->
     synchronization_test_base(Config, <<"user2">>, {0,2,1}, 0, 10, 100).
@@ -101,7 +101,6 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyStats = fun(File, IsDir) ->
         VerAns = Verify(fun(W) ->
-%%            ct:print("xxxx ~p", [{File, IsDir, W}]),
             case IsDir of
                 true ->
                     ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
@@ -312,20 +311,15 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         end),
         NewAcc
     end, <<>>, Workers),
-
-%%    ct:print("aaaaa1"),
 %%
 %%    Master = self(),
 %%    lists:foreach(fun(W) ->
 %%        spawn_link(fun() ->
 %%            Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 %%            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755),
-%%            ct:print("bbbb1 ~p", [{W, MkAns}]),
 %%            Master ! {mkdir_ans, Level2TmpDir, MkAns}
 %%        end)
 %%    end, Workers),
-%%
-%%    ct:print("aaaaa2"),
 %%
 %%    Level2TmpDirs = lists:foldl(fun(_, Acc) ->
 %%        MkAnsCheck =
@@ -335,27 +329,21 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 %%            after timer:seconds(2*Attempts+2) ->
 %%                {error, timeout}
 %%            end,
-%%        ct:print("bbbb2 ~p", [MkAnsCheck]),
 %%        ?assertMatch({_, {ok, _}}, MkAnsCheck),
 %%        {Level2TmpDir, _} = MkAnsCheck,
 %%        VerifyStats(Level2TmpDir, true),
 %%        [Level2TmpDir | Acc]
 %%    end, [], Workers),
 %%
-%%    ct:print("aaaaa3"),
-%%
 %%    lists:foreach(fun(Level2TmpDir) ->
 %%        lists:foreach(fun(W2) ->
 %%            spawn_link(fun() ->
 %%                Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
 %%                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755),
-%%                ct:print("bbbb3 ~p", [{W2, Level3TmpDir, MkAns}]),
 %%                Master ! {mkdir_ans, Level3TmpDir, MkAns}
 %%            end)
 %%        end, Workers)
 %%    end, Level2TmpDirs),
-%%
-%%    ct:print("aaaaa4"),
 %%
 %%    lists:foreach(fun(_) ->
 %%        lists:foreach(fun(_) ->
@@ -366,14 +354,12 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 %%                after timer:seconds(2*Attempts+2) ->
 %%                    {error, timeout}
 %%                end,
-%%            ct:print("bbbb4 ~p", [MkAnsCheck]),
 %%            ?assertMatch({_, {ok, _}}, MkAnsCheck),
 %%            {Level3TmpDir, _} = MkAnsCheck,
 %%            VerifyStats(Level3TmpDir, true)
 %%        end, Workers)
 %%    end, Level2TmpDirs),
 %%
-%%    ct:print("aaaaa5"),
     ok.
 
 %%%===================================================================

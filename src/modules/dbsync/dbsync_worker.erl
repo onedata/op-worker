@@ -353,7 +353,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
     NewChanges = lists:sort(lists:flatten(Changes)),
     do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true),
 
-    %% Apply old changes that weren't applied previously
+    %% Some changes might be waiting fir applied changes
     catch consume_batches(FromProvider, SpaceId).
 
 %%--------------------------------------------------------------------
@@ -365,7 +365,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
     ok | no_return().
 do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch,
     ShouldRequest) ->
-    ?info("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
+    ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil + 1 < Since of
         true ->
