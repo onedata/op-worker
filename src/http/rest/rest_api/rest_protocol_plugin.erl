@@ -40,8 +40,9 @@ routes() ->
             handler_initial_opts => #{subject_type => user}}},
         {"/api/v3/oneprovider/replicas/[...]", #{handler => replicas}},
         {"/api/v3/oneprovider/replicas-id/:id", #{handler => replicas,
-            handler_initial_opts => #{resource_type => id}}}
-    ].
+            handler_initial_opts => #{resource_type => id}}},
+        {"/api/v3/oneprovider/spaces", #{handler => spaces}}
+].
 
 
 %%%===================================================================
