@@ -196,15 +196,11 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
             {length(ZerosList), length(LocationsList)}
         end,
-        ToMatch = {(SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes - ProxyNodesWritten,
-            SyncNodes*SyncNodes + ProxyNodesWritten},
+        ToMatch = {(SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes
+            - ProxyNodesWritten*NodesOfWriteProvider,
+            SyncNodes*SyncNodes + ProxyNodesWritten*NodesOfWriteProvider},
         ?match(ToMatch, AssertLocations(), Attempts)
-
-        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes
-    - ProxyNodesWritten*NodesOfWriteProvider, length(ZerosList)),
-?assertEqual(SyncNodes*SyncNodes + ProxyNodesWritten*NodesOfWriteProvider, length(LocationsList))
-
-end,
+    end,
     VerifyFile({2, Level2File}),
 
     lists:foreach(fun(W) ->
