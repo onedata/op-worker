@@ -304,11 +304,10 @@ changes_stream_xattr_test(Config) ->
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
     ?assert(length(Changes) >= 1),
-    LastChangeJson = lists:last(Changes),
+    [_, LastChangeJson | _] = lists:reverse(Changes),
     LastChange = json_utils:decode(LastChangeJson),
-    Changes = proplists:get_value(<<"changes">>, LastChange),
-    ?assertEqual([{<<"name">>, <<"value">>}], proplists:get_value(<<"xattrs">>, Changes)).
-
+    Metadata = proplists:get_value(<<"changes">>, LastChange),
+    ?assertEqual([{<<"name">>, <<"value">>}], proplists:get_value(<<"xattrs">>, Metadata)).
 
 
 %%%===================================================================
