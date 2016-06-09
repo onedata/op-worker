@@ -72,6 +72,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     timer:sleep(10000), % TODO - connection must appear after mock setup
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     ProvIDs = lists:map(fun(Worker) ->
         rpc:call(Worker, oneprovider, get_provider_id, [])
     end, Workers),
@@ -82,7 +83,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         end, [], Workers)
     end,
 
-    Dir = generator:gen_name(),
+    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
