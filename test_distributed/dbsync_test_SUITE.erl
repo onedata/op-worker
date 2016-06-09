@@ -282,6 +282,9 @@ global_stream_with_proto_test(MultiConfig) ->
             D0
         end, lists:seq(1, 5)),
 
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, create,
+        [space, <<"space_name1">>, storage_used, #monitoring_state{}])),
+
     timer:sleep(timer:seconds(10)),
 
     RevPerPath = lists:map(
@@ -341,6 +344,9 @@ global_stream_with_proto_test(MultiConfig) ->
                 end, maps:to_list(PathMap))
         end, RevPerPath),
 
+    ?assertEqual({ok, #monitoring_state{}}, rpc:call(WorkerP2, monitoring_state,
+        get, [space, <<"space_name1">>, storage_used, Prov1ID])),
+
     {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/space_name1">>}, 0, 100),
     {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/space_name1">>}, 0, 100),
 
@@ -384,6 +390,11 @@ init_per_testcase(_, Config) ->
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_spaces_for_provider,
         fun(_) ->
             [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>]
+        end),
+
+    test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, validate_space_access,
+        fun(_, _) ->
+            ok
         end),
 
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, communicate,
