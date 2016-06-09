@@ -108,7 +108,6 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyStats = fun(File, IsDir) ->
         VerAns = Verify(fun(W) ->
-            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
             case IsDir of
                 true ->
                     ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
