@@ -280,7 +280,7 @@ posix_write_dir_user_test(Config) ->
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#570)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId3, <<"/space_name3/t7_dir/file2">>, 8#770)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:mv(W, SessId3, {guid, File2GUID}, <<"/space_name3/t7_dir/renamed_file">>)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:mv(W, SessId3, {guid, File2GUID}, <<"/space_name3/t7_dir/renamed_file">>)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId3, {guid, File1GUID})),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#370)),
@@ -300,7 +300,7 @@ posix_write_dir_group_test(Config) ->
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#750)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId1, <<"/space_name3/t8_dir/file2">>, 8#770)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:mv(W, SessId1, {guid, File2GUID}, <<"/space_name3/t8_dir/renamed_file">>)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:mv(W, SessId1, {guid, File2GUID}, <<"/space_name3/t8_dir/renamed_file">>)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {guid, File1GUID})),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {guid, DirGUID}, 8#730)),
