@@ -16,6 +16,7 @@
 -include("http/http_common.hrl").
 -include("http/rest/http_status.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
@@ -137,7 +138,16 @@ get_file_replicas(Req, State) ->
 -spec replicate_file_internal(req(), #{}) -> {term(), req(), #{}}.
 replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback := Callback} = State) ->
     File = get_file(State),
-    ok = onedata_file_api:replicate_file(Auth, File, ProviderId),
+
+    {ok, _} = onedata_file_api:stat(Auth, File),
+    spawn(fun() ->
+        try
+            ok = onedata_file_api:replicate_file(Auth, File, ProviderId)
+        catch
+            _:E ->
+                ?error_stacktrace("Could not replicate file ~p due to ~p", [File, E])
+        end
+    end),
     Response = json_utils:encode([{<<"transferId">>, <<"">>}]), %todo start async transfer
     {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
     {Response, Req2, State}.
