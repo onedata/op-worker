@@ -342,7 +342,7 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
 %% Updates queue until field.
 %% @end
 %%--------------------------------------------------------------------
--spec queue_update_until(queue(), Until :: integer()) -> queue().
+-spec queue_update_until(queue(), Until :: non_neg_integer()) -> ok.
 queue_update_until(QueueKey, Until) ->
     state_update({queue, QueueKey},
         fun(Queue) ->
@@ -360,7 +360,7 @@ queue_update_until(QueueKey, Until) ->
 %% Calculates queue until field's value.
 %% @end
 %%--------------------------------------------------------------------
--spec queue_calculate_until(NewUntil :: integer(), queue()) -> integer().
+-spec queue_calculate_until(NewUntil :: non_neg_integer(), #queue{}) -> non_neg_integer().
 queue_calculate_until(NewUntil, Queue) ->
     max(NewUntil, Queue#queue.until).
 
