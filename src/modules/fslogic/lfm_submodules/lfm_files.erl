@@ -27,7 +27,7 @@
 -export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, read_without_events_and_prefetching/3,
+    read/3, read_without_events/3, silent_read/3,
     truncate/2, truncate/3, unlink/1, unlink/2, release/1,
     get_file_distribution/2, replicate_file/3]).
 
@@ -261,9 +261,9 @@ read_without_events(FileHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, false)
 %%--------------------------------------------------------------------
--spec read_without_events_and_prefetching(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
+-spec silent_read(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
-read_without_events_and_prefetching(FileHandle, Offset, MaxSize) ->
+silent_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, false).
 
 
