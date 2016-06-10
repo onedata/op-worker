@@ -28,7 +28,8 @@
 -type event() :: #event{}.
 -type key() :: term().
 -type object() :: #read_event{} | #update_event{} | #write_event{}
-| #permission_changed_event{} | #file_removal_event{} | #quota_exeeded_event{}.
+| #permission_changed_event{} | #file_removal_event{} | #quota_exeeded_event{}
+| #file_renamed_event{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
@@ -210,7 +211,10 @@ set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid};
 
 set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
-    Evt#event{key = <<"quota_exeeded">>}.
+    Evt#event{key = <<"quota_exeeded">>};
+
+set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
+    Evt#event{key = Uuid}.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -54,13 +54,13 @@ exists(_FileKey) ->
 %%--------------------------------------------------------------------
 -spec mv(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     TargetPath :: file_meta:path()) ->
-    ok | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mv(SessId, FileKey, TargetPath) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, #rename{uuid = GUID, target_path = TargetPath},
-        fun(_) ->
-            ok
+        fun(#file_renamed{new_uuid = NewGuid}) ->
+            {ok, NewGuid}
         end).
 
 

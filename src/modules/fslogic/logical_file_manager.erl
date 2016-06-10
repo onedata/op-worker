@@ -161,7 +161,7 @@ exists(FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mv(session:id(), fslogic_worker:file(), file_meta:path()) ->
-    ok | error_reply().
+    {ok, fslogic_worker:file_guid()} | error_reply().
 mv(SessId, FileEntry, TargetPath) ->
     ?run(fun() -> lfm_files:mv(SessId, FileEntry, TargetPath) end).
 
