@@ -89,7 +89,7 @@ get_simple_file_distribution(Config) ->
 
     % then
     DecodedBody = json_utils:decode(Body),
-    ?assertEqual([[{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]], DecodedBody).
+    ?assertEqual([[{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]], DecodedBody).
 
 replicate_file(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -112,8 +112,8 @@ replicate_file(Config) ->
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         [
-            [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
-            [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
 
 replicate_dir(Config) ->
@@ -154,8 +154,8 @@ replicate_dir(Config) ->
     DecodedBody2 = json_utils:decode(Body2),
     DecodedBody3 = json_utils:decode(Body3),
     Distribution = [
-        [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
-        [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+        [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+        [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
     ],
     ?assertEqual(Distribution, DecodedBody1),
     ?assertEqual(Distribution, DecodedBody2),
@@ -344,8 +344,8 @@ replicate_file_by_id(Config) ->
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         [
-            [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
-            [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
 
 changes_stream_file_meta_test(Config) ->
@@ -370,7 +370,6 @@ changes_stream_file_meta_test(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
         get, [user_1_token_header(Config)], []),
 
-    ct:print("~s", [Body]),
     ?assertNotEqual(<<>>, Body),
     ?assert(length(binary:split(Body, <<"\r\n">>, [global])) >= 2).
 
@@ -390,7 +389,6 @@ changes_stream_xattr_test(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
         get, [user_1_token_header(Config)], []),
 
-    ct:print("~s", [Body]),
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
     ?assert(length(Changes) >= 1),
