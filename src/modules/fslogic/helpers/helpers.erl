@@ -35,7 +35,8 @@
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
 -type args() :: helpers_nif:helper_args().
--type user_ctx() :: #ceph_user_ctx{} | #posix_user_ctx{} | #s3_user_ctx{}.
+-type user_ctx() :: #ceph_user_ctx{} | #posix_user_ctx{} | #s3_user_ctx{}
+| #swift_user_ctx{}.
 -type user_ctx_map() :: #{binary() => binary()}.
 -type init() :: #helper_init{}.
 
@@ -84,6 +85,9 @@ set_user_ctx(#helper_handle{ctx = CTX}, #posix_user_ctx{uid = UID, gid = GID}) -
     ok = helpers_nif:set_user_ctx(CTX, UserCTX);
 set_user_ctx(#helper_handle{ctx = CTX}, #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey}) ->
     UserCTX = #{<<"access_key">> => AccessKey, <<"secret_key">> => SecretKey},
+    ok = helpers_nif:set_user_ctx(CTX, UserCTX);
+set_user_ctx(#helper_handle{ctx = CTX}, #swift_user_ctx{user_name = UserName, password = Password}) ->
+    UserCTX = #{<<"user_name">> => UserName, <<"password">> => Password},
     ok = helpers_nif:set_user_ctx(CTX, UserCTX);
 set_user_ctx(_, Unknown) ->
     ?error("Unknown user context ~p", [Unknown]),

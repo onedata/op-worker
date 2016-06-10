@@ -97,6 +97,7 @@ groupname_to_gid_test() ->
 prepare_environment() ->
     application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
     application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
-    application:set_env(?APP_NAME, s3_helper_threads_number, 1).
+    application:set_env(?APP_NAME, s3_helper_threads_number, 1),
+    application:set_env(?APP_NAME, swift_helper_threads_number, 1).
 
 -endif.

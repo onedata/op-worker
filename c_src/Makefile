@@ -4,7 +4,8 @@ ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts
 
 LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L ../priv/helpers/lib \
 	-lhelpers $(shell pkg-config --libs botan-1.10 tbb fuse) -laws-cpp-sdk-s3 \
-	-laws-cpp-sdk-core -lcurl -lboost_filesystem -lrados -lglog \
+	-laws-cpp-sdk-core -lcurl -lSwift -lPocoUtil -lPocoXML \
+    -lPocoNet -lPocoFoundation -lpthread-lboost_filesystem -lrados -lglog \
 	../helpers/release/erlang-tls/c_src/deps/boringssl/ssl/libssl.a \
 	../helpers/release/erlang-tls/c_src/deps/boringssl/crypto/libcrypto.a
 
