@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for listing spaces.
+%%% Handler for listing spaces by id.
 %%% @end
 %%%--------------------------------------------------------------------
--module(spaces).
+-module(spaces_by_id).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -26,7 +26,7 @@
     content_types_provided/2]).
 
 %% resource functions
--export([list_spaces/2]).
+-export([get_space/2]).
 
 %%%===================================================================
 %%% API
@@ -66,7 +66,7 @@ is_authorized(Req, State) ->
 -spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/json">>, list_spaces}
+        {<<"application/json">>, get_space}
     ], Req, State}.
 
 %%%===================================================================
@@ -74,21 +74,33 @@ content_types_provided(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% '/api/v3/oneprovider/spaces'
-%% @doc Returns the list of all user spaces.
+%% '/api/v3/oneprovider/spaces/{sid}'
+%% @doc Returns the basic information about space with given ID.\n
 %%
 %% HTTP method: GET
 %%
+%% @param sid Space ID.
 %%--------------------------------------------------------------------
--spec list_spaces(req(), #{}) -> {term(), req(), #{}}.
-list_spaces(Req, State = #{auth := Auth}) ->
-    {ok, UserId} = session:get_user_id(Auth),
+-spec get_space(req(), #{}) -> {term(), req(), #{}}.
+get_space(Req, State) ->
+    {State2, Req2} = validator:parse_space_id(Req, State),
 
-    Client = fslogic_utils:session_to_rest_client(Auth),
-    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get_or_fetch(Client, UserId),
-    RawResponse =
-        lists:map(fun({SpaceId, SpaceName}) ->
-            [{<<"name">>, SpaceName}, {<<"spaceId">>, SpaceId}]
-        end, Spaces),
+    #{auth := Auth, space_id := SpaceId} = State2,
+
+    {ok, #document{value = #space_info{name = Name, providers = Providers}}} =
+        space_info:get_or_fetch(Auth, SpaceId),
+    ProvidersRawResponse = lists:map(fun(ProviderId) ->
+        {ok, #document{value = #provider_info{client_name = ProviderName}}} =
+            provider_info:get_or_fetch(ProviderId),
+        [
+            {<<"providerId">>, ProviderId},
+            {<<"providerName">>, ProviderName}
+        ]
+    end, Providers),
+    RawResponse = [
+        {<<"name">>, Name},
+        {<<"providers">>, ProvidersRawResponse},
+        {<<"spaceId">>, SpaceId}
+    ],
     Response = json_utils:encode(RawResponse),
-    {Response, Req, State}.
+    {Response, Req2, State2}.

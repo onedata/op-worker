@@ -45,7 +45,8 @@
     replicate_file_by_id/1,
     changes_stream_file_meta_test/1,
     changes_stream_xattr_test/1,
-    list_spaces/1
+    list_spaces/1,
+    get_space/1
 ]).
 
 all() ->
@@ -65,7 +66,8 @@ all() ->
         replicate_file_by_id,
         changes_stream_file_meta_test,
         changes_stream_xattr_test,
-        list_spaces
+        list_spaces,
+        get_space
     ]).
 
 %%%===================================================================
@@ -411,6 +413,33 @@ list_spaces(Config) ->
             [{<<"name">>, <<"space1">>}, {<<"spaceId">>, <<"space1">>}],
             [{<<"name">>, <<"space2">>}, {<<"spaceId">>, <<"space2">>}],
             [{<<"name">>, <<"space3">>}, {<<"spaceId">>, <<"space3">>}]
+        ],
+        DecodedBody
+    ).
+
+get_space(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"spaces/space3">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            {<<"name">>, <<"space3">>},
+            {<<"providers">>, [
+                [
+                    {<<"providerId">>, PID1},
+                    {<<"providerName">>, PID1}
+                ],
+                [
+                    {<<"providerId">>, PID2},
+                    {<<"providerName">>, PID2}
+                ]
+            ]},
+            {<<"spaceId">>, <<"space3">>}
         ],
         DecodedBody
     ).

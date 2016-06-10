@@ -553,7 +553,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         fun(_, PID) ->
             Domain = provider_id_to_domain(PID),
             Workers = get_same_domain_workers(Config, Domain),
-            {ok, #provider_details{id = PID, urls = [list_to_binary(utils:get_host(Worker)) || Worker <- Workers]}}
+            {ok, #provider_details{id = PID, name = PID, urls = [list_to_binary(utils:get_host(Worker)) || Worker <- Workers]}}
         end),
 
 
