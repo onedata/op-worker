@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This test checks requests routing inside OP cluster.
+%%% This SUITE contains stress test for single provider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(stress_test_SUITE).

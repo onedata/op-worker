@@ -190,7 +190,6 @@ route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId
     ok;
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #fuse_request{} = FuseRequest}) ->
-    Connection = self(),
     ?debug("Fuse request: ~p ~p", [FuseRequest, effective_session_id(Msg)]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
@@ -203,7 +202,6 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = Origin
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
-    Connection = self(),
     spawn(fun() ->
         ProxyIOResponse = worker_proxy:call(fslogic_worker,
             {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
