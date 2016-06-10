@@ -78,7 +78,7 @@ is_authorized(Req, State) ->
     {[{atom() | binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/x-gzip">>, get_metric}
+        {<<"application/json">>, get_metric}
     ], Req, State}.
 
 %%%===================================================================
@@ -89,12 +89,26 @@ content_types_provided(Req, State) ->
 %% @doc Handles GET
 %%--------------------------------------------------------------------
 -spec get_metric(req(), #{}) -> {term(), req(), #{}}.
-get_metric(Req, #{auth := Auth, subject_type := Type, id:= Id} = State) ->
+get_metric(Req, #{auth := Auth, subject_type := space, id:= Id} = State) ->
     {Metric, Req2} = cowboy_req:qs_val(<<"metric">>, Req),
     {Step, Req2} = cowboy_req:qs_val(<<"step">>, Req),
-    {ok, Data} = onedata_metrics_api:get_metric(Auth, Type, Id,
-        transform_metric(Metric), transform_step(Step)),
-    {Data, Req2, State}.
+
+    case space_info:get_or_fetch(Auth, Id) of
+        {ok, #document{value = #space_info{providers = Providers}}} ->
+            Json =
+                lists:map(fun(ProviderId) ->
+                    {ok, Data} = onedata_metrics_api:get_metric(Auth, space, Id,
+                        transform_metric(Metric), transform_step(Step), json, ProviderId),
+                    [
+                        {<<"providerId">>, ProviderId},
+                        {<<"rrd">>, Data}
+                    ]
+                end, Providers),
+            Response = json_utils:encode(Json),
+            {Response, Req2, State};
+        {error, {not_found, _}} ->
+            throw(?ERROR_NOT_FOUND)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -266,10 +266,14 @@ metric_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/user/id?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(Body),
 
     % then
-    ?assertEqual(<<"gzip_data">>, Body).
+    ?assertMatch([
+        [{<<"providerId">>, _}, {<<"rrd">>, <<"json_data">>}],
+        [{<<"providerId">>, _}, {<<"rrd">>, <<"json_data">>}]
+    ], DecodedBody).
 
 list_file(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
