@@ -107,7 +107,7 @@ replicate_file(Config) ->
     ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
     % then
-    timer:sleep(timer:seconds(5)),
+    timer:sleep(timer:seconds(10)),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
@@ -146,7 +146,7 @@ replicate_dir(Config) ->
     ?assertMatch([{<<"transferId">>, _}], DecodedBody),
 
     % then
-    timer:sleep(timer:seconds(5)),
+    timer:sleep(timer:seconds(10)),
     {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body3} = do_request(WorkerP1, <<"replicas/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
@@ -339,7 +339,7 @@ replicate_file_by_id(Config) ->
     ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
     % then
-    timer:sleep(timer:seconds(5)),
+    timer:sleep(timer:seconds(10)),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(

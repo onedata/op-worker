@@ -1193,7 +1193,7 @@ out_of_range(Config) ->
     ?assertEqual(400, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
 
-    ?assertMatch([{<<"invalid_childrenrange">>, _}], CdmiResponse4).
+    ?assertMatch([{{<<"error">>, <<"invalid_childrenrange">>}, _}], CdmiResponse4).
 %%------------------------------
 
 % tests copy and move operations on dataobjects and containers
@@ -1631,7 +1631,7 @@ errors(Config) ->
         do_request(Workers, SpaceName ++ "/dir_dupl/", put, RequestHeaders5, RequestBody5),
     ?assertEqual(400, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
-    ?assertMatch([{<<"duplicated_body_fields">>, _}], CdmiResponse5),
+    ?assertMatch([{{<<"error">>, <<"duplicated_body_fields">>}, _}], CdmiResponse5),
 
     %%-- reding non-existing file --
     RequestHeaders6 = [
