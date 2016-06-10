@@ -217,7 +217,7 @@ ls(Worker, SessId, FileKey, Offset, Limit) ->
         end).
 
 -spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
-    ok | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mv(Worker, SessId, FileKeyFrom, PathTo) ->
     exec(Worker,
         fun(Host) ->
