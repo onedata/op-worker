@@ -92,6 +92,10 @@ translate_from_protobuf(#'FileRemovalSubscription'{} = Record) ->
     #file_removal_subscription{
         file_uuid = Record#'FileRemovalSubscription'.file_uuid
     };
+translate_from_protobuf(#'FileRenamedSubscription'{} = Record) ->
+    #file_renamed_subscription{
+        file_uuid = Record#'FileRenamedSubscription'.file_uuid
+    };
 translate_from_protobuf(#'ReadSubscription'{} = Record) ->
     #read_subscription{
         counter_threshold = Record#'ReadSubscription'.counter_threshold,
@@ -264,6 +268,11 @@ translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
     #'proxyio_request'{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
+translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = ChildEntries}) ->
+    #'file_renamed'{new_uuid = NewUuid,
+        child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]};
+translate_from_protobuf(#'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
+    #'file_renamed_entry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
 
 translate_from_protobuf(#'GetParent'{uuid = UUID}) ->
     #'get_parent'{uuid = UUID};
@@ -396,6 +405,11 @@ translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
     {permission_changed_event, #'PermissionChangedEvent'{file_uuid = FileUuid}};
 translate_to_protobuf(#file_removal_event{file_uuid = FileUuid}) ->
     {file_removal_event, #'FileRemovalEvent'{file_uuid = FileUuid}};
+translate_to_protobuf(#file_renamed_event{top_entry =  TopEntry, child_entries = ChildEntries}) ->
+    {file_renamed_event, #'FileRenamedEvent'{top_entry = translate_to_protobuf(TopEntry),
+        child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};
+translate_to_protobuf(#file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
+    #'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
@@ -539,6 +553,9 @@ translate_to_protobuf(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) 
     #'Token'{value = Token, secondary_values = SecValues};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
+translate_to_protobuf(#file_renamed{new_uuid = NewUuid, child_entries = ChildEntries}) ->
+    {file_renamed, #'FileRenamed'{new_uuid = NewUuid,
+        child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};
 
 
 translate_to_protobuf(#fuse_request{fuse_request = Record}) ->

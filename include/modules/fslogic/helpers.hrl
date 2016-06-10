@@ -26,6 +26,7 @@
 -define(CEPH_HELPER_NAME, <<"Ceph">>).
 -define(DIRECTIO_HELPER_NAME, <<"DirectIO">>).
 -define(S3_HELPER_NAME, <<"AmazonS3">>).
+-define(SWIFT_HELPER_NAME, <<"Swift">>).
 
 %% Record holding user's identity that may be used on Ceph storage system
 -record(ceph_user_ctx, {
@@ -43,6 +44,13 @@
 -record(s3_user_ctx, {
     access_key :: binary(),
     secret_key :: binary()
+}).
+
+%% Record holding user's identity that may be used on Openstack Swift
+%% storage system
+-record(swift_user_ctx, {
+    user_name :: binary(),
+    password :: binary()
 }).
 
 -endif.

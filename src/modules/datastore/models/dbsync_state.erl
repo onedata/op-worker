@@ -98,6 +98,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
+    % TODO - LOCALLY_CACHED (db_sync is singleton)
     ?MODEL_CONFIG(dbsync_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------

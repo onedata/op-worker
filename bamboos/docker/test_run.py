@@ -21,7 +21,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 def skipped_test_exists(junit_report_path):
     reports = glob.glob(junit_report_path)
     # if there are many reports, check only the last one
-    if len(reports) > 0:
+    if reports:
         reports.sort()
         tree = ElementTree.parse(reports[-1])
         testsuite = tree.getroot()

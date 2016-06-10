@@ -33,6 +33,10 @@ public:
         asio::const_buffer buf, off_t offset,
         GeneralCallback<std::size_t>) override;
 
+    void ash_multiwrite(CTXPtr ctx, const boost::filesystem::path &p,
+        std::vector<std::pair<off_t, asio::const_buffer>> buffs,
+        GeneralCallback<std::size_t> callback) override;
+
 private:
     communication::Communicator &m_communicator;
     std::string m_storageId;

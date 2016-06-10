@@ -47,16 +47,21 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-%%    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 15, 10, 100).
-    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 15, 10, 50).
+%%    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 15, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 15, 10, 20).
 
 proxy_test1(Config) ->
-    synchronization_test_base(Config, <<"user2">>, {0,2,1}, 0, 10, 100).
+    synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
 
 proxy_test2(Config) ->
-    synchronization_test_base(Config, <<"user3">>, {0,2,1}, 0, 10, 100).
+    synchronization_test_base(Config, <<"user3">>, {0,4,1,2}, 0, 10, 100).
 
 synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
+    synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
+
+synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider},
+    Attempts, DirsNum, FilesNum) ->
+    ProxyNodesWritten = ProxyNodesWritten0 * NodesOfWriteProvider,
     Workers = ?config(op_worker_nodes, Config),
     Worker1 = lists:foldl(fun(W, Acc) ->
         case is_atom(Acc) of
@@ -175,7 +180,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         end,
 
         VerAns0 = VerifyLocation(),
-        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
 
         Verify(fun(W) ->
             OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
@@ -186,13 +191,14 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
         VerAns = VerifyLocation(),
         Flattened = lists:flatten(VerAns),
-        ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+%%        ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
 
-        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes - ProxyNodesWritten, length(ZerosList)),
-        ?assertEqual(SyncNodes*SyncNodes + ProxyNodesWritten, length(LocationsList))
+        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes
+            - ProxyNodesWritten*NodesOfWriteProvider, length(ZerosList)),
+        ?assertEqual(SyncNodes*SyncNodes + ProxyNodesWritten*NodesOfWriteProvider, length(LocationsList))
     end,
     VerifyFile({2, Level2File}),
 
@@ -252,13 +258,14 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end, ProvIDs)
         end),
         Flattened = lists:flatten(VerAns),
-        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+%%        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, Flattened),
 
-        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes - ProxyNodesWritten, length(ZerosList)),
-        ?assertEqual(SyncNodes + ProxyNodesWritten, length(SList))
+        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*NodesOfWriteProvider
+            - ProxyNodesWritten*NodesOfWriteProvider, length(ZerosList)),
+        ?assertEqual(SyncNodes * NodesOfWriteProvider + ProxyNodesWritten*NodesOfWriteProvider, length(SList))
     end,
     VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
 

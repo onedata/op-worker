@@ -18,7 +18,8 @@
 -include("global_definitions.hrl").
 
 %% oz_plugin_behaviour API
--export([get_oz_url/0, get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
+-export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0]).
+-export([get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
 
 %%%===================================================================
 %%% oz_plugin_behaviour API
@@ -33,8 +34,27 @@
 get_oz_url() ->
     {ok, Hname} = application:get_env(?APP_NAME, oz_domain),
     Hostname = str_utils:to_list(Hname),
+    "https://" ++ Hostname.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Should return OZ REST port.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_rest_port() -> integer().
+get_oz_rest_port() ->
     {ok, Port} = application:get_env(?APP_NAME, oz_rest_port),
-    string:join(["https://", Hostname, ":", integer_to_list(Port)], "").
+    Port.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @doc Should return OZ REST API prefix - for example /api/v3/onezone.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_rest_api_prefix() -> string().
+get_oz_rest_api_prefix() ->
+    {ok, Prefix} = application:get_env(?APP_NAME, oz_rest_api_prefix),
+    Prefix.
 
 %%--------------------------------------------------------------------
 %% @doc

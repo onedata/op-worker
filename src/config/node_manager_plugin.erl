@@ -21,7 +21,7 @@
 -include_lib("ctool/include/global_definitions.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([on_init/1, on_terminate/2, on_code_change/3,
+-export([before_init/1, after_init/1, on_terminate/2, on_code_change/3,
     handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
     modules_with_args/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0, app_name/0]).
 
@@ -84,29 +84,37 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     ]},
     {subscriptions_worker, []},
     {fslogic_worker, []},
-    {dbsync_worker, []}
+    {singleton, dbsync_worker, []}
 ].
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% {@link node_manager_plugin_behaviour}  callback on_init/0.
+%% {@link node_manager_plugin_behaviour} callback before_init/0.
 %% @end
 %%--------------------------------------------------------------------
--spec on_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
-on_init([]) ->
+-spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
+before_init([]) ->
     try
         ensure_correct_hostname(),
 
         %% Load NIFs
         ok = helpers_nif:init(),
-        ok = luma_nif:init(),
-        ok
+        ok = luma_nif:init()
     catch
         _:Error ->
-            ?error_stacktrace("Cannot start node_manager plugin: ~p", [Error]),
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
+                [Error]),
             {error, cannot_start_node_manager_plugin}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link node_manager_plugin_behaviour} callback after_init/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec after_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
+after_init([]) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
