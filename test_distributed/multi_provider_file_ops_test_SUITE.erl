@@ -180,7 +180,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         end,
 
         VerAns0 = VerifyLocation(),
-        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
 
         Verify(fun(W) ->
             OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
@@ -191,7 +191,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
         VerAns = VerifyLocation(),
         Flattened = lists:flatten(VerAns),
-        ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+%%        ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
@@ -258,7 +258,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end, ProvIDs)
         end),
         Flattened = lists:flatten(VerAns),
-        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+%%        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, Flattened),

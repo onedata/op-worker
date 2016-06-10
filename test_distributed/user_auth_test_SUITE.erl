@@ -145,7 +145,14 @@ unmock_oz_spaces(Config) ->
 
 mock_oz_certificates(Config) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    Url = rpc:call(Worker1, oz_plugin, get_oz_url, []),
+    OZUrl = rpc:call(Worker1, oz_plugin, get_oz_url, []),
+    OZRestPort = rpc:call(Worker1, oz_plugin, get_oz_rest_port, []),
+    OZRestApiPrefix = rpc:call(Worker1, oz_plugin, get_oz_rest_api_prefix, []),
+    OzRestApiUrl = str_utils:format("~s:~B~s", [
+        OZUrl,
+        OZRestPort,
+        OZRestApiPrefix
+    ]),
 
     % save key and cert files on the workers
     % read the files
@@ -167,21 +174,21 @@ mock_oz_certificates(Config) ->
     test_utils:mock_expect(Workers, oz_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, Url ++ URN,
+                http_client:request(Method, OzRestApiUrl ++ URN,
                     [{<<"content-type">>, <<"application/json">>} | Headers],
                     Body, [SSLOpts, insecure | Options]);
             (client, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, Url ++ URN,
+                http_client:request(Method, OzRestApiUrl ++ URN,
                     [{<<"content-type">>, <<"application/json">>} | Headers],
                     Body, [SSLOpts, insecure | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
-                http_client:request(Method, Url ++ URN,
+                http_client:request(Method, OzRestApiUrl ++ URN,
                     [{<<"content-type">>, <<"application/json">>} | Headers],
                     Body, [SSLOpts, insecure | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
                 {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
-                http_client:request(Method, Url ++ URN, [
+                http_client:request(Method, OzRestApiUrl ++ URN, [
                     {<<"content-type">>, <<"application/json">>},
                     {<<"macaroon">>, SrlzdMacaroon} | Headers
                 ], Body, [SSLOpts, insecure | Options])
