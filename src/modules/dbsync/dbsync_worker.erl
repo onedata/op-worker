@@ -337,6 +337,12 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
                 until = queue_calculate_until(UntilToSet, Queue1)}
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates queue until field.
+%% @end
+%%--------------------------------------------------------------------
+-spec queue_update_until(queue(), Until :: integer()) -> queue().
 queue_update_until(QueueKey, Until) ->
     state_update({queue, QueueKey},
         fun(Queue) ->
@@ -349,6 +355,12 @@ queue_update_until(QueueKey, Until) ->
             Queue1#queue{until = queue_calculate_until(Until, Queue1)}
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Calculates queue until field's value.
+%% @end
+%%--------------------------------------------------------------------
+-spec queue_calculate_until(NewUntil :: integer(), queue()) -> integer().
 queue_calculate_until(NewUntil, Queue) ->
     max(NewUntil, Queue#queue.until).
 
@@ -373,7 +385,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
     NewChanges = lists:sort(lists:flatten(Changes)),
     do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true),
 
-    %% Some changes might be waiting fir applied changes
+    %% Some changes might be waiting for applied changes
     catch consume_batches(FromProvider, SpaceId).
 
 %%--------------------------------------------------------------------
@@ -460,11 +472,17 @@ apply_changes(SpaceId,
             {error, Reason}
     end;
 apply_changes(SpaceId, [], Done) ->
-    apply_changes2(SpaceId, lists:reverse(Done)).
+    run_posthooks(SpaceId, lists:reverse(Done)).
 
-apply_changes2(_, []) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Apply posthooks for list of changes from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_posthooks(SpaceId :: binary(), [change()]) -> ok.
+run_posthooks(_, []) ->
     ok;
-apply_changes2(SpaceId, [Change | Done]) ->
+run_posthooks(SpaceId, [Change | Done]) ->
     spawn(
         fun() ->
             try
@@ -476,7 +494,7 @@ apply_changes2(SpaceId, [Change | Done]) ->
             ok
         end),
 
-    apply_changes2(SpaceId, Done).
+    run_posthooks(SpaceId, Done).
 
 %%--------------------------------------------------------------------
 %% @doc
