@@ -439,7 +439,7 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
                     Other
             end;
         {ok, _} ->
-            fslogic_req_regular:synchronize_block(Ctx, {uuid, Uuid}, Block)
+            fslogic_req_regular:synchronize_block(Ctx, {uuid, Uuid}, Block, false)
     end.
 
 %%%===================================================================
