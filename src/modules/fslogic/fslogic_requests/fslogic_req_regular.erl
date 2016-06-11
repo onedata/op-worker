@@ -20,7 +20,7 @@
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3,
     get_helper_params/3, release/2]).
--export([get_parent/2, synchronize_block/3, synchronize_block_and_compute_checksum/3,
+-export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
 %%%===================================================================
@@ -84,23 +84,33 @@ get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
             helper_args = [
                 #helper_arg{key = <<"storage_id">>, value = StorageId}
             ]}};
-get_helper_params(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}},
+get_helper_params(#fslogic_ctx{session_id = SessId, space_id = SpaceId},
     StorageId, false = _ForceProxy) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
     {HelperName, HelperArgsMap} = case fslogic_storage:select_helper(StorageDoc) of
-        {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args}} ->
-            {ok, #document{value = #ceph_user{credentials = UserCredentials}}} = ceph_user:get(UserId),
-            {ok, Credentials} = maps:find(StorageId, UserCredentials),
+        {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args} = HelperInit} ->
+            #ceph_user_ctx{user_name = UserName, user_key = UserKey} =
+                fslogic_storage:new_user_ctx(HelperInit, SessId,
+                    fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
             {?CEPH_HELPER_NAME, Args#{
-                <<"user_name">> => ceph_user:name(Credentials),
-                <<"key">> => ceph_user:key(Credentials)
+                <<"user_name">> => UserName,
+                <<"key">> => UserKey
             }};
-        {ok, #helper_init{name = ?S3_HELPER_NAME, args = Args}} ->
-            {ok, #document{value = #s3_user{credentials = UserCredentials}}} = s3_user:get(UserId),
-            {ok, Credentials} = maps:find(StorageId, UserCredentials),
+        {ok, #helper_init{name = ?S3_HELPER_NAME, args = Args} = HelperInit} ->
+            #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey} =
+                fslogic_storage:new_user_ctx(HelperInit, SessId,
+                    fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
             {?S3_HELPER_NAME, Args#{
-                <<"access_key">> => s3_user:access_key(Credentials),
-                <<"secret_key">> => s3_user:secret_key(Credentials)
+                <<"access_key">> => AccessKey,
+                <<"secret_key">> => SecretKey
+            }};
+        {ok, #helper_init{name = ?SWIFT_HELPER_NAME, args = Args} = HelperInit} ->
+            #swift_user_ctx{user_name = UserName, password =  Password} =
+                fslogic_storage:new_user_ctx(HelperInit, SessId,
+                    fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+            {?SWIFT_HELPER_NAME, Args#{
+                <<"user_name">> => UserName,
+                <<"password">> => Password
             }};
         {ok, #helper_init{name = Name, args = Args}} ->
             {Name, Args}
@@ -219,13 +229,13 @@ get_parent(CTX, File) ->
 %% Synchronizes given block with remote replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
+-spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block(), boolean()) ->
     #fuse_response{}.
-synchronize_block(CTX, {uuid, FileUUID}, undefined)  ->
+synchronize_block(CTX, {uuid, FileUUID}, undefined, Prefetch)  ->
     Size = fslogic_blocks:get_file_size({uuid, FileUUID}),
-    synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size});
-synchronize_block(_CTX, {uuid, FileUUID}, Block)  ->
-    ok = replica_synchronizer:synchronize(FileUUID, Block),
+    synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size}, Prefetch);
+synchronize_block(_CTX, {uuid, FileUUID}, Block, Prefetch)  ->
+    ok = replica_synchronizer:synchronize(FileUUID, Block, Prefetch),
     #fuse_response{status = #status{code = ?OK}}.
 
 

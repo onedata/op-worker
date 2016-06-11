@@ -66,8 +66,9 @@ create_storage_test_file(#fslogic_ctx{session_id = SessId} = Ctx, StorageId, Fil
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{key = SpaceUuid}} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
     {ok, Storage} = storage:get(StorageId),
+    NewCtx = Ctx#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid)},
     #fuse_response{fuse_response = HelperParams} =
-        fslogic_req_regular:get_helper_params(Ctx, StorageId, false),
+        fslogic_req_regular:get_helper_params(NewCtx, StorageId, false),
 
     FileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}),
     Dirname = fslogic_path:dirname(FileId),

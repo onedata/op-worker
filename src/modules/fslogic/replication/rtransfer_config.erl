@@ -62,7 +62,7 @@ rtransfer_opts() ->
             end},
         {read_fun,
             fun(Handle, Offset, MaxSize) ->
-                lfm_files:read_without_events(Handle, Offset, MaxSize)
+                lfm_files:silent_read(Handle, Offset, MaxSize)
             end},
         {write_fun,
             fun(Handle, Offset, Buffer) ->

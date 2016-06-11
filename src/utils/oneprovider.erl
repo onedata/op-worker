@@ -38,7 +38,7 @@
 -export([get_provider_id/0, get_provider_domain/0]).
 -export([get_oz_domain/0, get_oz_url/0, get_oz_cert/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
--export([register_in_gr/3, save_file/2]).
+-export([register_in_oz/3, save_file/2]).
 
 % Developer function
 -export([register_in_oz_dev/3]).
@@ -142,9 +142,9 @@ get_oz_providers_page() ->
 %% Registers in OZ using config from app.src (cert locations).
 %% @end
 %%--------------------------------------------------------------------
--spec register_in_gr(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
+-spec register_in_oz(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
     {ok, ProviderID :: binary()} | {error, term()}.
-register_in_gr(NodeList, KeyFilePassword, ProviderName) ->
+register_in_oz(NodeList, KeyFilePassword, ProviderName) ->
     try
         OZPKeyPath = oz_plugin:get_key_path(),
         OZPCertPath = oz_plugin:get_cert_path(),

@@ -101,13 +101,13 @@ get_local_file_locations(Entry, 0) ->
 get_local_file_locations(Entry, Num) ->
     try get_local_file_locations_once(Entry) of
         [] ->
-            timer:sleep(500),
+            timer:sleep(timer:seconds(3)),
             get_local_file_locations(Entry, Num - 1);
         Ans ->
             Ans
     catch
         _:_ ->
-            timer:sleep(500),
+            timer:sleep(timer:seconds(3)),
             get_local_file_locations(Entry, Num - 1)
     end.
 
@@ -160,7 +160,7 @@ wait_for_links(FileUuid, Retries, SpaceId) ->
         true ->
             ok;
         false ->
-            timer:sleep(timer:seconds(1)),
+            timer:sleep(timer:seconds(3)),
             wait_for_links(FileUuid, Retries - 1, SpaceId)
     end.
 
@@ -179,7 +179,7 @@ wait_for_file_meta(FileUuid, Retries) ->
         true ->
             ok;
         false ->
-            timer:sleep(timer:seconds(1)),
+            timer:sleep(timer:seconds(3)),
             wait_for_file_meta(FileUuid, Retries - 1)
     end.
 

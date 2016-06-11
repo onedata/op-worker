@@ -160,7 +160,8 @@
 
 -record(synchronize_block, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    block :: #file_block{}
+    block :: #file_block{},
+    prefetch :: boolean()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
@@ -269,11 +270,16 @@
     provider_file_distributions :: [#provider_file_distribution{}]
 }).
 
+-record(file_renamed, {
+    new_uuid :: fslogic_worker:file_guid(),
+    child_entries :: [#file_renamed_entry{}]
+}).
+
 -type fuse_response() ::
     #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
     #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
-    #checksum{} | #acl{} | #file_path{} | #file_distribution{}.
+    #checksum{} | #acl{} | #file_path{} | #file_distribution{} | #file_renamed{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

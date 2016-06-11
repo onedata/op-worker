@@ -56,11 +56,13 @@ struct HelpersNIF {
         helperServices.emplace("AmazonS3", std::make_unique<HelperIOService>());
         helperServices.emplace("Ceph", std::make_unique<HelperIOService>());
         helperServices.emplace("DirectIO", std::make_unique<HelperIOService>());
+        helperServices.emplace("Swift", std::make_unique<HelperIOService>());
 
         SHFactory = std::make_unique<one::helpers::StorageHelperFactory>(
             helperServices["Ceph"]->service,
             helperServices["DirectIO"]->service,
-            helperServices["AmazonS3"]->service);
+            helperServices["AmazonS3"]->service,
+            helperServices["Swift"]->service);
         umask(0);
     }
 
@@ -452,7 +454,7 @@ ERL_NIF_TERM set_threads_number(
     ErlNifEnv *env, std::unordered_map<std::string, std::size_t> args)
 {
     return handle_errors(env, [&]() {
-        std::vector<std::string> names{"AmazonS3", "Ceph", "DirectIO"};
+        std::vector<std::string> names{"AmazonS3", "Ceph", "DirectIO", "Swift"};
         for (const auto &name : names) {
             auto result = args.find(name);
             if (result != args.end()) {

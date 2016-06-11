@@ -14,7 +14,7 @@
 #include "messages/proxyio/remoteWriteResult.h"
 #include "messages/status.h"
 
-#include <asio.hpp>
+#include <asio/buffer.hpp>
 
 namespace one {
 namespace helpers {
@@ -55,20 +55,32 @@ void ProxyIOHelper::ash_read(CTXPtr ctx, const boost::filesystem::path &p,
 void ProxyIOHelper::ash_write(CTXPtr ctx, const boost::filesystem::path &p,
     asio::const_buffer buf, off_t offset, GeneralCallback<std::size_t> callback)
 {
-    auto fileId = p.string();
-    messages::proxyio::RemoteWrite msg{
-        ctx->parameters(), m_storageId, std::move(fileId), offset, buf};
+    ash_multiwrite(std::move(ctx), p, {{offset, buf}}, std::move(callback));
+}
 
-    auto wrappedCallback =
-        [ callback = std::move(callback), buf ](const std::error_code &ec,
-            std::unique_ptr<messages::proxyio::RemoteWriteResult> result)
+void ProxyIOHelper::ash_multiwrite(CTXPtr ctx, const boost::filesystem::path &p,
+    std::vector<std::pair<off_t, asio::const_buffer>> buffs,
+    GeneralCallback<std::size_t> callback)
+{
+    auto fileId = p.string();
+
+    std::vector<std::pair<off_t, std::string>> stringBuffs;
+    stringBuffs.reserve(buffs.size());
+    std::transform(buffs.begin(), buffs.end(), std::back_inserter(stringBuffs),
+        [](const std::pair<off_t, asio::const_buffer> &elem) {
+            return make_pair(elem.first,
+                std::string(asio::buffer_cast<const char *>(elem.second),
+                                 asio::buffer_size(elem.second)));
+        });
+
+    messages::proxyio::RemoteWrite msg{ctx->parameters(), m_storageId,
+        std::move(fileId), std::move(stringBuffs)};
+
+    auto wrappedCallback = [callback = std::move(callback)](
+        const std::error_code &ec,
+        std::unique_ptr<messages::proxyio::RemoteWriteResult> result)
     {
-        if (ec) {
-            callback(-1, ec);
-        }
-        else {
-            callback(result->wrote(), ec);
-        }
+        ec ? callback(-1, ec) : callback(result->wrote(), ec);
     };
 
     m_communicator.communicate<messages::proxyio::RemoteWriteResult>(

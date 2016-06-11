@@ -20,8 +20,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
     db_sync_test/1, proxy_test1/1, proxy_test2/1
@@ -47,16 +46,21 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-%%    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 15, 10, 100).
-    synchronization_test_base(Config, <<"user1">>, {2,0,0}, 15, 10, 50).
+%%    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 30, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 30, 10, 35).
 
 proxy_test1(Config) ->
-    synchronization_test_base(Config, <<"user2">>, {0,2,1}, 0, 10, 100).
+    synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
 
 proxy_test2(Config) ->
-    synchronization_test_base(Config, <<"user3">>, {0,2,1}, 0, 10, 100).
+    synchronization_test_base(Config, <<"user3">>, {0,4,1,2}, 0, 10, 100).
 
 synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
+    synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
+
+synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider},
+    Attempts, DirsNum, FilesNum) ->
+    ProxyNodesWritten = ProxyNodesWritten0 * NodesOfWriteProvider,
     Workers = ?config(op_worker_nodes, Config),
     Worker1 = lists:foldl(fun(W, Acc) ->
         case is_atom(Acc) of
@@ -175,7 +179,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         end,
 
         VerAns0 = VerifyLocation(),
-        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
 
         Verify(fun(W) ->
             OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
@@ -184,15 +188,19 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts)
         end),
 
-        VerAns = VerifyLocation(),
-        Flattened = lists:flatten(VerAns),
-        ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+        AssertLocations = fun() ->
+            VerAns = VerifyLocation(),
+            Flattened = lists:flatten(VerAns),
+%%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
 
-        ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
-        LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
-
-        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes - ProxyNodesWritten, length(ZerosList)),
-        ?assertEqual(SyncNodes*SyncNodes + ProxyNodesWritten, length(LocationsList))
+            ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
+            LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
+            {length(ZerosList), length(LocationsList)}
+        end,
+        ToMatch = {(SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes
+            - ProxyNodesWritten*NodesOfWriteProvider,
+            SyncNodes*SyncNodes + ProxyNodesWritten*NodesOfWriteProvider},
+        ?match(ToMatch, AssertLocations(), Attempts)
     end,
     VerifyFile({2, Level2File}),
 
@@ -252,13 +260,14 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end, ProvIDs)
         end),
         Flattened = lists:flatten(VerAns),
-        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+%%        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, Flattened),
 
-        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes - ProxyNodesWritten, length(ZerosList)),
-        ?assertEqual(SyncNodes + ProxyNodesWritten, length(SList))
+        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*NodesOfWriteProvider
+            - ProxyNodesWritten*NodesOfWriteProvider, length(ZerosList)),
+        ?assertEqual(SyncNodes * NodesOfWriteProvider + ProxyNodesWritten*NodesOfWriteProvider, length(SList))
     end,
     VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
 
@@ -299,7 +308,8 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         {ok, Handle} = OpenAns,
         WriteBuf = atom_to_binary(W, utf8),
         Offset = size(Acc),
-        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
+        WriteSize = size(WriteBuf),
+        ?assertMatch({ok, WriteSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
@@ -315,7 +325,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 %%    lists:foreach(fun(W) ->
 %%        spawn_link(fun() ->
 %%            Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%            MkAns = lfm_proxy:mkdir(W, SessId, Level2TmpDir, 8#755),
+%%            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755),
 %%            Master ! {mkdir_ans, Level2TmpDir, MkAns}
 %%        end)
 %%    end, Workers),
@@ -338,7 +348,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 %%        lists:foreach(fun(W2) ->
 %%            spawn_link(fun() ->
 %%                Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-%%                MkAns = lfm_proxy:mkdir(W2, SessId, Level3TmpDir, 8#755),
+%%                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755),
 %%                Master ! {mkdir_ans, Level3TmpDir, MkAns}
 %%            end)
 %%        end, Workers)
@@ -423,8 +433,10 @@ check_locations(W, Map) ->
     maps:fold(fun(_, V, Acc) ->
         case V of
             {ID, file_location} ->
-                ?assertMatch({ok, _}, rpc:call(W, file_location, get, [ID])),
-                Acc + 1;
+                case rpc:call(W, file_location, get, [ID]) of
+                    {ok, _} -> Acc + 1;
+                    _ -> Acc
+                end;
             _ ->
                 Acc
         end
