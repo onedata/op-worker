@@ -34,5 +34,5 @@ connected_users | remote_access_kbs | metada_access_ops.
 %%--------------------------------------------------------------------
 -spec get_metric(onedata_auth_api:auth(), subject_type(), subject_id(),
     metric_type(), step(), oneprovider:id(), format()) -> {ok, binary()}.
-get_metric(_Auth, _SubjectType, _SubjectId, _MetricType, _Step, _Format, _ProviderId) ->
+get_metric(_Auth, _SubjectType, _SubjectId, _MetricType, _Step, _ProviderId, _Format) ->
     {ok, <<"json_data">>}. %todo
