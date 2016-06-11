@@ -312,8 +312,8 @@ translate_from_protobuf(#'BatchUpdate'{space_id = SpaceId, since_seq = Since, un
     #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes};
 
 % Replication
-translate_from_protobuf(#'SynchronizeBlock'{uuid = Uuid, block = #'FileBlock'{offset = O, size = S}}) ->
-    #synchronize_block{uuid = Uuid, block = #file_block{offset = O, size = S}};
+translate_from_protobuf(#'SynchronizeBlock'{uuid = Uuid, block = #'FileBlock'{offset = O, size = S}, prefetch = Prefetch}) ->
+    #synchronize_block{uuid = Uuid, block = #file_block{offset = O, size = S}, prefetch = Prefetch};
 translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{uuid = Uuid,
     block = #'FileBlock'{offset = O, size = S}}) ->
     #synchronize_block_and_compute_checksum{uuid = Uuid, block = #file_block{offset = O, size = S}};
@@ -635,8 +635,9 @@ translate_to_protobuf(#'get_parent'{uuid = UUID}) ->
 
 
 % Replication
-translate_to_protobuf(#synchronize_block{uuid = Uuid, block = Block}) ->
-    {synchronize_block, #'SynchronizeBlock'{uuid = Uuid, block = translate_to_protobuf(Block)}};
+translate_to_protobuf(#synchronize_block{uuid = Uuid, block = Block, prefetch = Prefetch}) ->
+    {synchronize_block,
+        #'SynchronizeBlock'{uuid = Uuid, block = translate_to_protobuf(Block), prefetch = Prefetch}};
 translate_to_protobuf(#synchronize_block_and_compute_checksum{uuid = Uuid, block = Block}) ->
     {synchronize_block_and_compute_checksum,
         #'SynchronizeBlockAndComputeChecksum'{uuid = Uuid, block = translate_to_protobuf(Block)}};

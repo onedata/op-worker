@@ -160,7 +160,8 @@
 
 -record(synchronize_block, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    block :: #file_block{}
+    block :: #file_block{},
+    prefetch :: boolean()
 }).
 
 -record(synchronize_block_and_compute_checksum, {

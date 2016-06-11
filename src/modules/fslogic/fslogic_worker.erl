@@ -348,8 +348,8 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_mimetype{uuid = UUID}
     fslogic_req_generic:get_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_mimetype{uuid = UUID, value = Value}}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID, block = Block}}) ->
-    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID, block = Block, prefetch = Prefetch}}) ->
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block, Prefetch);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block_and_compute_checksum{uuid = UUID, block = Block}}) ->
     fslogic_req_regular:synchronize_block_and_compute_checksum(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}}) ->
@@ -362,7 +362,7 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = File
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = FileGUID}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
-    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block, false);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -371,7 +371,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileGUID, file_size = FileSize}}) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-        case replica_updater:update(FileUUID, Blocks, FileSize, true) of
+        case replica_updater:update(FileUUID, Blocks, FileSize, true, undefined) of
             {ok, size_changed} ->
                 {ok, #document{value = #session{identity = #identity{
                     user_id = UserId}}}} = session:get(SessId),

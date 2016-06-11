@@ -339,7 +339,7 @@ read_should_synchronize_file(Config) ->
     % mock rtransfer
     test_utils:mock_new(Workers, rtransfer),
     test_utils:mock_expect(Workers, rtransfer, prepare_request,
-        fun(_ProvId, _Uuid, 1, 3) ->
+        fun(_ProvId, _Uuid, 1, Size) when Size >= 3 ->
             ref
         end
     ),
@@ -357,7 +357,7 @@ read_should_synchronize_file(Config) ->
     % then
     ?assertEqual({ok, <<>>}, Ans),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, prepare_request, '_'])),
-    ?assert(rpc:call(W1, meck, called, [rtransfer, prepare_request, [ExternalProviderId, FileGUID, 1, 3]])),
+    ?assert(rpc:call(W1, meck, called, [rtransfer, prepare_request, [ExternalProviderId, FileGUID, 1, '_']])),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, fetch, '_'])),
     ?assert(rpc:call(W1, meck, called, [rtransfer, fetch, [ref, '_', '_']])),
     test_utils:mock_validate_and_unload(Workers, rtransfer),
