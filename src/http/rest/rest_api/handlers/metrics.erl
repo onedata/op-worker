@@ -98,7 +98,7 @@ get_metric(Req, #{auth := Auth, subject_type := space, id:= Id} = State) ->
             Json =
                 lists:map(fun(ProviderId) ->
                     {ok, Data} = onedata_metrics_api:get_metric(Auth, space, Id,
-                        transform_metric(Metric), transform_step(Step), json, ProviderId),
+                        transform_metric(Metric), transform_step(Step), ProviderId, json),
                     [
                         {<<"providerId">>, ProviderId},
                         {<<"rrd">>, Data}
