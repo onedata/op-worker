@@ -32,18 +32,42 @@
 -export([
     get_simple_file_distribution/1,
     replicate_file/1,
+    replicate_dir/1,
     posix_mode_get/1,
     posix_mode_put/1,
-    read_event_subscription_test/1
+    xattr_get/1,
+    xattr_put/1,
+    xattr_list/1,
+    metric_get/1,
+    list_file/1,
+    list_dir/1,
+    list_dir_range/1,
+    replicate_file_by_id/1,
+    changes_stream_file_meta_test/1,
+    changes_stream_xattr_test/1,
+    list_spaces/1,
+    get_space/1
 ]).
 
 all() ->
     ?ALL([
         get_simple_file_distribution,
         replicate_file,
+        replicate_dir,
         posix_mode_get,
-        posix_mode_put
-%%        read_event_subscription_test %todo fix dialyzer in rest_event_handler
+        posix_mode_put,
+        xattr_get,
+        xattr_put,
+        xattr_list,
+        metric_get,
+        list_file,
+        list_dir,
+        list_dir_range,
+        replicate_file_by_id,
+        changes_stream_file_meta_test,
+        changes_stream_xattr_test,
+        list_spaces,
+        get_space
     ]).
 
 %%%===================================================================
@@ -61,11 +85,11 @@ get_simple_file_distribution(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"file_distribution", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas", File/binary>>, get, [user_1_token_header(Config)], []),
 
     % then
     DecodedBody = json_utils:decode(Body),
-    ?assertEqual([[{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]], DecodedBody).
+    ?assertEqual([[{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]], DecodedBody).
 
 replicate_file(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -78,17 +102,64 @@ replicate_file(Config) ->
 
     % when
     timer:sleep(timer:seconds(10)),
-    {ok, 204, _, _} = do_request(WorkerP1, <<"replicate_file/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode(Body0),
+    ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
     % then
-    timer:sleep(timer:seconds(5)),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"file_distribution/space3/file">>, get, [user_1_token_header(Config)], []),
+    timer:sleep(timer:seconds(10)),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         [
-            [{<<"provider">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
-            [{<<"provider">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
+
+replicate_dir(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    Dir1 = <<"/space3/dir1">>,
+    Dir2 = <<"/space3/dir1/dir2">>,
+    File1 = <<"/space3/dir1/file1">>,
+    File2 = <<"/space3/dir1/file2">>,
+    File3 = <<"/space3/dir1/dir2/file3">>,
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir1),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, Dir2),
+    {ok, File1Guid} = lfm_proxy:create(WorkerP1, SessionId, File1, 8#700),
+    {ok, Handle1} = lfm_proxy:open(WorkerP1, SessionId, {guid, File1Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle1, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle1),
+    {ok, File2Guid} = lfm_proxy:create(WorkerP1, SessionId, File2, 8#700),
+    {ok, Handle2} = lfm_proxy:open(WorkerP1, SessionId, {guid, File2Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle2, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle2),
+    {ok, File3Guid} = lfm_proxy:create(WorkerP1, SessionId, File3, 8#700),
+    {ok, Handle3} = lfm_proxy:open(WorkerP1, SessionId, {guid, File3Guid}, write),
+    lfm_proxy:write(WorkerP1, Handle3, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle3),
+
+    % when
+    timer:sleep(timer:seconds(10)),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch([{<<"transferId">>, _}], DecodedBody),
+
+    % then
+    timer:sleep(timer:seconds(10)),
+    {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP1, <<"replicas/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    DecodedBody1 = json_utils:decode(Body1),
+    DecodedBody2 = json_utils:decode(Body2),
+    DecodedBody3 = json_utils:decode(Body3),
+    Distribution = [
+        [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+        [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+    ],
+    ?assertEqual(Distribution, DecodedBody1),
+    ?assertEqual(Distribution, DecodedBody2),
+    ?assertEqual(Distribution, DecodedBody3).
 
 posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -99,12 +170,12 @@ posix_mode_get(Config) ->
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
     % when
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"posix_mode", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
 
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
-        [{<<"posix_mode">>, Mode}],
+        [[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]],
         DecodedBody
     ).
 
@@ -118,41 +189,262 @@ posix_mode_put(Config) ->
 
     % when
     NewMode = 8#777,
-    Body = json_utils:encode([{<<"posix_mode">>, NewMode}]),
-    {ok, 204, _, _} = do_request(WorkerP1, <<"posix_mode", File/binary>>, put,
+    Body = json_utils:encode([{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>}]),
+    {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary>>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
     % then
-    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"posix_mode", File/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
-        [{<<"posix_mode">>, NewMode}],
+        [[{<<"name">>, <<"mode">>},
+        {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>}]],
         DecodedBody
     ).
 
-read_event_subscription_test(Config) ->
+xattr_get(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, [user_1_token_header(Config)], []),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [[{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]],
+        DecodedBody
+    ).
+
+xattr_put(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file2"])),
+    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+
+    % when
+    Body = json_utils:encode([{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]),
+    {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, put,
+        [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
+
+    % then
+    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(RespBody),
+    ?assertEqual(
+        [[{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]],
+        DecodedBody
+    ).
+
+xattr_list(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
+    ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k2">>, value = <<"v2">>}),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, get, [user_1_token_header(Config)], []),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [
+            [{<<"name">>, <<"k2">>}, {<<"value">>, <<"v2">>}],
+            [{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]
+        ],
+        DecodedBody
+    ).
+
+metric_get(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(Body),
+
+    % then
+    ?assertMatch([
+        [{<<"providerId">>, _}, {<<"rrd">>, <<"json_data">>}],
+        [{<<"providerId">>, _}, {<<"rrd">>, <<"json_data">>}]
+    ], DecodedBody).
+
+list_file(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/space3/file1">>,
+    Mode = 8#700,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+
+    % when
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"files/space3/file1">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [[{<<"id">>, FileGuid}, {<<"path">>, File}]],
+        DecodedBody
+    ).
+
+list_dir(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"files">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            [{<<"id">>, _}, {<<"path">>, <<"/space1">>}],
+            [{<<"id">>, _}, {<<"path">>, <<"/space2">>}],
+            [{<<"id">>, _}, {<<"path">>, <<"/space3">>}]
+        ],
+        DecodedBody
+    ).
+
+list_dir_range(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"files?offset=1&limit=1">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            [{<<"id">>, _}, {<<"path">>, <<"/space2">>}]
+        ],
+        DecodedBody
+    ).
+
+replicate_file_by_id(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/space3/file">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    timer:sleep(timer:seconds(10)),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode(Body0),
+    ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
+
+    % then
+    timer:sleep(timer:seconds(10)),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode(Body),
+    ?assertEqual(
+        [
+            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+        ], DecodedBody).
+
+changes_stream_file_meta_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file3"])),
+    File2 =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file3"])),
     Mode = 8#700,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, rdwr),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>),
-    lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
     spawn(fun() ->
         timer:sleep(500),
+        lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>),
         lfm_proxy:read(WorkerP1, Handle, 0, 2),
-        lfm_proxy:read(WorkerP1, Handle, 0, 2),
-        lfm_proxy:read(WorkerP1, Handle, 2, 2),
-        lfm_proxy:fsync(WorkerP1, Handle)
+        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, 8#777),
+        lfm_proxy:fsync(WorkerP1, Handle),
+        lfm_proxy:create(WorkerP1, SessionId, File2, Mode)
     end),
-    {ok, 200, _, RespBody} = do_request(WorkerP1, <<"read_event", File/binary, "?timeout=3000">>, get, [user_1_token_header(Config)], []),
-    ?assertEqual(<<"{\"type\":\"read_event\",\"count\":3,\"size\":0,\"blocks\":[[0,4]]}\r\n">>, % todo check size
-        RespBody).
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
+        get, [user_1_token_header(Config)], []),
 
+    ?assertNotEqual(<<>>, Body),
+    ?assert(length(binary:split(Body, <<"\r\n">>, [global])) >= 2).
+
+changes_stream_xattr_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4"])),
+    Mode = 8#700,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+
+    % when
+    spawn(fun() ->
+        timer:sleep(500),
+        lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"name">>, value = <<"value">>})
+    end),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
+        get, [user_1_token_header(Config)], []),
+
+    ?assertNotEqual(<<>>, Body),
+    Changes = binary:split(Body, <<"\r\n">>, [global]),
+    ?assert(length(Changes) >= 1),
+    [_, LastChangeJson | _] = lists:reverse(Changes),
+    LastChange = json_utils:decode(LastChangeJson),
+    Metadata = proplists:get_value(<<"changes">>, LastChange),
+    ?assertEqual([{<<"name">>, <<"value">>}], proplists:get_value(<<"xattrs">>, Metadata)).
+
+list_spaces(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"spaces">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            [{<<"name">>, <<"space1">>}, {<<"spaceId">>, <<"space1">>}],
+            [{<<"name">>, <<"space2">>}, {<<"spaceId">>, <<"space2">>}],
+            [{<<"name">>, <<"space3">>}, {<<"spaceId">>, <<"space3">>}]
+        ],
+        DecodedBody
+    ).
+
+get_space(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"spaces/space3">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            {<<"name">>, <<"space3">>},
+            {<<"providers">>, [
+                [
+                    {<<"providerId">>, PID1},
+                    {<<"providerName">>, PID1}
+                ],
+                [
+                    {<<"providerId">>, PID2},
+                    {<<"providerName">>, PID2}
+                ]
+            ]},
+            {<<"spaceId">>, <<"space3">>}
+        ],
+        DecodedBody
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -186,7 +478,7 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 do_request(Node, URL, Method, Headers, Body) ->
-    http_client:request(Method, <<(rest_endpoint(Node))/binary,  URL/binary>>, Headers, Body, [insecure]).
+    http_client:request(Method, <<(rest_endpoint(Node))/binary,  URL/binary>>, Headers, Body, [insecure, {recv_timeout, 15000}]).
 
 rest_endpoint(Node) ->
     Port =
@@ -197,7 +489,7 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    <<"https://", (list_to_binary(utils:get_host(Node)))/binary, ":", Port/binary, "/rest/latest/">>.
+    <<"https://", (list_to_binary(utils:get_host(Node)))/binary, ":", Port/binary, "/api/v3/oneprovider/">>.
 
 
 user_1_token_header(Config) ->

@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for posix mode read and modification.
+%%% Handler for listing spaces by id.
 %%% @end
 %%%--------------------------------------------------------------------
--module(posix_mode_handler).
+-module(spaces_by_id).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -18,14 +18,15 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
-    is_authorized/2, resource_exists/2, content_types_provided/2,
-    content_types_accepted/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_provided/2]).
 
 %% resource functions
--export([get_mode/2, put_mode/2]).
+-export([get_space/2]).
 
 %%%===================================================================
 %%% API
@@ -50,14 +51,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"PUT">>], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:malformed_request/2
-%%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
-malformed_request(Req, State) ->
-    rest_arg_parser:malformed_request(Req, State).
+    {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -67,55 +61,46 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:resource_exists/2
-%%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
-resource_exists(Req, State) ->
-    rest_existence_checker:resource_exists(Req, State).
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/json">>, get_mode}
+        {<<"application/json">>, get_space}
     ], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
-%%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
-content_types_accepted(Req, State) ->
-    {[
-        {<<"application/json">>, put_mode}
-    ], Req, State}.
-
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Handles GET with "application/json" content-type
+%% '/api/v3/oneprovider/spaces/{sid}'
+%% @doc Returns the basic information about space with given ID.\n
+%%
+%% HTTP method: GET
+%%
+%% @param sid Space ID.
 %%--------------------------------------------------------------------
--spec get_mode(req(), #{}) -> {term(), req(), #{}}.
-get_mode(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth} = State) ->
-    {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {guid, Guid}),
-    Response = json_utils:encode([{<<"posix_mode">>, Mode}]),
-    {Response, Req, State}.
+-spec get_space(req(), #{}) -> {term(), req(), #{}}.
+get_space(Req, State) ->
+    {State2, Req2} = validator:parse_space_id(Req, State),
 
-%%--------------------------------------------------------------------
-%% @doc Handles PUT with "application/json" content-type
-%%--------------------------------------------------------------------
--spec put_mode(req(), #{}) -> {term(), req(), #{}}.
-put_mode(Req, #{auth := Auth, path := Path} = State) ->
-    {ok, Body, Req2} = cowboy_req:body(Req),
-    case json_utils:decode(Body) of
-        [{<<"posix_mode">>, Mode}] ->
-            ok = onedata_file_api:set_perms(Auth, {path, Path}, Mode),
-            {true, Req2, State};
-        _ ->
-            throw(?BAD_REQUEST)
-    end.
+    #{auth := Auth, space_id := SpaceId} = State2,
+
+    {ok, #document{value = #space_info{name = Name, providers = Providers}}} =
+        space_info:get_or_fetch(Auth, SpaceId),
+    ProvidersRawResponse = lists:map(fun(ProviderId) ->
+        {ok, #document{value = #provider_info{client_name = ProviderName}}} =
+            provider_info:get_or_fetch(ProviderId),
+        [
+            {<<"providerId">>, ProviderId},
+            {<<"providerName">>, ProviderName}
+        ]
+    end, Providers),
+    RawResponse = [
+        {<<"name">>, Name},
+        {<<"providers">>, ProvidersRawResponse},
+        {<<"spaceId">>, SpaceId}
+    ],
+    Response = json_utils:encode(RawResponse),
+    {Response, Req2, State2}.

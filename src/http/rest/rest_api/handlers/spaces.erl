@@ -6,22 +6,27 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler allowing for replicating files.
+%%% Handler for listing spaces.
 %%% @end
 %%%--------------------------------------------------------------------
--module(replicate_file_handler).
+-module(spaces).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include("http/rest/http_status.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
-    is_authorized/2, resource_exists/2, content_types_accepted/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_provided/2]).
 
 %% resource functions
--export([replicate_file/2]).
+-export([list_spaces/2]).
 
 %%%===================================================================
 %%% API
@@ -46,14 +51,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-    {[<<"POST">>], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:malformed_request/2
-%%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
-malformed_request(Req, State) ->
-    rest_arg_parser:malformed_request(Req, State).
+    {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -63,20 +61,12 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:resource_exists/2
+%% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
-resource_exists(Req, State) ->
-    rest_existence_checker:resource_exists(Req, State).
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
-%%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{atom() | binary(), atom()}], req(), #{}}.
-content_types_accepted(Req, State) ->
+-spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+content_types_provided(Req, State) ->
     {[
-        {'*', replicate_file}
+        {<<"application/json">>, list_spaces}
     ], Req, State}.
 
 %%%===================================================================
@@ -84,10 +74,21 @@ content_types_accepted(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Handles POST
+%% '/api/v3/oneprovider/spaces'
+%% @doc Returns the list of all user spaces.
+%%
+%% HTTP method: GET
+%%
 %%--------------------------------------------------------------------
--spec replicate_file(req(), #{}) -> {term(), req(), #{}}.
-replicate_file(Req, #{path:= Path, auth := Auth} = State) ->
-    {ProviderId, Req2} = cowboy_req:qs_val(<<"provider_id">>, Req, oneprovider:get_provider_id()),
-    ok = onedata_file_api:replicate_file(Auth, {path, Path}, ProviderId),
-    {true, Req2, State}.
+-spec list_spaces(req(), #{}) -> {term(), req(), #{}}.
+list_spaces(Req, State = #{auth := Auth}) ->
+    {ok, UserId} = session:get_user_id(Auth),
+
+    Client = fslogic_utils:session_to_rest_client(Auth),
+    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get_or_fetch(Client, UserId),
+    RawResponse =
+        lists:map(fun({SpaceId, SpaceName}) ->
+            [{<<"name">>, SpaceName}, {<<"spaceId">>, SpaceId}]
+        end, Spaces),
+    Response = json_utils:encode(RawResponse),
+    {Response, Req, State}.

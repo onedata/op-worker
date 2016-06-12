@@ -17,7 +17,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_by_name/2, delete_by_name/2, exists_by_name/2, save/2, list/1]).
+-export([get_by_name/2, delete_by_name/2, exists_by_name/2, save/2, list/1,
+    get_file_uuid/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -80,6 +81,14 @@ list(FileUuid) ->
             (_, _, Acc) ->
                 Acc
         end, []).
+
+%%--------------------------------------------------------------------
+%% @doc Get file Uuid from xattr uuid
+%%--------------------------------------------------------------------
+-spec get_file_uuid(datastore:key()) -> {ok, file_meta:uuid()}.
+get_file_uuid(XattrUuid) ->
+    {Uuid, _Name} = decode_key(XattrUuid),
+    {ok, Uuid}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
