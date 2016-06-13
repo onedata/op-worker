@@ -21,7 +21,7 @@
     model_init/0, 'after'/5, before/4]).
 
 -export([save/4, get/3, get/4, decoded_list/0, exists/3, delete/3, create/4,
-    decode_id/1]).
+    create/5, decode_id/1]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -151,7 +151,8 @@ get(SubjectType, SubjectId, MetricType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns Monitoring State for given SubjectType, SubjectId and MetricType.
+%% Returns Monitoring State for given SubjectType, SubjectId, MetricType
+%% and ProviderId.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(atom(), datastore:id(), atom(), oneprovider:id()) ->
@@ -214,6 +215,20 @@ delete(SubjectType, SubjectId, MetricType) ->
 create(SubjectType, SubjectId, MetricType, MonitoringState) ->
     monitoring_state:create(#document{
         key = encode_id(SubjectType, SubjectId, MetricType),
+        value = MonitoringState
+    }).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates document with Monitoring State for given SubjectType,
+%% SubjectId, MetricType and ProviderId.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(atom(), datastore:id(), atom(), oneprovider:id(), #monitoring_state{}) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create(SubjectType, SubjectId, MetricType, ProviderId, MonitoringState) ->
+    monitoring_state:create(#document{
+        key = encode_id(SubjectType, SubjectId, MetricType, ProviderId),
         value = MonitoringState
     }).
 

@@ -18,12 +18,14 @@
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
--define(AVAILABLE_METRICS, [storage_quota, storage_used, data_access_kbs,
-    block_access_iops, block_access_latency, remote_transfer_kbs,
-    connected_users, remote_access_kbs, metada_access_ops]).
+-define(AVAILABLE_METRICS, [storage_quota, storage_used
+    %% TODO VFS-2160 Implement new metrics
+    %data_access_kbs, block_access_iops, block_access_latency, remote_transfer_kbs,
+    %connected_users, remote_access_kbs, metada_access_ops
+]).
 
 -define(DEFAULT_STEP, '5m').
--define(AVAILABLE_STEPS, ['5m', '1h', '1d', '1m', '1y']).
+-define(AVAILABLE_STEPS, ['5m', '1h', '1d', '1m']).
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
