@@ -47,7 +47,7 @@ start_link() ->
 specification() ->
     #{
         id => rrdtool_supervisor,
-        start => {rrdtool_supervisor, start_rrdtool, []},
+        start => {rrdtool_supervisor, start_link, []},
         restart => transient,
         shutdown => timer:seconds(10),
         type => supervisor,
