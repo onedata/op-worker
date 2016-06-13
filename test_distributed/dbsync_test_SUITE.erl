@@ -51,7 +51,7 @@ all() ->
 
 global_stream_test(MultiConfig) ->
     ConfigP1 = ?config(p1, MultiConfig),
-    ConfigP2 = ?config(p1, MultiConfig),
+    ConfigP2 = ?config(p2, MultiConfig),
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
@@ -145,7 +145,7 @@ global_stream_test(MultiConfig) ->
 
 global_stream_document_remove_test(MultiConfig) ->
     ConfigP1 = ?config(p1, MultiConfig),
-    ConfigP2 = ?config(p1, MultiConfig),
+    ConfigP2 = ?config(p2, MultiConfig),
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
@@ -258,7 +258,7 @@ global_stream_document_remove_test(MultiConfig) ->
 
 global_stream_with_proto_test(MultiConfig) ->
     ConfigP1 = ?config(p1, MultiConfig),
-    ConfigP2 = ?config(p1, MultiConfig),
+    ConfigP2 = ?config(p2, MultiConfig),
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
