@@ -190,4 +190,11 @@
     current_size = 0 :: non_neg_integer()
 }).
 
+%% Model for holding state of monitoring
+-record(monitoring_state, {
+    rrd_file = undefinied :: rrd_utils:rrd_file(),
+    monitoring_interval = 0 :: non_neg_integer(),
+    active = true :: boolean()
+}).
+
 -endif.

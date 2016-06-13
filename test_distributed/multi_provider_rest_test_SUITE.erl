@@ -263,7 +263,17 @@ xattr_list(Config) ->
     ).
 
 metric_get(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
+    Prov2ID = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
+
+    ?assertMatch(ok, rpc:call(WorkerP1, worker_proxy, call,
+        [monitoring_worker, {start, space, <<"space3">>, storage_quota}])),
+    {ok, State} = rpc:call(WorkerP1, monitoring_state, get,
+        [space, <<"space3">>, storage_quota]),
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, create,
+        [space, <<"space3">>, storage_quota, Prov2ID, State])),
 
     % when
     {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, [user_1_token_header(Config)], []),
@@ -271,8 +281,8 @@ metric_get(Config) ->
 
     % then
     ?assertMatch([
-        [{<<"providerId">>, _}, {<<"rrd">>, <<"json_data">>}],
-        [{<<"providerId">>, _}, {<<"rrd">>, <<"json_data">>}]
+        [{<<"providerId">>, Prov1ID}, {<<"rrd">>, _}],
+        [{<<"providerId">>, Prov2ID}, {<<"rrd">>, _}]
     ], DecodedBody).
 
 list_file(Config) ->
