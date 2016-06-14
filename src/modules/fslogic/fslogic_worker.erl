@@ -170,7 +170,7 @@ cleanup() ->
 run_and_catch_exceptions(Function, Context, Request, Type) ->
     try
         UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)),
-        {NextCTX, Providers} =
+        {NextCTX, Providers, UpdatedRequest} =
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
                     #fslogic_ctx{session_id = SessionId} = Context,
@@ -178,48 +178,32 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                         space_info:get_or_fetch(SessionId, SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
-                            {Context, [oneprovider:get_provider_id()]};
+                            {Context, [oneprovider:get_provider_id()], Request};
                         {[_ | _], false} ->
-                            {Context, ProviderIds};
+                            {Context, ProviderIds, Request};
                         {[], _} ->
                             throw(unsupported_space)
                     end;
                 {file, Entry} ->
-                    case file_meta:to_uuid(Entry) of
-                        {ok, UserRootDir} ->
-                            {Context, [oneprovider:get_provider_id()]};
-                        _ ->
-                            #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
-                                fslogic_context:set_space_id(Context, Entry),
-
-                            {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessionId, SpaceId),
-                            case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
-                                {_, true} ->
-                                    {NewCtx, [oneprovider:get_provider_id()]};
-                                {[_ | _], false} ->
-                                    {NewCtx, ProviderIds};
-                                {[], _} ->
-                                    throw(unsupported_space)
-                            end
-                    end;
+                    resolve_provider_for_file(Context, Entry, Request, UserRootDir);
                 {provider, ProvId} ->
-                    {Context, [ProvId]}
+                    {Context, [ProvId], Request}
             end,
 
         Self = oneprovider:get_provider_id(),
 
         case lists:member(Self, Providers) of
             true ->
-                apply(Function, [NextCTX, Request]);
+                apply(Function, [NextCTX, UpdatedRequest]);
             false ->
                 PrePostProcessResponse =
-                    try fslogic_remote:prerouting(NextCTX, Request, Providers) of
+                    try fslogic_remote:prerouting(NextCTX, UpdatedRequest, Providers) of
                         {ok, {reroute, Self, Request1}} ->  %% Request should be handled locally for some reason
                             {ok, apply(Function, [NextCTX, Request1])};
                         {ok, {reroute, RerouteToProvider, Request1}} ->
                             {ok, fslogic_remote:reroute(NextCTX, RerouteToProvider, Request1)};
                         {error, PreRouteError} ->
-                            ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [Request, PreRouteError]),
+                            ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [UpdatedRequest, PreRouteError]),
                             throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
 
                     catch
@@ -227,7 +211,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                             ?error_stacktrace("Unable to process remote fslogic request due to: ~p", [{Type, Reason0}]),
                             {error, {Type, Reason0}}
                     end,
-                case fslogic_remote:postrouting(NextCTX, PrePostProcessResponse, Request) of
+                case fslogic_remote:postrouting(NextCTX, PrePostProcessResponse, UpdatedRequest) of
                     undefined -> throw({unable_to_reroute_message, PrePostProcessResponse});
                     LocalResponse -> LocalResponse
                 end
@@ -246,6 +230,115 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
             %% Something went horribly wrong. This should not happen.
             report_error(Request, Type, Reason, error)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Resolves provider for given request. File targeted by the request
+%% may be changed by redirection.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_provider_for_file(fslogic_worker:ctx(),
+    file_meta:entry() | {guid, fslogic_worker:file_guid()}, any(),
+    file_meta:uuid()) -> {fslogic_worker:ctx(), [binary()], any()}.
+resolve_provider_for_file(Context, Entry, Request, UserRootDir) ->
+    case file_meta:to_uuid(Entry) of
+        {ok, UserRootDir} ->
+            {Context, [oneprovider:get_provider_id()], Request};
+        _ ->
+            #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
+                fslogic_context:set_space_id(Context, Entry),
+
+            {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessionId, SpaceId),
+            case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                {_, true} ->
+                    {ok, Uuid} = file_meta:to_uuid(Entry),
+                    case file_meta:get(Uuid) of
+                        {error, {not_found, file_meta}} ->
+                            {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
+                            UpdatedRequest = change_file_in_request(Request, NewGuid),
+                            resolve_provider_for_file(NewCtx, {guid, NewGuid}, UpdatedRequest, UserRootDir);
+                        _ ->
+                            {NewCtx, [oneprovider:get_provider_id()], Request}
+                    end;
+                {[_ | _], false} ->
+                    {NewCtx, ProviderIds, Request};
+                {[], _} ->
+                    throw(unsupported_space)
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Changes target GUID of given request
+%% @end
+%%--------------------------------------------------------------------
+-spec change_file_in_request(any(), fslogic_worker:file_guid()) -> any().
+change_file_in_request(#fuse_request{fuse_request = #get_file_attr{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_file_attr{entry = {guid, GUID}}};
+change_file_in_request(#fuse_request{fuse_request = #delete_file{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#delete_file{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #create_dir{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#create_dir{parent_uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_file_children{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_file_children{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_parent{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_parent{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #change_mode{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#change_mode{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #rename{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#rename{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #update_times{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#update_times{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_new_file_location{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_new_file_location{parent_uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_file_location{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_file_location{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #truncate{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#truncate{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_xattr{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_xattr{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #set_xattr{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#set_xattr{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #remove_xattr{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#remove_xattr{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #list_xattr{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#list_xattr{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_acl{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_acl{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #set_acl{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#set_acl{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #remove_acl{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#remove_acl{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_transfer_encoding{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_transfer_encoding{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #set_transfer_encoding{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#set_transfer_encoding{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_cdmi_completion_status{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_cdmi_completion_status{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #set_cdmi_completion_status{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#set_cdmi_completion_status{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_mimetype{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_mimetype{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #set_mimetype{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#set_mimetype{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #synchronize_block{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#synchronize_block{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #synchronize_block_and_compute_checksum{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#synchronize_block_and_compute_checksum{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_file_path{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_file_path{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #fsync{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#fsync{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #get_file_distribution{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#get_file_distribution{uuid = GUID}};
+change_file_in_request(#fuse_request{fuse_request = #release{} = IRequest} = Request, GUID) ->
+    Request#fuse_request{fuse_request = IRequest#release{uuid = GUID}};
+change_file_in_request(#proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := _} = Parameters} = Request, GUID) ->
+    Request#proxyio_request{parameters = Parameters#{?PROXYIO_PARAMETER_FILE_UUID => GUID}};
+change_file_in_request(Request, _) ->
+    Request.
 
 %%--------------------------------------------------------------------
 %% @private

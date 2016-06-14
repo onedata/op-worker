@@ -136,13 +136,13 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms,
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
-            (NewProvMap, false) -> %% Request should be handled locally only
+            (#events{events = [Event]}, NewProvMap, false) -> %% Request should be handled locally only
                 {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:map(
                     fun(_, EvtStm) ->
-                        gen_server:cast(EvtStm, Evt),
+                        gen_server:cast(EvtStm, Event),
                         EvtStm
                     end, EvtStms)}};
-            (NewProvMap, true) -> %% Request was already handled remotely
+            (_, NewProvMap, true) -> %% Request was already handled remotely
                 {noreply, State#state{entry_to_provider_map = NewProvMap}}
         end,
 
@@ -153,7 +153,7 @@ handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, not
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
-            (NewProvMap, false) -> %% Request should be handled locally only
+            (_, NewProvMap, false) -> %% Request should be handled locally only
                 case maps:find(SubId, EvtStms) of
                     {ok, Stm} ->
                         gen_server:cast(Stm, {flush, NotifyFun});
@@ -162,7 +162,7 @@ handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, not
                         "session ~p not found", [SubId, SessId])
                 end,
                 {noreply, State#state{entry_to_provider_map = NewProvMap}};
-            (NewProvMap, true) -> %% Request was already handled remotely
+            (_, NewProvMap, true) -> %% Request was already handled remotely
                 {noreply, State#state{entry_to_provider_map = NewProvMap}}
         end,
 
@@ -171,7 +171,7 @@ handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, not
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
     HandleLocally =
-        fun(NewProvMap, _) ->
+        fun(_, NewProvMap, _) ->
             ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
             {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
             {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:put(SubId, EvtStm, EvtStms)}}
@@ -293,17 +293,18 @@ request_to_file_entry_or_provider(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_or_reroute(RequestMessage :: term(),
-    RequestContext :: {file, file_meta:entry()} | {provider, oneprovider:id()} | not_file_context,
+    RequestContext :: {file, fslogic_worker:file_guid_or_path()} | {provider, oneprovider:id()} | not_file_context,
     SessId :: session:id(),
-    HandleLocallyFun :: fun((NewProvMap :: #{}, IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
-handle_or_reroute(_, _, undefined, HandleLocallyFun, ProvMap) ->
-    HandleLocallyFun(ProvMap, false);
+    HandleLocallyFun :: fun((RequestMessage :: term(), NewProvMap :: #{},
+    IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
+handle_or_reroute(Msg, _, undefined, HandleLocallyFun, ProvMap) ->
+    HandleLocallyFun(Msg, ProvMap, false);
 handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage,
     {provider, ProviderId}, SessId, HandleLocallyFun, ProvMap) ->
     {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
     case oneprovider:get_provider_id() of
         ProviderId ->
-            HandleLocallyFun(ProvMap, false);
+            HandleLocallyFun(RequestMessage, ProvMap, false);
         _ ->
             ClientMsg =
                 #client_message{
@@ -323,14 +324,14 @@ handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = Request
                     end
                 end),
             provider_communicator:communicate_async(ClientMsg, Ref, RequestTranslator),
-            HandleLocallyFun(ProvMap, true)
+            HandleLocallyFun(RequestMessage, ProvMap, true)
     end;
-handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
+handle_or_reroute(#events{events = [Evt]} = RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
     {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
     UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
     case file_meta:to_uuid(Entry) of
         {ok, UserRootDir} ->
-            HandleLocallyFun(ProvMap, false);
+            HandleLocallyFun(RequestMessage, ProvMap, false);
         {ok, FileUUID} ->
             CurrentTime = erlang:system_time(seconds),
             {NewProvMap, ProviderIdsFinal} =
@@ -338,25 +339,44 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
                     {CachedTime, Mapped} when CachedTime + ?ENTRY_TO_PROVIDER_MAPPING_CACHE_LIFETIME_SECONDS > CurrentTime ->
                         {ProvMap, Mapped};
                     _ ->
-                        {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
-                        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+                        SpaceId = fslogic_spaces:get_space_id(Entry),
                         RestClient = fslogic_utils:session_to_rest_client(SessId),
                         {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(RestClient, SpaceId, UserId),
                         {maps:put(Entry, {erlang:system_time(seconds), ProviderIds}, ProvMap), ProviderIds}
                 end,
             case {ProviderIdsFinal, lists:member(oneprovider:get_provider_id(), ProviderIdsFinal)} of
                 {_, true} ->
-                    HandleLocallyFun(NewProvMap, false);
+                    case file_meta:get(FileUUID) of
+                        {error, {not_found, file_meta}} ->
+                            {ok, NewGuid} = file_meta:get_guid_from_phantom_file(FileUUID),
+                            UpdatedEvt = change_file_in_event(Evt, NewGuid),
+                            handle_or_reroute(RequestMessage#events{events = [UpdatedEvt]},
+                                {file, {guid, NewGuid}}, SessId, HandleLocallyFun, ProvMap);
+                        _ ->
+                            HandleLocallyFun(RequestMessage, NewProvMap, false)
+                    end;
                 {[H | _], false} ->
                     provider_communicator:stream(sequencer:term_to_stream_id(FileUUID), #client_message{
                         message_body = RequestMessage,
                         proxy_session_id = SessId,
                         proxy_session_auth = Auth
                     }, session_manager:get_provider_session_id(outgoing, H), 1),
-                    HandleLocallyFun(NewProvMap, true);
+                    HandleLocallyFun(RequestMessage, NewProvMap, true);
                 {[], _} ->
                     throw(unsupported_space)
             end
     end;
-handle_or_reroute(_, _, _, HandleLocallyFun, ProvMap) ->
-    HandleLocallyFun(ProvMap, false).
+handle_or_reroute(Msg, _, _, HandleLocallyFun, ProvMap) ->
+    HandleLocallyFun(Msg, ProvMap, false).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Changes target GUID of given event
+%% @end
+%%--------------------------------------------------------------------
+-spec change_file_in_event(any(), fslogic_worker:file_guid()) -> any().
+change_file_in_event(#event{object = #read_event{} = Object} = Msg, GUID) ->
+    Msg#event{key = GUID, object = Object#read_event{file_uuid = GUID}};
+change_file_in_event(#event{object = #write_event{} = Object} = Msg, GUID) ->
+    Msg#event{key = GUID, object = Object#write_event{file_uuid = GUID}}.

@@ -185,7 +185,7 @@ moving_into_itself(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logical
 rename_select(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath, FileType) ->
     {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
     {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
-    SourceSpaceId = fslogic_spaces:get_space_id(SourceUUID),
+    SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
     TargetSpaceId = fslogic_spaces:get_space_id(CTX, TargetParentPath),
 
     case SourceSpaceId =:= TargetSpaceId of
@@ -283,7 +283,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
     {_, CanonicalTargetParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
     {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
     {ok, #document{key = SourceUUID} = SourceDoc} = file_meta:get(SourceEntry),
-    SourceSpaceId = fslogic_spaces:get_space_id(SourceUUID),
+    SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
     TargetSpaceId = fslogic_spaces:get_space_id(CTX, TargetParentPath),
 
     RenamedEntries = case SourceDoc of
