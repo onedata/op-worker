@@ -208,7 +208,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
     {ok, {hostent, FullHostname, _, inet, _, IPList}} = inet:gethostbyname(Hostname),
     {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
 
-    IPListParsed = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IPList),
+    IPListParsed = lists:map(fun(IP) ->
+        list_to_binary(inet_parse:ntoa(IP)) end, IPList),
 
     UserDetailsJSON = case get_auth(SessionIdOrIdentity) of
         {ok, undefined} ->
@@ -228,9 +229,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
                 {error, {not_found, onedata_user}} ->
                     <<"{}">>
             end;
-        {ok, #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}} ->
-            {ok, UserDetails} = oz_users:get_details({user,
-                {Macaroon, DMacaroons}}),
+        {ok, Auth} ->
+            {ok, UserDetails} = oz_users:get_details(Auth),
             UserDetailsList = ?record_to_list(user_details, UserDetails),
             json_utils:encode(UserDetailsList)
     end,

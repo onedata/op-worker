@@ -20,7 +20,7 @@
     message_id :: message_id:id(),
     session_id :: session:id(),
     proxy_session_id :: session:id(),
-    proxy_session_auth :: #auth{},
+    proxy_session_auth :: #token_auth{},
     message_stream :: #message_stream{},
     message_body :: tuple()
 }).

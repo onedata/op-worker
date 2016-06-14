@@ -39,7 +39,7 @@
 get_user_rest_auth() ->
     SessionId = g_session:get_session_id(),
     {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
+    #token_auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
     {user, {Mac, DMacs}}.
 
 

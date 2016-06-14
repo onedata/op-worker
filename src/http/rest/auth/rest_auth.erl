@@ -59,7 +59,7 @@ is_authorized(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user basing on request headers
+%% Authenticates user based on request headers
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate(Req :: req()) -> {{ok, session:id()} | {error, term()}, req()}.
@@ -68,7 +68,12 @@ authenticate(Req) ->
         {undefined, Req2} ->
             case cowboy_req:header(<<"macaroon">>, Req2) of
                 {undefined, Req3} ->
-                    authenticate_using_cert(Req3);
+                    case cowboy_req:header(<<"authorization">>, Req3) of
+                        {undefined, Req4} ->
+                            authenticate_using_cert(Req4);
+                        {BasicAuthHeader, Req4} ->
+                            authenticate_using_basic_auth(Req4, BasicAuthHeader)
+                    end;
                 {Token, Req3} ->
                     authenticate_using_token(Req3, Token)
             end;
@@ -82,7 +87,7 @@ authenticate(Req) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user basing on provided token.
+%% Authenticates user based on provided token.
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate_using_token(req(), Token :: binary()) ->
@@ -90,7 +95,7 @@ authenticate(Req) ->
 authenticate_using_token(Req, Token) ->
     case macaroon:deserialize(Token) of
         {ok, Macaroon} ->
-            Auth = #auth{macaroon = Macaroon},
+            Auth = #token_auth{macaroon = Macaroon},
             case identity:get_or_fetch(Auth) of
                 {ok, #document{value = Iden}} ->
                     {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
@@ -104,7 +109,24 @@ authenticate_using_token(Req, Token) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user basing on onedata-internal certificate headers.
+%% Authenticates user based on basic auth header.
+%% @end
+%%--------------------------------------------------------------------
+-spec authenticate_using_basic_auth(req(), BasicAuthHeader :: binary()) ->
+    {{ok, session:id()} | {error, term()}, req()}.
+authenticate_using_basic_auth(Req, BasicAuthHeader) ->
+    Auth = #basic_auth{credentials = BasicAuthHeader},
+    case identity:get_or_fetch(Auth) of
+        {ok, #document{value = Iden}} ->
+            {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
+            {{ok, SessId}, Req};
+        Error ->
+            {Error, Req}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Authenticates user based on onedata-internal certificate headers.
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate_using_cert(req()) ->
