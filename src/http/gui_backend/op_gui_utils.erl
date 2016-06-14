@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_user_rest_auth/0]).
+-export([get_user_auth/0]).
 -export([ids_to_association/2, association_to_ids/1]).
 
 % @todo temporary solution, fix when subscriptions work better
@@ -33,14 +33,10 @@
 %% current user.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_rest_auth() -> {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
-get_user_rest_auth() ->
-    SessionId = g_session:get_session_id(),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #token_auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {user, {Mac, DMacs}}.
+-spec get_user_auth() -> #token_auth{}.
+get_user_auth() ->
+    {ok, Auth} = session:get_auth(g_session:get_session_id()),
+    Auth.
 
 
 %%--------------------------------------------------------------------

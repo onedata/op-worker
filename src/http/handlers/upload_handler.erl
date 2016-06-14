@@ -289,12 +289,6 @@ get_new_file_id(Params) ->
             SessionId = g_session:get_session_id(),
             ParentId = get_bin_param(<<"parentId">>, Params),
             FileName = get_bin_param(<<"resumableFilename">>, Params),
-            case FileName of
-                <<"hello">> ->
-                    throw(dupa);
-                _ ->
-                    ok
-            end,
             {ok, ParentPath} = logical_file_manager:get_file_path(
                 SessionId, ParentId),
             ProposedPath = filename:join([ParentPath, FileName]),
