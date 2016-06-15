@@ -4,6 +4,32 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta6
+
+* Update erlang tls
+* VFS-2112 Integrate monitoring with REST API
+* VFS-2109 Adjust cdmi tests to new error messages.
+* VFS-2108 Add prefetching for unsynchronized files.
+* VFS-2109 Accept Macaroon header with token, as auth method for REST.
+* VFS-2031 Improve queue flushing in dbsync
+* VFS-2031 Remove default space
+* VFS-2109 Add support for dir replication through REST api.
+* VFS-2109 Move rest error handling logic from cdmi_exception_handler to more generic request_exception_handler.
+* VFS-2019 Add space name to luma proxy call
+* VFS-1506 Make security rules more generic.
+* VFS-2081 Make dbsync singleton
+* VFS-2018 Add response after rename
+* VFS-1506 Fix sending file attributes after replica reconciliation.
+* VFS-1506 Include file gaps in file_location's blocks.
+* VFS-1999 Use message origin instead of message sender as dbsync's provider context
+* VFS-1506 Add permission checking to utime operation.
+* VFS-2071 Adjust code to the new S3 helper
+* VFS-1999 Quota implementation
+* VFS-2018 Adding file renamed subscription
+* VFS-2018 Adding file_renamed_event
+* VFS-1854 Enable inter-provider sequencer
+
+
 ### 3.0.0-beta5
 
 * VFS-2050, Get file size update
