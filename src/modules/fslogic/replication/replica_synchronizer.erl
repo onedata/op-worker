@@ -45,7 +45,13 @@ synchronize(Uuid, Block) ->
 %%--------------------------------------------------------------------
 -spec synchronize(file_meta:uuid(), fslogic_blocks:block(), boolean()) -> ok.
 synchronize(Uuid, Block = #file_block{size = RequestedSize}, Prefetch) ->
-    EnlargedBlock = Block#file_block{size = max(RequestedSize, ?MINIMAL_SYNC_REQUEST)},
+    EnlargedBlock =
+        case Prefetch of
+            true ->
+                Block#file_block{size = max(RequestedSize, ?MINIMAL_SYNC_REQUEST)};
+            false ->
+                Block
+        end,
     trigger_prefetching(Uuid, EnlargedBlock, Prefetch),
     {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
     LocationDocs = lists:map(
