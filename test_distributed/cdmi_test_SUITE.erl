@@ -180,14 +180,19 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(choose_adequate_handler_test, Config) ->
+    % TODO TRY CATCH TUTEJ!!!!
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
+    try
     application:start(ssl2),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    lfm_proxy:init(ConfigWithSessionInfo)
+    catch T:M ->
+        ct:print("~p", [{T,M,erlang:get_stacktrace()}])
+    end.
 
 end_per_testcase(choose_adequate_handler_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),

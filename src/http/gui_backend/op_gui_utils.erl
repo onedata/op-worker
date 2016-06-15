@@ -68,9 +68,8 @@ association_to_ids(AssocId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_spaces(UserAuth, UserId :: binary()) -> [SpaceId :: binary()]
-    when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_spaces(UserAuth :: oz_endpoint:auth(), UserId :: binary()) ->
+    [SpaceId :: binary()].
 find_all_spaces(UserAuth, UserId) ->
     find_all_spaces(UserAuth, UserId, 100).
 
@@ -83,10 +82,8 @@ find_all_spaces(UserAuth, UserId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_spaces(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary()] when UserAuth :: {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_spaces(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary()].
 find_all_spaces(_, _, 0) ->
     [];
 
@@ -109,9 +106,8 @@ find_all_spaces(UserAuth, UserId, MaxRetries) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_groups(UserAuth, UserId :: binary()) -> [SpaceId :: binary()]
-    when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary()) ->
+    [SpaceId :: binary()].
 find_all_groups(UserAuth, UserId) ->
     find_all_groups(UserAuth, UserId, 100).
 
@@ -124,10 +120,8 @@ find_all_groups(UserAuth, UserId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_groups(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary()] when UserAuth :: {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary()].
 find_all_groups(_, _, 0) ->
     [];
 
