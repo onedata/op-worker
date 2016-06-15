@@ -21,36 +21,11 @@
 -export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_file_locations_once/1,
     get_local_storage_file_locations/1]).
--export([session_to_rest_client/1]).
 -export([wait_for_links/3, wait_for_file_meta/2, wait_for_local_file_location/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns most suitable rest client for onezone request for given session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_to_rest_client(session:id()) -> oz_endpoint:client().
-session_to_rest_client(?ROOT_SESS_ID) ->
-    provider;
-session_to_rest_client(SessId) ->
-    {ok, #document{value = #session{auth = Auth, type = Type}}} = session:get(SessId),
-    case Type of
-        provider_outgoing -> provider;
-        provider_incoming -> provider;
-        _ ->
-            case Auth of
-                #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc} ->
-                    {try_user, {Macaroon, MacaroonDsc}};
-                _ ->
-                    provider
-            end
-    end.
-
-
 
 %%--------------------------------------------------------------------
 %% @doc Create random sequence consisting of lowercase ASCII letters.

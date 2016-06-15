@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -26,6 +27,7 @@
 -export([
     token_auth/1,
     cert_auth/1,
+    basic_auth/1,
     internal_error_when_handler_crashes/1,
     custom_code_when_handler_throws_code/1,
     custom_error_when_handler_throws_error/1
@@ -35,12 +37,14 @@
 all() -> ?ALL([
     token_auth,
 %%    cert_auth, %todo reenable rest_cert_auth after appmock repair
+    basic_auth,
     internal_error_when_handler_crashes,
     custom_code_when_handler_throws_code,
     custom_error_when_handler_throws_error
 ]).
 
 -define(MACAROON, element(2, macaroon:serialize(macaroon:create("a", "b", "c")))).
+-define(BASIC_AUTH_HEADER, <<"Basic ", (base64:encode(<<"user:password">>))/binary>>).
 
 %%%===================================================================
 %%% Test functions
@@ -81,6 +85,19 @@ cert_auth(Config) ->
     {ok, 307, Headers3, _} = do_request(get, Loc2, [], <<>>, [KnownCertOpt]),
     Loc3 = proplists:get_value(<<"location">>, Headers3),
     ?assertMatch({ok, 404, _, _}, do_request(get, Loc3, [], <<>>, [KnownCertOpt])).
+
+basic_auth(Config) ->
+    % given
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Endpoint = rest_endpoint(Worker),
+
+    % when
+    AuthFail = do_request(get, Endpoint ++ "files", [{<<"Authorization">>, <<"invalid">>}]),
+    AuthSuccess = do_request(get, Endpoint ++ "files", [{<<"Authorization">>, ?BASIC_AUTH_HEADER}]),
+
+    % then
+    ?assertMatch({ok, 401, _, _}, AuthFail),
+    ?assertMatch({ok, 200, _, _}, AuthSuccess).
 
 internal_error_when_handler_crashes(Config) ->
     % given
@@ -242,25 +259,23 @@ mock_oz_certificates(Config) ->
 
     test_utils:mock_expect(Workers, oz_endpoint, auth_request,
         fun
-            (provider, URN, Method, Headers, Body, Options) ->
-                do_request(Method, OzRestApiUrl ++ URN,
-                    [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
-            (client, URN, Method, Headers, Body, Options) ->
-                do_request(Method, OzRestApiUrl ++ URN,
-                    [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
-            ({_, undefined}, URN, Method, Headers, Body, Options) ->
-                do_request(Method, OzRestApiUrl ++ URN,
-                    [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
             % @todo for now, in rest we only use the root macaroon
-            ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
+            (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
                 {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
                 AuthorizationHeader = {<<"macaroon">>, SrlzdMacaroon},
                 do_request(Method, OzRestApiUrl ++ URN,
-                    [{<<"content-type">>,<< "application/json">>},
+                    [{<<"content-type">>, <<"application/json">>},
                         AuthorizationHeader | Headers],
+                    Body, [SSLOpts | Options]);
+            (#basic_auth{credentials =  Credentials}, URN, Method, Headers, Body, Options) ->
+                AuthorizationHeader = {<<"Authorization">>, Credentials},
+                do_request(Method, OzRestApiUrl ++ URN,
+                    [{<<"content-type">>, <<"application/json">>},
+                        AuthorizationHeader | Headers],
+                    Body, [SSLOpts | Options]);
+            (_, URN, Method, Headers, Body, Options) ->
+                do_request(Method, OzRestApiUrl ++ URN,
+                    [{<<"content-type">>, <<"application/json">>} | Headers],
                     Body, [SSLOpts | Options])
         end
     ).

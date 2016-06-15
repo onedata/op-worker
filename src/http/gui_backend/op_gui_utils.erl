@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_user_rest_auth/0]).
+-export([get_user_auth/0]).
 -export([ids_to_association/2, association_to_ids/1]).
 
 % @todo temporary solution, fix when subscriptions work better
@@ -33,14 +33,10 @@
 %% current user.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_rest_auth() -> {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
-get_user_rest_auth() ->
-    SessionId = g_session:get_session_id(),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {user, {Mac, DMacs}}.
+-spec get_user_auth() -> #token_auth{}.
+get_user_auth() ->
+    {ok, Auth} = session:get_auth(g_session:get_session_id()),
+    Auth.
 
 
 %%--------------------------------------------------------------------
@@ -72,9 +68,8 @@ association_to_ids(AssocId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_spaces(UserAuth, UserId :: binary()) -> [SpaceId :: binary()]
-    when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_spaces(UserAuth :: oz_endpoint:auth(), UserId :: binary()) ->
+    [SpaceId :: binary()].
 find_all_spaces(UserAuth, UserId) ->
     find_all_spaces(UserAuth, UserId, 100).
 
@@ -87,10 +82,8 @@ find_all_spaces(UserAuth, UserId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_spaces(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary()] when UserAuth :: {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_spaces(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary()].
 find_all_spaces(_, _, 0) ->
     [];
 
@@ -113,9 +106,8 @@ find_all_spaces(UserAuth, UserId, MaxRetries) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_groups(UserAuth, UserId :: binary()) -> [SpaceId :: binary()]
-    when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary()) ->
+    [SpaceId :: binary()].
 find_all_groups(UserAuth, UserId) ->
     find_all_groups(UserAuth, UserId, 100).
 
@@ -128,10 +120,8 @@ find_all_groups(UserAuth, UserId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_groups(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary()] when UserAuth :: {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary()].
 find_all_groups(_, _, 0) ->
     [];
 
