@@ -267,6 +267,12 @@ mock_oz_certificates(Config) ->
                     [{<<"content-type">>, <<"application/json">>},
                         AuthorizationHeader | Headers],
                     Body, [SSLOpts | Options]);
+            (#basic_auth{credentials =  Credentials}, URN, Method, Headers, Body, Options) ->
+                AuthorizationHeader = {<<"Authorization">>, Credentials},
+                do_request(Method, OzRestApiUrl ++ URN,
+                    [{<<"content-type">>, <<"application/json">>},
+                        AuthorizationHeader | Headers],
+                    Body, [SSLOpts | Options]);
             (_, URN, Method, Headers, Body, Options) ->
                 do_request(Method, OzRestApiUrl ++ URN,
                     [{<<"content-type">>, <<"application/json">>} | Headers],
