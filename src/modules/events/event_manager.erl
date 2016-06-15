@@ -326,7 +326,7 @@ handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = Request
             provider_communicator:communicate_async(ClientMsg, Ref, RequestTranslator),
             HandleLocallyFun(RequestMessage, ProvMap, true)
     end;
-handle_or_reroute(#events{events = [Evt]} = RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
+handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
     {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
     UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
     case file_meta:to_uuid(Entry) of
@@ -349,9 +349,9 @@ handle_or_reroute(#events{events = [Evt]} = RequestMessage, {file, Entry}, SessI
                     case file_meta:get(FileUUID) of
                         {error, {not_found, file_meta}} ->
                             {ok, NewGuid} = file_meta:get_guid_from_phantom_file(FileUUID),
-                            UpdatedEvt = change_file_in_event(Evt, NewGuid),
-                            handle_or_reroute(RequestMessage#events{events = [UpdatedEvt]},
-                                {file, {guid, NewGuid}}, SessId, HandleLocallyFun, ProvMap);
+                            UpdatedRequest = change_file_in_message(RequestMessage, NewGuid),
+                            handle_or_reroute(UpdatedRequest, {file, {guid, NewGuid}},
+                                SessId, HandleLocallyFun, ProvMap);
                         _ ->
                             HandleLocallyFun(RequestMessage, NewProvMap, false)
                     end;
@@ -375,8 +375,14 @@ handle_or_reroute(Msg, _, _, HandleLocallyFun, ProvMap) ->
 %% Changes target GUID of given event
 %% @end
 %%--------------------------------------------------------------------
--spec change_file_in_event(any(), fslogic_worker:file_guid()) -> any().
-change_file_in_event(#event{object = #read_event{} = Object} = Msg, GUID) ->
-    Msg#event{key = GUID, object = Object#read_event{file_uuid = GUID}};
-change_file_in_event(#event{object = #write_event{} = Object} = Msg, GUID) ->
-    Msg#event{key = GUID, object = Object#write_event{file_uuid = GUID}}.
+-spec change_file_in_message(any(), fslogic_worker:file_guid()) -> any().
+change_file_in_message(#events{events = [#event{object = #read_event{} = Object} = Msg]}, GUID) ->
+    #events{events = [Msg#event{key = GUID, object = Object#read_event{file_uuid = GUID}}]};
+change_file_in_message(#events{events = [#event{object = #write_event{} = Object} = Msg]}, GUID) ->
+    #events{events = [Msg#event{key = GUID, object = Object#write_event{file_uuid = GUID}}]};
+change_file_in_message(#subscription{object = #file_attr_subscription{} = Object} = Sub, GUID) ->
+    Sub#subscription{object = Object#file_attr_subscription{file_uuid = GUID}};
+change_file_in_message(#subscription{object = #file_location_subscription{} = Object} = Sub, GUID) ->
+    Sub#subscription{object = Object#file_location_subscription{file_uuid = GUID}};
+change_file_in_message(#subscription{object = #permission_changed_subscription{} = Object} = Sub, GUID) ->
+    Sub#subscription{object = Object#permission_changed_subscription{file_uuid = GUID}}.

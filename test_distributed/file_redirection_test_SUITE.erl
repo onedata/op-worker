@@ -20,6 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -define(TIMEOUT, timer:seconds(15)).
+-define(PHANTOM_LIFESPAN_SECONDS, 5).
 
 %%%-------------------------------------------------------------------
 %%% API
@@ -30,12 +31,14 @@
 
 -export([
     redirect_fuse_request_test/1,
-    redirect_event_test/1]).
+    redirect_event_test/1,
+    phantom_file_deletion_test/1]).
 
 all() ->
     ?ALL([
         redirect_fuse_request_test,
-        redirect_event_test
+        redirect_event_test,
+        phantom_file_deletion_test
     ]).
 
 %%%===================================================================
@@ -78,6 +81,26 @@ redirect_event_test(Config) ->
     ?assertEqual(TargetEvent, RedirectedEvent),
     ok.
 
+phantom_file_deletion_test(Config) ->
+    [W, _] = sorted_workers(Config),
+
+    ?assertEqual(ok, rpc:call(W, application, set_env,
+        [op_worker, phantom_lifespan_seconds, ?PHANTOM_LIFESPAN_SECONDS])),
+
+    TargetGuid = <<"some_guid">>,
+    OldScope = <<"some_scope">>,
+    {ok, PhantomUuid} = ?assertMatch({ok, _}, rpc:call(W, file_meta,
+        create_phantom_file, [<<"some_uuid">>, OldScope, TargetGuid])),
+
+    ?assertMatch({ok, _}, rpc:call(W, file_meta, get, [PhantomUuid])),
+
+    %% wait for phantom file deletion
+    timer:sleep(timer:seconds(?PHANTOM_LIFESPAN_SECONDS + 1)),
+
+    ?assertEqual({error, {not_found, file_meta}}, rpc:call(W, file_meta, get, [PhantomUuid])),
+
+    ok.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -101,7 +124,7 @@ init_per_testcase(CaseName, Config) ->
 end_per_testcase(_, Config) ->
     initializer:unload_quota_mocks(Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config).
 
 %%%===================================================================

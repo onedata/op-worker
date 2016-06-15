@@ -283,6 +283,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
     {_, CanonicalTargetParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
     {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
     {ok, #document{key = SourceUUID} = SourceDoc} = file_meta:get(SourceEntry),
+
     SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
     TargetSpaceId = fslogic_spaces:get_space_id(CTX, TargetParentPath),
 
@@ -354,11 +355,14 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewLogicalPath}]
     end,
 
+    ok = create_phantom_files(RenamedEntries, SourceSpaceId, TargetSpaceId),
+
     UserId = fslogic_context:get_user_id(CTX),
     CurrTime = erlang:system_time(seconds),
     ok = fslogic_times:update_mtime_ctime(SourceParent, UserId, CurrTime),
     ok = fslogic_times:update_ctime({path, CanonicalTargetPath}, UserId, CurrTime),
     ok = fslogic_times:update_mtime_ctime({path, CanonicalTargetParentPath}, UserId, CurrTime),
+
     {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} = parse_renamed_entries(RenamedEntries),
     spawn(fun() -> fslogic_event:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
     {ok, #file_renamed{new_uuid = NewGuid, child_entries = ChildEntries}}.
@@ -377,6 +381,10 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
     {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
     SourcePathTokens = filename:split(SourcePath),
     TargetPathTokens = filename:split(LogicalTargetPath),
+    {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
+
+    SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
+    TargetSpaceId = fslogic_spaces:get_space_id(CTX, TargetParentPath),
 
     RenamedEntries = for_each_child_file(SourceEntry,
         fun(#document{key = SourceUuid} = Doc, Acc) ->
@@ -406,10 +414,13 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
             [{SourceGuid, TargetGuid, NewPath} | Acc]
         end, []),
 
+    ok = create_phantom_files(RenamedEntries, SourceSpaceId, TargetSpaceId),
+
     CurrTime = erlang:system_time(seconds),
     ok = fslogic_times:update_mtime_ctime(SourceParent, fslogic_context:get_user_id(CTX), CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, LogicalTargetPath}, undefined, undefined, CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, TargetParentPath}, undefined, CurrTime, CurrTime),
+
     {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} = parse_renamed_entries(RenamedEntries),
     spawn(fun() -> fslogic_event:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
     {ok, #file_renamed{new_uuid = NewGuid, child_entries = ChildEntries}}.
@@ -688,10 +699,29 @@ logical_path_to_canonical(#fslogic_ctx{session_id = SessId} = CTX, LogicalPath) 
     NewUuid :: fslogic_worker:file_guid(), NewPath :: file_meta:path()}]) ->
     {#file_renamed_entry{}, [#file_renamed_entry{}]}.
 parse_renamed_entries([TopEntryRaw | ChildEntriesRaw]) ->
-    {TopEntryOldUuid, TopEntryNewUuid, TopEntryNewPath} = TopEntryRaw,
+    {TopEntryOldGuid, TopEntryNewGuid, TopEntryNewPath} = TopEntryRaw,
     ChildEntries = lists:map(
-        fun({OldUuid, NewUuid, NewPath}) ->
-            #file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}
+        fun({OldGuid, NewGuid, NewPath}) ->
+            #file_renamed_entry{old_uuid = OldGuid, new_uuid = NewGuid, new_path = NewPath}
         end, ChildEntriesRaw),
-    {#file_renamed_entry{old_uuid = TopEntryOldUuid, new_uuid = TopEntryNewUuid,
+    {#file_renamed_entry{old_uuid = TopEntryOldGuid, new_uuid = TopEntryNewGuid,
         new_path = TopEntryNewPath}, ChildEntries}.
+
+%%--------------------------------------------------------------------
+%% @doc Converts list of entry tuples to records that can be sent or emitted
+%%--------------------------------------------------------------------
+-spec create_phantom_files([{OldUuid :: fslogic_worker:file_guid(),
+    NewUuid :: fslogic_worker:file_guid(), NewPath :: file_meta:path()}],
+    OldSpaceId :: binary(), NewSpaceId :: binary()) ->
+    ok.
+create_phantom_files(Entries, OldSpaceId, NewSpaceId) ->
+    case OldSpaceId =:= NewSpaceId of
+        true ->
+            ok;
+        false ->
+            lists:foreach(
+                fun({OldGuid, NewGuid, _}) ->
+                    file_meta:create_phantom_file(fslogic_uuid:file_guid_to_uuid(OldGuid),
+                        OldSpaceId, NewGuid)
+                end, Entries)
+    end.

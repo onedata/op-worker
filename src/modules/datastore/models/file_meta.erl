@@ -13,10 +13,12 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -624,8 +626,21 @@ is_root_dir(#document{key = Key}) ->
 -spec create_phantom_file(uuid(), uuid(), fslogic_worker:file_guid()) ->
     {ok, uuid()} | datastore:generic_error().
 create_phantom_file(OldUUID, OldScope, NewGUID) ->
-    save(#document{key = fslogic_uuid:uuid_to_phantom_uuid(OldUUID),
-        value = #file_meta{type = ?PHANTOM_TYPE, scope = OldScope, link_value = NewGUID}}).
+    {ok, PhantomUuid} = save(#document{key = fslogic_uuid:uuid_to_phantom_uuid(OldUUID),
+        value = #file_meta{type = ?PHANTOM_TYPE, scope = OldScope, link_value = NewGUID}}),
+    CreationTime = erlang:system_time(seconds),
+    task_manager:start_task(fun() ->
+        TimeSinceCreation = erlang:system_time(seconds) - CreationTime,
+        {ok, PhantomLifespan} = application:get_env(?APP_NAME, phantom_lifespan_seconds),
+        case TimeSinceCreation > PhantomLifespan of
+            false ->
+                timer:sleep(timer:seconds(PhantomLifespan));
+            true ->
+                ok
+        end,
+        file_meta:delete(PhantomUuid)
+    end, ?NODE_LEVEL),
+    {ok, PhantomUuid}.
 
 %%--------------------------------------------------------------------
 %% @doc
