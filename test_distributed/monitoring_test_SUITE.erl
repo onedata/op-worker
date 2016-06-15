@@ -19,12 +19,15 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+    end_per_testcase/2, counter/3]).
 
--export([rrd_test/1, monitoring_test/1]).
+-export([rrd_test/1, monitoring_test/1, rrdtool_pool_test/1]).
 
 all() ->
-    ?ALL([rrd_test, monitoring_test]).
+    ?ALL([rrd_test, monitoring_test, rrdtool_pool_test]).
+
+-define(TIMEOUT, timer:seconds(60)).
+-define(COUNTER_TIMEOUT, timer:seconds(30)).
 
 -define(SPACE_ID, <<"s1">>).
 -define(MONITORING_TYPES, [
@@ -35,6 +38,7 @@ all() ->
 -define(FORMATS, [json, xml]).
 -define(STEPS, ['5m', '1h', '1d', '1m']).
 -define(reg(W, P), rpc:call(W, worker_proxy, call, [monitoring_worker, P])).
+-define(EXPECTED_SIZE, 100).
 
 %%%===================================================================
 %%% Test functions
@@ -42,15 +46,17 @@ all() ->
 
 rrd_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    ProvID = rpc:call(Worker, oneprovider, get_provider_id, []),
+
     lists:foreach(fun({SubjectType, SubjectId, MetricType}) ->
         %% create
         ?assertEqual(false, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType])),
+            [SubjectType, SubjectId, MetricType, ProvID])),
 
         ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd,
             [SubjectType, SubjectId, MetricType])),
         ?assertEqual(true, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType])),
+            [SubjectType, SubjectId, MetricType, ProvID])),
 
         {ok, #monitoring_state{rrd_file = RRDFile} = State} =
             rpc:call(Worker, monitoring_state, get, [SubjectType, SubjectId, MetricType]),
@@ -83,16 +89,17 @@ rrd_test(Config) ->
 
 monitoring_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    ProvID = rpc:call(Worker, oneprovider, get_provider_id, []),
 
     lists:foreach(fun({SubjectType, SubjectId, MetricType}) ->
         %% start
         ?assertEqual(false, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType])),
+            [SubjectType, SubjectId, MetricType, ProvID])),
 
         ?assertEqual(ok, ?reg(Worker, {start, SubjectType, SubjectId, MetricType})),
 
         ?assertEqual(true, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType])),
+            [SubjectType, SubjectId, MetricType, ProvID])),
 
         {ok, #monitoring_state{rrd_file = RRDFile, active = Active} = State} =
             rpc:call(Worker, monitoring_state, get, [SubjectType, SubjectId, MetricType]),
@@ -112,7 +119,7 @@ monitoring_test(Config) ->
         lists:foreach(fun(Step) ->
             lists:foreach(fun(Format) ->
                 ?assertMatch({ok, _}, ?reg(Worker, {export, SubjectType,
-                    SubjectId, MetricType, Step, Format}))
+                    SubjectId, MetricType, Step, Format, ProvID}))
             end,
                 ?FORMATS)
         end,
@@ -126,6 +133,21 @@ monitoring_test(Config) ->
         ?assertEqual(false, UnActive)
     end,
         ?MONITORING_TYPES).
+
+rrdtool_pool_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    CounterPid = spawn(?MODULE, counter, [0, ?EXPECTED_SIZE, self()]),
+
+    lists:foreach(fun(Id) ->
+        spawn(fun() ->
+            ?assertEqual(ok, ?reg(Worker, {start, space, integer_to_binary(Id), storage_used})),
+            ?assertEqual(ok, ?reg(Worker, {update, space, integer_to_binary(Id), storage_used})),
+            ?assertEqual(ok, ?reg(Worker, {update, space, integer_to_binary(Id), storage_used})),
+            CounterPid ! ok
+        end)
+    end, lists:seq(1, ?EXPECTED_SIZE)),
+
+    ?assertReceivedMatch({count, ?EXPECTED_SIZE}, ?TIMEOUT).
 
 
 %%%===================================================================
@@ -147,7 +169,7 @@ init_per_suite(Config) ->
     ?assertMatch({ok, _}, rpc:call(Worker, space_info, create, [#document{
         key = ?SPACE_ID,
         value = #space_info{
-            providers_supports = #{oneprovider:get_provider_id() => 1000}
+            providers_supports = [{oneprovider:get_provider_id(), 1000}]
         }
     }])),
     EnvUpResult.
@@ -158,8 +180,27 @@ end_per_suite(Config) ->
     test_utils:mock_unload(Worker, space_info),
     test_node_starter:clean_environment(Config).
 
+init_per_testcase(rrdtool_pool_test, Config)->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Id) ->
+        ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
+            key = integer_to_binary(Id),
+            value = #space_quota{
+                current_size = 100
+            }
+        }]))
+    end, lists:seq(1, ?EXPECTED_SIZE)),
+    Config;
+
 init_per_testcase(_, Config) ->
     Config.
+
+end_per_testcase(rrdtool_pool_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Id) ->
+        ?assertMatch(ok, rpc:call(Worker, space_quota, delete, [integer_to_binary(Id)]))
+    end, lists:seq(1, ?EXPECTED_SIZE)),
+    end_per_testcase(all, Config);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -172,3 +213,17 @@ clear_state(Worker) ->
             [SubjectType, SubjectId, MetricType]))
     end,
         ?MONITORING_TYPES).
+
+counter(CurrentCount, ExpectedCount, ResponsePid) ->
+    case CurrentCount == ExpectedCount of
+        true ->
+            ResponsePid ! {count, CurrentCount};
+        false ->
+            receive
+                ok ->
+                    counter(CurrentCount + 1, ExpectedCount, ResponsePid)
+            after
+                ?COUNTER_TIMEOUT ->
+                    ResponsePid ! {count, CurrentCount}
+            end
+    end.

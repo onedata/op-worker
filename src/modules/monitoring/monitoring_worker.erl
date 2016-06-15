@@ -23,6 +23,9 @@
 %% API
 -export([init/1, handle/1, cleanup/0]).
 
+-define(START_RETRY_TIMEOUT, timer:seconds(1)).
+-define(START_RETRY_LIMIT, 3).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -67,13 +70,31 @@ handle(healthcheck) ->
     ok;
 
 handle({start, SubjectType, SubjectId, MetricType}) ->
-    case rrd_utils:create_rrd(SubjectType, SubjectId, MetricType) of
+    worker_proxy:call(monitoring_worker,
+        {restart, SubjectType, SubjectId, MetricType, 0});
+
+handle({restart, SubjectType, SubjectId, MetricType, Count}) ->
+    try rrd_utils:create_rrd(SubjectType, SubjectId, MetricType) of
         already_exists ->
             ok;
         ok ->
             worker_proxy:cast(monitoring_worker,
                 {update, SubjectType, SubjectId, MetricType}),
             ok
+    catch
+        T:M ->
+            CurrentCount = Count + 1,
+            ?error_stacktrace(
+                "Cannot start monitoring for {~s, ~s, ~s}, tries number: ~b - ~p:~p",
+                [SubjectType, SubjectId, MetricType, CurrentCount, T, M]),
+            case CurrentCount of
+                ?START_RETRY_LIMIT ->
+                    ok;
+                _ ->
+                    erlang:send_after(?START_RETRY_TIMEOUT, monitoring_worker,
+                        {timer, {restart, SubjectType, SubjectId, MetricType, CurrentCount}}),
+                    ok
+            end
     end;
 
 handle({stop, SubjectType, SubjectId, MetricType}) ->
@@ -108,19 +129,10 @@ handle({update, SubjectType, SubjectId, MetricType}) ->
     end;
 
 handle({export, SubjectType, SubjectId, MetricType, Step, Format, ProviderId}) ->
-    case monitoring_state:exists(SubjectType, SubjectId, MetricType) of
+    case monitoring_state:exists(SubjectType, SubjectId, MetricType, ProviderId) of
         true ->
             rrd_utils:export_rrd(SubjectType, SubjectId, MetricType, Step,
                 Format, ProviderId);
-        false ->
-            {error, ?ENOENT}
-    end;
-
-handle({export, SubjectType, SubjectId, MetricType, Step, Format}) ->
-    case monitoring_state:exists(SubjectType, SubjectId, MetricType) of
-        true ->
-            rrd_utils:export_rrd(SubjectType, SubjectId, MetricType, Step,
-                Format, oneprovider:get_provider_id());
         false ->
             {error, ?ENOENT}
     end;

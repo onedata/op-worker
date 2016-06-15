@@ -36,15 +36,17 @@
 %%--------------------------------------------------------------------
 -spec create_rrd(atom(), datastore:id(), atom()) -> ok | already_exists.
 create_rrd(SubjectType, SubjectId, MetricType) ->
-    Pid = whereis(rrdtool),
     #rrd_definition{datastore = Datastore, rras_map = RRASMap, options = Options} =
         get_rrd_definition(SubjectType, MetricType),
     StepInSeconds = proplists:get_value(step, Options),
 
-    case monitoring_state:exists(SubjectType, SubjectId, MetricType) of
+    case monitoring_state:exists(SubjectType, SubjectId, MetricType, oneprovider:get_provider_id()) of
         false ->
             Path = get_path(),
-            ok = rrdtool:create(Pid, Path, [Datastore], parse_rras_map(RRASMap), Options),
+            poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
+                ok = rrdtool:create(Pid, Path, [Datastore],
+                    parse_rras_map(RRASMap), Options)
+            end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
             {ok, RRDFile} = read_rrd_from_file(Path),
 
@@ -69,7 +71,6 @@ create_rrd(SubjectType, SubjectId, MetricType) ->
 -spec update_rrd(atom(), datastore:id(), atom(), term()) ->
     {ok, #monitoring_state{}}.
 update_rrd(SubjectType, SubjectId, MetricType, UpdateValue) ->
-    Pid = whereis(rrdtool),
     #rrd_definition{datastore = Datastore} = get_rrd_definition(SubjectType, MetricType),
     {DSName, _, _} = Datastore,
 
@@ -84,7 +85,9 @@ update_rrd(SubjectType, SubjectId, MetricType, UpdateValue) ->
         end,
 
     {ok, Path} = write_rrd_to_file(RRDFile),
-    ok = rrdtool:update(Pid, Path, [{DSName, UpdateValue}]),
+    poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
+        ok = rrdtool:update(Pid, Path, [{DSName, UpdateValue}])
+    end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
     {ok, UpdatedRRDFile} = read_rrd_from_file(Path),
     UpdatedMonitoringState = MonitoringState#monitoring_state{rrd_file = UpdatedRRDFile},
@@ -100,7 +103,6 @@ update_rrd(SubjectType, SubjectId, MetricType, UpdateValue) ->
 -spec export_rrd(atom(), datastore:id(), atom(), atom(), Format :: json | xml,
     oneprovider:id()) -> {ok, binary()}.
 export_rrd(SubjectType, SubjectId, MetricType, Step, Format, ProviderId) ->
-    Pid = whereis(rrdtool),
     #rrd_definition{datastore = Datastore, rras_map = RRASMap, options = Options} =
         get_rrd_definition(SubjectType, MetricType),
     StepInSeconds = proplists:get_value(step, Options),
@@ -122,13 +124,16 @@ export_rrd(SubjectType, SubjectId, MetricType, Step, Format, ProviderId) ->
     Description = "\"" ++ atom_to_list(SubjectType) ++ " " ++ binary_to_list(SubjectId)
         ++ "; metric " ++ atom_to_list(MetricType)
         ++ "; oneprovider ID " ++ binary_to_list(ProviderId) ++ "\"",
-    {ok, Data} = rrdtool:xport(Pid,
-        "DEF:export=" ++ Path ++ ":" ++ DSName ++ ":"
-            ++ atom_to_list(CF) ++ ":step="
-            ++ integer_to_list(StepInSeconds * PDPsPerCDP),
-        "XPORT:export:" ++ Description,
-        FormatOptions ++ " --start now-" ++ maps:get(Step, ?MAKESPAN_FOR_STEP)
-            ++ " --end now"),
+
+    {ok, Data} = poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
+        rrdtool:xport(Pid,
+            "DEF:export=" ++ Path ++ ":" ++ DSName ++ ":"
+                ++ atom_to_list(CF) ++ ":step="
+                ++ integer_to_list(StepInSeconds * PDPsPerCDP),
+            "XPORT:export:" ++ Description,
+            FormatOptions ++ " --start now-" ++ maps:get(Step, ?MAKESPAN_FOR_STEP)
+                ++ " --end now")
+    end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
     file:delete(Path),
     {ok, list_to_binary(Data)}.

@@ -12,6 +12,9 @@
 -ifndef(RRD_DEFINITIONS_HRL).
 -define(RRD_DEFINITIONS_HRL, 1).
 
+-define(RRDTOOL_POOL_NAME, rrdtool_pool_name).
+-define(RRDTOOL_POOL_TRANSACTION_TIMEOUT, timer:seconds(60)).
+
 -define(_5_MIN_COUNT_IN_5_MIN, 1).
 -define(_5_MIN_COUNT_IN_1_H, 12).
 -define(_5_MIN_COUNT_IN_1_DAY, 288).
