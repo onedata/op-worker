@@ -105,8 +105,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_info_bucket, [{space_info, create},
-        {space_info, save}, {space_info, delete}], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(space_info_bucket, [{space_info, create}, {space_info, save},
+        {space_info, delete}, {space_info, create_or_update}], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,6 +117,9 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(space_info, create, _, _, {ok, SpaceId}) ->
+    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
+    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
+'after'(space_info, create_or_update, _, _, {ok, SpaceId}) ->
     worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
     worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
 'after'(space_info, save, _, _, {ok, SpaceId}) ->
