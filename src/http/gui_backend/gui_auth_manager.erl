@@ -23,12 +23,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authorizes a user via Global Registry. Upon success, returns the #auth{}
-%% record that can be used to perform operations on behalf of the user.
+%% Authorizes a user via Global Registry. Upon success, returns
+%% the #token_auth{} record that can be used to perform operations
+%% on behalf of the user.
 %% @end
 %%--------------------------------------------------------------------
 -spec authenticate(Macaroon :: macaroon:macaroon()) ->
-    {ok, #auth{}} | {error, term()}.
+    {ok, #token_auth{}} | {error, term()}.
 authenticate(Macaroon) ->
     try
         Caveats = macaroon:third_party_caveats(Macaroon),
@@ -38,7 +39,7 @@ authenticate(Macaroon) ->
                 {ok, DM} = macaroon:deserialize(SrlzdDM),
                 DM
             end, Caveats),
-        {ok, #auth{
+        {ok, #token_auth{
             macaroon = Macaroon,
             disch_macaroons = DischMacaroons}}
     catch

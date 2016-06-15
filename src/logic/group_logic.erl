@@ -16,7 +16,6 @@
 
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/1, get/2, create/2, set_name/3, delete/2]).
@@ -47,23 +46,23 @@ get(GroupId) ->
 %% Provided client should be authorised to access group details.
 %% @end
 %%--------------------------------------------------------------------
--spec get(oz_endpoint:client(), GroupId :: binary()) ->
+-spec get(oz_endpoint:auth(), GroupId :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-get({user, {Macaroon, DischMacaroons}}, GroupId) ->
-    onedata_group:get_or_fetch({user, {Macaroon, DischMacaroons}}, GroupId).
+get(Auth, GroupId) ->
+    onedata_group:get_or_fetch(Auth, GroupId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates group in context of an user.
-%% User identity is determined using provided client.
+%% User identity is determined using provided auth.
 %% @end
 %%--------------------------------------------------------------------
--spec create(oz_endpoint:client(), #onedata_group{}) ->
+-spec create(oz_endpoint:auth(), #onedata_group{}) ->
     {ok, GroupId :: binary()} | {error, Reason :: term()}.
-create(Client = {user, _}, Record) ->
+create(Auth, Record) ->
     Name = Record#onedata_group.name,
-    oz_users:create_group(Client, [
+    oz_users:create_group(Auth, [
         {<<"name">>, Name},
         {<<"type">>, <<"undefined">>}
     ]).
@@ -74,10 +73,10 @@ create(Client = {user, _}, Record) ->
 %% Deletes group from the system.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(oz_endpoint:client(), GroupId :: binary()) ->
+-spec delete(oz_endpoint:auth(), GroupId :: binary()) ->
     ok | {error, Reason :: term()}.
-delete(Client, GroupId) ->
-    oz_groups:remove(Client, GroupId).
+delete(Auth, GroupId) ->
+    oz_groups:remove(Auth, GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -85,10 +84,10 @@ delete(Client, GroupId) ->
 %% Joins a group to a space based on invite token.
 %% @end
 %%--------------------------------------------------------------------
--spec join_space(oz_endpoint:client(), GroupId :: binary(),
+-spec join_space(oz_endpoint:auth(), GroupId :: binary(),
     Token :: binary()) -> ok | {error, Reason :: term()}.
-join_space(Client, GroupId, Token) ->
-    case oz_groups:join_space(Client, GroupId, [{<<"token">>, Token}]) of
+join_space(Auth, GroupId, Token) ->
+    case oz_groups:join_space(Auth, GroupId, [{<<"token">>, Token}]) of
         {ok, SpaceId} ->
             {ok, SpaceId};
         {error, {
@@ -105,10 +104,10 @@ join_space(Client, GroupId, Token) ->
 %% Removes a group from space.
 %% @end
 %%--------------------------------------------------------------------
--spec leave_space(oz_endpoint:client(), GroupId :: binary(),
+-spec leave_space(oz_endpoint:auth(), GroupId :: binary(),
     SpaceId :: binary()) -> ok | {error, Reason :: term()}.
-leave_space(Client, GroupId, SpaceId) ->
-    oz_groups:leave_space(Client, GroupId, SpaceId).
+leave_space(Auth, GroupId, SpaceId) ->
+    oz_groups:leave_space(Auth, GroupId, SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -116,10 +115,10 @@ leave_space(Client, GroupId, SpaceId) ->
 %% Joins a group to a space based on invite token.
 %% @end
 %%--------------------------------------------------------------------
--spec join_group(oz_endpoint:client(), GroupId :: binary(),
+-spec join_group(oz_endpoint:auth(), GroupId :: binary(),
     Token :: binary()) -> ok | {error, Reason :: term()}.
-join_group(Client, ChildGroupId, Token) ->
-    case oz_groups:join_group(Client, ChildGroupId, [{<<"token">>, Token}]) of
+join_group(Auth, ChildGroupId, Token) ->
+    case oz_groups:join_group(Auth, ChildGroupId, [{<<"token">>, Token}]) of
         {ok, ParentGroupId} ->
             {ok, ParentGroupId};
         {error, {
@@ -136,22 +135,22 @@ join_group(Client, ChildGroupId, Token) ->
 %% Removes a subgroup from a group.
 %% @end
 %%--------------------------------------------------------------------
--spec leave_group(oz_endpoint:client(), ParentGroupId :: binary(),
+-spec leave_group(oz_endpoint:auth(), ParentGroupId :: binary(),
     ChildGroupId :: binary()) -> ok | {error, Reason :: term()}.
-leave_group(Client, ParentGroupId, ChildGroupId) ->
-    oz_groups:leave_group(Client, ParentGroupId, ChildGroupId).
+leave_group(Auth, ParentGroupId, ChildGroupId) ->
+    oz_groups:leave_group(Auth, ParentGroupId, ChildGroupId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets name for a group.
-%% User identity is determined using provided client.
+%% User identity is determined using provided auth.
 %% @end
 %%--------------------------------------------------------------------
--spec set_name(oz_endpoint:client(), GroupId :: binary(), Name :: binary()) ->
+-spec set_name(oz_endpoint:auth(), GroupId :: binary(), Name :: binary()) ->
     ok | {error, Reason :: term()}.
-set_name(Client, GroupId, Name) ->
-    oz_groups:modify_details(Client, GroupId, [
+set_name(Auth, GroupId, Name) ->
+    oz_groups:modify_details(Auth, GroupId, [
         {<<"name">>, Name},
         {<<"type">>, <<"undefined">>}
     ]).
@@ -160,15 +159,15 @@ set_name(Client, GroupId, Name) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets group privileges for an user.
-%% User identity is determined using provided client.
+%% User identity is determined using provided auth.
 %% @end
 %%--------------------------------------------------------------------
--spec set_user_privileges(oz_endpoint:client(), SpaceId :: binary(),
+-spec set_user_privileges(oz_endpoint:auth(), SpaceId :: binary(),
     UserId :: binary(), Privileges :: [atom()]) ->
     ok | {error, Reason :: term()}.
-set_user_privileges(Client, GroupId, UserId, PrivilegesAtoms) ->
+set_user_privileges(Auth, GroupId, UserId, PrivilegesAtoms) ->
     Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-    oz_groups:set_user_privileges(Client, GroupId, UserId, [
+    oz_groups:set_user_privileges(Auth, GroupId, UserId, [
         {<<"privileges">>, Privileges}
     ]).
 
@@ -176,15 +175,15 @@ set_user_privileges(Client, GroupId, UserId, PrivilegesAtoms) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets group privileges for a group.
-%% User identity is determined using provided client.
+%% User identity is determined using provided auth.
 %% @end
 %%--------------------------------------------------------------------
--spec set_group_privileges(oz_endpoint:client(), ParentGroupId :: binary(),
+-spec set_group_privileges(oz_endpoint:auth(), ParentGroupId :: binary(),
     ChildGroupId :: binary(), Privileges :: [atom()]) ->
     ok | {error, Reason :: term()}.
-set_group_privileges(Client, ParentGroupId, ChildGroupId, PrivilegesAtoms) ->
+set_group_privileges(Auth, ParentGroupId, ChildGroupId, PrivilegesAtoms) ->
     Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
-    oz_groups:set_nested_privileges(Client, ParentGroupId, ChildGroupId, [
+    oz_groups:set_nested_privileges(Auth, ParentGroupId, ChildGroupId, [
         {<<"privileges">>, Privileges}
     ]).
 
@@ -194,10 +193,10 @@ set_group_privileges(Client, ParentGroupId, ChildGroupId, PrivilegesAtoms) ->
 %% Returns a user invitation token to group.
 %% @end
 %%--------------------------------------------------------------------
--spec get_invite_user_token(oz_endpoint:client(), GroupId :: binary()) ->
+-spec get_invite_user_token(oz_endpoint:auth(), GroupId :: binary()) ->
     {ok, binary()} | {error, Reason :: term()}.
-get_invite_user_token(Client, GroupId) ->
-    oz_groups:get_invite_user_token(Client, GroupId).
+get_invite_user_token(Auth, GroupId) ->
+    oz_groups:get_invite_user_token(Auth, GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -205,10 +204,10 @@ get_invite_user_token(Client, GroupId) ->
 %% Returns a group invitation token to group.
 %% @end
 %%--------------------------------------------------------------------
--spec get_invite_group_token(oz_endpoint:client(), GroupId :: binary()) ->
+-spec get_invite_group_token(oz_endpoint:auth(), GroupId :: binary()) ->
     {ok, binary()} | {error, Reason :: term()}.
-get_invite_group_token(Client, GroupId) ->
-    oz_groups:get_invite_group_token(Client, GroupId).
+get_invite_group_token(Auth, GroupId) ->
+    oz_groups:get_invite_group_token(Auth, GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -216,8 +215,8 @@ get_invite_group_token(Client, GroupId) ->
 %% Returns a create space token (for provider to create a space for group).
 %% @end
 %%--------------------------------------------------------------------
--spec get_create_space_token(oz_endpoint:client(), GroupId :: binary()) ->
+-spec get_create_space_token(oz_endpoint:auth(), GroupId :: binary()) ->
     {ok, binary()} | {error, Reason :: term()}.
-get_create_space_token(Client, GroupId) ->
-    oz_groups:get_create_space_token(Client, GroupId).
+get_create_space_token(Auth, GroupId) ->
+    oz_groups:get_create_space_token(Auth, GroupId).
 

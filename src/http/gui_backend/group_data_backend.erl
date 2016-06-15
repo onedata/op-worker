@@ -75,7 +75,7 @@ find(<<"group-group-permission">>, AssocId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"group">>) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
     GroupIds = op_gui_utils:find_all_groups(UserAuth, UserId),
     Res = lists:map(
@@ -105,7 +105,7 @@ find_query(<<"group">>, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"group">>, Data) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     Name = proplists:get_value(<<"name">>, Data),
     case Name of
         <<"">> ->
@@ -132,7 +132,7 @@ create_record(<<"group">>, Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case Name of
         undefined ->
             ok;
@@ -150,7 +150,7 @@ update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
     end;
 
 update_record(<<"group-user-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     {UserId, GroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #onedata_group{
@@ -179,7 +179,7 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
     end;
 
 update_record(<<"group-group-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #onedata_group{
@@ -216,7 +216,7 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"group">>, GroupId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:delete(UserAuth, GroupId) of
         ok ->
             ok;
@@ -238,7 +238,7 @@ delete_record(<<"group">>, GroupId) ->
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary()) -> proplists:proplist().
 group_record(CurrentGroupId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #onedata_group{
             name = Name,
@@ -274,7 +274,7 @@ group_record(CurrentGroupId) ->
 %%--------------------------------------------------------------------
 -spec group_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 group_user_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     {UserId, GroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #onedata_group{
@@ -302,7 +302,7 @@ group_user_permission_record(AssocId) ->
 -spec group_group_permission_record(AssocId :: binary()) ->
     proplists:proplist().
 group_group_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #onedata_group{

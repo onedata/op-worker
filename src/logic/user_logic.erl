@@ -33,10 +33,10 @@
 %% Provided client should be authorised to access user details.
 %% @end
 %%--------------------------------------------------------------------
--spec get(oz_endpoint:client(), UserId :: binary()) ->
+-spec get(oz_endpoint:auth(), UserId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
-get({user, {Macaroon, DischMacaroons}}, UserId) ->
-    onedata_user:get_or_fetch({user, {Macaroon, DischMacaroons}}, UserId).
+get(Auth, UserId) ->
+    onedata_user:get_or_fetch(Auth, UserId).
 
 
 %%--------------------------------------------------------------------
@@ -44,11 +44,11 @@ get({user, {Macaroon, DischMacaroons}}, UserId) ->
 %% Returns list of user space IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces(oz_endpoint:client(), UserId :: onedata_user:id()) ->
+-spec get_spaces(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
     {ok, [{SpaceId :: binary(), SpaceName :: binary()}]} |
     {error, Reason :: term()}.
-get_spaces({user, {Macaroon, DischMacaroons}}, UserId) ->
-    case get({user, {Macaroon, DischMacaroons}}, UserId) of
+get_spaces(Auth, UserId) ->
+    case get(Auth, UserId) of
         {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
             {ok, Spaces};
         {error, Reason} ->
@@ -79,10 +79,10 @@ get_spaces(UserId) ->
 %% Retrieves default space for given user.
 %% @end
 %%--------------------------------------------------------------------
--spec get_default_space(oz_endpoint:client(), UserId :: binary()) ->
+-spec get_default_space(oz_endpoint:auth(), UserId :: binary()) ->
     {ok, SpaceId :: space_info:id()} | datastore:get_error().
-get_default_space({user, {Macaroon, DischMacaroons}}, UserId) ->
-    case get({user, {Macaroon, DischMacaroons}}, UserId) of
+get_default_space(Auth, UserId) ->
+    case get(Auth, UserId) of
         {ok, Doc} ->
             #document{
                 value = #onedata_user{
@@ -100,11 +100,10 @@ get_default_space({user, {Macaroon, DischMacaroons}}, UserId) ->
 %% User identity is determined using provided client.
 %% @end
 %%--------------------------------------------------------------------
--spec set_default_space(oz_endpoint:client(), SpaceId :: binary()) ->
+-spec set_default_space(oz_endpoint:auth(), SpaceId :: binary()) ->
     ok | {error, Reason :: term()}.
-set_default_space({user, {Macaroon, DischMacaroons}}, SpaceId) ->
-    oz_users:set_default_space({user, {Macaroon, DischMacaroons}},
-        [{<<"spaceId">>, SpaceId}]).
+set_default_space(Auth, SpaceId) ->
+    oz_users:set_default_space(Auth, [{<<"spaceId">>, SpaceId}]).
 
 
 %%--------------------------------------------------------------------
@@ -112,10 +111,10 @@ set_default_space({user, {Macaroon, DischMacaroons}}, SpaceId) ->
 %% Adds a user (owner of auth) to a group.
 %% @end
 %%--------------------------------------------------------------------
--spec join_group(oz_endpoint:client(), GroupId :: binary()) ->
+-spec join_group(oz_endpoint:auth(), GroupId :: binary()) ->
     ok | {error, Reason :: term()}.
-join_group(Client, Token) ->
-    oz_users:join_group(Client, [{<<"token">>, Token}]).
+join_group(Auth, Token) ->
+    oz_users:join_group(Auth, [{<<"token">>, Token}]).
 
 
 %%--------------------------------------------------------------------
@@ -123,10 +122,10 @@ join_group(Client, Token) ->
 %% Removes a user (owner of auth) from group users list.
 %% @end
 %%--------------------------------------------------------------------
--spec leave_group(oz_endpoint:client(), GroupId :: binary()) ->
+-spec leave_group(oz_endpoint:auth(), GroupId :: binary()) ->
     ok | {error, Reason :: term()}.
-leave_group(Client, GroupId) ->
-    oz_users:leave_group(Client, GroupId).
+leave_group(Auth, GroupId) ->
+    oz_users:leave_group(Auth, GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -134,10 +133,10 @@ leave_group(Client, GroupId) ->
 %% Returns list of user group IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_groups(oz_endpoint:client(), UserId :: onedata_user:id()) ->
+-spec get_groups(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
-get_groups({user, {Macaroon, DischMacaroons}}, UserId) ->
-    case get({user, {Macaroon, DischMacaroons}}, UserId) of
+get_groups(Auth, UserId) ->
+    case get(Auth, UserId) of
         {ok, #document{value = #onedata_user{group_ids = GroupsIds}}} ->
             {ok, GroupsIds};
         {error, Reason} ->
@@ -150,10 +149,10 @@ get_groups({user, {Macaroon, DischMacaroons}}, UserId) ->
 %% Returns list of user effective group IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective_groups(oz_endpoint:client(), UserId :: onedata_user:id()) ->
+-spec get_effective_groups(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
-get_effective_groups({user, {Macaroon, DischMacaroons}}, UserId) ->
-    case get({user, {Macaroon, DischMacaroons}}, UserId) of
+get_effective_groups(Auth, UserId) ->
+    case get(Auth, UserId) of
         {ok, #document{value = #onedata_user{
             effective_group_ids = GroupsIds}}} ->
             {ok, GroupsIds};

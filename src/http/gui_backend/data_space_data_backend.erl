@@ -57,7 +57,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space">>, SpaceId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
     {ok, #document{
         value = #space_info{
@@ -90,7 +90,7 @@ find(<<"data-space">>, SpaceId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"data-space">>) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(

@@ -83,9 +83,7 @@ content_types_provided(Req, State) ->
 -spec list_spaces(req(), #{}) -> {term(), req(), #{}}.
 list_spaces(Req, State = #{auth := Auth}) ->
     {ok, UserId} = session:get_user_id(Auth),
-
-    Client = fslogic_utils:session_to_rest_client(Auth),
-    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get_or_fetch(Client, UserId),
+    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get_or_fetch(Auth, UserId),
     RawResponse =
         lists:map(fun({SpaceId, SpaceName}) ->
             [{<<"name">>, SpaceName}, {<<"spaceId">>, SpaceId}]

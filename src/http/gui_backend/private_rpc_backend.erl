@@ -17,7 +17,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
 -export([handle/2]).
@@ -64,7 +63,7 @@ handle(<<"fileUploadFailure">>, Props) ->
 %% Space related procedures
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case space_logic:get_invite_user_token(UserAuth, SpaceId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
@@ -74,7 +73,7 @@ handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     end;
 
 handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case space_logic:join_space(UserAuth, Token) of
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
@@ -86,7 +85,7 @@ handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
     end;
 
 handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case space_logic:leave_space(UserAuth, SpaceId) of
         ok ->
             ok;
@@ -96,7 +95,7 @@ handle(<<"userLeaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     end;
 
 handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case space_logic:get_invite_group_token(UserAuth, SpaceId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
@@ -108,7 +107,7 @@ handle(<<"getTokenGroupJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
 handle(<<"groupJoinSpace">>, Props) ->
     GroupId = proplists:get_value(<<"groupId">>, Props),
     Token = proplists:get_value(<<"token">>, Props),
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:join_space(UserAuth, GroupId, Token) of
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
@@ -122,7 +121,7 @@ handle(<<"groupJoinSpace">>, Props) ->
 handle(<<"groupLeaveSpace">>, Props) ->
     GroupId = proplists:get_value(<<"groupId">>, Props),
     SpaceId = proplists:get_value(<<"spaceId">>, Props),
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:leave_space(UserAuth, GroupId, SpaceId) of
         ok ->
             ok;
@@ -132,7 +131,7 @@ handle(<<"groupLeaveSpace">>, Props) ->
     end;
 
 handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
@@ -145,7 +144,7 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
 %% Group related procedures
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:get_invite_user_token(UserAuth, GroupId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
@@ -155,7 +154,7 @@ handle(<<"getTokenUserJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
     end;
 
 handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case user_logic:join_group(UserAuth, Token) of
         {ok, GroupId} ->
             GroupRecord = group_data_backend:group_record(GroupId),
@@ -168,7 +167,7 @@ handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
     end;
 
 handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case user_logic:leave_group(UserAuth, GroupId) of
         ok ->
             ok;
@@ -178,7 +177,7 @@ handle(<<"userLeaveGroup">>, [{<<"groupId">>, GroupId}]) ->
     end;
 
 handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:get_invite_group_token(UserAuth, GroupId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
@@ -190,7 +189,7 @@ handle(<<"getTokenGroupJoinGroup">>, [{<<"groupId">>, GroupId}]) ->
 handle(<<"groupJoinGroup">>, Props) ->
     ChildGroupId = proplists:get_value(<<"groupId">>, Props),
     Token = proplists:get_value(<<"token">>, Props),
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:join_group(UserAuth, ChildGroupId, Token) of
         {ok, ParentGroupId} ->
             ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
@@ -207,7 +206,7 @@ handle(<<"groupJoinGroup">>, Props) ->
 handle(<<"groupLeaveGroup">>, Props) ->
     ParentGroupId = proplists:get_value(<<"parentGroupId">>, Props),
     ChildGroupId = proplists:get_value(<<"childGroupId">>, Props),
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:leave_group(UserAuth, ParentGroupId, ChildGroupId) of
         ok ->
             ok;
@@ -217,7 +216,7 @@ handle(<<"groupLeaveGroup">>, Props) ->
     end;
 
 handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case group_logic:get_create_space_token(UserAuth, GroupId) of
         {ok, Token} ->
             {ok, [{<<"token">>, Token}]};
