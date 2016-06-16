@@ -150,7 +150,7 @@ handle({clear_temp, Key}) ->
 
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
-    ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p ~p", [QueueKey, Seq, dbsync_utils:temp_get({replicated, Key, Rev}), Doc]),
     dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
@@ -176,7 +176,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
             queue_update_until(QueueKey, Seq),
             Ans;
         {true, true} ->
-            ?debug("Rereplication detected, skipping ~p", [Doc]),
+            ?info("Rereplication detected, skipping ~p", [Doc]),
             ok;
         {false, _} ->
             ?debug("Skipping doc ~p", [Doc]),
@@ -372,71 +372,43 @@ queue_calculate_until(NewUntil, Queue) ->
 %%--------------------------------------------------------------------
 -spec apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
-apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
-    ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
+apply_batch_changes(FromProvider, SpaceId, #batch{since = Since, until = Until, changes = Changes} = Batch0) ->
+    ?info("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch0]),
 
     %% Both providers have to support this space
     ok = dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId),
     ok = dbsync_utils:validate_space_access(FromProvider, SpaceId),
 
-    %% Apply old changes that weren't applied previously
-    catch consume_batches(FromProvider, SpaceId),
-
     NewChanges = lists:sort(lists:flatten(Changes)),
-    do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true),
+    Batch = Batch0#batch{changes = NewChanges},
+    CurrentUntil = get_current_seq(FromProvider, SpaceId),
+    stash_batch(FromProvider, SpaceId, Batch, CurrentUntil), % Other batches will not ask for missing changes if long batch is processed
 
-    %% Some changes might be waiting for applied changes
-    catch consume_batches(FromProvider, SpaceId).
+    consume_batches(FromProvider, SpaceId, CurrentUntil, Since, Until).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Apply whole batch of changes from remote provider.
 %% @end
 %%--------------------------------------------------------------------
--spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean()) ->
+-spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
-do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch,
-    ShouldRequest) ->
-    ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
+do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+    ?info("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil + 1 < Since of
         true ->
             ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p",
                 [FromProvider, SpaceId, CurrentUntil, Since]),
-            stash_batch(FromProvider, SpaceId, Batch),
-            case ShouldRequest of
-                true ->
-                    spawn(fun() ->
-                        timer:sleep(timer:seconds(5)),
-                        Batches = case state_get({stash, FromProvider, SpaceId}) of
-                                      undefined ->
-                                          [];
-                                      List ->
-                                          lists:sort(List)
-                                  end,
-                        Stashed = lists:foldl(fun(#batch{since = S, until = U}, Acc) ->
-                            case Acc + 1 >= S of
-                                true -> U;
-                                _ -> Acc
-                            end
-                        end, CurrentUntil, Batches),
-                        case Stashed + 1 < Since of
-                            true ->
-                                request_missing_changes(FromProvider, SpaceId, Stashed, Since);
-                            _ ->
-                                consume_batches(FromProvider, SpaceId)
-                        end
-                    end);
-                false ->
-                    ok
-            end;
+            ok;
         false when Until =< CurrentUntil ->
             ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
             ok;
         false ->
             ok = apply_changes(SpaceId, Changes),
-            ?debug("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
-            update_current_seq(FromProvider, SpaceId, Until)
+            ?info("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
+            update_current_seq(FromProvider, SpaceId, Until),
+            retrieve_stashed_batch(FromProvider, SpaceId, Batch)
     end.
 
 %%--------------------------------------------------------------------
@@ -463,6 +435,7 @@ apply_changes(SpaceId,
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
 
+        ?info("aaaaa ~p", [{replicated, Key, Rev}]),
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
         apply_changes(SpaceId, T, [Change | Done])
@@ -763,44 +736,49 @@ do_request_changes(ProviderId, Since, Until) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Requests changes since given sequence up to fist found cached (stashed) change or up to given 'Until' if
-%% there is no stashed changes.
-%% @end
-%%--------------------------------------------------------------------
--spec request_missing_changes(oneprovider:id(), SpaceId :: binary(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
-    ok | {error, Reason :: term()}.
-request_missing_changes(ProviderId, SpaceId, Since, Until) ->
-    case state_get({stash, ProviderId, SpaceId}) of
-        undefined ->
-            do_request_changes(ProviderId, Since, Until);
-        Batches ->
-            [#batch{since = FirstSince} | _] = lists:sort(Batches),
-            do_request_changes(ProviderId, Since, FirstSince)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Stash changes batch in memory for further use.
 %% @end
 %%--------------------------------------------------------------------
--spec stash_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch()) ->
+-spec stash_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch(), CurrentUntil :: non_neg_integer()) ->
     ok | no_return().
-stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUntil, changes = NewChanges}) ->
+stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUntil}, CurrentUntil) ->
     state_update({stash, ProviderId, SpaceId},
         fun
             (undefined) ->
-                [Batch];
+                maps:put(NewSince, Batch, #{});
             (Batches) ->
-                case size(term_to_binary(Batches)) > ?CHANGES_STASH_MAX_SIZE_BYTES of
+                case (CurrentUntil + 1 < NewSince) andalso (size(term_to_binary(Batches)) > ?CHANGES_STASH_MAX_SIZE_BYTES) of
                     true -> Batches;
                     false ->
-                        [#batch{until = Until, since = Since, changes = Changes} | Tail] = Batches,
-                        case NewSince > Until + 1 orelse NewSince < Since of
+                        #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
+                        case NewUntil > Until of
                             true ->
-                                [Batch | Batches];
+                                maps:put(NewSince, Batch, Batches);
                             false ->
-                                [#batch{since = Since, until = NewUntil, changes = lists:flatten([Changes, NewChanges])} | Tail]
+                                Batches
                         end
+                end
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieve changes batch from memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec retrieve_stashed_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch()) ->
+    ok | no_return().
+retrieve_stashed_batch(ProviderId, SpaceId, #batch{since = NewSince, until = NewUntil}) ->
+    state_update({stash, ProviderId, SpaceId},
+        fun
+            (undefined) ->
+                #{};
+            (Batches) ->
+                #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
+                case NewUntil >= Until of
+                    true ->
+                        maps:remove(NewSince, Batches);
+                    false ->
+                        Batches
                 end
         end).
 
@@ -810,19 +788,58 @@ stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUnt
 %% Consumes batches from batch-stash.
 %% @end
 %%--------------------------------------------------------------------
--spec consume_batches(oneprovider:id(), SpaceId :: binary()) ->
+-spec consume_batches(oneprovider:id(), SpaceId :: binary(), CurrentUntil :: non_neg_integer(),
+    NewBranchSince :: non_neg_integer(), NewBranchUntil :: non_neg_integer()) ->
     ok | no_return().
-consume_batches(ProviderId, SpaceId) ->
+consume_batches(_, _, CurrentUntil, _, NewBranchUntil) when CurrentUntil >= NewBranchUntil ->
+    ok;
+consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUntil) ->
     Batches = case state_get({stash, ProviderId, SpaceId}) of
                   undefined ->
-                      [];
-                  List ->
-                      lists:sort(List)
+                      #{};
+                  Map ->
+                      Map
               end,
-    state_put({stash, ProviderId, SpaceId}, undefined),
-    lists:foreach(fun(Batch) ->
-        do_apply_batch_changes(ProviderId, SpaceId, Batch, false)
-    end, Batches).
+    SortedKeys = lists:sort(maps:keys(Batches)),
+    Stashed = lists:foldl(fun(S, Acc) ->
+        case Acc + 1 >= S of
+            true ->
+                #batch{until = U} = maps:get(S, Batches),
+                U;
+            _ -> Acc
+        end
+    end, CurrentUntil, SortedKeys),
+    case Stashed + 1 < NewBranchSince of
+        true ->
+            ?info("Missing changes ~p:~p for provider ~p", [Stashed, NewBranchSince, ProviderId]),
+            do_request_changes(ProviderId, Stashed, NewBranchSince);
+        _ ->
+            MyPid = self(),
+            state_update({current_consumer, ProviderId, SpaceId},
+                fun
+                    ({Pid, To}) ->
+                        case is_process_alive(Pid) of
+                            true -> {Pid, To};
+                            _ -> {MyPid, Stashed}
+                        end;
+                    (_) ->
+                        {MyPid, Stashed}
+                end),
+
+            case state_get({current_consumer, ProviderId, SpaceId}) of
+                {MyPid, _} ->
+                    lists:foreach(fun(Key) ->
+                        Batch = maps:get(Key, Batches),
+                        do_apply_batch_changes(ProviderId, SpaceId, Batch)
+                     end, SortedKeys);
+                {_, To} when To < Stashed ->
+                    timer:sleep(timer:seconds(5)),
+                    NewCurrentUntil = get_current_seq(ProviderId, SpaceId),
+                    consume_batches(ProviderId, SpaceId, NewCurrentUntil, NewBranchSince, NewBranchUntil);
+                _ ->
+                    ok
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
