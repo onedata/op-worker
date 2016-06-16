@@ -36,7 +36,7 @@
 -spec handle_handshake(#client_message{}, #'OTPCertificate'{}) ->
     {ok, #server_message{}} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = SessId, auth = Auth = #auth{}}}, _) when is_binary(SessId) ->
+    session_id = SessId, auth = Auth = #token_auth{}}}, _) when is_binary(SessId) ->
     {ok, Iden} = authenticate_using_token(Auth),
     {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
     {ok, #server_message{message_body = #handshake_response{session_id = SessId}}};
@@ -57,7 +57,7 @@ handle_handshake(#client_message{message_body = #handshake_request{
 %% Authenticate client using given token, returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(#auth{}) -> {ok, #identity{}} | {error, term()}.
+-spec authenticate_using_token(#token_auth{}) -> {ok, #identity{}} | {error, term()}.
 authenticate_using_token(Auth) ->
     {ok, #document{value = Iden}} = identity:get_or_fetch(Auth),
     {ok, Iden}.

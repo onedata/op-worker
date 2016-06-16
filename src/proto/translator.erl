@@ -138,7 +138,7 @@ translate_from_protobuf(#'MessageAcknowledgement'{} = Record) ->
 translate_from_protobuf(#'Token'{value = Val, secondary_values = SecValues}) ->
     {ok, Macaroon} = macaroon:deserialize(Val),
     DischargeMacaroons = [R || {ok, R} <- [macaroon:deserialize(SecValue) || SecValue <- SecValues]],
-    #auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
+    #token_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 translate_from_protobuf(#'Ping'{data = Data}) ->
     #ping{data = Data};
 translate_from_protobuf(#'GetProtocolVersion'{}) ->
@@ -547,7 +547,7 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
     {xattr, #'Xattr'{name = Name, value = Value}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
-translate_to_protobuf(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
+translate_to_protobuf(#token_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
     {ok, Token} = macaroon:serialize(Macaroon),
     SecValues = [R || {ok, R} <- [macaroon:serialize(DMacaroon) || DMacaroon <- DMacaroons]],
     #'Token'{value = Token, secondary_values = SecValues};

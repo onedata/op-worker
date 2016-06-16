@@ -503,7 +503,7 @@ rest_endpoint(Node) ->
 
 
 user_1_token_header(Config) ->
-    #auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
+    #token_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
     {ok, Srlzd} = macaroon:serialize(Macaroon),
     {<<"X-Auth-Token">>, Srlzd}.
 

@@ -182,6 +182,8 @@ handle_http_upload(Req) ->
             catch
                 throw:{missing_param, _} ->
                     g_ctx:reply(500, [], <<"">>);
+                throw:stream_file_error ->
+                    g_ctx:reply(500, [], <<"">>);
                 Type:Message ->
                     ?error_stacktrace("Error while processing file upload "
                     "from user ~p - ~p:~p",
@@ -239,7 +241,15 @@ multipart(Req, Params) ->
                         % is not satisfied within this time.
                         {read_timeout, UploadReadTimeout}
                     ],
-                    Req3 = stream_file(Req2, FileHandle, Offset, Opts),
+                    Req3 = try
+                        stream_file(Req2, FileHandle, Offset, Opts)
+                    catch Type:Message ->
+                        ?error_stacktrace("Error while streaming file upload "
+                        "from user ~p - ~p:~p",
+                            [g_session:get_user_id(), Type, Message]),
+                        logical_file_manager:unlink(SessionId, {guid, FileId}),
+                        throw(stream_file_error)
+                    end,
                     multipart(Req3, Params)
             end;
         {done, Req2} ->

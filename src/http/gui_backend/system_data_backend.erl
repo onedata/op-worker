@@ -75,7 +75,7 @@ find(<<"system-provider">>, ProviderId) ->
     ]};
 
 find(<<"system-user">>, UserId) ->
-    CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
+    CurrentUserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{value = #onedata_user{name = UserName}}} =
         user_logic:get(CurrentUserAuth, UserId),
     {ok, [
@@ -84,7 +84,7 @@ find(<<"system-user">>, UserId) ->
     ]};
 
 find(<<"system-group">>, GroupId) ->
-    CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
+    CurrentUserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{value = #onedata_group{name = GroupName}}} =
         group_logic:get(CurrentUserAuth, GroupId),
     {ok, [

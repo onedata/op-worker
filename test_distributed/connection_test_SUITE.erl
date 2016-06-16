@@ -722,7 +722,7 @@ mock_identity(Workers) ->
     Macaroon = ?MACAROON,
     test_utils:mock_new(Workers, identity),
     test_utils:mock_expect(Workers, identity, get_or_fetch,
-        fun(#auth{macaroon = M}) when M =:= Macaroon ->
+        fun(#token_auth{macaroon = M}) when M =:= Macaroon ->
             {ok, #document{value = #identity{}}}
         end
     ).

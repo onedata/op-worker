@@ -76,7 +76,7 @@ find(<<"space-group-permission">>, AssocId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"space">>) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
@@ -106,7 +106,7 @@ find_query(<<"space">>, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     Name = proplists:get_value(<<"name">>, Data),
     case Name of
         <<"">> ->
@@ -133,7 +133,7 @@ create_record(<<"space">>, Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(<<"space">>, SpaceId, [{<<"isDefault">>, Flag}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case Flag of
         undefined ->
             ok;
@@ -150,7 +150,7 @@ update_record(<<"space">>, SpaceId, [{<<"isDefault">>, Flag}]) ->
     end;
 
 update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case Name of
         undefined ->
             ok;
@@ -168,7 +168,7 @@ update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
     end;
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     CurrentUser = g_session:get_user_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
@@ -198,7 +198,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     end;
 
 update_record(<<"space-group-permission">>, AssocId, Data) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     CurrentUser = g_session:get_user_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
@@ -236,7 +236,7 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"space">>, SpaceId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     case space_logic:delete(UserAuth, SpaceId) of
         ok ->
             ok;
@@ -259,7 +259,7 @@ delete_record(<<"space">>, SpaceId) ->
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
     CurrentUser = g_session:get_user_id(),
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #space_info{
             name = Name,
@@ -295,7 +295,7 @@ space_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     CurrentUser = g_session:get_user_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
@@ -327,7 +327,7 @@ space_user_permission_record(AssocId) ->
 -spec space_group_permission_record(AssocId :: binary()) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
-    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_auth(),
     CurrentUser = g_session:get_user_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
