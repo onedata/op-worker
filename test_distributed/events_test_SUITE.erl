@@ -182,18 +182,32 @@ init_per_testcase(Case, Config) when
     end, lists:seq(0, 4)),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
+    test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
+        fun(_) -> <<"spaceid">> end),
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]),
+    test_utils:mock_expect(Worker, file_meta, get, fun
+        (<<"file_uuid">>) -> {ok, #document{}};
+        (Entry) -> meck:passthrough([Entry])
+    end),
+    NewConfig;
 
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
+        fun(_) -> <<"spaceid">> end),
     test_utils:mock_new(Workers, space_info),
     test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
         {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
     end),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]),
+    test_utils:mock_expect(Worker, file_meta, get, fun
+        (<<"file_uuid">>) -> {ok, #document{}};
+        (Entry) -> meck:passthrough([Entry])
+    end),
+    NewConfig.
 
 end_per_testcase(Case, Config) when
     Case =:= emit_read_event_should_execute_handler;
