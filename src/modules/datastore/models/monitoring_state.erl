@@ -20,7 +20,7 @@
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--export([save/4, get/3, get/4, decoded_list/0, exists/3, delete/3, create/4,
+-export([save/4, save/5, get/3, get/4, decoded_list/0, exists/3, delete/3, create/4,
     create/5, decode_id/1]).
 
 %%%===================================================================
@@ -132,6 +132,20 @@ before(_ModelName, _Method, _Level, _Context) ->
 save(SubjectType, SubjectId, MetricType, MonitoringState) ->
     monitoring_state:save(#document{
         key = encode_id(SubjectType, SubjectId, MetricType),
+        value = MonitoringState
+    }).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves Monitoring State for given SubjectType, SubjectId, MetricType and
+%% ProviderId
+%% @end
+%%--------------------------------------------------------------------
+-spec save(atom(), datastore:id(), atom(), oneprovider:id(), #monitoring_state{})
+        -> {ok, datastore:ext_key()} | datastore:create_error().
+save(SubjectType, SubjectId, MetricType, ProviderId, MonitoringState) ->
+    monitoring_state:save(#document{
+        key = encode_id(SubjectType, SubjectId, MetricType, ProviderId),
         value = MonitoringState
     }).
 

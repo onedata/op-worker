@@ -272,7 +272,7 @@ metric_get(Config) ->
         [monitoring_worker, {start, space, <<"space3">>, storage_quota}])),
     {ok, State} = rpc:call(WorkerP1, monitoring_state, get,
         [space, <<"space3">>, storage_quota]),
-    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, create,
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save,
         [space, <<"space3">>, storage_quota, Prov2ID, State])),
 
     % when
