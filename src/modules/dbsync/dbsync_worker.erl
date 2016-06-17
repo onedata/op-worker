@@ -403,6 +403,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
             ok;
         false when Until =< CurrentUntil ->
             ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
+            retrieve_stashed_batch(FromProvider, SpaceId, Batch),
             ok;
         false ->
             ok = apply_changes(SpaceId, Changes),
