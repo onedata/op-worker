@@ -173,10 +173,11 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
             end,
-            queue_update_until(QueueKey, Seq),
+%%            queue_update_until(QueueKey, Seq),
             Ans;
         {true, true} ->
             ?info("Rereplication detected, skipping ~p", [Doc]),
+            queue_update_until(QueueKey, Seq),
             ok;
         {false, _} ->
             ?debug("Skipping doc ~p", [Doc]),
@@ -185,7 +186,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 
 %% Push changes from queue to providers
 handle({flush_queue, QueueKey}) ->
-    ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
+    ?info("[ DBSync ] Flush queue ~p", [QueueKey]),
     ensure_global_stream_active(),
 
     FlushInterval = ?FLUSH_QUEUE_INTERVAL,
