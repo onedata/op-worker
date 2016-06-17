@@ -180,6 +180,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
 
         Verify(fun(W) ->
+            ct:print("Verify file ~p", [{File, W}]),
             OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -241,11 +242,13 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
         VerifyStats(Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
+            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
@@ -348,6 +351,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
+            ct:print("Verify write ~p", [{Level2File, W}]),
             OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,
@@ -375,6 +379,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end,
         ?assertMatch({_, {ok, _}}, MkAnsCheck),
         {Level2TmpDir, _} = MkAnsCheck,
+        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
         VerifyStats(Level2TmpDir, true),
         [Level2TmpDir | Acc]
     end, [], Workers),
@@ -400,6 +405,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
                 end,
             ?assertMatch({_, {ok, _}}, MkAnsCheck),
             {Level3TmpDir, _} = MkAnsCheck,
+            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
     end, Level2TmpDirs),
