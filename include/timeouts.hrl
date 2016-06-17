@@ -14,7 +14,9 @@
 -define(FSYNC_TIMEOUT, timer:minutes(1)).
 
 %% replica_synchronizer
--define(SYNC_TIMEOUT, timer:minutes(5)).
+% TODO - check why sometimes we do not get notification
+-define(SYNC_TIMEOUT, timer:seconds(30)).
+%%-define(SYNC_TIMEOUT, timer:minutes(5)).
 
 %% gateway_connection
 -define(CONNECTION_TIMEOUT, timer:minutes(1)).

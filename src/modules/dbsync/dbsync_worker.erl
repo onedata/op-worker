@@ -150,7 +150,7 @@ handle({clear_temp, Key}) ->
 
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
-    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p ~p", [QueueKey, Seq, dbsync_utils:temp_get({replicated, Key, Rev}), Doc]),
+    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of

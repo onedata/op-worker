@@ -46,8 +46,7 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 30, 10, 100).
-%%    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 30, 10, 35).
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
 
 proxy_test1(Config) ->
     synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
@@ -351,7 +350,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
-            ct:print("Verify write ~p", [{Level2File, W}]),
+            ct:print("Verify write ~p", [{Level2File, W2}]),
             OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,
