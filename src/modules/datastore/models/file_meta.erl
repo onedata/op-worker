@@ -457,6 +457,7 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                                 Err
                         end;
                     {error, link_not_found} -> %% Map links errors to document errors
+                        ?info("Link to doc not found translation ~p", [{Root, First}]),
                         {error, {not_found, ?MODEL_NAME}};
                     {error, Reason} ->
                         {error, Reason}
@@ -474,6 +475,7 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                                 {error, ghost_file}
                         end;
                     {error, link_not_found} -> %% Map links errors to document errors
+                        ?info("Link to doc not found translation ~p", [{Root, Tokens}]),
                         {error, {not_found, ?MODEL_NAME}};
                     {error, Reason} ->
                         {error, Reason}
@@ -539,8 +541,14 @@ setup_onedata_user(_Client, UserId) ->
             SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             case exists({uuid, SpaceDirUuid}) of
                 true ->
+                    ?info("Fixing links for space ~p", [{SpaceId, SpaceDirUuid}]),
+                    try
                     fix_parent_links({uuid, ?ROOT_DIR_UUID},
-                        {uuid, SpaceDirUuid});
+                        {uuid, SpaceDirUuid})
+                    catch
+                        E1:E2 ->
+                            ?error_stacktrace("Fixing links for space error ~p", [{SpaceId, SpaceDirUuid, E1, E2}])
+                    end;
                 false ->
                     {ok, _} = create({uuid, ?ROOT_DIR_UUID},
                         #document{key = SpaceDirUuid,
