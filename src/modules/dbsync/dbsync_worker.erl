@@ -824,8 +824,15 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
     end, CurrentUntil, SortedKeys),
     case Stashed + 1 < NewBranchSince of
         true ->
-            ?info("Missing changes ~p:~p for provider ~p", [Stashed, NewBranchSince, ProviderId]),
-            do_request_changes(ProviderId, Stashed, NewBranchSince);
+            timer:sleep(timer:seconds(2)),
+            NewCurrentUntil = get_current_seq(ProviderId, SpaceId),
+            case NewCurrentUntil > CurrentUntil of
+                true ->
+                    consume_batches(ProviderId, SpaceId, NewCurrentUntil, NewBranchSince, NewBranchUntil);
+                _ ->
+                    ?info("Missing changes ~p:~p for provider ~p", [Stashed, NewBranchSince, ProviderId]),
+                    do_request_changes(ProviderId, Stashed, NewBranchSince)
+            end;
         _ ->
             MyPid = self(),
             state_update({current_consumer, ProviderId, SpaceId},
