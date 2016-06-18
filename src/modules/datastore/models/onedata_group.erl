@@ -150,33 +150,33 @@ create_or_update(Doc, Diff) ->
 %% Fetch group from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Client :: oz_endpoint:client(), GroupId :: id()) ->
+-spec fetch(Auth :: oz_endpoint:auth(), GroupId :: id()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(Client, GroupId) ->
+fetch(Auth, GroupId) ->
     try
         {ok, #group_details{id = Id, name = Name, type = Type}} =
-            oz_groups:get_details(Client, GroupId),
-        {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
-        {ok, ParentIds} = oz_groups:get_parents(Client, Id),
+            oz_groups:get_details(Auth, GroupId),
+        {ok, SpaceIds} = oz_groups:get_spaces(Auth, Id),
+        {ok, ParentIds} = oz_groups:get_parents(Auth, Id),
 
         % nested groups
-        {ok, NestedIds} = oz_groups:get_nested(Client, Id),
+        {ok, NestedIds} = oz_groups:get_nested(Auth, Id),
         NestedGroupsWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_nested_privileges(Client, Id, UID),
+            {ok, Privileges} = oz_groups:get_nested_privileges(Auth, Id, UID),
             {UID, Privileges}
         end, NestedIds),
 
         % users
-        {ok, UserIds} = oz_groups:get_users(Client, Id),
+        {ok, UserIds} = oz_groups:get_users(Auth, Id),
         UsersWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_user_privileges(Client, Id, UID),
+            {ok, Privileges} = oz_groups:get_user_privileges(Auth, Id, UID),
             {UID, Privileges}
         end, UserIds),
 
         % effective users
-        {ok, EffectiveUserIds} = oz_groups:get_effective_users(Client, Id),
+        {ok, EffectiveUserIds} = oz_groups:get_effective_users(Auth, Id),
         EffectiveUsersWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_effective_user_privileges(Client, Id, UID),
+            {ok, Privileges} = oz_groups:get_effective_user_privileges(Auth, Id, UID),
             {UID, Privileges}
         end, EffectiveUserIds),
 
@@ -197,11 +197,11 @@ fetch(Client, GroupId) ->
 %% Get group from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Client :: oz_endpoint:client(), GroupId :: onedata_group:id()) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), GroupId :: onedata_group:id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Client, GroupId) ->
+get_or_fetch(Auth, GroupId) ->
     case onedata_group:get(GroupId) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Client, GroupId);
+        {error, {not_found, _}} -> fetch(Auth, GroupId);
         Error -> Error
     end.

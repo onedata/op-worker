@@ -154,21 +154,21 @@ create_or_update(Doc, Diff) ->
 %% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Client :: oz_endpoint:client()) ->
+-spec fetch(Auth :: oz_endpoint:auth()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(Client) ->
+fetch(Auth) ->
     {ok, #user_details{
         id = UserId, name = Name, connected_accounts = ConnectedAccounts,
         alias = Alias, email_list = EmailList}
-    } = oz_users:get_details(Client),
+    } = oz_users:get_details(Auth),
     {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-        oz_users:get_spaces(Client),
-    {ok, GroupIds} = oz_users:get_groups(Client),
-    {ok, EffectiveGroupIds} = oz_users:get_effective_groups(Client),
+        oz_users:get_spaces(Auth),
+    {ok, GroupIds} = oz_users:get_groups(Auth),
+    {ok, EffectiveGroupIds} = oz_users:get_effective_groups(Auth),
 
     Spaces = utils:pmap(fun(SpaceId) ->
         {ok, #space_details{name = SpaceName}} =
-            oz_spaces:get_details(Client, SpaceId),
+            oz_spaces:get_details(Auth, SpaceId),
         {SpaceId, SpaceName}
     end, SpaceIds),
 
@@ -186,11 +186,11 @@ fetch(Client) ->
     {ok, _} = onedata_user:save(OnedataUserDoc),
 
     utils:pforeach(fun(SpaceId) ->
-        space_info:get_or_fetch(Client, SpaceId, UserId)
+        space_info:get_or_fetch(Auth, SpaceId, UserId)
     end, SpaceIds),
 
     utils:pforeach(fun(GroupId) ->
-        onedata_group:get_or_fetch(Client, GroupId)
+        onedata_group:get_or_fetch(Auth, GroupId)
     end, GroupIds),
 
     {ok, OnedataUserDoc}.
@@ -200,13 +200,13 @@ fetch(Client) ->
 %% Get user from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Client :: oz_endpoint:client(), UserId :: id()) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Client, UserId) ->
+get_or_fetch(Auth, UserId) ->
     try
         case onedata_user:get(UserId) of
             {ok, Doc} -> {ok, Doc};
-            {error, {not_found, _}} -> fetch(Client);
+            {error, {not_found, _}} -> fetch(Auth);
             Error -> Error
         end
     catch

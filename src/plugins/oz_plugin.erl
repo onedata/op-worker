@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements oz_plugin_behaviour in order
-%%% to customize connection settings to Global Registry.
+%%% to customize connection settings to OneZone.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(oz_plugin).
@@ -16,10 +16,13 @@
 -behaviour(oz_plugin_behaviour).
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 
 %% oz_plugin_behaviour API
 -export([get_oz_url/0, get_oz_rest_port/0, get_oz_rest_api_prefix/0]).
 -export([get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
+-export([auth_to_rest_client/1]).
 
 %%%===================================================================
 %%% oz_plugin_behaviour API
@@ -98,6 +101,40 @@ get_cacert_path() ->
     {ok, CACertFile} = application:get_env(?APP_NAME, oz_ca_cert_path),
     CACertFile.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% This callback is used to convert Auth term, which is transparent to ctool,
+%% into one of possible authorization methods. Thanks to this, the code
+%% using OZ API can always use its specific Auth terms and they are converted
+%% when request is done.
+%% @end
+%%--------------------------------------------------------------------
+-spec auth_to_rest_client(Auth :: term()) -> file:name_all().
+auth_to_rest_client(#token_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
+    {user, token, {Mac, DMacs}};
+
+auth_to_rest_client(#basic_auth{credentials = Credentials}) ->
+    {user, basic, Credentials};
+
+auth_to_rest_client(?ROOT_SESS_ID) ->
+    provider;
+
+auth_to_rest_client(SessId) when is_binary(SessId) ->
+    {ok, #document{
+        value = #session{
+            auth = Auth,
+            type = Type
+        }}} = session:get(SessId),
+    case Type of
+        provider_outgoing ->
+            provider;
+        provider_incoming ->
+            provider;
+        _ ->
+            % This will evaluate either to user_token, user_basic or provider.
+            auth_to_rest_client(Auth)
+    end;
+
+auth_to_rest_client(Other) ->
+    % Other can be provider|client.
+    Other.

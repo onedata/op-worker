@@ -32,7 +32,7 @@
 %% todo split this model to:
 %% todo globally cached - #certificate{} -> #identity{},
 %% todo and locally cached - #token{} | #certificate_info{} -> #identity{}
--type credentials() :: #auth{} | #'OTPCertificate'{}.
+-type credentials() :: #token_auth{} | #basic_auth{} | #'OTPCertificate'{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -141,11 +141,10 @@ fetch(OtpCert = #'OTPCertificate'{}) ->
             {ok, Doc};
         Error_ -> Error_
     end;
-fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
+fetch(Auth) ->
     try
-        Client = {user, {Macaroon, DMacaroons}},
-        {ok, #user_details{id = UserId}} = oz_users:get_details(Client),
-        {ok, #document{key = Id}} = onedata_user:get_or_fetch(Client, UserId),
+        {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
+        {ok, #document{key = Id}} = onedata_user:get_or_fetch(Auth, UserId),
         NewDoc = #document{key = Auth, value = #identity{user_id = Id}},
         {ok, _} = identity:save(NewDoc),
         {ok, NewDoc}

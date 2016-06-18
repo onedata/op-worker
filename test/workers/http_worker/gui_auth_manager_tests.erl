@@ -40,7 +40,7 @@ authorize_test() ->
         {ok, Token}
     end),
 
-    {ok, #auth{macaroon = M4, disch_macaroons = DischMacaroons}} =
+    {ok, #token_auth{macaroon = M4, disch_macaroons = DischMacaroons}} =
         gui_auth_manager:authenticate(M4),
 
     V = macaroon_verifier:create(),

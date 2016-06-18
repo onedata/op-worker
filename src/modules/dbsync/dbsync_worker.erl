@@ -25,7 +25,7 @@
 -export([apply_batch_changes/3, init_stream/3]).
 -export([bcast_status/0, on_status_received/3]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location]).
+-define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
@@ -533,6 +533,13 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
     boolean().
 has_sync_context(#document{value = #links{model = ModelName}}) ->
     lists:member(ModelName, ?MODELS_TO_SYNC);
+has_sync_context(#document{value = #monitoring_state{}, key = Id}) ->
+    case monitoring_state:decode_id(Id) of
+        {space, _SpaceId, _, _} ->
+            true;
+        _ ->
+            false
+    end;
 has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     ModelName = element(1, Value),
     lists:member(ModelName, ?MODELS_TO_SYNC).
@@ -565,6 +572,11 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
 %%--------------------------------------------------------------------
 -spec get_space_id(datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
+get_space_id(#document{key = Id, value = #monitoring_state{}}) ->
+    case monitoring_state:decode_id(Id) of
+        {space, SpaceId, _, _} ->
+            {ok, SpaceId}
+    end;
 get_space_id(#document{key = Key} = Doc) ->
     try state_get({sid, Key}) of
         undefined ->

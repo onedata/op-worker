@@ -526,7 +526,7 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(oz_endpoint:client(), UserId :: onedata_user:id()) -> ok.
+-spec setup_onedata_user(oz_endpoint:auth(), UserId :: onedata_user:id()) -> ok.
 setup_onedata_user(_Client, UserId) ->
     ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
     datastore:run_synchronized(onedata_user, UserId, fun() ->
