@@ -68,8 +68,8 @@ db_sync_test_base(Config) ->
 proxy_test1(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, dirs_num}, {value, 10}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 50}, {description, "Number of files with single parent."}]
+            [{name, dirs_num}, {value, 5}, {description, "Number of directorines with single parent."}],
+            [{name, files_num}, {value, 10}, {description, "Number of files with single parent."}]
         ]},
         {description, "Performs multiple file operations on space 2."}
     ]).
@@ -83,8 +83,8 @@ proxy_test1_base(Config) ->
 proxy_test2(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, dirs_num}, {value, 10}, {description, "Number of directorines with single parent."}],
-            [{name, files_num}, {value, 50}, {description, "Number of files with single parent."}]
+            [{name, dirs_num}, {value, 5}, {description, "Number of directorines with single parent."}],
+            [{name, files_num}, {value, 10}, {description, "Number of files with single parent."}]
         ]},
         {description, "Performs multiple file operations on space 3."}
     ]).
