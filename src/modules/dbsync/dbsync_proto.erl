@@ -225,7 +225,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, sp
     try handle_broadcast(Ignore, MessageOrigin, Request, BaseRequest) of
 %%                ok -> ok; %% This case should be safely ignored but is not used right now.
         reemit ->
-            case worker_proxy:cast(dbsync_worker, Request) of
+            case worker_proxy:cast(dbsync_worker, {reemit, BaseRequest}) of
                 ok -> ok;
                 {error, Reason} ->
                     ?error("Cannot reemit tree broadcast due to: ~p", [Reason]),
