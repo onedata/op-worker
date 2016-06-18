@@ -437,7 +437,6 @@ apply_changes(SpaceId,
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
 
-        ?info("aaaaa ~p", [{replicated, Key, Rev}]),
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
         apply_changes(SpaceId, T, [Change | Done])
