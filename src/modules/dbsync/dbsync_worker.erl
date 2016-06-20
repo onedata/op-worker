@@ -66,8 +66,7 @@
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     ?info("[ DBSync ]: Starting dbsync..."),
-    Since = 0,
-    state_put(global_resume_seq, Since),
+    Since = state_get(global_resume_seq),
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
@@ -162,6 +161,8 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                 {ok, <<"">>} ->
                     ?debug("Skipping doc ~p", [Doc]),
                     skip;
+                {ok, {space_doc, SpaceId}} ->
+                    queue_push(QueueKey, {init_batch, Seq}, SpaceId);
                 {ok, SpaceId} ->
                     case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
                         ok -> queue_push(QueueKey, Change, SpaceId);
@@ -173,7 +174,12 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
             end,
-%%            queue_update_until(QueueKey, Seq),
+            case Key of
+                {dbsync_state, _} ->
+                    ok;
+                _ ->
+                    queue_update_until(QueueKey, Seq)
+            end,
             Ans;
         {true, true} ->
             ?info("Rereplication detected, skipping ~p", [Doc]),
@@ -187,7 +193,6 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 %% Push changes from queue to providers
 handle({flush_queue, QueueKey}) ->
     ?info("[ DBSync ] Flush queue ~p", [QueueKey]),
-    ensure_global_stream_active(),
 
     FlushInterval = ?FLUSH_QUEUE_INTERVAL,
     FlushAgainAfter = FlushInterval + crypto:rand_uniform(0, round(?FLUSH_QUEUE_INTERVAL / 2)),
@@ -201,7 +206,8 @@ handle({flush_queue, QueueKey}) ->
                     ?info("[ DBSync ] Flush loop is too fast, breaking this one."),
                     throw({too_many_flush_loops, {flush_queue, QueueKey}});
                 _ ->
-                    dbsync_utils:temp_put(last_global_flush, CTime, 0)
+                    dbsync_utils:temp_put(last_global_flush, CTime, 0),
+                    ensure_global_stream_active()
             end;
         _ -> ok
     end,
@@ -256,9 +262,14 @@ handle({'EXIT', Stream, Reason}) ->
         Stream ->
             Since = state_get(global_resume_seq),
             state_update(changes_stream,
-                fun(_) ->
-                    {ok, NewStream} = init_stream(Since, infinity, global),
-                    NewStream
+                fun(OldStream) ->
+                    case is_valid_stream(OldStream) of
+                        true ->
+                            OldStream;
+                        _ ->
+                            {ok, NewStream} = init_stream(Since, infinity, global),
+                            NewStream
+                    end
                 end);
         _ ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
@@ -319,7 +330,24 @@ queue_remove(QueueKey, Until) ->
 %% Push given change to given queue.
 %% @end
 %%--------------------------------------------------------------------
--spec queue_push(queue(), change(), SpaceId :: binary()) -> ok.
+-spec queue_push(queue(), change() | {init_batch, non_neg_integer()}, SpaceId :: binary()) -> ok.
+queue_push(QueueKey, {init_batch, Seq}, SpaceId) ->
+    state_update({queue, QueueKey},
+        fun(Queue) ->
+            Queue1 =
+                case Queue of
+                    undefined ->
+                        #queue{batch_map = #{}};
+                    #queue{} = Q -> Q
+                end,
+            BatchMap = Queue1#queue.batch_map,
+            Since = Queue1#queue.since,
+            Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Seq}),
+            Batch = Batch0#batch{until = max(Seq, Since)},
+            UntilToSet = max(Batch0#batch.until, Seq),
+            Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
+                until = queue_calculate_until(UntilToSet, Queue1)}
+        end);
 queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
     state_update({queue, QueueKey},
         fun(Queue) ->
@@ -477,7 +505,7 @@ run_posthooks(SpaceId, [Change | Done]) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
+    {ok, _} = dbsync_state:save(#document{key = {dbsync_state, Key}, value = #dbsync_state{entry = Value}}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -487,7 +515,7 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    case dbsync_state:get(Key) of
+    case dbsync_state:get({dbsync_state, Key}) of
         {ok, #document{value = #dbsync_state{entry = Value}}} ->
             Value;
         {error, {not_found, _}} ->
@@ -570,7 +598,7 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_id(datastore:document()) ->
-    {ok, SpaceId :: binary()} | {error, Reason :: term()}.
+    {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
 get_space_id(#document{key = Id, value = #monitoring_state{}}) ->
     case monitoring_state:decode_id(Id) of
         {space, SpaceId, _, _} ->
@@ -596,13 +624,20 @@ get_space_id(#document{key = Key} = Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
-    {ok, SpaceId :: binary()} | {error, Reason :: term()}.
-get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
+    {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
+get_space_id_not_cached(KeyToCache, #document{key = Key} = Doc) ->
     Context = get_sync_context(Doc),
     case file_meta:get_scope(Context) of
         {ok, #document{key = <<"">> = Root}} ->
-            state_put({sid, KeyToCache}, Root),
-            {ok, Root};
+            try
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Key),
+                state_put({sid, KeyToCache}, {space_doc, SpaceId}),
+                {ok, {space_doc, SpaceId}}
+            catch
+                _:_ ->
+                    state_put({sid, KeyToCache}, Root),
+                    {ok, Root}
+            end;
         {ok, #document{key = ScopeUUID}} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
