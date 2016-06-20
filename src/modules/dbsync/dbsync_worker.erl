@@ -749,7 +749,28 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
         true ->
             case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
                 ok ->
-                    do_request_changes(ProviderId, CurrentSeq, SeqNum);
+                    timer:sleep(timer:seconds(2)),
+                    Batches = case state_get({stash, ProviderId, SpaceId}) of
+                                  undefined ->
+                                      #{};
+                                  Map ->
+                                      Map
+                              end,
+                    SortedKeys = lists:sort(maps:keys(Batches)),
+                    Stashed = lists:foldl(fun(S, Acc) ->
+                        case Acc + 1 >= S of
+                            true ->
+                                #batch{until = U} = maps:get(S, Batches),
+                                U;
+                            _ -> Acc
+                        end
+                    end, CurrentSeq, SortedKeys),
+                    case Stashed < SeqNum of
+                        true ->
+                            do_request_changes(ProviderId, Stashed, SeqNum);
+                        _ ->
+                            ok
+                    end;
                 {error, space_not_supported_locally} ->
                     ?info("Ignoring space ~p status since it's not supported locally."),
                     ok
