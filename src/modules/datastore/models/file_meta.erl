@@ -283,17 +283,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ScopeFun1 =
-        fun() ->
-            erlang:get(mother_scope)
-        end,
-    ScopeFun2 =
-        fun() ->
-            erlang:get(other_scopes)
-        end,
-
     ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
-        ?DISK_ONLY_LEVEL, ?DISK_ONLY_LEVEL, true, false, ScopeFun1, ScopeFun2). % todo fix links and use GLOBALLY_CACHED
+        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -304,13 +295,13 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, _, _, {ok, UUID}) ->
+'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, save, _, _, {ok, UUID}) ->
+'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, update, _, _, {ok, UUID}) ->
+'after'(onedata_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
+'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

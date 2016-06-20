@@ -109,7 +109,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_quota_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(space_quota_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

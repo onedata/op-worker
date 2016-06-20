@@ -427,15 +427,29 @@ apply_changes(SpaceId,
     try
         ModelConfig = ModelName:model_init(),
 
-        %todo add cache manipulation functions and activate GLOBALLY_CACHED levels of datastore for file_meta and file_location
         MainDocKey = case Value of
             #links{} ->
-                Value#links.doc_key;
-            _ -> Key
+                % TODO - work only on local tree (after refactoring of link_utils)
+                MDK = Value#links.doc_key,
+                {ok, MD} = file_meta:get({uuid, MDK}),
+                file_meta:set_link_context(MD),
+                ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, maps:to_list(Value#links.link_map)),
+                MDK;
+             _ ->
+                 ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
+                 Key
         end,
         datastore:run_synchronized(ModelName, MainDocKey, fun() ->
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
+
+        case Value of
+            #links{} ->
+                % TODO - work only on local tree (after refactoring of link_utils)
+                ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, maps:to_list(Value#links.link_map));
+            _ ->
+                ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
+        end,
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 

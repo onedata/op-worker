@@ -152,7 +152,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations_bucket, [], ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
+    ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
