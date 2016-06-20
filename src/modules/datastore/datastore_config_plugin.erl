@@ -44,5 +44,6 @@ models() -> [
     files_to_chown,
     posix_user,
     message_id,
-    space_quota
+    space_quota,
+    monitoring_state
 ].

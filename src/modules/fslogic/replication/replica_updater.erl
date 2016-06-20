@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update/4, fill_blocks_with_storage_info/2]).
+-export([update/5, fill_blocks_with_storage_info/2]).
 
 %%%===================================================================
 %%% API
@@ -34,31 +34,33 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec update(FileUUID :: file_meta:uuid(), Blocks :: fslogic_blocks:blocks(),
-    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
+    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean(), version_vector:version_vector()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update(FileUUID, Blocks, FileSize, BumpVersion) ->
+update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
     fslogic_utils:wait_for_local_file_location(FileUUID),
     file_location:run_synchronized(FileUUID,
         fun() ->
-                [Location = #document{value = #file_location{size = OldSize}} | _] =
-                    fslogic_utils:get_local_file_locations_once({uuid, FileUUID}), %todo get location as argument, insted operating on first one
-                FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
+            [Location = #document{value = #file_location{size = OldSize,
+                version_vector = Version}} | _] =
+                fslogic_utils:get_local_file_locations_once({uuid, FileUUID}), %todo get location as argument, insted operating on first one
+            FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
-                UpdatedLocation = append(Location, FullBlocks, BumpVersion),
+            warning_if_different_version(BaseVersion, Version, FileUUID),
+            UpdatedLocation = append(Location, FullBlocks, BumpVersion),
 
-                case FileSize of
-                    undefined ->
-                        file_location:save(UpdatedLocation),
-                        case fslogic_blocks:upper(FullBlocks) > OldSize of
-                            true -> {ok, size_changed};
-                            false -> {ok, size_not_changed}
-                        end;
-                    _ ->
-                        TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
-                        file_location:save(TruncatedLocation),
-                        {ok, size_changed}
-                end
-                % todo reconcile other local replicas according to this one
+            case FileSize of
+                undefined ->
+                    file_location:save(UpdatedLocation),
+                    case fslogic_blocks:upper(FullBlocks) > OldSize of
+                        true -> {ok, size_changed};
+                        false -> {ok, size_not_changed}
+                    end;
+                _ ->
+                    TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
+                    file_location:save(TruncatedLocation),
+                    {ok, size_changed}
+            end
+            % todo reconcile other local replicas according to this one
         end).
 
 
@@ -92,6 +94,21 @@ fill_blocks_with_storage_info(Blocks, #document{value = #file_location{storage_i
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Warns if we update file blocks and it has changed in the meantime.
+%% @end
+%%--------------------------------------------------------------------
+-spec warning_if_different_version(version_vector:version_vector(),
+    version_vector:version_vector(), file_meta:uuid()) -> ok.
+warning_if_different_version(undefined, _ActualVersion, _FileUuid) ->
+    ok;
+warning_if_different_version(_ActualVersion, _ActualVersion, _FileUuid) ->
+    ok;
+warning_if_different_version(BaseVersion, ActualVersion, FileUuid) ->
+    ?warning("Applying transferred changes of file ~p on top of modified replica, version mismatch: ~p vs ~p",
+        [FileUuid, BaseVersion, ActualVersion]).
 
 %%--------------------------------------------------------------------
 %% @private

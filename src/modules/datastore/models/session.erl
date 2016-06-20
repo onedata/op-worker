@@ -32,7 +32,7 @@
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
--type auth() :: #auth{}.
+-type auth() :: #token_auth{} | #basic_auth{}.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming.
 -type status() :: active | inactive.
 -type identity() :: #identity{}.
@@ -386,11 +386,11 @@ remove_connection(SessId, Con) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns #auth{} record associated with session.
+%% Returns #token_auth{} record associated with session.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(SessId :: id()) ->
-    {ok, Auth :: #auth{}} | {ok, undefined} | {error, Reason :: term()}.
+    {ok, Auth :: #token_auth{}} | {ok, undefined} | {error, Reason :: term()}.
 get_auth(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} ->

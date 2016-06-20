@@ -28,8 +28,9 @@
 -export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, truncate/2, truncate/3, unlink/1,
-    unlink/2, release/1, get_file_distribution/2, replicate_file/3]).
+    read/3, read_without_events/3, silent_read/3,
+    truncate/2, truncate/3, unlink/1, unlink/2, release/1,
+    get_file_distribution/2, replicate_file/3]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -55,13 +56,15 @@ exists(_FileKey) ->
 %%--------------------------------------------------------------------
 -spec mv(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     TargetPath :: file_meta:path()) ->
-    ok | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mv(SessId, FileKey, TargetPath) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, fuse_request,
         #rename{uuid = GUID, target_path = TargetPath},
-        fun(_) -> ok end).
+        fun(#file_renamed{new_uuid = NewGuid}) ->
+            {ok, NewGuid}
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -247,20 +250,29 @@ write_without_events(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, false).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, true)
+%% @equiv read(FileHandle, Offset, MaxSize, true, true)
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read(FileHandle, Offset, MaxSize) ->
-    read(FileHandle, Offset, MaxSize, true).
+    read(FileHandle, Offset, MaxSize, true, true).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, false)
+%% @equiv read(FileHandle, Offset, MaxSize, false, true)
 %%--------------------------------------------------------------------
 -spec read_without_events(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read_without_events(FileHandle, Offset, MaxSize) ->
-    read(FileHandle, Offset, MaxSize, false).
+    read(FileHandle, Offset, MaxSize, false, true).
+
+%%--------------------------------------------------------------------
+%% @equiv read(FileHandle, Offset, MaxSize, false, false)
+%%--------------------------------------------------------------------
+-spec silent_read(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
+silent_read(FileHandle, Offset, MaxSize) ->
+    read(FileHandle, Offset, MaxSize, false, false).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -301,7 +313,7 @@ get_file_distribution(SessId, FileKey) ->
             Distribution =
                 lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
                     [
-                        {<<"provider">>, ProviderId},
+                        {<<"providerId">>, ProviderId},
                         {<<"blocks">>, lists:map(fun(#file_block{offset = O, size = S}) ->
                             [O, S] end, Blocks)}
                     ]
@@ -479,10 +491,10 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
-    MaxSize :: integer(), GenerateEvents :: boolean()) ->
+    MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
-read(FileHandle, Offset, MaxSize, GenerateEvents) ->
-    case read_internal(FileHandle, Offset, MaxSize, GenerateEvents) of
+read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
+    case read_internal(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) of
         {error, Reason} ->
             {error, Reason};
         {ok, NewHandle, Bytes} = Ret1 ->
@@ -492,7 +504,7 @@ read(FileHandle, Offset, MaxSize, GenerateEvents) ->
                 0 ->
                     Ret1;
                 Size ->
-                    case read(NewHandle, Offset + Size, MaxSize - Size, GenerateEvents) of
+                    case read(NewHandle, Offset + Size, MaxSize - Size, GenerateEvents, PrefetchData) of
                         {ok, NewHandle1, Bytes1} ->
                             {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
                         {error, Reason} ->
@@ -506,13 +518,15 @@ read(FileHandle, Offset, MaxSize, GenerateEvents) ->
 %% Internal function for reading one portion of data in read/3
 %% @end
 %%--------------------------------------------------------------------
--spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer(), GenerateEvents :: boolean()) ->
+-spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+    MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode = OpenType,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize, GenerateEvents) ->
+    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize,
+    GenerateEvents, PrefetchData) ->
 
     lfm_utils:call_fslogic(SessId, fuse_request,
-        #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}},
+        #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}, prefetch = PrefetchData},
         fun(_) -> ok end),
 
     {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),

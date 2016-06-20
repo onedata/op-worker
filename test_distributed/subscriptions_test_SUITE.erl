@@ -245,7 +245,7 @@ check_file_operations_test_base(Config, UpdateFun, IdExt) ->
     UpdateFun(Node, S1, U1, P1, Priv1, G1),
 
     %% then
-    FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
     OpenResult = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
     ?assertMatch({ok, _}, OpenResult),
@@ -482,7 +482,7 @@ space_without_support_test(Config) ->
     expect_message([U1], 4, []),
 
     %% then
-    FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
     ?assertMatch({error, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
     ok.
 
@@ -757,12 +757,12 @@ get_provider_id(Node) ->
 
 create_rest_session(Node, UserID) ->
     ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_rest_session, [
-        #identity{user_id = UserID}, #auth{}
+        #identity{user_id = UserID}, #token_auth{}
     ])).
 
 create_fuse_session(Node, SessionID, UserID) ->
     ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_fuse_session, [
-        SessionID, #identity{user_id = UserID}, #auth{}, self()
+        SessionID, #identity{user_id = UserID}, #token_auth{}, self()
     ])).
 
 expectation(Users, ResumeAt, Missing) ->

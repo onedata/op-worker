@@ -35,6 +35,9 @@
 %% supervisor.
 -define(SESSION_MANAGER_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?SESSION_MANAGER_WORKER)).
 
+%% Local name (name and node is used to identify it) of rrdtool supervisor.
+-define(RRDTOOL_SUPERVISOR, rrdtool_supervisor).
+
 %%%===================================================================
 %%% Global identities
 %%%===================================================================

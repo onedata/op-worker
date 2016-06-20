@@ -24,6 +24,7 @@
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("global_definitions.hrl").
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1, clean_test_users_and_spaces/1,
@@ -292,11 +293,11 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         end
     end, Spaces),
 
-    Auth = #auth{macaroon = Macaroon},
+    Auth = #token_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, fetch, [{user, {Macaroon, []}}]),
+    {ok, _} = rpc:call(Worker, onedata_user, fetch, [#token_auth{macaroon = Macaroon}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -327,11 +328,7 @@ teardown_sesion(Worker, Config) ->
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:default_space_uuid(UserId)])),
-            ?assertEqual(ok,
-                rpc:call(Worker, file_meta, delete,
-                    [fslogic_uuid:spaces_uuid(UserId)]
-                )),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:user_root_dir_uuid(UserId)])),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
             Acc;
@@ -556,7 +553,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         fun(_, PID) ->
             Domain = provider_id_to_domain(PID),
             Workers = get_same_domain_workers(Config, Domain),
-            {ok, #provider_details{id = PID, urls = [list_to_binary(utils:get_host(Worker)) || Worker <- Workers]}}
+            {ok, #provider_details{id = PID, name = PID, urls = [list_to_binary(utils:get_host(Worker)) || Worker <- Workers]}}
         end),
 
 
@@ -629,6 +626,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         rpc:multicall(MasterWorkers, space_info, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
     end, Spaces),
 
+    %% Set expiration time for session to 1d.
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 24 * 60 * 60]),
+
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).
@@ -674,7 +674,7 @@ teardown_storage(Worker, Config) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, oz_users),
-    test_utils:mock_expect(Workers, oz_users, get_details, fun({user, {Macaroon, _}}) ->
+    test_utils:mock_expect(Workers, oz_users, get_details, fun(#token_auth{macaroon = Macaroon}) ->
         {_, #user_config{name = UName, id = UID}} = lists:keyfind(Macaroon, 1, Users),
         {ok, #user_details{
             id = UID,
@@ -682,19 +682,19 @@ oz_users_mock_setup(Workers, Users) ->
         }}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_spaces, fun({user, {Macaroon, _}}) ->
+    test_utils:mock_expect(Workers, oz_users, get_spaces, fun(#token_auth{macaroon = Macaroon}) ->
         {_, #user_config{spaces = Spaces, default_space = DefaultSpaceId}} = lists:keyfind(Macaroon, 1, Users),
         {SpaceIds, _} = lists:unzip(Spaces),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_groups, fun({user, {Macaroon, _}}) ->
+    test_utils:mock_expect(Workers, oz_users, get_groups, fun(#token_auth{macaroon = Macaroon}) ->
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun({user, {Macaroon, _}}) ->
+    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun(#token_auth{macaroon = Macaroon}) ->
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
@@ -755,7 +755,7 @@ oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 oz_groups_mock_setup(Workers, Groups, Users) ->
     test_utils:mock_new(Workers, oz_groups),
     test_utils:mock_expect(Workers, oz_groups, get_details,
-        fun({user, _}, GroupId) ->
+        fun(_, GroupId) ->
             GroupName = proplists:get_value(GroupId, Groups),
             {ok, #group_details{id = GroupId, name = GroupName}}
         end

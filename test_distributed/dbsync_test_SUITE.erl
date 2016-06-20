@@ -70,9 +70,9 @@ global_stream_test(MultiConfig) ->
         fun(_N) ->
             D0 = gen_filename(),
 
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
 
             D0
         end, lists:seq(1, 5)),
@@ -82,9 +82,9 @@ global_stream_test(MultiConfig) ->
     RevPerPath = lists:map(
         fun(D0) ->
 
-            Path1 = <<"/", D0/binary>>,
-            Path2 = <<"/", D0/binary, "/", D0/binary>>,
-            Path3 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>,
+            Path1 = <<"/space_name1/", D0/binary>>,
+            Path2 = <<"/space_name1/", D0/binary, "/", D0/binary>>,
+            Path3 = <<"/space_name1/", D0/binary, "/", D0/binary, "/", D0/binary>>,
 
             {ok, #file_attr{uuid = FileGUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
             {ok, #file_attr{uuid = FileGUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
@@ -136,15 +136,10 @@ global_stream_test(MultiConfig) ->
                 end, maps:to_list(PathMap))
         end, RevPerPath),
 
-    {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/spaces/space_name1">>}, 0, 100),
-    {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/spaces/space_name1">>}, 0, 100),
-
-    {ok, LS2P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/">>}, 0, 100),
-    {ok, LS2P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/">>}, 0, 100),
+    {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/space_name1">>}, 0, 100),
+    {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/space_name1">>}, 0, 100),
 
     ?assertMatch(LS1P1, LS1P2),
-    ?assertMatch(LS2P1, LS2P2),
-
     ok.
 
 
@@ -168,7 +163,7 @@ global_stream_document_remove_test(MultiConfig) ->
     Dirs = lists:map(
         fun(_N) ->
             D0 = gen_filename(),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary>>, 8#755),
             D0
         end, lists:seq(1, 5)),
 
@@ -177,7 +172,7 @@ global_stream_document_remove_test(MultiConfig) ->
     RevPerPath = lists:map(
         fun(D0) ->
 
-            Path1 = <<"/", D0/binary>>,
+            Path1 = <<"/space_name1/", D0/binary>>,
             {ok, #file_attr{uuid = FileGUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
             FileUUID1 = fslogic_uuid:file_guid_to_uuid(FileGUID1),
 
@@ -217,19 +212,14 @@ global_stream_document_remove_test(MultiConfig) ->
                 end, maps:to_list(PathMap))
         end, RevPerPath),
 
-    {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/spaces/space_name1">>}, 0, 100),
-    {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/spaces/space_name1">>}, 0, 100),
-
-    {ok, LS2P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/">>}, 0, 100),
-    {ok, LS2P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/">>}, 0, 100),
+    {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/space_name1">>}, 0, 100),
+    {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/space_name1">>}, 0, 100),
 
     ?assertMatch(LS1P1, LS1P2),
-    ?assertMatch(LS2P1, LS2P2),
-
 
     lists:foreach(
         fun(D0) ->
-            ok = lfm_proxy:unlink(WorkerP1, SessId1P1, {path, <<"/", D0/binary>>})
+            ok = lfm_proxy:unlink(WorkerP1, SessId1P1, {path, <<"/space_name1/", D0/binary>>})
         end, Dirs),
 
     timer:sleep(timer:seconds(5)),
@@ -254,20 +244,15 @@ global_stream_document_remove_test(MultiConfig) ->
                     ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, UUID])),
 
                     ?assertMatch({error, enoent}, lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path})),
-                    ?assertMatch({ok, [{_, <<"spaces">>}]}, lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/">>}, 0, 10))
+                    ?assertMatch({ok, []}, lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/space_name1">>}, 0, 10))
                 end, maps:to_list(PathMap))
         end, RevPerPath),
 
 
-    {ok, RemovedLS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/spaces/space_name1">>}, 0, 100),
-    {ok, RemovedLS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/spaces/space_name1">>}, 0, 100),
-
-    {ok, RemovedLS2P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/">>}, 0, 100),
-    {ok, RemovedLS2P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/">>}, 0, 100),
+    {ok, RemovedLS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/space_name1">>}, 0, 100),
+    {ok, RemovedLS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/space_name1">>}, 0, 100),
 
     ?assertMatch(RemovedLS1P1, RemovedLS1P2),
-    ?assertMatch(RemovedLS2P1, RemovedLS2P2),
-
     ok.
 
 
@@ -289,22 +274,25 @@ global_stream_with_proto_test(MultiConfig) ->
 
             F = gen_filename(),
 
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:create(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:create(WorkerP1, SessId1P1, <<"/space_name1/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
 
             D0
         end, lists:seq(1, 5)),
+
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, create,
+        [space, <<"space_name1">>, storage_used, #monitoring_state{}])),
 
     timer:sleep(timer:seconds(10)),
 
     RevPerPath = lists:map(
         fun(D0) ->
 
-            Path1 = <<"/", D0/binary>>,
-            Path2 = <<"/", D0/binary, "/", D0/binary>>,
-            Path3 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>,
+            Path1 = <<"/space_name1/", D0/binary>>,
+            Path2 = <<"/space_name1/", D0/binary, "/", D0/binary>>,
+            Path3 = <<"/space_name1/", D0/binary, "/", D0/binary, "/", D0/binary>>,
 
             {ok, #file_attr{uuid = FileGUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
             {ok, #file_attr{uuid = FileGUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
@@ -356,15 +344,13 @@ global_stream_with_proto_test(MultiConfig) ->
                 end, maps:to_list(PathMap))
         end, RevPerPath),
 
-    {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/spaces/space_name1">>}, 0, 100),
-    {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/spaces/space_name1">>}, 0, 100),
+    ?assertEqual({ok, #monitoring_state{}}, rpc:call(WorkerP2, monitoring_state,
+        get, [space, <<"space_name1">>, storage_used, Prov1ID])),
 
-    {ok, LS2P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/">>}, 0, 100),
-    {ok, LS2P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/">>}, 0, 100),
+    {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/space_name1">>}, 0, 100),
+    {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/space_name1">>}, 0, 100),
 
     ?assertMatch(LS1P1, LS1P2),
-    ?assertMatch(LS2P1, LS2P2),
-
     ok.
 
 
@@ -404,6 +390,11 @@ init_per_testcase(_, Config) ->
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_spaces_for_provider,
         fun(_) ->
             [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>]
+        end),
+
+    test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, validate_space_access,
+        fun(_, _) ->
+            ok
         end),
 
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, communicate,

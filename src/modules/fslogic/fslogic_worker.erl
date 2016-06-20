@@ -182,7 +182,7 @@ cleanup() ->
     #fuse_response{} | #provider_response{} | #proxyio_response{}.
 run_and_catch_exceptions(Function, Context, Request, Type) ->
     try
-        SpacesDir = fslogic_uuid:spaces_uuid(fslogic_context:get_user_id(Context)),
+        UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)),
         {NextCTX, Providers} =
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
@@ -199,7 +199,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                     end;
                 {file, Entry} ->
                     case file_meta:to_uuid(Entry) of
-                        {ok, SpacesDir} ->
+                        {ok, UserRootDir} ->
                             {Context, [oneprovider:get_provider_id()]};
                         _ ->
                             #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
@@ -337,8 +337,8 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #release{handle_id = Handl
     fslogic_req_regular:release(Ctx, HandleId);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID, block = Block}}) ->
-    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID, block = Block, prefetch = Prefetch}}) ->
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block, Prefetch);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block_and_compute_checksum{uuid = UUID, block = Block}}) ->
     fslogic_req_regular:synchronize_block_and_compute_checksum(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}}) ->
@@ -391,8 +391,7 @@ handle_provider_request(Ctx, #provider_request{provider_request = #get_file_path
 handle_provider_request(Ctx, #provider_request{provider_request = #get_file_distribution{uuid = FileGUID}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 handle_provider_request(Ctx, #provider_request{provider_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
-    #fuse_response{status = Status} = fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block),
-    #provider_response{status = Status};
+    fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
 handle_provider_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -431,7 +430,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileGUID, file_size = FileSize}}) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-        case replica_updater:update(FileUUID, Blocks, FileSize, true) of
+        case replica_updater:update(FileUUID, Blocks, FileSize, true, undefined) of
             {ok, size_changed} ->
                 {ok, #document{value = #session{identity = #identity{
                     user_id = UserId}}}} = session:get(SessId),
@@ -485,10 +484,10 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_at
         {path, P} = FileEntry ->
             {ok, Tokens1} = fslogic_path:verify_file_path(P),
             case Tokens1 of
-                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId] ->
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId] ->
                     %% Handle root space dir locally
                     {provider, oneprovider:get_provider_id()};
-                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | _] ->
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
                     {space, SpaceId};
                 _ ->
                     {file, FileEntry}

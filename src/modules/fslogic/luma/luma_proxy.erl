@@ -37,7 +37,9 @@ new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_posix_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_s3_user_ctx(SessionId, SpaceUUID).
+    new_s3_user_ctx(SessionId, SpaceUUID);
+new_user_ctx(#helper_init{name = ?SWIFT_HELPER_NAME}, SessionId, SpaceUUID) ->
+    new_swift_user_ctx(SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -140,6 +142,28 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates new user's storage context for Swift storage helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_swift_user_ctx(SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+new_swift_user_ctx(SessionId, SpaceUUID) ->
+    %% TODO VFS-2117 call luma service
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
+        space_storage:get(SpaceId),
+    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
+        storage:get(StorageId),
+
+    #swift_user_ctx{
+        user_name = maps:get(<<"user_name">>, Args),
+        password = maps:get(<<"password">>, Args)
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Retrieves user context from LUMA server for all posix-compilant helpers
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
@@ -184,7 +208,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
     {ok, {hostent, FullHostname, _, inet, _, IPList}} = inet:gethostbyname(Hostname),
     {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
 
-    IPListParsed = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IPList),
+    IPListParsed = lists:map(fun(IP) ->
+        list_to_binary(inet_parse:ntoa(IP)) end, IPList),
 
     UserDetailsJSON = case get_auth(SessionIdOrIdentity) of
         {ok, undefined} ->
@@ -204,9 +229,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
                 {error, {not_found, onedata_user}} ->
                     <<"{}">>
             end;
-        {ok, #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}} ->
-            {ok, UserDetails} = oz_users:get_details({user,
-                {Macaroon, DMacaroons}}),
+        {ok, Auth} ->
+            {ok, UserDetails} = oz_users:get_details(Auth),
             UserDetailsList = ?record_to_list(user_details, UserDetails),
             json_utils:encode(UserDetailsList)
     end,

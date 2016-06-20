@@ -34,14 +34,6 @@
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
 mkdir(CTX, ParentUUID, Name, Mode) ->
-    NormalizedParentUUID =
-        case {uuid, fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX))} =:= ParentUUID of
-            true ->
-                {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-                {uuid, DefaultSpaceUUID};
-            false ->
-                ParentUUID
-        end,
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
@@ -52,9 +44,9 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
-    case file_meta:create(NormalizedParentUUID, File) of
+    case file_meta:create(ParentUUID, File) of
         {ok, DirUUID} ->
-            fslogic_times:update_mtime_ctime(NormalizedParentUUID, fslogic_context:get_user_id(CTX)),
+            fslogic_times:update_mtime_ctime(ParentUUID, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = fslogic_uuid:to_file_guid(DirUUID)}
             };
@@ -81,27 +73,9 @@ read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offs
 
     fslogic_times:update_atime(FileDoc, fslogic_context:get_user_id(CTX)),
 
-    SpacesKey = fslogic_uuid:spaces_uuid(UserId),
-    DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
+    UserRootUUID = fslogic_uuid:user_root_dir_uuid(UserId),
     case Key of
-        DefaultSpaceKey ->
-            {ok, DefaultSpace = #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-            {ok, DefaultSpaceChildLinks} =
-                case Offset of
-                    0 ->
-                        file_meta:list_children(DefaultSpace, 0, Size - 1);
-                    _ ->
-                        file_meta:list_children(DefaultSpace, Offset - 1, Size)
-                end,
-
-            #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{
-                    child_links = [
-                        CL#child_link{uuid = fslogic_uuid:to_file_guid(UUID, fslogic_uuid:space_dir_uuid_to_spaceid(DefaultSpaceUUID))}
-                        || CL = #child_link{uuid = UUID} <- ChildLinks ++ DefaultSpaceChildLinks]
-                }
-            };
-        SpacesKey ->
+        UserRootUUID ->
             {ok, #document{value = #onedata_user{spaces = Spaces}}} =
                 onedata_user:get(UserId),
 

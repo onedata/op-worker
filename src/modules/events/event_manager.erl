@@ -327,9 +327,9 @@ handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = Request
     end;
 handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
     {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
-    SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+    UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
     case file_meta:to_uuid(Entry) of
-        {ok, SpacesDir} ->
+        {ok, UserRootDir} ->
             HandleLocallyFun(ProvMap, false);
         {ok, FileUUID} ->
             CurrentTime = erlang:system_time(seconds),
@@ -340,8 +340,7 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
                     _ ->
                         {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
                         SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                        RestClient = fslogic_utils:session_to_rest_client(SessId),
-                        {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(RestClient, SpaceId, UserId),
+                        {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessId, SpaceId, UserId),
                         {maps:put(Entry, {erlang:system_time(seconds), ProviderIds}, ProvMap), ProviderIds}
                 end,
             case {ProviderIdsFinal, lists:member(oneprovider:get_provider_id(), ProviderIdsFinal)} of

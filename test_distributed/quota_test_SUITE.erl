@@ -302,18 +302,18 @@ rename_should_unlock_space(Config) ->
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:rand_bytes(12))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File3), 0, crypto:rand_bytes(3))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:rand_bytes(18))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, File2), f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, File2), f(<<"space0">>, File2))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File3), 0, crypto:rand_bytes(3))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:rand_bytes(18))),
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, File1), f(<<"space0">>, File1))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, File1), f(<<"space0">>, File1))),
 
     %% Cleanup only
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File1))),
 
     ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, [Dir1], File1), 0, crypto:rand_bytes(17))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 3, crypto:rand_bytes(11))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, Dir1), f(<<"space0">>, Dir1))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, Dir1), f(<<"space0">>, Dir1))),
     ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 3, crypto:rand_bytes(11))),
     ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 3, crypto:rand_bytes(17))),
 
@@ -327,7 +327,7 @@ rename_should_unlock_space(Config) ->
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:rand_bytes(18))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File3), 0, crypto:rand_bytes(7))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:rand_bytes(28))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, File2), f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File3), 0, crypto:rand_bytes(7))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:rand_bytes(28))),
 
@@ -337,7 +337,7 @@ rename_should_unlock_space(Config) ->
 
     ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, [Dir1], File1), 0, crypto:rand_bytes(17))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 7, crypto:rand_bytes(27))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, Dir1), f(<<"space0">>, Dir1))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space2">>, Dir1), f(<<"space0">>, Dir1))),
     ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 7, crypto:rand_bytes(27))),
     ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 7, crypto:rand_bytes(37))),
 
@@ -365,12 +365,12 @@ rename_bigger_then_quota_should_fail(Config) ->
 
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:rand_bytes(16))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:rand_bytes(12))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, File2), f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, File2), f(<<"space0">>, File2))),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space1">>, File1), f(<<"space0">>, File1))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3, File3], File2), 0, crypto:rand_bytes(8))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3], File2), 0, crypto:rand_bytes(2))),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space1">>, File3), f(<<"space0">>, File3))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space1">>, [File3], File3), f(<<"space0">>, File3))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, [File3], File3), f(<<"space0">>, File3))),
 
     %% Cleanup only
     ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
@@ -378,7 +378,7 @@ rename_bigger_then_quota_should_fail(Config) ->
 
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:rand_bytes(16))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:rand_bytes(12))),
-    ?assertMatch(ok, rename(P1, User1,                      f(<<"space2">>, File2), f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
     ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File1), f(<<"space0">>, File1))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3, File3], File2), 0, crypto:rand_bytes(8))),
     ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3], File2), 0, crypto:rand_bytes(2))),
@@ -536,7 +536,7 @@ gen_test_env(Config) ->
     }.
 
 f(Space, FileName) ->
-    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"spaces">>, Space, FileName]).
+    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space, FileName]).
 
 f(Space, Dirs, FileName) ->
-    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"spaces">>, Space] ++ Dirs ++ [FileName]).
+    fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Space] ++ Dirs ++ [FileName]).

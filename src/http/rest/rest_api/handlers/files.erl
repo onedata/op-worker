@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for posix mode read and modification.
+%%% Handler for listing files.
 %%% @end
 %%%--------------------------------------------------------------------
--module(posix_mode_handler).
+-module(files).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -18,14 +18,16 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+
+-define(MAX_ENTRIES, 1000).
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
-    is_authorized/2, resource_exists/2, content_types_provided/2,
-    content_types_accepted/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
+    content_types_provided/2]).
 
 %% resource functions
--export([get_mode/2, put_mode/2]).
+-export([list_files/2]).
 
 %%%===================================================================
 %%% API
@@ -50,14 +52,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"PUT">>], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:malformed_request/2
-%%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
-malformed_request(Req, State) ->
-    rest_arg_parser:malformed_request(Req, State).
+    {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -67,55 +62,51 @@ is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:resource_exists/2
-%%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
-resource_exists(Req, State) ->
-    rest_existence_checker:resource_exists(Req, State).
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/json">>, get_mode}
+        {<<"application/json">>, list_files}
     ], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
-%%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
-content_types_accepted(Req, State) ->
-    {[
-        {<<"application/json">>, put_mode}
-    ], Req, State}.
-
 
 %%%===================================================================
 %%% Content type handler functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Handles GET with "application/json" content-type
+%% '/api/v3/oneprovider/files/{path}'
+%% @doc Returns the list of folders and files directly under specified path.
+%% If the path points to a file, the result array will consist only of the
+%% single item with the path to the file requested, confirming it exists.\n
+%%
+%% HTTP method: GET
+%%
+%% @param path Directory path (e.g. &#39;/My Private Space/testfiles&#39;)
 %%--------------------------------------------------------------------
--spec get_mode(req(), #{}) -> {term(), req(), #{}}.
-get_mode(Req, #{attributes := #file_attr{uuid = Guid}, auth := Auth} = State) ->
-    {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {guid, Guid}),
-    Response = json_utils:encode([{<<"posix_mode">>, Mode}]),
-    {Response, Req, State}.
+-spec list_files(req(), #{}) -> {term(), req(), #{}}.
+list_files(Req, State) ->
+    {State2, Req2} = validator:parse_path(Req, State),
+    {State3, Req3} = validator:parse_offset(Req2, State2),
+    {State4, Req4} = validator:parse_limit(Req3, State3),
 
-%%--------------------------------------------------------------------
-%% @doc Handles PUT with "application/json" content-type
-%%--------------------------------------------------------------------
--spec put_mode(req(), #{}) -> {term(), req(), #{}}.
-put_mode(Req, #{auth := Auth, path := Path} = State) ->
-    {ok, Body, Req2} = cowboy_req:body(Req),
-    case json_utils:decode(Body) of
-        [{<<"posix_mode">>, Mode}] ->
-            ok = onedata_file_api:set_perms(Auth, {path, Path}, Mode),
-            {true, Req2, State};
-        _ ->
-            throw(?BAD_REQUEST)
-    end.
+    #{auth := Auth, path := Path, offset := Offset, limit := Limit} = State4,
+
+    Response =
+        case onedata_file_api:stat(Auth, {path, Path}) of
+            {ok, #file_attr{type = ?DIRECTORY_TYPE, uuid = Guid}} ->
+                case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
+                    {ok, ChildNum} when Limit =:= undefined andalso ChildNum > ?MAX_ENTRIES ->
+                        throw(?ERROR_TOO_MANY_ENTRIES);
+                    {ok, ChildNum} ->
+                        DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
+                        {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
+                        json_utils:encode(
+                            lists:map(fun({Guid, ChildPath}) ->
+                                [{<<"id">>, Guid}, {<<"path">>, filename:join(Path, ChildPath)}]
+                            end, Children))
+                end;
+            {ok, #file_attr{uuid = Guid}} ->
+                json_utils:encode([[{<<"id">>, Guid}, {<<"path">>, Path}]])
+        end,
+    {Response, Req4, State4}.

@@ -25,7 +25,7 @@
 -export([apply_batch_changes/3, init_stream/3]).
 -export([bcast_status/0, on_status_received/3]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location]).
+-define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
@@ -44,6 +44,7 @@
 -record(queue, {
     key :: queue(),
     since = 0 :: non_neg_integer(),
+    until = 0 :: non_neg_integer(),
     batch_map = #{} :: #{},
     removed = false :: boolean()
 }).
@@ -66,6 +67,7 @@
 init(_Args) ->
     ?info("[ DBSync ]: Starting dbsync..."),
     Since = 0,
+    state_put(global_resume_seq, Since),
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
@@ -79,6 +81,8 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec init_stream(Since :: non_neg_integer(), Until :: non_neg_integer() | infinity, Queue :: queue()) ->
     {ok, pid()} | {error, Reason :: term()}.
+init_stream(undefined, Until, Queue) ->
+    init_stream(0, Until, Queue);
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
     case Queue of
@@ -88,7 +92,7 @@ init_stream(Since, Until, Queue) ->
                     {SpaceId, #batch{since = Since, until = Since}}
                 end, dbsync_utils:get_spaces_for_provider())),
             timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
-            state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
+            state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since, until = Since});
         _ ->
             CTime = erlang:monotonic_time(milli_seconds),
             dbsync_utils:temp_put(last_change, CTime, 0)
@@ -99,7 +103,8 @@ init_stream(Since, Until, Queue) ->
             (_, stream_ended, _) ->
                 worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
             (Seq, Doc, Model) ->
-                worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
+                worker_proxy:call(dbsync_worker, {Queue,
+                    #change{seq = couchdb_datastore_driver:normalize_seq(Seq), doc = Doc, model = Model}})
         end, Since, Until).
 
 %%--------------------------------------------------------------------
@@ -150,7 +155,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
-            case get_space_id(Doc) of
+            Ans = case get_space_id(Doc) of
                 {ok, <<"spaces">>} ->
                     ?debug("Skipping doc ~p", [Doc]),
                     skip;
@@ -167,7 +172,9 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                 {error, Reason} ->
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
-            end;
+            end,
+            queue_update_until(QueueKey, Seq),
+            Ans;
         {true, true} ->
             ?debug("Rereplication detected, skipping ~p", [Doc]),
             ok;
@@ -180,30 +187,57 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
     ensure_global_stream_active(),
+
+    FlushInterval = ?FLUSH_QUEUE_INTERVAL,
+    FlushAgainAfter = FlushInterval + crypto:rand_uniform(0, round(?FLUSH_QUEUE_INTERVAL / 2)),
+
+    case QueueKey of
+        global ->
+            CTime = erlang:monotonic_time(milli_seconds),
+            case dbsync_utils:temp_get(last_global_flush) of
+                FTime when  is_integer(FTime),
+                            FTime + FlushInterval / 2 > CTime ->
+                    ?info("[ DBSync ] Flush loop is too fast, breaking this one."),
+                    throw({too_many_flush_loops, {flush_queue, QueueKey}});
+                _ ->
+                    dbsync_utils:temp_put(last_global_flush, CTime, 0)
+            end;
+        _ -> ok
+    end,
+
     state_update({queue, QueueKey},
-        fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
+        fun(#queue{batch_map = BatchMap, removed = IsRemoved, until = Until} = Queue) ->
             NewBatchMap = maps:map(
-                fun(SpaceId, #batch{until = Until} = B) ->
+                fun(SpaceId, B0) ->
+                    B = B0#batch{until = Until},
                     spawn(fun() -> dbsync_proto:send_batch(QueueKey, SpaceId, B) end),
-                    set_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+
                     case QueueKey of
-                        global -> state_put(global_resume_seq, Until);
+                        global ->
+                            set_current_seq(oneprovider:get_provider_id(), SpaceId, Until);
                         _ -> ok
                     end,
+
                     #batch{since = Until, until = Until}
                 end,
                 BatchMap),
+
+            case QueueKey of
+                global ->
+                    state_put(global_resume_seq, Until);
+                _ -> ok
+            end,
 
             case IsRemoved of
                 true ->
                     ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
                     undefined;
                 false ->
-                    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
+                    timer:send_after(FlushAgainAfter, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
                     Queue#queue{batch_map = NewBatchMap}
             end;
             (undefined) when QueueKey =:= global ->
-                timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
+                timer:send_after(FlushAgainAfter, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
                 undefined;
             (undefined) ->
                 ?warning("Unknown operation on empty queue ~p", [QueueKey]),
@@ -297,9 +331,38 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
             BatchMap = Queue1#queue.batch_map,
             Since = Queue1#queue.since,
             Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
-            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = Until},
-            Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap)}
+            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = max(Until, Since)},
+            UntilToSet = max(Batch0#batch.until, Until),
+            Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
+                until = queue_calculate_until(UntilToSet, Queue1)}
         end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates queue until field.
+%% @end
+%%--------------------------------------------------------------------
+-spec queue_update_until(queue(), Until :: non_neg_integer()) -> ok.
+queue_update_until(QueueKey, Until) ->
+    state_update({queue, QueueKey},
+        fun(Queue) ->
+            Queue1 =
+                case Queue of
+                    undefined ->
+                        #queue{batch_map = #{}};
+                    #queue{} = Q -> Q
+                end,
+            Queue1#queue{until = queue_calculate_until(Until, Queue1)}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calculates queue until field's value.
+%% @end
+%%--------------------------------------------------------------------
+-spec queue_calculate_until(NewUntil :: non_neg_integer(), #queue{}) -> non_neg_integer().
+queue_calculate_until(NewUntil, Queue) ->
+    max(NewUntil, Queue#queue.until).
 
 
 %%--------------------------------------------------------------------
@@ -320,7 +383,10 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
     catch consume_batches(FromProvider, SpaceId),
 
     NewChanges = lists:sort(lists:flatten(Changes)),
-    do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true).
+    do_apply_batch_changes(FromProvider, SpaceId, Batch#batch{changes = NewChanges}, true),
+
+    %% Some changes might be waiting for applied changes
+    catch consume_batches(FromProvider, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -329,41 +395,39 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes} = Batch) ->
 %%--------------------------------------------------------------------
 -spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean()) ->
     ok | no_return().
-do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest) ->
-    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, 4).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Apply whole batch of changes from remote provider.
-%% @end
-%%--------------------------------------------------------------------
--spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean(),
-    Attempts :: integer()) -> ok | no_return().
 do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch,
-    ShouldRequest, Attempts) ->
+    ShouldRequest) ->
     ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil + 1 < Since of
         true ->
-            ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p, attempt ~p",
-                [FromProvider, SpaceId, CurrentUntil, Since, Attempts]),
-            case Attempts of
-                4 ->
-                    stash_batch(FromProvider, SpaceId, Batch),
-                    case ShouldRequest of
-                        true ->
-                            request_missing_changes(FromProvider, SpaceId, CurrentUntil, Since);
-                        false ->
-                            ok
-                    end;
-                _ ->
-                   ok
-            end,
-            case Attempts > 1 of
+            ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p",
+                [FromProvider, SpaceId, CurrentUntil, Since]),
+            stash_batch(FromProvider, SpaceId, Batch),
+            case ShouldRequest of
                 true ->
-                    timer:sleep(500),
-                    do_apply_batch_changes(FromProvider, SpaceId, Batch, ShouldRequest, Attempts - 1);
-                _ ->
+                    spawn(fun() ->
+                        timer:sleep(timer:seconds(5)),
+                        Batches = case state_get({stash, FromProvider, SpaceId}) of
+                                      undefined ->
+                                          [];
+                                      List ->
+                                          lists:sort(List)
+                                  end,
+                        Stashed = lists:foldl(fun(#batch{since = S, until = U}, Acc) ->
+                            case Acc + 1 >= S of
+                                true -> U;
+                                _ -> Acc
+                            end
+                        end, CurrentUntil, Batches),
+                        case Stashed + 1 < Since of
+                            true ->
+                                request_missing_changes(FromProvider, SpaceId, Stashed, Since);
+                            _ ->
+                                consume_batches(FromProvider, SpaceId)
+                        end
+                    end);
+                false ->
                     ok
             end;
         false when Until =< CurrentUntil ->
@@ -382,7 +446,10 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T]) ->
+apply_changes(SpaceId, Changes) ->
+    apply_changes(SpaceId, Changes, []).
+apply_changes(SpaceId,
+    [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T], Done) ->
     try
         ModelConfig = ModelName:model_init(),
 
@@ -398,24 +465,36 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value, rev = 
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
-        spawn(
-            fun() ->
-                try
-                    dbsync_events:change_replicated(SpaceId, Change)
-                catch
-                    E1:E2  ->
-                        ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
-                end,
-                ok
-            end),
-        apply_changes(SpaceId, T)
+        apply_changes(SpaceId, T, [Change | Done])
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p", [Change, Reason]),
             {error, Reason}
     end;
-apply_changes(_, []) ->
-    ok.
+apply_changes(SpaceId, [], Done) ->
+    run_posthooks(SpaceId, lists:reverse(Done)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Apply posthooks for list of changes from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_posthooks(SpaceId :: binary(), [change()]) -> ok.
+run_posthooks(_, []) ->
+    ok;
+run_posthooks(SpaceId, [Change | Done]) ->
+    spawn(
+        fun() ->
+            try
+                dbsync_events:change_replicated(SpaceId, Change)
+            catch
+                E1:E2  ->
+                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
+            end,
+            ok
+        end),
+
+    run_posthooks(SpaceId, Done).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -479,6 +558,13 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
     boolean().
 has_sync_context(#document{value = #links{model = ModelName}}) ->
     lists:member(ModelName, ?MODELS_TO_SYNC);
+has_sync_context(#document{value = #monitoring_state{}, key = Id}) ->
+    case monitoring_state:decode_id(Id) of
+        {space, _SpaceId, _, _} ->
+            true;
+        _ ->
+            false
+    end;
 has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     ModelName = element(1, Value),
     lists:member(ModelName, ?MODELS_TO_SYNC).
@@ -511,6 +597,11 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
 %%--------------------------------------------------------------------
 -spec get_space_id(datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
+get_space_id(#document{key = Id, value = #monitoring_state{}}) ->
+    case monitoring_state:decode_id(Id) of
+        {space, SpaceId, _, _} ->
+            {ok, SpaceId}
+    end;
 get_space_id(#document{key = Key} = Doc) ->
     try state_get({sid, Key}) of
         undefined ->
@@ -734,7 +825,12 @@ stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUnt
 -spec consume_batches(oneprovider:id(), SpaceId :: binary()) ->
     ok | no_return().
 consume_batches(ProviderId, SpaceId) ->
-    Batches = lists:sort(state_get({stash, ProviderId, SpaceId})),
+    Batches = case state_get({stash, ProviderId, SpaceId}) of
+                  undefined ->
+                      [];
+                  List ->
+                      lists:sort(List)
+              end,
     state_put({stash, ProviderId, SpaceId}, undefined),
     lists:foreach(fun(Batch) ->
         do_apply_batch_changes(ProviderId, SpaceId, Batch, false)
@@ -761,9 +857,22 @@ is_valid_stream(_) ->
 %%--------------------------------------------------------------------
 -spec ensure_global_stream_active() -> ok.
 ensure_global_stream_active() ->
+    CTime = erlang:monotonic_time(milli_seconds),
+
+    %% Check if flush loop works
+    MaxFlushDelay = ?FLUSH_QUEUE_INTERVAL * 4,
+    case dbsync_utils:temp_get(last_global_flush) of
+        LastFlushTime when  is_integer(LastFlushTime),
+                            LastFlushTime + MaxFlushDelay > CTime ->
+            ok;
+        LastFlushTime ->
+            %% Initialize new flush loop
+            ?info("[ DBSync ] Flush loop is too slow (last timestamp: ~p vs current: ~p), starting new one.", [LastFlushTime, CTime]),
+            timer:send_after(0, whereis(dbsync_worker), {timer, {flush_queue, global}})
+    end,
+
     case is_valid_stream(state_get(changes_stream)) of
         true ->
-            CTime = erlang:monotonic_time(milli_seconds),
             MaxIdleTime = timer:seconds(10),
             case dbsync_utils:temp_get(last_change) of
                 undefined ->

@@ -15,10 +15,16 @@
 
 -include_lib("public_key/include/public_key.hrl").
 
-% Record containing macaroons for user authorization in GR.
--record(auth, {
+% Record containing macaroons for user authorization in OZ.
+-record(token_auth, {
     macaroon :: macaroon:macaroon(),
     disch_macaroons = [] :: [macaroon:macaroon()]
+}).
+
+% Record containing HTTP basic auth headers for user authorization in OZ.
+-record(basic_auth, {
+    % Credentials are in form "Basic base64(user:password)"
+    credentials = <<"">> :: binary()
 }).
 
 -record(certificate, {

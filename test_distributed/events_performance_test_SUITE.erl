@@ -564,7 +564,7 @@ end_per_testcase(_, Config) ->
     Iden :: session:identity(), Con :: pid()) -> ok.
 session_setup(Worker, SessId, Iden, Con) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, #auth{}, [Con]])).
+        reuse_or_create_session, [SessId, fuse, Iden, #token_auth{}, [Con]])).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -127,7 +127,8 @@ exists(FileKey) ->
 -spec mv(onedata_auth_api:auth(), file_id_or_path(), file_path()) ->
     ok | error_reply().
 mv(Auth, FileEntry, TargetPath) ->
-    logical_file_manager:mv(Auth, FileEntry, TargetPath).
+    {ok, _} = logical_file_manager:mv(Auth, FileEntry, TargetPath),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc Copies a file or directory to given location.

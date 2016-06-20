@@ -31,6 +31,12 @@
     data :: binary()
 }).
 
+-record(file_renamed_entry, {
+    old_uuid :: fslogic_worker:file_guid(),
+    new_uuid :: fslogic_worker:file_guid(),
+    new_path :: file_meta:path()
+}).
+
 -record(dir, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).

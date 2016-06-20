@@ -13,6 +13,8 @@
 -ifndef(OP_WORKER_MODULES_EVENTS_TYPES_HRL).
 -define(OP_WORKER_MODULES_EVENTS_TYPES_HRL, 1).
 
+-include("proto/oneclient/common_messages.hrl").
+
 %% definition of a top level event wrapper
 %% key     - arbitrary value that distinguish events, i.e. events with the same
 %%           key can be aggregated
@@ -80,6 +82,14 @@
 %% definition of an event triggered when any of spaces becomes (un)available
 -record(quota_exeeded_event, {
    spaces = [] :: [space_info:id()]
+}).
+
+%% definition of an event triggered when file is renamed
+%% old_uuid - old UUID of renamed file
+%% new_uuid - new UUID of renamed file
+-record(file_renamed_event, {
+    top_entry :: #file_renamed_entry{},
+    child_entries = [] :: [#file_renamed_entry{}]
 }).
 
 -endif.

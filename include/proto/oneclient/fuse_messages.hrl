@@ -93,7 +93,8 @@
 
 -record(synchronize_block, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    block :: #file_block{}
+    block :: #file_block{},
+    prefetch :: boolean()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
@@ -146,9 +147,14 @@
     value :: binary()
 }).
 
+-record(file_renamed, {
+    new_uuid :: fslogic_worker:file_guid(),
+    child_entries :: [#file_renamed_entry{}]
+}).
+
 -type fuse_response() ::
     #file_attr{} | #file_children{} | #helper_params{} | #file_location{} |
-    #storage_test_file{} | #dir{} | #checksum{}.
+    #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

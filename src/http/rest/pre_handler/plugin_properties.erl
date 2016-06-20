@@ -16,7 +16,7 @@
 %% API
 -export([fill_with_default/1]).
 
--define(DEFAULT_HANDLER_INITIAL_OPTS, []).
+-define(DEFAULT_HANDLER_INITIAL_OPTS, #{}).
 -define(DEFAULT_EXCEPTION_HANDLER, fun request_exception_handler:handle/4).
 
 %%%===================================================================

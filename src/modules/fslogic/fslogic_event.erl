@@ -18,8 +18,8 @@
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_file_location_update/3,
-    emit_permission_changed/1, emit_file_removal/1]).
--export([emit_quota_exeeded/0]).
+    emit_permission_changed/1, emit_file_removal/1, emit_file_renamed/3,
+    emit_quota_exeeded/0]).
 
 %%%===================================================================
 %%% API
@@ -166,6 +166,18 @@ emit_permission_changed(FileUuid) ->
     ok | {error, Reason :: term()}.
 emit_file_removal(FileGUID) ->
     event:emit(#event{object = #file_removal_event{file_uuid = FileGUID}}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Send event informing subscribed client about file rename and guid change.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_renamed(TopEntry :: #file_renamed_entry{},
+    ChildEntries :: [#file_renamed_entry{}], ExcludedSessions :: [session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
+    event:emit(#event{object = #file_renamed_event{top_entry = TopEntry, child_entries = ChildEntries}},
+        {exclude, ExcludedSessions}).
 
 %%%===================================================================
 %%% Internal functions
