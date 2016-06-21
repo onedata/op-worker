@@ -154,7 +154,7 @@ handle({reemit, Msg}) ->
 
 handle(bcast_status) ->
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
-        catch bcast_status();
+    catch bcast_status();
 
 handle(requested_bcast_status) ->
     bcast_status();
@@ -781,10 +781,10 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
                         case Acc + 1 >= S of
                             true ->
                                 #batch{until = U} = maps:get(S, Batches),
-                                U;
+                                max(U, Acc);
                             _ -> Acc
                         end
-                    end, CurrentSeq, SortedKeys),
+                    end, get_current_seq(ProviderId, SpaceId), SortedKeys),
                     case Stashed < SeqNum of
                         true ->
                             do_request_changes(ProviderId, Stashed, SeqNum);

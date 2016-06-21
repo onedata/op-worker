@@ -101,7 +101,8 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+%%    test_node_starter:clean_environment(Config).
+ok.
 
 init_per_testcase(stress_test, Config) ->
     application:start(ssl2),
