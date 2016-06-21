@@ -65,7 +65,7 @@ change_replicated_internal(SpaceId, #change{model = file_location, doc = Doc = #
     ok = fslogic_utils:wait_for_file_meta(FileUUID, 30),
 %%    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
     ok = fslogic_utils:wait_for_local_file_location(FileUUID),
-    ok = replication_dbsync_hook:on_file_location_change(SpaceId, Doc);
+    ok = replica_dbsync_hook:on_file_location_change(SpaceId, Doc);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 

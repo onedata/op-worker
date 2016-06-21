@@ -9,7 +9,7 @@
 %%% Hook executed whenever dbsync changes file_location document.
 %%% @end
 %%%--------------------------------------------------------------------
--module(replication_dbsync_hook).
+-module(replica_dbsync_hook).
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/common_messages.hrl").
