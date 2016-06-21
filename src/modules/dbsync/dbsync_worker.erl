@@ -79,32 +79,51 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init_stream(Since :: non_neg_integer(), Until :: non_neg_integer() | infinity, Queue :: queue()) ->
-    {ok, pid()} | {error, Reason :: term()}.
+    {ok, pid() | already_started} | {error, Reason :: term()}.
 init_stream(undefined, Until, Queue) ->
     init_stream(0, Until, Queue);
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
-    case Queue of
+    Start = case Queue of
         {provider, _, _} ->
-            BatchMap = maps:from_list(lists:map(
-                fun(SpaceId) ->
-                    {SpaceId, #batch{since = Since, until = Since}}
-                end, dbsync_utils:get_spaces_for_provider())),
-            timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
-            state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since, until = Since});
+            case state_get({queue, Queue}) of
+                #queue{} ->
+                    already_started;
+                _ ->
+                    BatchMap = maps:from_list(lists:map(
+                        fun(SpaceId) ->
+                            {SpaceId, #batch{since = Since, until = Since}}
+                        end, dbsync_utils:get_spaces_for_provider())),
+                    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
+                    state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since, until = Since}),
+                    ok
+            end;
         _ ->
             CTime = erlang:monotonic_time(milli_seconds),
-            dbsync_utils:temp_put(last_change, CTime, 0)
+            dbsync_utils:temp_put(last_change, CTime, 0),
+            ok
     end,
 
-    couchdb_datastore_driver:changes_start_link(
-        fun
-            (_, stream_ended, _) ->
-                worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
-            (Seq, Doc, Model) ->
-                worker_proxy:call(dbsync_worker, {Queue,
-                    #change{seq = couchdb_datastore_driver:normalize_seq(Seq), doc = Doc, model = Model}})
-        end, Since, Until).
+    NewUntil = case Until of
+        infinity ->
+            infinity;
+        _ ->
+            min(Until, Since + 1000)
+    end,
+
+    case Start of
+        ok ->
+            couchdb_datastore_driver:changes_start_link(
+                fun
+                    (_, stream_ended, _) ->
+                        worker_proxy:call(dbsync_worker, {Queue, {cleanup, NewUntil}});
+                    (Seq, Doc, Model) ->
+                        worker_proxy:call(dbsync_worker, {Queue,
+                            #change{seq = couchdb_datastore_driver:normalize_seq(Seq), doc = Doc, model = Model}})
+                end, Since, NewUntil);
+        _ ->
+            {ok, already_started}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -212,6 +231,7 @@ handle({flush_queue, QueueKey}) ->
         _ -> ok
     end,
 
+    ?info("Memory ~p", [erlang:memory()]),
     state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved, until = Until} = Queue) ->
             NewBatchMap = maps:map(
@@ -791,13 +811,16 @@ do_request_changes(ProviderId, Since, Until) ->
     Now = erlang:monotonic_time(milli_seconds),
     %% Wait for {X}ms + {Y}ms per one document
     MaxWaitTime = ?DIRECT_REQUEST_BASE_TIMEOUT + ?DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT * (Until - Since),
-    case state_get({do_request_changes, ProviderId, Until}) of
+    case state_get({do_request_changes, ProviderId, Since}) of
         undefined ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:monotonic_time(milli_seconds)),
+            state_put({do_request_changes, ProviderId, Since}, {erlang:monotonic_time(milli_seconds), Until}),
             dbsync_proto:changes_request(ProviderId, Since, Until);
-        OldTime when OldTime + MaxWaitTime < Now ->
-            state_put({do_request_changes, ProviderId, Until}, erlang:monotonic_time(milli_seconds)),
+        {OldTime, _} when OldTime + MaxWaitTime < Now ->
+            state_put({do_request_changes, ProviderId, Since}, {erlang:monotonic_time(milli_seconds), Until}),
             dbsync_proto:changes_request(ProviderId, Since, Until);
+        {_, OldUntil} when OldUntil < Until ->
+            state_put({do_request_changes, ProviderId, OldUntil}, {erlang:monotonic_time(milli_seconds), Until}),
+            dbsync_proto:changes_request(ProviderId, OldUntil, Until);
         _ ->
             ok
     end.

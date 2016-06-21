@@ -238,7 +238,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, sp
     end;
 handle_impl(From, #changes_request{since_seq = Since, until_seq = Until} = _BaseRequest) ->
 %%    ?info("Changes request form ~p: Since ~p, Until: ~p", [From, Since, Until]),
-    {ok, _} = dbsync_worker:init_stream(dbsync_utils:decode_term(Since), dbsync_utils:decode_term(Until), {provider, From, dbsync_utils:gen_request_id()}),
+    {ok, _} = dbsync_worker:init_stream(dbsync_utils:decode_term(Since), dbsync_utils:decode_term(Until), {provider, From, Since}),
     ok;
 handle_impl(From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = ChangesBin}) ->
     ProviderId = From,
