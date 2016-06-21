@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Files that need to be chowned when their owner shows in provider.
+%%% Model that keeps track of consistency of file metadata
 %%% @end
 %%%-------------------------------------------------------------------
--module(files_to_chown).
+-module(file_consistency).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
@@ -20,15 +20,16 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/2, chown_file/3]).
+-export([wait/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
+
 -export_type([id/0]).
 
--type id() :: onedata_user:id().
+-type id() :: file_meta:id().
 
 
 %%%===================================================================
@@ -37,44 +38,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add file that need to be chowned in future.
+%% Wait for file metadata to become consistent
 %% @end
 %%--------------------------------------------------------------------
--spec add(onedata_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
-add(UserId, FileUuid) ->
-    %todo add create_or_update operation to datastore
-    UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
-        {ok, Val#files_to_chown{file_uuids = [FileUuid | Uuids]}}
-    end,
-    case update(UserId, UpdateFun) of
-        {ok, Key} ->
-            {ok, Key};
-        {error, {not_found, files_to_chown}} ->
-            create(#document{key = UserId, value = #files_to_chown{file_uuids = [FileUuid]}});
-        Other ->
-            Other
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Chown specific file according to given UserId and SpaceId
-%% @end
-%%--------------------------------------------------------------------
--spec chown_file(file_meta:uuid(), onedata_user:id(), space_info:id()) -> ok.
-chown_file(FileUuid, UserId, SpaceId) ->
-    LocalLocations = fslogic_utils:get_local_storage_file_locations({uuid, FileUuid}),
-    lists:foreach(fun({StorageId, FileId}) ->
-        try
-            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            {ok, Storage} = storage:get(StorageId),
-            SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUuid, Storage, FileId),
-
-            ok = storage_file_manager:chown(SFMHandle, UserId, SpaceId)
-        catch
-            _:Error ->
-                ?error_stacktrace("Cannot chown file ~p, due to error ~p", [FileUuid, Error])
-        end
-    end, LocalLocations).
+-spec wait(file_meta:uuid()) -> ok.
+wait(_FileUuid) ->
+    ok.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -142,8 +111,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files_to_chown_bucket, [{onedata_user, create}, {onedata_user, save},
-        {onedata_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(file_consistency_bucket, [], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -153,13 +121,6 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-% TODO filter by level when onedata_user will be globally cached
-'after'(onedata_user, create, _, _, {ok, UUID}) ->
-    chown_pending_files(UUID);
-'after'(onedata_user, save, _, _, {ok, UUID}) ->
-    chown_pending_files(UUID);
-'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
-    chown_pending_files(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -176,37 +137,3 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Chown all pending files of given user
-%% @end
-%%--------------------------------------------------------------------
--spec chown_pending_files(onedata_user:id()) -> ok.
-chown_pending_files(UserId) ->
-    case files_to_chown:get(UserId) of
-        {ok, #document{value = #files_to_chown{file_uuids = FileUuids}}} ->
-            lists:foreach(fun chown_pending_file/1, FileUuids),
-            delete(UserId);
-        {error,{not_found,files_to_chown}} ->
-            ok
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Chown given file to its owner
-%% @end
-%%--------------------------------------------------------------------
--spec chown_pending_file(file_meta:uuid()) -> ok.
-chown_pending_file(FileUuid) ->
-    try
-        {ok, #document{value = #file_meta{uid = UserId}}} = file_meta:get({uuid, FileUuid}),
-        {ok, #document{key = SpaceDirUuid}} = file_meta:get_scope({uuid, FileUuid}),
-        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
-        chown_file(FileUuid, UserId, SpaceId)
-    catch
-        _:Error ->
-            ?error_stacktrace("Cannot chown pending file ~p due to error ~p", [FileUuid, Error])
-    end.
-
-

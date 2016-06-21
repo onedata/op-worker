@@ -37,12 +37,12 @@
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean(), version_vector:version_vector()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
-    fslogic_utils:wait_for_local_file_location(FileUUID),
+    file_consistency:wait(FileUUID),
     file_location:run_synchronized(FileUUID,
         fun() ->
             [Location = #document{value = #file_location{size = OldSize,
                 version_vector = Version}} | _] =
-                fslogic_utils:get_local_file_locations_once({uuid, FileUUID}), %todo get location as argument, insted operating on first one
+                fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, insted operating on first one
             FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
             warning_if_different_version(BaseVersion, Version, FileUUID),

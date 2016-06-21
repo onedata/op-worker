@@ -54,7 +54,7 @@ change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document
 change_replicated_internal(SpaceId, #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-%%    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
+    ok = file_consistency:wait(FileUUID),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated_internal(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
@@ -62,9 +62,7 @@ change_replicated_internal(_SpaceId, #change{model = file_meta, doc = #document{
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated_internal(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
     ?info("change_replicated_internal: changed file_location ~p", [FileUUID]),
-    ok = fslogic_utils:wait_for_file_meta(FileUUID, 30),
-%%    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
-    ok = fslogic_utils:wait_for_local_file_location(FileUUID),
+    ok = file_consistency:wait(FileUUID),
     ok = replica_dbsync_hook:on_file_location_change(SpaceId, Doc);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

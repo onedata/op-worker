@@ -38,7 +38,7 @@ on_file_location_change(_SpaceId, ChangedLocationDoc =
         fun() ->
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
-                    [LocalLocation] = fslogic_utils:get_local_file_locations_once({uuid, Uuid}),
+                    [LocalLocation] = fslogic_utils:get_local_file_locations({uuid, Uuid}),
                     update_local_location_replica(LocalLocation, ChangedLocationDoc);
                 false ->
                     ok
