@@ -22,6 +22,7 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -268,6 +269,17 @@ translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
     #'proxyio_request'{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
+translate_from_protobuf(#'ProviderRequest'{provider_request = {_, Record}}) ->
+    #'provider_request'{provider_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'ProviderResponse'{status = Status, provider_response = {_, ProviderResponse}}) ->
+    #'provider_response'{
+        status = translate_from_protobuf(Status),
+        provider_response = translate_from_protobuf(ProviderResponse)
+    };
+translate_from_protobuf(#'ProviderResponse'{status = Status}) ->
+    #'provider_response'{
+        status = translate_from_protobuf(Status)
+    };
 translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = ChildEntries}) ->
     #'file_renamed'{new_uuid = NewUuid,
         child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]};
@@ -625,6 +637,14 @@ translate_to_protobuf(#'proxyio_request'{parameters = Parameters, storage_id = S
             #'Parameter'{key = Key, value = Value}
         end, maps:to_list(Parameters)),
     {proxyio_request, #'ProxyIORequest'{parameters = ParametersProto, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#provider_request{provider_request = Record}) ->
+    {provider_request, #'ProviderRequest'{provider_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#provider_response{status = #status{code = Code,
+    description = Description}, provider_response = ProviderResponse}) ->
+    {provider_response, #'ProviderResponse'{
+        status = #'Status'{code = Code, description = Description},
+        provider_response = translate_to_protobuf(ProviderResponse)
+    }};
 translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
     {remote_read, #'RemoteRead'{offset = Offset, size = Size}};
 translate_to_protobuf(#'dir'{uuid = UUID}) ->

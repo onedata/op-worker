@@ -13,11 +13,13 @@
 
 -include_lib("ctool/include/posix/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([call_fslogic/3, rm/2, isdir/2]).
+-export([call_fslogic/4, rm/2, isdir/2]).
 
 
 %%--------------------------------------------------------------------
@@ -26,13 +28,21 @@
 %% Returns the function's return value on success or error code returned in fslogic's response.
 %% @end
 %%--------------------------------------------------------------------
--spec call_fslogic(SessId :: session:id(), Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
+-spec call_fslogic(SessId :: session:id(), RequestType :: fslogic_worker:request_type(),
+    Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
-call_fslogic(SessId, Request, OKHandle) ->
+call_fslogic(SessId, fuse_request, Request, OKHandle) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = Request}}) of
         #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
             OKHandle(Response);
         #fuse_response{status = #status{code = Code}} ->
+            {error, Code}
+    end;
+call_fslogic(SessId, provider_request, Request, OKHandle) ->
+    case worker_proxy:call(fslogic_worker, {provider_request, SessId, #provider_request{provider_request = Request}}) of
+        #provider_response{status = #status{code = ?OK}, provider_response = Response} ->
+            OKHandle(Response);
+        #provider_response{status = #status{code = Code}} ->
             {error, Code}
     end.
 

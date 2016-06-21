@@ -16,9 +16,10 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
@@ -40,8 +41,10 @@
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
+-type request_type() :: fuse_request | provider_request | proxyio_request.
 
--export_type([ctx/0, file/0, open_flags/0, posix_permissions/0, file_guid/0, ext_file/0, file_guid_or_path/0]).
+-export_type([ctx/0, file/0, ext_file/0, open_flags/0, posix_permissions/0,
+    file_guid/0, file_guid_or_path/0, request_type/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -119,10 +122,14 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: ping | healthcheck | {fuse_request, SessId :: session:id(),
-        FuseRequest :: #fuse_request{}},
+    Request ::
+        ping |
+        healthcheck |
+        {fuse_request, SessId :: session:id(), FuseRequest :: #fuse_request{}} |
+        {provider_request, SessId :: session:id(), ProviderRequest :: #provider_request{}} |
+        {proxyio_request, SessId :: session:id(), ProxyIORequest :: #proxyio_request{}},
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
-    {error, Reason} | pong,
+        {error, Reason} | pong,
     Response :: term(),
     Reason :: term().
 handle(ping) ->
@@ -133,6 +140,11 @@ handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request),
     ?debug("fuse_response: ~p", [Response]),
+    Response;
+handle({provider_request, SessId, ProviderRequest}) ->
+    ?debug("provider_request(~p): ~p", [SessId, ProviderRequest]),
+    Response = run_and_catch_exceptions(fun handle_provider_request/2, fslogic_context:new(SessId), ProviderRequest, provider_request),
+    ?debug("provider_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
     ?debug("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
@@ -166,7 +178,8 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_and_catch_exceptions(Function :: function(), ctx(), any(),
-    fuse_request | proxyio_request) -> #fuse_response{} | #proxyio_response{}.
+    request_type()) ->
+    #fuse_response{} | #provider_response{} | #proxyio_response{}.
 run_and_catch_exceptions(Function, Context, Request, Type) ->
     try
         UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)),
@@ -254,8 +267,9 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
 %% Logs an error with given log level.
 %% @end
 %%--------------------------------------------------------------------
--spec report_error(Request :: any(), fuse_request | proxyio_request, Error :: term(),
-    LogLevel :: debug | warning | error) -> #fuse_response{} | #proxyio_response{}.
+-spec report_error(Request :: any(), Type :: request_type(), Error :: term(),
+    LogLevel :: debug | warning | error) ->
+    #fuse_response{} | #provider_response{} | #proxyio_response{}.
 report_error(Request, Type, Error, LogLevel) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
@@ -273,9 +287,12 @@ report_error(Request, Type, Error, LogLevel) ->
 %% Returns response with given status, matching given request.
 %% @end
 %%--------------------------------------------------------------------
--spec error_response(fuse_request | proxyio_request, #status{}) -> #fuse_response{}.
+-spec error_response(request_type(), #status{}) ->
+    #fuse_response{} | #provider_response{} | #proxyio_response{}.
 error_response(fuse_request, Status) ->
     #fuse_response{status = Status};
+error_response(provider_request, Status) ->
+    #provider_response{status = Status};
 error_response(proxyio_request, Status) ->
     #proxyio_response{status = Status}.
 
@@ -301,8 +318,6 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_dir{parent_uuid = 
     fslogic_req_special:mkdir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentGUID)}, Name, Mode);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_children{uuid = GUID, offset = Offset, size = Size}}) ->
     fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Offset, Size);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_parent{uuid = GUID}}) ->
-    fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #change_mode{uuid = GUID, mode = Mode}}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Mode);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #rename{uuid = GUID, target_path = TargetPath}}) ->
@@ -322,32 +337,6 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #release{handle_id = Handl
     fslogic_req_regular:release(Ctx, HandleId);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID, name = XattrName}}) ->
-    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, XattrName);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_xattr{uuid = UUID, xattr = Xattr}}) ->
-    fslogic_req_generic:set_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Xattr);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #remove_xattr{uuid = UUID, name = XattrName}}) ->
-    fslogic_req_generic:remove_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, XattrName);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #list_xattr{uuid = UUID}}) ->
-    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_acl{uuid = UUID}}) ->
-    fslogic_req_generic:get_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_acl{uuid = UUID, acl = Acl}}) ->
-    fslogic_req_generic:set_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Acl);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #remove_acl{uuid = UUID}}) ->
-    fslogic_req_generic:remove_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_transfer_encoding{uuid = UUID}}) ->
-    fslogic_req_generic:get_transfer_encoding(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_transfer_encoding{uuid = UUID, value = Value}}) ->
-    fslogic_req_generic:set_transfer_encoding(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_cdmi_completion_status{uuid = UUID}}) ->
-    fslogic_req_generic:get_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_cdmi_completion_status{uuid = UUID, value = Value}}) ->
-    fslogic_req_generic:set_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_mimetype{uuid = UUID}}) ->
-    fslogic_req_generic:get_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_mimetype{uuid = UUID, value = Value}}) ->
-    fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID, block = Block, prefetch = Prefetch}}) ->
     fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block, Prefetch);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block_and_compute_checksum{uuid = UUID, block = Block}}) ->
@@ -357,16 +346,86 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{
 handle_fuse_request(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
     file_id = FileId, file_content = FileContent}}) ->
     fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_path{uuid = FileGUID}}) ->
-    fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = FileGUID}}) ->
-    fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
-    fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes provider request and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_provider_request(Ctx :: fslogic_worker:ctx(), ProviderRequest :: #provider_request{}) ->
+    ProviderResponse :: #provider_response{}.
+handle_provider_request(Ctx, #provider_request{provider_request = #get_parent{uuid = GUID}}) ->
+    fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #get_xattr{uuid = UUID, name = XattrName}}) ->
+    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, XattrName);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_xattr{uuid = UUID, xattr = Xattr}}) ->
+    fslogic_req_generic:set_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Xattr);
+handle_provider_request(Ctx, #provider_request{provider_request = #remove_xattr{uuid = UUID, name = XattrName}}) ->
+    fslogic_req_generic:remove_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, XattrName);
+handle_provider_request(Ctx, #provider_request{provider_request = #list_xattr{uuid = UUID}}) ->
+    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #get_acl{uuid = UUID}}) ->
+    fslogic_req_generic:get_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #set_acl{uuid = UUID, acl = Acl}}) ->
+    fslogic_req_generic:set_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Acl);
+handle_provider_request(Ctx, #provider_request{provider_request = #remove_acl{uuid = UUID}}) ->
+    fslogic_req_generic:remove_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #get_transfer_encoding{uuid = UUID}}) ->
+    fslogic_req_generic:get_transfer_encoding(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #set_transfer_encoding{uuid = UUID, value = Value}}) ->
+    fslogic_req_generic:set_transfer_encoding(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_cdmi_completion_status{uuid = UUID}}) ->
+    fslogic_req_generic:get_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #set_cdmi_completion_status{uuid = UUID, value = Value}}) ->
+    fslogic_req_generic:set_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_mimetype{uuid = UUID}}) ->
+    fslogic_req_generic:get_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #set_mimetype{uuid = UUID, value = Value}}) ->
+    fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_file_path{uuid = FileGUID}}) ->
+    fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:file_guid_to_uuid(FileGUID));
+handle_provider_request(Ctx, #provider_request{provider_request = #get_file_distribution{uuid = FileGUID}}) ->
+    fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
+handle_provider_request(Ctx, #provider_request{provider_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
+    fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
+handle_provider_request(_Ctx, Req) ->
+    ?log_bad_request(Req),
+    erlang:error({invalid_request, Req}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes proxyio request and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_proxyio_request(Ctx :: fslogic_worker:ctx(), ProxyIORequest :: #proxyio_request{}) ->
+    ProxyIOResponse :: #proxyio_response{}.
+handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
+    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
+    proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
+    FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, ByteSequences);
+handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
+    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
+    proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
+    FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    fslogic_proxyio:read(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, Offset, Size);
+handle_proxyio_request(_CTX, Req) ->
+    ?log_bad_request(Req),
+    erlang:error({invalid_request, Req}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes write events and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_write_events(Evts :: [event:event()], Ctx :: #{}) ->
+    [ok | {error, Reason :: term()}].
 handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileGUID, file_size = FileSize}}) ->
@@ -395,6 +454,14 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 
     Results.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes read events and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_read_events(Evts :: [event:event()], Ctx :: #{}) ->
+    [ok | {error, Reason :: term()}].
 handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
     lists:map(fun(#event{object = #read_event{file_uuid = FileGUID}}) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
@@ -403,30 +470,13 @@ handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
         fslogic_times:update_atime({uuid, FileUUID}, UserId)
     end, Evts).
 
-handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
-    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
-    proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
-    FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, ByteSequences);
-
-handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
-    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
-    proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
-    FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-    fslogic_proxyio:read(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, Offset, Size);
-
-handle_proxyio_request(_CTX, Req) ->
-    ?log_bad_request(Req),
-    erlang:error({invalid_request, Req}).
-
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Map given request to file-scope, provider-scope or space-scope.
 %% @end
 %%--------------------------------------------------------------------
--spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{} | #proxyio_request{}) ->
+-spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{} | #provider_request{} | #proxyio_request{}) ->
     {file, file_meta:entry() | {guid, fslogic_worker:file_guid()}} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {path, Path}}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
@@ -461,8 +511,6 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_dir
     {file, {guid, ParentUUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_children{uuid = UUID}}) ->
     {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_parent{uuid = UUID}}) ->
-    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #change_mode{uuid = UUID}}) ->
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #rename{uuid = UUID}}) ->
@@ -477,50 +525,52 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #truncate{u
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_helper_params{}}) ->
     {provider, oneprovider:get_provider_id()};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_xattr{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #remove_xattr{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #list_xattr{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_acl{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_acl{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #remove_acl{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_transfer_encoding{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_transfer_encoding{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_cdmi_completion_status{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_cdmi_completion_status{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_mimetype{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_mimetype{uuid = UUID}}) ->
-    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID}}) ->
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #synchronize_block_and_compute_checksum{uuid = UUID}}) ->
     {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_path{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #fsync{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_distribution{uuid = UUID}}) ->
-    {file, {guid, UUID}};
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #replicate_file{provider_id = ProviderId}}) ->
-    {provider, ProviderId};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #release{uuid = UUID}}) ->
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_parent{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_xattr{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #set_xattr{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #remove_xattr{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #list_xattr{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_acl{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #set_acl{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #remove_acl{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_transfer_encoding{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #set_transfer_encoding{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_cdmi_completion_status{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #set_cdmi_completion_status{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_mimetype{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #set_mimetype{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_file_path{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #fsync{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_file_distribution{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
+    {provider, ProviderId};
 request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}}) ->
     {file, {guid, FileGUID}};
 
