@@ -20,8 +20,7 @@
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--export([save/4, save/5, get/3, get/4, decoded_list/0, exists/4, delete/3, create/4,
-    create/5, decode_id/1]).
+-export([decoded_list/0, decode_id/1, encode_id/1]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -33,6 +32,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
+save(#document{key = #monitoring_id{} = MonitoringIdRecord} = Document) ->
+    monitoring_state:save(Document#document{key = encode_id(MonitoringIdRecord)});
 save(#document{} = Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
@@ -52,6 +53,8 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
+create(#document{key = #monitoring_id{} = MonitoringIdRecord} = Document) ->
+    monitoring_state:create(Document#document{key = encode_id(MonitoringIdRecord)});
 create(#document{} = Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
@@ -62,6 +65,8 @@ create(#document{} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+get(#monitoring_id{} = MonitoringIdRecord) ->
+    monitoring_state:get(encode_id(MonitoringIdRecord));
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -80,6 +85,8 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+delete(#monitoring_id{} = MonitoringIdRecord) ->
+    monitoring_state:delete(encode_id(MonitoringIdRecord));
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
@@ -89,6 +96,8 @@ delete(Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(datastore:ext_key()) -> datastore:exists_return().
+exists(#monitoring_id{} = MonitoringIdRecord) ->
+    monitoring_state:exists(encode_id(MonitoringIdRecord));
 exists(Key) ->
     ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
@@ -124,75 +133,18 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves Monitoring State for given SubjectType, SubjectId and MetricType.
-%% @end
-%%--------------------------------------------------------------------
--spec save(atom(), datastore:id(), atom(), #monitoring_state{}) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-save(SubjectType, SubjectId, MetricType, MonitoringState) ->
-    monitoring_state:save(#document{
-        key = encode_id(SubjectType, SubjectId, MetricType),
-        value = MonitoringState
-    }).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves Monitoring State for given SubjectType, SubjectId, MetricType and
-%% ProviderId
-%% @end
-%%--------------------------------------------------------------------
--spec save(atom(), datastore:id(), atom(), oneprovider:id(), #monitoring_state{})
-        -> {ok, datastore:ext_key()} | datastore:create_error().
-save(SubjectType, SubjectId, MetricType, ProviderId, MonitoringState) ->
-    monitoring_state:save(#document{
-        key = encode_id(SubjectType, SubjectId, MetricType, ProviderId),
-        value = MonitoringState
-    }).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns Monitoring State for given SubjectType, SubjectId and MetricType.
-%% @end
-%%--------------------------------------------------------------------
--spec get(atom(), datastore:id(), atom()) -> {ok, #monitoring_state{}} | datastore:get_error().
-get(SubjectType, SubjectId, MetricType) ->
-    case monitoring_state:get(encode_id(SubjectType, SubjectId, MetricType)) of
-        {ok, #document{value = MonitoringState}} ->
-            {ok, MonitoringState};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns Monitoring State for given SubjectType, SubjectId, MetricType
-%% and ProviderId.
-%% @end
-%%--------------------------------------------------------------------
--spec get(atom(), datastore:id(), atom(), oneprovider:id()) ->
-    {ok, #monitoring_state{}} | datastore:get_error().
-get(SubjectType, SubjectId, MetricType, ProviderId) ->
-    case monitoring_state:get(encode_id(SubjectType, SubjectId, MetricType, ProviderId)) of
-        {ok, #document{value = MonitoringState}} ->
-            {ok, MonitoringState};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns Monitoring State with Id decoded to SubjectType,
 %% SubjectId and MetricType.
 %% @end
 %%--------------------------------------------------------------------
--spec decoded_list() -> {ok, [{atom(), datastore:id(), atom(),
-    #monitoring_state{}}]} | datastore:generic_error() | no_return().
+-spec decoded_list() -> {ok, [{#monitoring_id{}, #monitoring_state{}}]} |
+    datastore:generic_error() | no_return().
 decoded_list() ->
     case monitoring_state:list() of
         {ok, Docs} ->
             DecodedDocs = lists:map(fun(#document{key = Key, value = Value}) ->
-                {SubjectType, SubjectId, MetricType, ProviderId} = decode_id(Key),
-                {SubjectType, SubjectId, MetricType, ProviderId, Value}
+                MonitoringId = decode_id(Key),
+                {MonitoringId, Value}
             end, Docs),
             {ok, DecodedDocs};
         {error, Reason} ->
@@ -201,88 +153,23 @@ decoded_list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns true when monitoring state for given SubjectType,
-%% SubjectId, MetricType and ProviderID exists, false otherwise.
+%% Decodes monitoring datastore id to monitoring_id record.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(atom(), datastore:id(), atom(), oneprovider:id()) ->
-    boolean() | datastore:generic_error().
-exists(SubjectType, SubjectId, MetricType, ProviderId) ->
-    monitoring_state:exists(encode_id(SubjectType, SubjectId, MetricType, ProviderId)).
+-spec decode_id(datastore:id()) -> #monitoring_id{}.
+decode_id(MonitoringIdBinary) ->
+    binary_to_term(MonitoringIdBinary).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes document for given SubjectType, SubjectId and MetricType.
+%% Encodes monitoring_id record to datastore id.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(atom(), datastore:id(), atom()) -> ok | datastore:create_error().
-delete(SubjectType, SubjectId, MetricType) ->
-    monitoring_state:delete(encode_id(SubjectType, SubjectId, MetricType)).
+-spec encode_id(#monitoring_id{}) -> datastore:id().
+encode_id(MonitoringIdRecord) ->
+    term_to_binary(MonitoringIdRecord).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates document with Monitoring State for given SubjectType,
-%% SubjectId and MetricType.
-%% @end
-%%--------------------------------------------------------------------
--spec create(atom(), datastore:id(), atom(), #monitoring_state{}) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(SubjectType, SubjectId, MetricType, MonitoringState) ->
-    monitoring_state:create(#document{
-        key = encode_id(SubjectType, SubjectId, MetricType),
-        value = MonitoringState
-    }).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates document with Monitoring State for given SubjectType,
-%% SubjectId, MetricType and ProviderId.
-%% @end
-%%--------------------------------------------------------------------
--spec create(atom(), datastore:id(), atom(), oneprovider:id(), #monitoring_state{}) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
-create(SubjectType, SubjectId, MetricType, ProviderId, MonitoringState) ->
-    monitoring_state:create(#document{
-        key = encode_id(SubjectType, SubjectId, MetricType, ProviderId),
-        value = MonitoringState
-    }).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Decodes Monitoring State Id to tuple containing SubjectType, SubjectId,
-%% MetricType and ProviderId
-%% @end
-%%--------------------------------------------------------------------
--spec decode_id(datastore:id()) -> {SubjectType :: atom(),
-    SubjectId :: datastore:id(), MetricType :: atom(), oneprovider:id()}.
-decode_id(Id) ->
-    binary_to_term(Id).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Encodes tuple containing SubjectType, SubjectId, MetricType
-%% and ProviderId to Monitoring State Id.
-%% @end
-%%--------------------------------------------------------------------
--spec encode_id(SubjectType :: atom(), SubjectId :: datastore:id(),
-    MetricType :: atom(), oneprovider:id()) -> datastore:id().
-encode_id(SubjectType, SubjectId, MetricType) ->
-    term_to_binary({SubjectType, SubjectId, MetricType, oneprovider:get_provider_id()}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Encodes tuple containing SubjectType, SubjectId, MetricType to
-%% Monitoring State Id using this provider ID.
-%% @end
-%%--------------------------------------------------------------------
--spec encode_id(SubjectType :: atom(), SubjectId :: datastore:id(),
-    MetricType :: atom()) -> datastore:id().
-encode_id(SubjectType, SubjectId, MetricType, ProviderId) ->
-    term_to_binary({SubjectType, SubjectId, MetricType, ProviderId}).
-

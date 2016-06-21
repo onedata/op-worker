@@ -190,6 +190,16 @@
     current_size = 0 :: non_neg_integer()
 }).
 
+%% Record that holds monitoring id.
+-record(monitoring_id, {
+    main_subject_type = undefined :: atom(),
+    main_subject_id = <<"">> :: datastore:id(),
+    metric_type = undefined :: atom(),
+    secondary_subject_id = <<"">> :: datastore:id(),
+    secondary_subject_type = undefined :: atom(),
+    provider_id = oneprovider:get_provider_id() :: oneprovider:id()
+}).
+
 %% Model for holding state of monitoring
 -record(monitoring_state, {
     rrd_file = undefinied :: rrd_utils:rrd_file(),

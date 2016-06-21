@@ -560,7 +560,10 @@ has_sync_context(#document{value = #links{model = ModelName}}) ->
     lists:member(ModelName, ?MODELS_TO_SYNC);
 has_sync_context(#document{value = #monitoring_state{}, key = Id}) ->
     case monitoring_state:decode_id(Id) of
-        {space, _SpaceId, _, _} ->
+        #monitoring_id{main_subject_type = space, main_subject_id = _,
+            provider_id = _, metric_type = _, secondary_subject_type = _,
+            secondary_subject_id = _} ->
+
             true;
         _ ->
             false
@@ -599,7 +602,10 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id(#document{key = Id, value = #monitoring_state{}}) ->
     case monitoring_state:decode_id(Id) of
-        {space, SpaceId, _, _} ->
+        #monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
+            provider_id = _, metric_type = _, secondary_subject_type = _,
+            secondary_subject_id = _} ->
+
             {ok, SpaceId}
     end;
 get_space_id(#document{key = Key} = Doc) ->

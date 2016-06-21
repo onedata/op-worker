@@ -117,17 +117,15 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(space_info, create, _, _, {ok, SpaceId}) ->
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
+    start_monitoring(SpaceId);
 'after'(space_info, create_or_update, _, _, {ok, SpaceId}) ->
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
+    start_monitoring(SpaceId);
 'after'(space_info, save, _, _, {ok, SpaceId}) ->
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
+    start_monitoring(SpaceId);
 'after'(space_info, delete, _, _, SpaceId) ->
-    worker_proxy:cast(monitoring_worker, {stop, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {stop, space, SpaceId, storage_quota});
+    MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
+    worker_proxy:cast(monitoring_worker, {stop, MonitoringId#monitoring_id{metric_type = storage_used}}),
+    worker_proxy:cast(monitoring_worker, {stop, MonitoringId#monitoring_id{metric_type = storage_quota}});
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -269,3 +267,15 @@ fetch(Auth, SpaceId) ->
     {ok, _} = save(Doc),
 
     {ok, Doc}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts monitoring for given space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_monitoring(datastore:id()) -> no_return().
+start_monitoring(SpaceId) ->
+    MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
+    worker_proxy:cast(monitoring_worker, {start, MonitoringId#monitoring_id{metric_type = storage_used}}),
+    worker_proxy:cast(monitoring_worker, {start, MonitoringId#monitoring_id{metric_type = storage_quota}}).

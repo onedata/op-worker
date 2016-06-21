@@ -268,12 +268,17 @@ metric_get(Config) ->
     Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
     Prov2ID = rpc:call(WorkerP2, oneprovider, get_provider_id, []),
 
-    ?assertMatch(ok, rpc:call(WorkerP1, worker_proxy, call,
-        [monitoring_worker, {start, space, <<"space3">>, storage_quota}])),
-    {ok, State} = rpc:call(WorkerP1, monitoring_state, get,
-        [space, <<"space3">>, storage_quota]),
-    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save,
-        [space, <<"space3">>, storage_quota, Prov2ID, State])),
+    MonitoringId = #monitoring_id{
+        main_subject_type = space,
+        main_subject_id = <<"space3">>,
+        metric_type = storage_quota,
+        provider_id = Prov1ID
+    },
+
+    ?assertMatch(ok, rpc:call(WorkerP1, worker_proxy, call, [monitoring_worker, {start, MonitoringId}])),
+    {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, create,
+        [#document{key = MonitoringId#monitoring_id{provider_id = Prov2ID}, value =  State}])),
 
     % when
     {ok, 200, _, Body} = do_request(WorkerP1, <<"metrics/space/space3?metric=storage_quota">>, get, [user_1_token_header(Config)], []),

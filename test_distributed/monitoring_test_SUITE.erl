@@ -31,8 +31,16 @@ all() ->
 
 -define(SPACE_ID, <<"s1">>).
 -define(MONITORING_TYPES, [
-    {space, ?SPACE_ID, storage_used},
-    {space, ?SPACE_ID, storage_quota}
+    #monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = storage_used
+    },
+    #monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = storage_quota
+    }
 ]).
 
 -define(FORMATS, [json, xml]).
@@ -46,40 +54,33 @@ all() ->
 
 rrd_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ProvID = rpc:call(Worker, oneprovider, get_provider_id, []),
 
-    lists:foreach(fun({SubjectType, SubjectId, MetricType}) ->
+    lists:foreach(fun(MonitoringId) ->
         %% create
-        ?assertEqual(false, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType, ProvID])),
+        ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd,
-            [SubjectType, SubjectId, MetricType])),
-        ?assertEqual(true, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType, ProvID])),
+        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId])),
+        ?assertEqual(true, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        {ok, #monitoring_state{rrd_file = RRDFile} = State} =
-            rpc:call(Worker, monitoring_state, get, [SubjectType, SubjectId, MetricType]),
+        {ok, #document{value = #monitoring_state{rrd_file = RRDFile}} = Doc} =
+            rpc:call(Worker, monitoring_state, get, [MonitoringId]),
         ?assertNotEqual(undefinied, RRDFile),
 
         %% second create
-        ?assertEqual(already_exists, rpc:call(Worker, rrd_utils, create_rrd,
-            [SubjectType, SubjectId, MetricType])),
-        ?assertEqual({ok, State}, rpc:call(Worker, monitoring_state, get,
-            [SubjectType, SubjectId, MetricType])),
+        ?assertEqual(already_exists, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId])),
+        ?assertEqual({ok, Doc}, rpc:call(Worker, monitoring_state, get, [MonitoringId])),
 
         %% update
         {ok, #monitoring_state{rrd_file = UpdatedRRDFile}} = ?assertMatch(
             {ok, #monitoring_state{}}, rpc:call(Worker, rrd_utils, update_rrd,
-                [SubjectType, SubjectId, MetricType, 100])),
+                [MonitoringId, 100])),
         ?assertNotEqual(RRDFile, UpdatedRRDFile),
 
-        ProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
         %% export
         lists:foreach(fun(Step) ->
             lists:foreach(fun(Format) ->
                 ?assertMatch({ok, _}, rpc:call(Worker, rrd_utils, export_rrd,
-                    [SubjectType, SubjectId, MetricType, Step, Format, ProviderId]))
+                    [MonitoringId, Step, Format]))
             end,
                 ?FORMATS)
         end,
@@ -89,47 +90,42 @@ rrd_test(Config) ->
 
 monitoring_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ProvID = rpc:call(Worker, oneprovider, get_provider_id, []),
 
-    lists:foreach(fun({SubjectType, SubjectId, MetricType}) ->
+    lists:foreach(fun(MonitoringId) ->
         %% start
-        ?assertEqual(false, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType, ProvID])),
+        ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        ?assertEqual(ok, ?reg(Worker, {start, SubjectType, SubjectId, MetricType})),
+        ?assertEqual(ok, ?reg(Worker, {start, MonitoringId})),
 
-        ?assertEqual(true, rpc:call(Worker, monitoring_state, exists,
-            [SubjectType, SubjectId, MetricType, ProvID])),
+        ?assertEqual(true, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        {ok, #monitoring_state{rrd_file = RRDFile, active = Active} = State} =
-            rpc:call(Worker, monitoring_state, get, [SubjectType, SubjectId, MetricType]),
+        {ok, #document{value = #monitoring_state{rrd_file = RRDFile, active = Active}} = Doc} =
+            rpc:call(Worker, monitoring_state, get, [MonitoringId]),
         ?assertNotEqual(undefinied, RRDFile),
         ?assertEqual(true, Active),
 
         %% second start
-        ?assertEqual(ok, ?reg(Worker, {start, SubjectType, SubjectId, MetricType})),
-        ?assertEqual({ok, State}, rpc:call(Worker, monitoring_state, get,
-            [SubjectType, SubjectId, MetricType])),
+        ?assertEqual(ok, ?reg(Worker, {start, MonitoringId})),
+        ?assertEqual({ok, Doc}, rpc:call(Worker, monitoring_state, get, [MonitoringId])),
 
         %% update
-        ?assertEqual(ok, ?reg(Worker, {update, SubjectType, SubjectId, MetricType})),
-        ?assertEqual(ok, ?reg(Worker, {update, SubjectType, SubjectId, MetricType})),
+        ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
+        ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
 
         %% export
         lists:foreach(fun(Step) ->
             lists:foreach(fun(Format) ->
-                ?assertMatch({ok, _}, ?reg(Worker, {export, SubjectType,
-                    SubjectId, MetricType, Step, Format, ProvID}))
+                ?assertMatch({ok, _}, ?reg(Worker, {export, MonitoringId, Step, Format}))
             end,
                 ?FORMATS)
         end,
             ?STEPS),
 
         %% stop
-        ?assertEqual(ok, ?reg(Worker, {stop, SubjectType, SubjectId, MetricType})),
+        ?assertEqual(ok, ?reg(Worker, {stop, MonitoringId})),
 
-        {ok, #monitoring_state{active = UnActive}} =
-            rpc:call(Worker, monitoring_state, get, [SubjectType, SubjectId, MetricType]),
+        {ok, #document{value = #monitoring_state{active = UnActive}}} =
+            rpc:call(Worker, monitoring_state, get, [MonitoringId]),
         ?assertEqual(false, UnActive)
     end,
         ?MONITORING_TYPES).
@@ -140,9 +136,14 @@ rrdtool_pool_test(Config) ->
 
     lists:foreach(fun(Id) ->
         spawn(fun() ->
-            ?assertEqual(ok, ?reg(Worker, {start, space, integer_to_binary(Id), storage_used})),
-            ?assertEqual(ok, ?reg(Worker, {update, space, integer_to_binary(Id), storage_used})),
-            ?assertEqual(ok, ?reg(Worker, {update, space, integer_to_binary(Id), storage_used})),
+            MonitoringId = #monitoring_id{
+                main_subject_type = space,
+                main_subject_id = integer_to_binary(Id),
+                metric_type = storage_used
+            },
+            ?assertEqual(ok, ?reg(Worker, {start, MonitoringId})),
+            ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
+            ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
             CounterPid ! ok
         end)
     end, lists:seq(1, ?EXPECTED_SIZE)),
@@ -208,9 +209,8 @@ end_per_testcase(_, Config) ->
     ok.
 
 clear_state(Worker) ->
-    lists:foreach(fun({SubjectType, SubjectId, MetricType}) ->
-        ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete,
-            [SubjectType, SubjectId, MetricType]))
+    lists:foreach(fun(MonitoringId) ->
+        ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [MonitoringId]))
     end,
         ?MONITORING_TYPES).
 

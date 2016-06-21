@@ -41,12 +41,11 @@ init(_Args) ->
     {ok, Docs} = monitoring_state:decoded_list(),
     ThisProviderId = oneprovider:get_provider_id(),
 
-    lists:foreach(fun({SubjectType, SubjectId, MetricType, ProviderId,
+    lists:foreach(fun({#monitoring_id{provider_id = ProviderId} = MonitoringId,
         #monitoring_state{monitoring_interval = Interval}}) ->
         case ProviderId of
             ThisProviderId ->
-                erlang:send_after(Interval, monitoring_worker,
-                    {timer, {update, SubjectType, SubjectId, MetricType}});
+                erlang:send_after(Interval, monitoring_worker, {timer, {update, MonitoringId}});
             _ -> ok
         end
     end, Docs),
@@ -69,70 +68,74 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 
-handle({start, SubjectType, SubjectId, MetricType}) ->
+handle({start, MonitoringId}) ->
     worker_proxy:call(monitoring_worker,
-        {restart, SubjectType, SubjectId, MetricType, 0});
+        {restart, MonitoringId, 0});
 
-handle({restart, SubjectType, SubjectId, MetricType, Count}) ->
-    try rrd_utils:create_rrd(SubjectType, SubjectId, MetricType) of
+handle({restart, MonitoringId, Count}) ->
+    try rrd_utils:create_rrd(MonitoringId) of
         already_exists ->
             ok;
         ok ->
             worker_proxy:cast(monitoring_worker,
-                {update, SubjectType, SubjectId, MetricType}),
+                {update, MonitoringId}),
             ok
     catch
         T:M ->
             CurrentCount = Count + 1,
             ?error_stacktrace(
-                "Cannot start monitoring for {~s, ~s, ~s}, tries number: ~b - ~p:~p",
-                [SubjectType, SubjectId, MetricType, CurrentCount, T, M]),
+                "Cannot start monitoring for ~w, tries number: ~b - ~p:~p",
+                [MonitoringId, CurrentCount, T, M]),
+
             case CurrentCount of
                 ?START_RETRY_LIMIT ->
                     ok;
                 _ ->
                     erlang:send_after(?START_RETRY_TIMEOUT, monitoring_worker,
-                        {timer, {restart, SubjectType, SubjectId, MetricType, CurrentCount}}),
+                        {timer, {restart, MonitoringId, CurrentCount}}),
                     ok
             end
     end;
 
-handle({stop, SubjectType, SubjectId, MetricType}) ->
-    {ok, State} = monitoring_state:get(SubjectType, SubjectId, MetricType),
-    {ok, _} = monitoring_state:save(SubjectType, SubjectId, MetricType,
-        State#monitoring_state{active = false}),
+handle({stop, MonitoringId}) ->
+    {ok, #document{value = State}} = monitoring_state:get(MonitoringId),
+    {ok, _} = monitoring_state:save(#document{key = MonitoringId,
+        value = State#monitoring_state{active = false}}),
     ok;
 
-handle({update, SubjectType, SubjectId, MetricType}) ->
-    case monitoring_state:get(SubjectType, SubjectId, MetricType) of
-        {ok, #monitoring_state{active = true}} ->
-            MonitoringInterval = try update(SubjectType, SubjectId, MetricType) of
+handle({update, MonitoringId}) ->
+    case monitoring_state:get(MonitoringId) of
+        {ok, #document{value = #monitoring_state{active = true}}} ->
+
+            MonitoringInterval = try update(MonitoringId) of
                 {ok, #monitoring_state{monitoring_interval = Interval}} ->
                     Interval
             catch
                 T:M ->
+
                     ?error_stacktrace(
-                        "Cannot update monitoring state for {~s, ~s, ~s} - ~p:~p",
-                        [SubjectType, SubjectId, MetricType, T, M]),
+                        "Cannot update monitoring state for ~w - ~p:~p",
+                        [MonitoringId, T, M]),
 
                     {ok, #monitoring_state{monitoring_interval = Interval}} =
-                        monitoring_state:get(SubjectType, SubjectId, MetricType),
+                        monitoring_state:get(MonitoringId),
                     Interval
             end,
+
             erlang:send_after(MonitoringInterval, monitoring_worker,
-                {timer, {update, SubjectType, SubjectId, MetricType}}),
+                {timer, {update, MonitoringId}}),
             ok;
+
         {ok, #monitoring_state{active = false}} ->
             ok;
         {error, Reason} ->
             {error, Reason}
     end;
 
-handle({export, SubjectType, SubjectId, MetricType, Step, Format, ProviderId}) ->
-    case monitoring_state:exists(SubjectType, SubjectId, MetricType, ProviderId) of
+handle({export, MonitoringId, Step, Format}) ->
+    case monitoring_state:exists(MonitoringId) of
         true ->
-            rrd_utils:export_rrd(SubjectType, SubjectId, MetricType, Step,
-                Format, ProviderId);
+            rrd_utils:export_rrd(MonitoringId, Step, Format);
         false ->
             {error, ?ENOENT}
     end;
@@ -162,18 +165,20 @@ cleanup() ->
 %% Updates rrd with value corresponding to metric type.
 %% @end
 %%--------------------------------------------------------------------
--spec update(atom(), datastore:id(), atom()) -> {ok, #monitoring_state{}}.
-update(space, SpaceId, storage_used) ->
+-spec update(#monitoring_id{}) -> {ok, #monitoring_state{}}.
+update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
+    metric_type = storage_used} = MonitoringId) ->
     {ok, #document{value = #space_quota{current_size = CSize}}} =
         space_quota:get(SpaceId),
 
-    {ok, State} = rrd_utils:update_rrd(space, SpaceId, storage_used, CSize),
+    {ok, State} = rrd_utils:update_rrd(MonitoringId, CSize),
     {ok, State};
 
-update(space, SpaceId, storage_quota) ->
+update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
+    metric_type = storage_quota} = MonitoringId) ->
     {ok, #document{value = #space_info{providers_supports = ProvSupport}}} =
         space_info:get(SpaceId),
     SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
 
-    {ok, State} = rrd_utils:update_rrd(space, SpaceId, storage_quota, SupSize),
+    {ok, State} = rrd_utils:update_rrd(MonitoringId, SupSize),
     {ok, State}.

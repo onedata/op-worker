@@ -16,7 +16,7 @@
 -include("modules/monitoring/rrd_definitions.hrl").
 
 %% API
--export([create_rrd/3, update_rrd/4, export_rrd/6]).
+-export([create_rrd/1, update_rrd/2, export_rrd/3]).
 
 -type rrd_file() :: binary().
 %% Params: [Heartbeat, MinValue, MaxValue]
@@ -34,13 +34,13 @@
 %% Creates rrd with given parameters if database entry for it is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec create_rrd(atom(), datastore:id(), atom()) -> ok | already_exists.
-create_rrd(SubjectType, SubjectId, MetricType) ->
+-spec create_rrd(#monitoring_id{}) -> ok | already_exists.
+create_rrd(MonitoringId) ->
     #rrd_definition{datastore = Datastore, rras_map = RRASMap, options = Options} =
-        get_rrd_definition(SubjectType, MetricType),
+        get_rrd_definition(MonitoringId),
     StepInSeconds = proplists:get_value(step, Options),
 
-    case monitoring_state:exists(SubjectType, SubjectId, MetricType, oneprovider:get_provider_id()) of
+    case monitoring_state:exists(MonitoringId) of
         false ->
             Path = get_path(),
             poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
@@ -50,16 +50,16 @@ create_rrd(SubjectType, SubjectId, MetricType) ->
 
             {ok, RRDFile} = read_rrd_from_file(Path),
 
-            {ok, _} = monitoring_state:save(SubjectType, SubjectId, MetricType,
-                #monitoring_state{
+            {ok, _} = monitoring_state:save(#document{key = MonitoringId,
+                value = #monitoring_state{
                     rrd_file = RRDFile,
                     monitoring_interval = timer:seconds(StepInSeconds)
-                }),
+                }}),
             ok;
         true ->
-            {ok, State} = monitoring_state:get(SubjectType, SubjectId, MetricType),
-            {ok, _} = monitoring_state:save(SubjectType, SubjectId, MetricType,
-                State#monitoring_state{active = true}),
+            {ok, #document{value = State}} = monitoring_state:get(MonitoringId),
+            {ok, _} = monitoring_state:save(#document{key = MonitoringId,
+                value = State#monitoring_state{active = true}}),
             already_exists
     end.
 
@@ -68,19 +68,18 @@ create_rrd(SubjectType, SubjectId, MetricType) ->
 %% Updates RRD file content with given data.
 %% @end
 %%--------------------------------------------------------------------
--spec update_rrd(atom(), datastore:id(), atom(), term()) ->
-    {ok, #monitoring_state{}}.
-update_rrd(SubjectType, SubjectId, MetricType, UpdateValue) ->
-    #rrd_definition{datastore = Datastore} = get_rrd_definition(SubjectType, MetricType),
+-spec update_rrd(#monitoring_id{}, term()) -> {ok, #monitoring_state{}}.
+update_rrd(MonitoringId, UpdateValue) ->
+    #rrd_definition{datastore = Datastore} = get_rrd_definition(MonitoringId),
     {DSName, _, _} = Datastore,
 
     #monitoring_state{rrd_file = RRDFile} = MonitoringState =
-        case monitoring_state:get(SubjectType, SubjectId, MetricType) of
-            {ok, State} ->
+        case monitoring_state:get(MonitoringId) of
+            {ok, #document{value = State}} ->
                 State;
             {error, {not_found, _}} ->
-                ok = create_rrd(SubjectType, SubjectId, MetricType),
-                {ok, State} = monitoring_state:get(SubjectType, SubjectId, MetricType),
+                ok = create_rrd(MonitoringId),
+                {ok, #document{value = State}} = monitoring_state:get(MonitoringId),
                 State
         end,
 
@@ -91,8 +90,8 @@ update_rrd(SubjectType, SubjectId, MetricType, UpdateValue) ->
 
     {ok, UpdatedRRDFile} = read_rrd_from_file(Path),
     UpdatedMonitoringState = MonitoringState#monitoring_state{rrd_file = UpdatedRRDFile},
-    {ok, _} = monitoring_state:save(SubjectType, SubjectId, MetricType,
-        UpdatedMonitoringState),
+    {ok, _} = monitoring_state:save(#document{key = MonitoringId,
+        value = UpdatedMonitoringState}),
     {ok, UpdatedMonitoringState}.
 
 %%--------------------------------------------------------------------
@@ -100,16 +99,15 @@ update_rrd(SubjectType, SubjectId, MetricType, UpdateValue) ->
 %% Exports RRD for given parameters in given format.
 %% @end
 %%--------------------------------------------------------------------
--spec export_rrd(atom(), datastore:id(), atom(), atom(), Format :: json | xml,
-    oneprovider:id()) -> {ok, binary()}.
-export_rrd(SubjectType, SubjectId, MetricType, Step, Format, ProviderId) ->
+-spec export_rrd(#monitoring_id{}, atom(), Format :: json | xml) -> {ok, binary()}.
+export_rrd(MonitoringId, Step, Format) ->
     #rrd_definition{datastore = Datastore, rras_map = RRASMap, options = Options} =
-        get_rrd_definition(SubjectType, MetricType),
+        get_rrd_definition(MonitoringId),
     StepInSeconds = proplists:get_value(step, Options),
     {DSName, _, _} = Datastore,
 
-    {ok, #monitoring_state{rrd_file = RRDFile}} =
-        monitoring_state:get(SubjectType, SubjectId, MetricType, ProviderId),
+    {ok, #document{value = #monitoring_state{rrd_file = RRDFile}}} =
+        monitoring_state:get(MonitoringId),
 
     {ok, Path} = write_rrd_to_file(RRDFile),
     {CF, _, PDPsPerCDP, _} = maps:get(Step, RRASMap),
@@ -121,8 +119,24 @@ export_rrd(SubjectType, SubjectId, MetricType, Step, Format, ProviderId) ->
             ""
     end,
 
-    Description = "\"" ++ atom_to_list(SubjectType) ++ " " ++ binary_to_list(SubjectId)
-        ++ "; metric " ++ atom_to_list(MetricType)
+    #monitoring_id{
+        main_subject_type = MainSubjectType,
+        main_subject_id = MainSubjectId,
+        metric_type = MetricType,
+        secondary_subject_type = SecondarySubjectType,
+        secondary_subject_id = SecondarySubjectId,
+        provider_id = ProviderId
+    } = MonitoringId,
+
+    SecondaryDescription = case SecondarySubjectType of
+        undefined ->
+            "";
+        _ ->
+            "; " ++ atom_to_list(SecondarySubjectType) ++ " " ++ binary_to_list(SecondarySubjectId)
+    end,
+
+    Description = "\"" ++ atom_to_list(MainSubjectType) ++ " " ++ binary_to_list(MainSubjectId)
+        ++ "; metric " ++ atom_to_list(MetricType) ++ SecondaryDescription
         ++ "; oneprovider ID " ++ binary_to_list(ProviderId) ++ "\"",
 
     {ok, Data} = poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
@@ -181,14 +195,15 @@ get_path() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns rrd definition for given SubjectType and MetricType.
+%% Returns rrd definition for given monitoring id record.
 %% @end
 %%--------------------------------------------------------------------
--spec get_rrd_definition(SubjectType :: atom(), MetricType :: atom()) ->
-    #rrd_definition{}.
-get_rrd_definition(space, storage_used) ->
+-spec get_rrd_definition(#monitoring_id{}) -> #rrd_definition{}.
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = storage_used,
+    main_subject_id = _, provider_id = _}) ->
     ?STORAGE_USED_PER_SPACE_RRD;
-get_rrd_definition(space, storage_quota) ->
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = storage_quota,
+    main_subject_id = _, provider_id = _}) ->
     ?STORAGE_QUOTA_PER_SPACE_RRD.
 
 %%--------------------------------------------------------------------
