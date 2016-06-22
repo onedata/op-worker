@@ -13,6 +13,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
@@ -37,7 +38,8 @@ remove_acl/1, remove_acl/2]).
 set_perms(SessId, FileKey, NewPerms) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #change_mode{uuid = GUID, mode = NewPerms},
+    lfm_utils:call_fslogic(SessId, fuse_request,
+        #change_mode{uuid = GUID, mode = NewPerms},
         fun(_) -> ok end).
 
 
@@ -63,7 +65,7 @@ get_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = Se
 get_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #get_acl{uuid = GUID},
+    lfm_utils:call_fslogic(SessId, provider_request, #get_acl{uuid = GUID},
         fun(#acl{value = Json}) ->
             Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)), %todo store perms as integers
             {ok, Acl}
@@ -85,7 +87,8 @@ set_acl(SessId, FileKey, Acl) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
-    lfm_utils:call_fslogic(SessId, #set_acl{uuid = GUID, acl = #acl{value = Json}},
+    lfm_utils:call_fslogic(SessId, provider_request,
+        #set_acl{uuid = GUID, acl = #acl{value = Json}},
         fun(_) -> ok end).
 
 
@@ -101,5 +104,5 @@ remove_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id =
 remove_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #remove_acl{uuid = GUID},
+    lfm_utils:call_fslogic(SessId, provider_request, #remove_acl{uuid = GUID},
         fun(_) -> ok end).

@@ -230,15 +230,15 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({send, ServerMsg}, State = #state{socket = Socket, connection_type = incoming,
+handle_cast({send, #server_message{} = ServerMsg}, State = #state{socket = Socket, connection_type = incoming,
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {noreply, State};
-handle_cast({send, ServerMsg}, State = #state{socket = Socket, connection_type = outgoing,
+handle_cast({send, #server_message{} = ServerMsg}, State = #state{socket = Socket, connection_type = outgoing,
     transport = Transport}) ->
     send_client_message(Socket, Transport, to_client_message(ServerMsg)),
     {noreply, State};
-handle_cast({send, ClientMsg}, State = #state{socket = Socket, connection_type = outgoing,
+handle_cast({send, #client_message{} = ClientMsg}, State = #state{socket = Socket, connection_type = outgoing,
     transport = Transport}) ->
     send_client_message(Socket, Transport, ClientMsg),
     {noreply, State};
