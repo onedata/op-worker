@@ -301,7 +301,7 @@ handle_or_reroute(Msg, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(Msg, ProvMap, false);
 handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage,
     {provider, ProviderId}, SessId, HandleLocallyFun, ProvMap) ->
-    {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
+    {ok, #document{value = #session{auth = Auth, identity = #identity{}}}} = session:get(SessId),
     case oneprovider:get_provider_id() of
         ProviderId ->
             HandleLocallyFun(RequestMessage, ProvMap, false);

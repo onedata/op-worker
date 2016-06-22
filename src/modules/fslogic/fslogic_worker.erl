@@ -464,7 +464,12 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileGUID, file_size = FileSize}}) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-        case replica_updater:update(FileUUID, Blocks, FileSize, true, undefined) of
+        UpdatedBlocks = lists:map(fun(#file_block{file_id = FileId, storage_id = StorageId} = Block) ->
+            {ValidFileId, ValidStorageId} = file_location:validate_block_data(FileUUID, FileId, StorageId),
+            Block#file_block{file_id = ValidFileId, storage_id = ValidStorageId}
+        end, Blocks),
+
+        case replica_updater:update(FileUUID, UpdatedBlocks, FileSize, true, undefined) of
             {ok, size_changed} ->
                 {ok, #document{value = #session{identity = #identity{
                     user_id = UserId}}}} = session:get(SessId),

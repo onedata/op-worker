@@ -370,8 +370,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
 %% @doc Renames file moving it to another space supported by another provider.
 %%--------------------------------------------------------------------
 -spec rename_interprovider(fslogic_worker:ctx(), fslogic_worker:file(),
-    file_meta:path()) -> {ok, #file_renamed{}}
-| logical_file_manager:error_reply().
+    file_meta:path()) -> {ok, #file_renamed{}} | logical_file_manager:error_reply().
 rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
