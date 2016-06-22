@@ -280,9 +280,14 @@ metric_get(Config) ->
     DecodedBody = json_utils:decode(Body),
 
     % then
+    [
+        [{_, DecodedProv1ID}, _],
+        [{_, DecodedProv2ID}, _]
+    ] = DecodedBody,
+    ?assertNotEqual(DecodedProv1ID, DecodedProv2ID),
     ?assertMatch([
-        [{<<"providerId">>, Prov1ID}, {<<"rrd">>, _}],
-        [{<<"providerId">>, Prov2ID}, {<<"rrd">>, _}]
+        [{<<"providerId">>, _}, {<<"rrd">>, _}],
+        [{<<"providerId">>, _}, {<<"rrd">>, _}]
     ], DecodedBody).
 
 list_file(Config) ->
