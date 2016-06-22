@@ -14,8 +14,8 @@
 -define(FSYNC_TIMEOUT, timer:minutes(1)).
 
 %% replica_synchronizer
-% TODO - check why sometimes we do not get notification
--define(SYNC_TIMEOUT, timer:seconds(30)).
+% TODO - VFS-2197
+-define(SYNC_TIMEOUT, timer:minutes(2)).
 %%-define(SYNC_TIMEOUT, timer:minutes(5)).
 
 %% gateway_connection

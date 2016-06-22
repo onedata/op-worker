@@ -168,7 +168,7 @@ handle({clear_temp, Key}) ->
 
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
-    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+    ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
@@ -201,7 +201,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
             end,
             Ans;
         {true, true} ->
-            ?info("Rereplication detected, skipping ~p", [Doc]),
+            ?debug("Rereplication detected, skipping ~p", [Doc]),
             queue_update_until(QueueKey, Seq),
             ok;
         {false, _} ->
@@ -211,7 +211,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 
 %% Push changes from queue to providers
 handle({flush_queue, QueueKey}) ->
-    ?info("[ DBSync ] Flush queue ~p", [QueueKey]),
+    ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
 
     FlushInterval = ?FLUSH_QUEUE_INTERVAL,
     FlushAgainAfter = FlushInterval + crypto:rand_uniform(0, round(?FLUSH_QUEUE_INTERVAL / 2)),
@@ -231,7 +231,6 @@ handle({flush_queue, QueueKey}) ->
         _ -> ok
     end,
 
-    ?info("Memory ~p", [erlang:memory()]),
     state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved, until = Until} = Queue) ->
             NewBatchMap = maps:map(
@@ -422,7 +421,7 @@ queue_calculate_until(NewUntil, Queue) ->
 -spec apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{since = Since, until = Until, changes = Changes} = Batch0) ->
-    ?info("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch0]),
+    ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch0]),
 
     %% Both providers have to support this space
     ok = dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId),
@@ -443,7 +442,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{since = Since, until = Until, 
 -spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
 do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?info("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
+    ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil + 1 < Since of
         true ->

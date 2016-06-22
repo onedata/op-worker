@@ -134,7 +134,7 @@
 assume_all_files_in_space(Config, SpaceId) ->
     SpaceDoc = #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), value = #file_meta{}},
     Workers = ?config(op_worker_nodes, Config),
-    catch test_utils:mock_new(Workers, fslogic_spaces, [passthrough, no_history]),
+    catch test_utils:mock_new(Workers, fslogic_spaces),
     test_utils:mock_expect(Workers, fslogic_spaces, get_space,
         fun(_, _) ->
             {ok, SpaceDoc}
@@ -380,7 +380,7 @@ teardown_storage(Config) ->
 %%--------------------------------------------------------------------
 -spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
 space_storage_mock(Workers, StorageId) ->
-    test_utils:mock_new(Workers, space_storage, [passthrough, no_history]),
+    test_utils:mock_new(Workers, space_storage),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
     end).
@@ -390,7 +390,7 @@ space_storage_mock(Workers, StorageId) ->
 %%--------------------------------------------------------------------
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
-    catch test_utils:mock_new(Workers, communicator, [passthrough, no_history]),
+    catch test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
 
@@ -401,7 +401,7 @@ enable_grpca_based_communication(Config) ->
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
 
     %% Enable grp certs
-    test_utils:mock_new(AllWorkers, [oz_plugin, provider_auth_manager], [passthrough, no_history]),
+    test_utils:mock_new(AllWorkers, [oz_plugin, provider_auth_manager]),
     CertMappings = lists:map(fun({ProvKey, Domain}) ->
         CertPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "cert.pem"),
         KeyPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "key.pem"),
@@ -449,7 +449,7 @@ disable_grpca_based_communication(Config) ->
 -spec disable_quota_limit(Config :: list()) -> ok.
 disable_quota_limit(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [space_quota], [passthrough, no_history]),
+    test_utils:mock_new(Workers, [space_quota]),
     test_utils:mock_expect(Workers, space_quota, assert_write,
         fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, space_quota, assert_write,
@@ -508,8 +508,8 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    catch test_utils:mock_new(AllWorkers, oneprovider, [passthrough, no_history]),
-    catch test_utils:mock_new(AllWorkers, oz_providers, [passthrough, no_history]),
+    catch test_utils:mock_new(AllWorkers, oneprovider),
+    catch test_utils:mock_new(AllWorkers, oz_providers),
 
     %% Setup storage
     lists:foreach(fun({SpaceId, _}) ->
@@ -673,7 +673,7 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
-    test_utils:mock_new(Workers, oz_users, [passthrough, no_history]),
+    test_utils:mock_new(Workers, oz_users),
     test_utils:mock_expect(Workers, oz_users, get_details, fun(#token_auth{macaroon = Macaroon}) ->
         {_, #user_config{name = UName, id = UID}} = lists:keyfind(Macaroon, 1, Users),
         {ok, #user_details{
@@ -712,7 +712,7 @@ oz_users_mock_setup(Workers, Users) ->
     ok.
 oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
-    test_utils:mock_new(Workers, oz_spaces, [passthrough, no_history]),
+    test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
@@ -753,7 +753,7 @@ oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 -spec oz_groups_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}]) -> ok.
 oz_groups_mock_setup(Workers, Groups, Users) ->
-    test_utils:mock_new(Workers, oz_groups, [passthrough, no_history]),
+    test_utils:mock_new(Workers, oz_groups),
     test_utils:mock_expect(Workers, oz_groups, get_details,
         fun(_, GroupId) ->
             GroupName = proplists:get_value(GroupId, Groups),
@@ -791,7 +791,7 @@ file_meta_mock_setup(Workers) ->
         file_meta:setup_onedata_user(provider, UUID),
         Self ! onedata_user_setup
     end,
-    test_utils:mock_new(Workers, file_meta, [passthrough, no_history]),
+    test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after', fun
         (onedata_user, create_or_update, _, _, {ok, UUID}) -> Handler(UUID);
         (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID);
