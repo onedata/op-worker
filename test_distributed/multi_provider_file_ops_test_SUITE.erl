@@ -46,7 +46,9 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
+    % TODO change timeout after VFS-2197
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 150, 10, 100).
+%%synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
 
 proxy_test1(Config) ->
     synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
@@ -107,7 +109,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyStats = fun(File, IsDir) ->
         VerAns = Verify(fun(W) ->
-            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
+%%            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
             case IsDir of
                 true ->
                     ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
@@ -176,10 +178,10 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         end,
 
         VerAns0 = VerifyLocation(),
-        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
 
         Verify(fun(W) ->
-            ct:print("Verify file ~p", [{File, W}]),
+%%            ct:print("Verify file ~p", [{File, W}]),
             OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -189,7 +191,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         AssertLocations = fun() ->
             VerAns = VerifyLocation(),
             Flattened = lists:flatten(VerAns),
-            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+%%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
 
             ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
             LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
@@ -222,7 +224,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyDel = fun({F,  FileUUID, Locations}) ->
         Verify(fun(W) ->
-            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
+%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
             ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
             %,
 %%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
@@ -241,13 +243,13 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
+%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
         VerifyStats(Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
+%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
@@ -297,7 +299,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end, ProvIDs)
         end),
         Flattened = lists:flatten(VerAns),
-        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+%%        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, Flattened),
@@ -350,7 +352,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
-            ct:print("Verify write ~p", [{Level2File, W2}]),
+%%            ct:print("Verify write ~p", [{Level2File, W2}]),
             OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,
@@ -378,7 +380,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end,
         ?assertMatch({_, {ok, _}}, MkAnsCheck),
         {Level2TmpDir, _} = MkAnsCheck,
-        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
+%%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
         VerifyStats(Level2TmpDir, true),
         [Level2TmpDir | Acc]
     end, [], Workers),
@@ -404,7 +406,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
                 end,
             ?assertMatch({_, {ok, _}}, MkAnsCheck),
             {Level3TmpDir, _} = MkAnsCheck,
-            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
+%%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
     end, Level2TmpDirs),

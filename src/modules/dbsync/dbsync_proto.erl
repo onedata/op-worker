@@ -255,7 +255,7 @@ handle_impl(From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq
 %%--------------------------------------------------------------------
 -spec handle_broadcast(IsIgnored :: boolean(), From :: oneprovider:id(), Request :: term(), BaseRequest :: term()) ->
     ok | reemit | {error, Reason :: any()}.
-handle_broadcast(true, _, #batch_update{}, _) ->
+handle_broadcast(true, _, _, _) ->
     reemit;
 handle_broadcast(_Ignore, From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = ChangesBin} = Request, BaseRequest) ->
     ProviderId = From,
