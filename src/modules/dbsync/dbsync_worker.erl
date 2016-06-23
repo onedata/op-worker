@@ -167,7 +167,7 @@ handle({clear_temp, Key}) ->
     dbsync_utils:temp_clear(Key);
 
 %% Append change to given queue
-handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc} = Change}) ->
+handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc, model = Model} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
@@ -193,8 +193,8 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
             end,
-            case Key of
-                {dbsync_state, _} ->
+            case Model of
+                dbsync_state ->
                     ok;
                 _ ->
                     queue_update_until(QueueKey, Seq)
@@ -524,7 +524,7 @@ run_posthooks(SpaceId, [Change | Done]) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    {ok, _} = dbsync_state:save(#document{key = {dbsync_state, Key}, value = #dbsync_state{entry = Value}}),
+    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -534,7 +534,7 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    case dbsync_state:get({dbsync_state, Key}) of
+    case dbsync_state:get(Key) of
         {ok, #document{value = #dbsync_state{entry = Value}}} ->
             Value;
         {error, {not_found, _}} ->
@@ -892,6 +892,8 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
                       Map
               end,
     SortedKeys = lists:sort(maps:keys(Batches)),
+
+    % check if we have all needed changes to start batches application
     Stashed = lists:foldl(fun(S, Acc) ->
         case Acc + 1 >= S of
             true ->
@@ -902,6 +904,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
     end, CurrentUntil, SortedKeys),
     case Stashed + 1 < NewBranchSince of
         true ->
+            % missing batches - check once more (requests may be processed in parallel) and request missing changes
             timer:sleep(timer:seconds(2)),
             NewCurrentUntil = get_current_seq(ProviderId, SpaceId),
             case NewCurrentUntil > CurrentUntil of
@@ -912,6 +915,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
                     do_request_changes(ProviderId, Stashed, NewBranchSince)
             end;
         _ ->
+            % set this pid as batches consumer (only one proc can consume batches)
             MyPid = self(),
             state_update({current_consumer, ProviderId, SpaceId},
                 fun
@@ -931,6 +935,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
                         do_apply_batch_changes(ProviderId, SpaceId, Batch)
                      end, SortedKeys);
                 {_, To} when To < Stashed ->
+                    % other proc is working - wait
                     timer:sleep(timer:seconds(5)),
                     NewCurrentUntil = get_current_seq(ProviderId, SpaceId),
                     consume_batches(ProviderId, SpaceId, NewCurrentUntil, NewBranchSince, NewBranchUntil);
