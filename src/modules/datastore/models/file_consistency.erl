@@ -20,16 +20,17 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([wait/1]).
+-export([wait/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
+model_init/0, 'after'/5, before/4]).
 
 
 -export_type([id/0]).
 
 -type id() :: file_meta:id().
+-type component() :: file_meta | local_file_location | parent_links | links.
 
 
 %%%===================================================================
@@ -41,9 +42,111 @@
 %% Wait for file metadata to become consistent
 %% @end
 %%--------------------------------------------------------------------
--spec wait(file_meta:uuid()) -> ok.
-wait(_FileUuid) ->
-    ok.
+-spec wait(file_meta:uuid(), list()) -> ok.
+wait(FileUuid, WaitFor) ->
+    MissingComponents = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+        fun() ->
+            case get(FileUuid) of
+                {ok, Doc = #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}}} ->
+                    case WaitFor -- ComponentsPresent of
+                        [] ->
+                            NewDoc = notify_waiting(Doc),
+                            case NewDoc == Doc of
+                                true ->
+                                    [];
+                                false ->
+                                    {ok, _} = save(NewDoc),
+                                    []
+                            end;
+                        MissingComponents ->
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{waiting = [{MissingComponents, self()} | Waiting]}}),
+                            {ok, _} = save(NewDoc),
+                            MissingComponents
+                    end;
+                {error, {not_found, file_consistency}} ->
+                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{}}),
+                    WaitFor
+            end
+        end),
+
+    case MissingComponents of
+        [] ->
+            ok;
+        _ ->
+            FoundComponents = check_missing_components(FileUuid, MissingComponents, []),
+            case MissingComponents -- FoundComponents of
+                [] ->
+                    datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+                        fun() ->
+                            {ok, Doc = #document{value = FC = #file_consistency{
+                                components_present = ComponentsPresent, waiting = Waiting}}
+                            } = get(FileUuid),
+                            UpdatedComponents = lists:usort(ComponentsPresent ++ FoundComponents),
+                            UpdatedWaiting = lists:keydelete(self(), 2, Waiting),
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present =
+                                UpdatedComponents, waiting = UpdatedWaiting}}),
+                            {ok, _} = save(NewDoc),
+                            ok
+                        end);
+                _ ->
+                    receive
+                        file_is_now_consistent ->
+                            ok
+                    end
+            end
+    end.
+
+
+notify_waiting(Doc = #document{value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
+    NewWaiting = lists:filter(fun({Missing, Pid}) ->
+        case Missing -- Components of
+            [] ->
+                Pid ! file_is_now_consistent,
+                false;
+            _ ->
+                true
+        end
+    end, Waiting),
+    Doc#document{value = FC#file_consistency{waiting = NewWaiting}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks some components of file are present.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_missing_components(file_meta:uuid(), [component()], [component()]) -> [component()].
+check_missing_components(_FileUuid, [], Found) ->
+    Found;
+check_missing_components(FileUuid, [file_meta | RestMissing], Found) ->
+    case catch file_meta:get(FileUuid) of
+        {ok, _} ->
+            check_missing_components(FileUuid, RestMissing, [file_meta | Found]);
+        _ ->
+            check_missing_components(FileUuid, RestMissing, Found)
+    end;
+check_missing_components(FileUuid, [local_file_location | RestMissing], Found) ->
+    case catch fslogic_utils:get_local_file_location({uuid, FileUuid}) of
+        #document{} ->
+            check_missing_components(FileUuid, RestMissing, [local_file_location | Found]);
+        _ ->
+            check_missing_components(FileUuid, RestMissing, Found)
+    end;
+check_missing_components(FileUuid, [parent_links | RestMissing], Found) ->
+    case catch fslogic_path:gen_path({uuid, FileUuid}, ?ROOT_SESS_ID) of
+        {ok, _} ->
+            check_missing_components(FileUuid, RestMissing, [parent_links | Found]);
+        _ ->
+            check_missing_components(FileUuid, RestMissing, Found)
+    end;
+check_missing_components(FileUuid, [links | RestMissing], Found) ->
+    ProviderId = oneprovider:get_provider_id(),
+    case catch file_meta:exists({uuid, links_utils:links_doc_key(FileUuid, ProviderId)}) of
+        true ->
+            check_missing_components(FileUuid, RestMissing, [links | Found]);
+        _ ->
+            check_missing_components(FileUuid, RestMissing, Found)
+    end.
 
 %%%===================================================================
 %%% model_behaviour callbacks

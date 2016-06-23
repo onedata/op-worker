@@ -199,11 +199,8 @@
 
 %% Model that keeps track of consistency of file metadata
 -record(file_consistency, {
-    file_meta_present = false :: boolean(),
-    local_file_location_present = false :: boolean(),
-    parent_present = false :: boolean(),
-    file_meta_links_present = false :: boolean(),
-    processes_waiting = []
+    components_present = [], % file_meta, local_file_location, parent, file_meta_links
+    waiting = []
 }).
 
 -endif.

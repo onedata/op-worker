@@ -37,7 +37,7 @@
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean(), version_vector:version_vector()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
-    file_consistency:wait(FileUUID),
+    ok = file_consistency:wait(FileUUID, [file_meta, parent_links, links, local_file_location]),
     file_location:run_synchronized(FileUUID,
         fun() ->
             [Location = #document{value = #file_location{size = OldSize,
