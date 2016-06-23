@@ -14,7 +14,9 @@
 -define(FSYNC_TIMEOUT, timer:minutes(1)).
 
 %% replica_synchronizer
--define(SYNC_TIMEOUT, timer:minutes(5)).
+% TODO - VFS-2197
+-define(SYNC_TIMEOUT, timer:minutes(2)).
+%%-define(SYNC_TIMEOUT, timer:minutes(5)).
 
 %% gateway_connection
 -define(CONNECTION_TIMEOUT, timer:minutes(1)).

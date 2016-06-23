@@ -225,7 +225,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId, sp
     try handle_broadcast(Ignore, MessageOrigin, Request, BaseRequest) of
 %%                ok -> ok; %% This case should be safely ignored but is not used right now.
         reemit ->
-            case worker_proxy:cast(dbsync_worker, Request) of
+            case worker_proxy:cast(dbsync_worker, {reemit, BaseRequest}) of
                 ok -> ok;
                 {error, Reason} ->
                     ?error("Cannot reemit tree broadcast due to: ~p", [Reason]),
@@ -255,7 +255,7 @@ handle_impl(From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq
 %%--------------------------------------------------------------------
 -spec handle_broadcast(IsIgnored :: boolean(), From :: oneprovider:id(), Request :: term(), BaseRequest :: term()) ->
     ok | reemit | {error, Reason :: any()}.
-handle_broadcast(true, _, #batch_update{}, _) ->
+handle_broadcast(true, _, _, _) ->
     reemit;
 handle_broadcast(_Ignore, From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = ChangesBin} = Request, BaseRequest) ->
     ProviderId = From,
