@@ -339,8 +339,8 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {gu
     fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     fslogic_req_generic:get_file_attr(Ctx, Entry);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #delete_file{uuid = GUID}}) ->
-    fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #delete_file{uuid = GUID, silent = Silent}}) ->
+    fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Silent);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_dir{parent_uuid = ParentGUID, name = Name, mode = Mode}}) ->
     fslogic_req_special:mkdir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentGUID)}, Name, Mode);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_children{uuid = GUID, offset = Offset, size = Size}}) ->
