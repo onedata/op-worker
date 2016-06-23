@@ -68,6 +68,16 @@ translate_from_protobuf(#'UpdateEvent'{object = {_, Obj}}) ->
     #update_event{
         object = translate_from_protobuf(Obj)
     };
+translate_from_protobuf(#'FileRemovalEvent'{} = Record) ->
+    #file_removal_event{
+        file_uuid = Record#'FileRemovalEvent'.file_uuid
+    };
+translate_from_protobuf(#'FileAccessedEvent'{} = Record) ->
+    #file_accessed_event{
+        file_uuid = Record#'FileAccessedEvent'.file_uuid,
+        open_count = Record#'FileAccessedEvent'.open_count,
+        release_count = Record#'FileAccessedEvent'.release_count
+    };
 translate_from_protobuf(#'Subscription'{id = Id, object = {_, Record}}) ->
     #subscription{
         id = Id,
@@ -111,6 +121,11 @@ translate_from_protobuf(#'WriteSubscription'{} = Record) ->
     };
 translate_from_protobuf(#'QuotaSubscription'{}) ->
     #quota_subscription{};
+translate_from_protobuf(#'FileAccessedSubscription'{} = Record) ->
+    #file_accessed_subscription{
+        counter_threshold = Record#'FileAccessedSubscription'.counter_threshold,
+        time_threshold = Record#'FileAccessedSubscription'.time_threshold
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
@@ -422,6 +437,12 @@ translate_to_protobuf(#file_renamed_event{top_entry =  TopEntry, child_entries =
         child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};
 translate_to_protobuf(#file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
     #'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
+translate_to_protobuf(#file_accessed_event{} = Record) ->
+    {file_accessed_event, #'FileAccessedEvent'{
+        file_uuid = Record#file_accessed_event.file_uuid,
+        open_count = Record#file_accessed_event.open_count,
+        release_count = Record#file_accessed_event.release_count
+    }};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
@@ -454,6 +475,15 @@ translate_to_protobuf(#'permission_changed_subscription'{} = Record) ->
     }};
 translate_to_protobuf(#'quota_subscription'{}) ->
     {quota_subscription, #'QuotaSubscription'{}};
+translate_to_protobuf(#'file_removal_subscription'{} = Record) ->
+    {file_removal_subscription, #'FileRemovalSubscription'{
+        file_uuid = Record#'file_removal_subscription'.file_uuid
+    }};
+translate_to_protobuf(#'file_accessed_subscription'{} = Record) ->
+    {file_accessed_subscription, #'FileAccessedSubscription'{
+        counter_threshold = Record#'file_accessed_subscription'.counter_threshold,
+        time_threshold = Record#'file_accessed_subscription'.time_threshold
+    }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
 translate_to_protobuf(#handshake_response{session_id = Id}) ->

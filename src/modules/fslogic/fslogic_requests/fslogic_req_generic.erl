@@ -159,22 +159,13 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-delete(#fslogic_ctx{space_id = SpaceId} = CTX, File) ->
-    {ok, FileUUID} = file_meta:to_uuid(File),
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID, SpaceId),
-    FuseResponse = case file_meta:get(File) of
+delete(CTX, File) ->
+    case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
             delete_dir(CTX, FileDoc);
         {ok, FileDoc} ->
             delete_file(CTX, FileDoc)
-    end,
-    case FuseResponse of
-        #fuse_response{status = #status{code = ?OK}} ->
-            fslogic_event:emit_file_removal(FileGUID);
-        _ ->
-            ok
-    end,
-    FuseResponse.
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -468,53 +459,20 @@ delete_file(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
-delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
+delete_impl(CTX, File) ->
     {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+
     {ok, FileChildren} =
         case Type of
             ?DIRECTORY_TYPE ->
                 file_meta:list_children(FileDoc, 0, 1);
-            ?REGULAR_FILE_TYPE ->
-                case catch fslogic_utils:get_local_file_location(File) of
-                    #document{value = #file_location{} = Location} ->
-                        ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
-                        Results =
-                            lists:map( %% @todo: run this via task manager
-                                fun({StorageId, FileId}) ->
-                                    case storage:get(StorageId) of
-                                        {ok, Storage} ->
-                                            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
-                                            case storage_file_manager:unlink(SFMHandle) of
-                                                ok -> ok;
-                                                {error, Reason1} ->
-                                                    {{StorageId, FileId}, {error, Reason1}}
-                                            end ;
-                                        {error, Reason2} ->
-                                            {{StorageId, FileId}, {error, Reason2}}
-                                    end
-                                end, ToDelete),
-                        case Results -- [ok] of
-                            [] -> ok;
-                            Errors ->
-                                lists:foreach(
-                                    fun({{SID0, FID0}, {error, Reason0}}) ->
-                                        ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
-                                    end, Errors)
-                        end,
-                        {ok, []};
-                    Reason3 ->
-                        ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p", [File, Reason3]),
-                        {ok, []}
-                end;
             _ ->
                 {ok, []}
         end,
     case length(FileChildren) of
         0 ->
-            {ok, ParentDoc} = file_meta:get_parent(FileDoc),
-            fslogic_times:update_mtime_ctime(ParentDoc, fslogic_context:get_user_id(CTX)),
-            ok = file_meta:delete(FileDoc),
+            ok = worker_proxy:call(file_deletion_worker,
+                {fslogic_deletion_request, CTX, FileUUID}),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
