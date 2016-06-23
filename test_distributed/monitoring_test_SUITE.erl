@@ -30,17 +30,99 @@ all() ->
 -define(COUNTER_TIMEOUT, timer:seconds(30)).
 
 -define(SPACE_ID, <<"s1">>).
+-define(USER_ID, <<"u1">>).
+
+-define(BLOCK_ACCESS_UPDATE, #{
+    update_value => #{write_operations_counter => 10, read_operations_counter => 40},
+    is_updated => fun(BufferState) ->
+        case maps:get(write_operations_counter, BufferState) of
+            10 ->
+                case maps:get(read_operations_counter, BufferState) of
+                    40 ->
+                        true;
+                    _ ->
+                        false
+                end;
+            _ ->
+                false
+        end
+    end
+}).
+
+-define(DATA_ACCESS_UPDATE, #{
+    update_value => #{write_counter => 25, read_counter => 80},
+    is_updated => fun(BufferState) ->
+        case maps:get(write_counter, BufferState) of
+            25 ->
+                case maps:get(read_counter, BufferState) of
+                    80 ->
+                        true;
+                    _ ->
+                        false
+                end;
+            _ ->
+                false
+        end
+    end
+}).
+
 -define(MONITORING_TYPES, [
-    #monitoring_id{
+    {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = storage_used
-    },
-    #monitoring_id{
+    }, none, [100]},
+    {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = storage_quota
-    }
+    }, none, [100]},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = connected_users
+    }, none, [100]},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = storage_used,
+        secondary_subject_type = user,
+        secondary_subject_id = ?USER_ID
+    }, #{
+        update_value => 60,
+        is_updated => fun(BufferState) ->
+            case maps:get(storage_used, BufferState) of
+                60 ->
+                   true;
+                _ ->
+                   false
+            end
+        end
+    }, [100]},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = block_access
+    }, ?BLOCK_ACCESS_UPDATE, [100, 100]},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = block_access,
+        secondary_subject_type = user,
+        secondary_subject_id = ?USER_ID
+    }, ?BLOCK_ACCESS_UPDATE, [100, 100]},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = data_access
+    }, ?DATA_ACCESS_UPDATE, [100, 100]},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = data_access,
+        secondary_subject_type = user,
+        secondary_subject_id = ?USER_ID
+    }, ?DATA_ACCESS_UPDATE, [100, 100]}
 ]).
 
 -define(FORMATS, [json, xml]).
@@ -55,25 +137,25 @@ all() ->
 rrd_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    lists:foreach(fun(MonitoringId) ->
+    lists:foreach(fun({MonitoringId, _, UpdateValue}) ->
         %% create
         ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId])),
+        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId, #{}])),
         ?assertEqual(true, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        {ok, #document{value = #monitoring_state{rrd_file = RRDFile}} = Doc} =
+        {ok, #document{value = #monitoring_state{rrd_file = RRDFile} = State} = Doc} =
             rpc:call(Worker, monitoring_state, get, [MonitoringId]),
         ?assertNotEqual(undefinied, RRDFile),
 
         %% second create
-        ?assertEqual(already_exists, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId])),
+        ?assertEqual(already_exists, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId, #{}])),
         ?assertEqual({ok, Doc}, rpc:call(Worker, monitoring_state, get, [MonitoringId])),
 
         %% update
         {ok, #monitoring_state{rrd_file = UpdatedRRDFile}} = ?assertMatch(
             {ok, #monitoring_state{}}, rpc:call(Worker, rrd_utils, update_rrd,
-                [MonitoringId, 100])),
+                [MonitoringId, State, UpdateValue])),
         ?assertNotEqual(RRDFile, UpdatedRRDFile),
 
         %% export
@@ -91,7 +173,7 @@ rrd_test(Config) ->
 monitoring_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    lists:foreach(fun(MonitoringId) ->
+    lists:foreach(fun({MonitoringId, StateBufferTest, _}) ->
         %% start
         ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
@@ -99,17 +181,33 @@ monitoring_test(Config) ->
 
         ?assertEqual(true, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        {ok, #document{value = #monitoring_state{rrd_file = RRDFile, active = Active}} = Doc} =
+        {ok, #document{value = #monitoring_state{rrd_file = RRDFile, active = Active} = State} = Doc} =
             rpc:call(Worker, monitoring_state, get, [MonitoringId]),
         ?assertNotEqual(undefinied, RRDFile),
         ?assertEqual(true, Active),
 
         %% second start
         ?assertEqual(ok, ?reg(Worker, {start, MonitoringId})),
-        ?assertEqual({ok, Doc}, rpc:call(Worker, monitoring_state, get, [MonitoringId])),
 
         %% update
         ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
+
+        case StateBufferTest of
+            none -> ok;
+            _ ->
+                #monitoring_state{state_buffer = StateBuffer} = State,
+                UpdateValue = maps:get(update_value, StateBufferTest),
+                IsUpdated = maps:get(is_updated, StateBufferTest),
+
+                ?assertEqual(false, IsUpdated(StateBuffer)),
+                ?reg(Worker, {update_buffer_state, MonitoringId, UpdateValue}),
+
+                {ok, #document{value = #monitoring_state{state_buffer = UpdatedStateBuffer}}} =
+                    rpc:call(Worker, monitoring_state, get, [MonitoringId]),
+
+                ?assertEqual(true, IsUpdated(UpdatedStateBuffer))
+        end,
+
         ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
 
         %% export
@@ -209,7 +307,7 @@ end_per_testcase(_, Config) ->
     ok.
 
 clear_state(Worker) ->
-    lists:foreach(fun(MonitoringId) ->
+    lists:foreach(fun({MonitoringId, _, _}) ->
         ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [MonitoringId]))
     end,
         ?MONITORING_TYPES).

@@ -277,7 +277,7 @@ metric_get(Config) ->
 
     ?assertMatch(ok, rpc:call(WorkerP1, worker_proxy, call, [monitoring_worker, {start, MonitoringId}])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
-    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, create,
+    ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save,
         [#document{key = MonitoringId#monitoring_id{provider_id = Prov2ID}, value =  State}])),
 
     % when

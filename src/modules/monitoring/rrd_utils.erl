@@ -16,7 +16,7 @@
 -include("modules/monitoring/rrd_definitions.hrl").
 
 %% API
--export([create_rrd/1, update_rrd/2, export_rrd/3]).
+-export([create_rrd/2, update_rrd/3, export_rrd/3]).
 
 -type rrd_file() :: binary().
 %% Params: [Heartbeat, MinValue, MaxValue]
@@ -34,9 +34,9 @@
 %% Creates rrd with given parameters if database entry for it is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec create_rrd(#monitoring_id{}) -> ok | already_exists.
-create_rrd(MonitoringId) ->
-    #rrd_definition{datastore = Datastore, rras_map = RRASMap, options = Options} =
+-spec create_rrd(#monitoring_id{}, maps:map()) -> ok | already_exists.
+create_rrd(MonitoringId, StateBuffer) ->
+    #rrd_definition{datastores = Datastores, rras_map = RRASMap, options = Options} =
         get_rrd_definition(MonitoringId),
     StepInSeconds = proplists:get_value(step, Options),
 
@@ -44,7 +44,7 @@ create_rrd(MonitoringId) ->
         false ->
             Path = get_path(),
             poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
-                ok = rrdtool:create(Pid, Path, [Datastore],
+                ok = rrdtool:create(Pid, Path, Datastores,
                     parse_rras_map(RRASMap), Options)
             end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
@@ -53,7 +53,8 @@ create_rrd(MonitoringId) ->
             {ok, _} = monitoring_state:save(#document{key = MonitoringId,
                 value = #monitoring_state{
                     rrd_file = RRDFile,
-                    monitoring_interval = timer:seconds(StepInSeconds)
+                    monitoring_interval = timer:seconds(StepInSeconds),
+                    state_buffer = StateBuffer
                 }}),
             ok;
         true ->
@@ -65,33 +66,26 @@ create_rrd(MonitoringId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates RRD file content with given data.
+%% Updates RRD file content with given data. Does not saves rrd to database.
 %% @end
 %%--------------------------------------------------------------------
--spec update_rrd(#monitoring_id{}, term()) -> {ok, #monitoring_state{}}.
-update_rrd(MonitoringId, UpdateValue) ->
-    #rrd_definition{datastore = Datastore} = get_rrd_definition(MonitoringId),
-    {DSName, _, _} = Datastore,
+-spec update_rrd(#monitoring_id{}, #monitoring_state{}, [term()]) -> {ok, #monitoring_state{}}.
+update_rrd(MonitoringId, MonitoringState, UpdateValues) ->
+    #rrd_definition{datastores = Datastores} = get_rrd_definition(MonitoringId),
+    #monitoring_state{rrd_file = RRDFile} = MonitoringState,
 
-    #monitoring_state{rrd_file = RRDFile} = MonitoringState =
-        case monitoring_state:get(MonitoringId) of
-            {ok, #document{value = State}} ->
-                State;
-            {error, {not_found, _}} ->
-                ok = create_rrd(MonitoringId),
-                {ok, #document{value = State}} = monitoring_state:get(MonitoringId),
-                State
-        end,
+    UpdatesList = lists:zip(
+        lists:map(fun({DSName, _, _}) -> DSName end, Datastores),
+        UpdateValues
+    ),
 
     {ok, Path} = write_rrd_to_file(RRDFile),
     poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
-        ok = rrdtool:update(Pid, Path, [{DSName, UpdateValue}])
+        ok = rrdtool:update(Pid, Path, UpdatesList)
     end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
     {ok, UpdatedRRDFile} = read_rrd_from_file(Path),
     UpdatedMonitoringState = MonitoringState#monitoring_state{rrd_file = UpdatedRRDFile},
-    {ok, _} = monitoring_state:save(#document{key = MonitoringId,
-        value = UpdatedMonitoringState}),
     {ok, UpdatedMonitoringState}.
 
 %%--------------------------------------------------------------------
@@ -101,10 +95,9 @@ update_rrd(MonitoringId, UpdateValue) ->
 %%--------------------------------------------------------------------
 -spec export_rrd(#monitoring_id{}, atom(), Format :: json | xml) -> {ok, binary()}.
 export_rrd(MonitoringId, Step, Format) ->
-    #rrd_definition{datastore = Datastore, rras_map = RRASMap, options = Options} =
+    #rrd_definition{datastores = Datastores, rras_map = RRASMap, options = Options, unit = Unit} =
         get_rrd_definition(MonitoringId),
     StepInSeconds = proplists:get_value(step, Options),
-    {DSName, _, _} = Datastore,
 
     {ok, #document{value = #monitoring_state{rrd_file = RRDFile}}} =
         monitoring_state:get(MonitoringId),
@@ -135,16 +128,26 @@ export_rrd(MonitoringId, Step, Format) ->
             "; " ++ atom_to_list(SecondarySubjectType) ++ " " ++ binary_to_list(SecondarySubjectId)
     end,
 
-    Description = "\"" ++ atom_to_list(MainSubjectType) ++ " " ++ binary_to_list(MainSubjectId)
-        ++ "; metric " ++ atom_to_list(MetricType) ++ SecondaryDescription
-        ++ "; oneprovider ID " ++ binary_to_list(ProviderId) ++ "\"",
+    DescriptionBase = lists:flatten(io_lib:format("\"~s ~s; metric ~s~s; oneprovider ID ~s",
+        [atom_to_list(MainSubjectType), binary_to_list(MainSubjectId), atom_to_list(MetricType),
+            SecondaryDescription, binary_to_list(ProviderId)])),
+
+    Sources = lists:foldl(
+        fun({DSName, _, _}, Acc) ->
+            lists:flatten(io_lib:format("~s DEF:~s=~s:~s:~s:step=~b",
+                [Acc, DSName, Path, DSName, atom_to_list(CF), StepInSeconds * PDPsPerCDP]))
+        end, "", Datastores),
+
+    Exports = lists:foldl(
+        fun({DSName, _, _}, Acc) ->
+            lists:flatten(io_lib:format("~s XPORT:~s:~s; ~s[~s]\"",
+                [Acc, DSName, DescriptionBase, DSName, Unit]))
+        end, "", Datastores),
 
     {ok, Data} = poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
         rrdtool:xport(Pid,
-            "DEF:export=" ++ Path ++ ":" ++ DSName ++ ":"
-                ++ atom_to_list(CF) ++ ":step="
-                ++ integer_to_list(StepInSeconds * PDPsPerCDP),
-            "XPORT:export:" ++ Description,
+            Sources,
+            Exports,
             FormatOptions ++ " --start now-" ++ maps:get(Step, ?MAKESPAN_FOR_STEP)
                 ++ " --end now")
     end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
@@ -199,12 +202,20 @@ get_path() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_rrd_definition(#monitoring_id{}) -> #rrd_definition{}.
-get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = storage_used,
-    main_subject_id = _, provider_id = _}) ->
-    ?STORAGE_USED_PER_SPACE_RRD;
-get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = storage_quota,
-    main_subject_id = _, provider_id = _}) ->
-    ?STORAGE_QUOTA_PER_SPACE_RRD.
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = storage_used}) ->
+    ?STORAGE_USED_RRD;
+
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = storage_quota}) ->
+    ?STORAGE_QUOTA_RRD;
+
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = connected_users}) ->
+    ?CONNECTED_USERS_RRD;
+
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = data_access}) ->
+    ?DATA_ACCESS_RRD;
+
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = block_access}) ->
+    ?BLOCK_ACCESS_IOPS_RRD.
 
 %%--------------------------------------------------------------------
 %% @private

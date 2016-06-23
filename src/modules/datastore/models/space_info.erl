@@ -117,15 +117,13 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(space_info, create, _, _, {ok, SpaceId}) ->
-    start_monitoring(SpaceId);
+    monitoring_action(start, SpaceId);
 'after'(space_info, create_or_update, _, _, {ok, SpaceId}) ->
-    start_monitoring(SpaceId);
+    monitoring_action(start, SpaceId);
 'after'(space_info, save, _, _, {ok, SpaceId}) ->
-    start_monitoring(SpaceId);
+    monitoring_action(start, SpaceId);
 'after'(space_info, delete, _, _, SpaceId) ->
-    MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
-    worker_proxy:cast(monitoring_worker, {stop, MonitoringId#monitoring_id{metric_type = storage_used}}),
-    worker_proxy:cast(monitoring_worker, {stop, MonitoringId#monitoring_id{metric_type = storage_quota}});
+    monitoring_action(stop, SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -271,11 +269,12 @@ fetch(Auth, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts monitoring for given space id.
+%% Starts or stops monitoring for given user id.
 %% @end
 %%--------------------------------------------------------------------
--spec start_monitoring(datastore:id()) -> no_return().
-start_monitoring(SpaceId) ->
+-spec monitoring_action(start | stop, datastore:id()) -> no_return().
+monitoring_action(Action, SpaceId) ->
     MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
-    worker_proxy:cast(monitoring_worker, {start, MonitoringId#monitoring_id{metric_type = storage_used}}),
-    worker_proxy:cast(monitoring_worker, {start, MonitoringId#monitoring_id{metric_type = storage_quota}}).
+    lists:foreach(fun(MetricType) ->
+        worker_proxy:cast(monitoring_worker, {Action, MonitoringId#monitoring_id{metric_type = MetricType}})
+    end, [storage_used, storage_quota, connected_users, data_access, block_access]).

@@ -82,6 +82,7 @@ init(_Args) ->
                 end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
+                monitoring_updates:handle_write_events_for_monitoring(Evts, Ctx),
                 handle_write_events(Evts, Ctx)
             end,
             terminate_handler = event_utils:send_subscription_cancellation_handler()
@@ -104,6 +105,7 @@ init(_Args) ->
 
     ReadSub = event_subscriptions:read_subscription(
         fun(Evts, Ctx) ->
+            monitoring_updates:handle_read_events_for_monitoring(Evts, Ctx),
             handle_read_events(Evts, Ctx)
         end),
 
