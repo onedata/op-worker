@@ -707,7 +707,7 @@ parse_renamed_entries([TopEntryRaw | ChildEntriesRaw]) ->
         new_path = TopEntryNewPath}, ChildEntries}.
 
 %%--------------------------------------------------------------------
-%% @doc Converts list of entry tuples to records that can be sent or emitted
+%% @doc Creates phantom file for each renamed entry if space has changed
 %%--------------------------------------------------------------------
 -spec create_phantom_files([{OldUuid :: fslogic_worker:file_guid(),
     NewUuid :: fslogic_worker:file_guid(), NewPath :: file_meta:path()}],

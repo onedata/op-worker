@@ -638,7 +638,14 @@ create_phantom_file(OldUUID, OldScope, NewGUID) ->
             true ->
                 ok
         end,
-        file_meta:delete(PhantomUuid)
+        case file_meta:delete(PhantomUuid) of
+            ok ->
+                ?debug("Deleted phantom file redirecting to ~p", [NewGUID]),
+                ok;
+            Error ->
+                ?debug("Error deleting phantom file redirecting to ~p: ~p", [NewGUID, Error]),
+                Error
+        end
     end, ?NODE_LEVEL),
     {ok, PhantomUuid}.
 
