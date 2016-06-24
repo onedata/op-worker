@@ -154,6 +154,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 %%--------------------------------------------------------------------
 %% @doc Deletes file.
 %% For best performance use following arg types: document -> uuid -> path
+%% If parameter Silent is true, file_removal_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
@@ -437,7 +438,7 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv delete_impl(CTX, File) with permission check
+%% @equiv delete_impl(CTX, File, Silent) with permission check
 %%--------------------------------------------------------------------
 -spec delete_dir(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
     FuseResponse :: #fuse_response{} | no_return().
@@ -446,7 +447,7 @@ delete_dir(CTX, File, Silent) ->
     delete_impl(CTX, File, Silent).
 
 %%--------------------------------------------------------------------
-%% @equiv delete_impl(CTX, File) with permission check
+%% @equiv delete_impl(CTX, File, Silent) with permission check
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
     FuseResponse :: #fuse_response{} | no_return().
@@ -455,7 +456,10 @@ delete_file(CTX, File, Silent) ->
     delete_impl(CTX, File, Silent).
 
 %%--------------------------------------------------------------------
-%% @doc Deletes file or directory
+%% @doc
+%% Deletes file or directory
+%% If parameter Silent is true, file_removal_event will not be emitted.
+%% @end
 %%--------------------------------------------------------------------
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
     FuseResponse :: #fuse_response{} | no_return().

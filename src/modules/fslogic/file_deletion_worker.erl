@@ -123,7 +123,8 @@ cleanup() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes file and file meta.
+%% Removes file and file meta. If parameter Silent is true, file_removal_event
+%% will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_meta:uuid(), session:id(), boolean()) -> ok.
