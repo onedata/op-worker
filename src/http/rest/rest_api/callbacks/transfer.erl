@@ -28,7 +28,13 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {session_id :: session:id()}).
+-record(state, {
+    session_id :: session:id(),
+    status :: status(),
+    callback :: binary(),
+    path :: file_meta:path(),
+    target_provider_id :: oneprovider:id()
+}).
 
 %%%===================================================================
 %%% API
@@ -89,15 +95,28 @@ stop(TransferId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessionId, FileEntry, ProviderId, Callback]) ->
+    Server = self(),
     spawn(fun() ->
         try
-            ok = onedata_file_api:replicate_file(SessionId, FileEntry, ProviderId)
+            gen_server:cast(Server, transfer_active),
+            ok = onedata_file_api:replicate_file(SessionId, FileEntry, ProviderId),
+            gen_server:cast(Server, transfer_completed)
         catch
             _:E ->
+                gen_server:cast(Server, transfer_failed),
                 ?error_stacktrace("Could not replicate file ~p due to ~p", [FileEntry, E])
         end
     end),
-    {ok, #state{}}.
+    FilePath =
+        case FileEntry of
+            {path, Path} ->
+                Path;
+            {guid, Guid} ->
+                {ok, Path} = onedata_file_api:get_file_path(SessionId, Guid),
+                Path
+        end,
+    {ok, #state{session_id = SessionId, status = scheduled, callback = Callback,
+        path = FilePath, target_provider_id = ProviderId}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,6 +132,15 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_call(get_info, _From, State = #state{status = Status, path = Path, target_provider_id = TargetProviderId}) ->
+    Response = [
+        {<<"path">>, Path},
+        {<<"status">>, atom_to_binary(Status, utf8)},
+        {<<"targetProviderId">>, TargetProviderId}
+    ],
+    {reply, Response, State};
+handle_call(get_status, _From, State) ->
+    {reply, State#state.status, State};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -127,6 +155,13 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_cast(transfer_active, State) ->
+    {noreply, State#state{status = active}};
+handle_cast(transfer_completed, State = #state{callback = Callback}) ->
+    http_client:get(Callback),
+    {noreply, State#state{status = completed}};
+handle_cast(transfer_failed, State) ->
+    {noreply, State#state{status = failed}};
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
