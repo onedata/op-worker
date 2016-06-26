@@ -29,7 +29,7 @@
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
-    get_transfers/1]).
+    get_transfers/1, remove_transfer/2, add_transfer/2]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
@@ -467,6 +467,32 @@ get_transfers(SessionId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes transfer from session memory
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+remove_transfer(SessionId, TransferId) ->
+    session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
+            FilteredTransfers = lists:filter(fun(T) ->
+                    T =/= TransferId
+                end, Transfers),
+            Sess#session{transfers = FilteredTransfers}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add transfer to session memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+add_transfer(SessionId, TransferId) ->
+    session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
+            Sess#session{transfers = [TransferId | Transfers]}
+        end).
+
 
 %%%===================================================================
 %%% Internal functions

@@ -140,15 +140,9 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
     File = get_file(State),
 
     {ok, _} = onedata_file_api:stat(Auth, File),
-    spawn(fun() ->
-        try
-            ok = onedata_file_api:replicate_file(Auth, File, ProviderId)
-        catch
-            _:E ->
-                ?error_stacktrace("Could not replicate file ~p due to ~p", [File, E])
-        end
-    end),
-    Response = json_utils:encode([{<<"transferId">>, <<"">>}]), %todo start async transfer
+    {ok, TransferId} = transfer:start(Auth, File, ProviderId, Callback),
+
+    Response = json_utils:encode([{<<"transferId">>, TransferId}]),
     {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
     {Response, Req2, State}.
 

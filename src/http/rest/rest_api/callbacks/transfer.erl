@@ -14,8 +14,10 @@
 
 -behaviour(gen_server).
 
+-include_lib("ctool/include/logging.hrl").
+
 %% API
--export([start_link/0, get_status/1, get/1, stop/1]).
+-export([start/4, get_status/1, get/1, stop/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -26,7 +28,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {session_id :: session:id()}).
 
 %%%===================================================================
 %%% API
@@ -37,10 +39,14 @@
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+-spec start(session:id(), file_meta:entry(), oneprovider:id(), binary()) ->
+    {ok, id()} | ignore | {error, Reason :: term()}.
+start(SessionId, FileEntry, ProviderId, Callback) ->
+    {ok, Pid} = gen_server:start_link({local, ?SERVER}, ?MODULE,
+        [SessionId, FileEntry, ProviderId, Callback], []),
+    TransferId = pid_to_id(Pid),
+    session:add_transfer(SessionId, TransferId),
+    {ok, TransferId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -48,17 +54,17 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_status(TransferId :: id()) -> status().
-get_status(_TransferId)  ->
-    completed.
+get_status(TransferId)  ->
+    gen_server:call(get_status, id_to_pid(TransferId)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets transfer info
 %% @end
 %%--------------------------------------------------------------------
--spec get(TransferId :: id()) -> [].
-get(_TransferId)  ->
-    [].
+-spec get(TransferId :: id()) -> list().
+get(TransferId)  ->
+    gen_server:call(get_info, id_to_pid(TransferId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -66,8 +72,8 @@ get(_TransferId)  ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stop(id()) -> ok.
-stop(Id) ->
-    ok.
+stop(TransferId) ->
+    gen_server:stop(id_to_pid(TransferId)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -82,7 +88,15 @@ stop(Id) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([]) ->
+init([SessionId, FileEntry, ProviderId, Callback]) ->
+    spawn(fun() ->
+        try
+            ok = onedata_file_api:replicate_file(SessionId, FileEntry, ProviderId)
+        catch
+            _:E ->
+                ?error_stacktrace("Could not replicate file ~p due to ~p", [FileEntry, E])
+        end
+    end),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -100,7 +114,8 @@ init([]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+    ?log_bad_request(_Request),
+    {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,6 +128,7 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(_Request, State) ->
+    ?log_bad_request(_Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -126,6 +142,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(_Info, State) ->
+    ?log_bad_request(_Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -139,8 +156,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, #state{session_id = SessionId}) ->
+    session:remove_transfer(SessionId, pid_to_id(self())).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -156,3 +173,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts pid of transfer handler to transfer id
+%% @end
+%%--------------------------------------------------------------------
+-spec pid_to_id(Pid :: pid()) -> id().
+pid_to_id(Pid) ->
+    base64url:encode(term_to_binary(Pid)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts transfer id to pid of transfer handler
+%% @end
+%%--------------------------------------------------------------------
+-spec id_to_pid(TransferId :: id()) -> pid().
+id_to_pid(TransferId) ->
+    binary_to_term(base64url:decode(TransferId)).
