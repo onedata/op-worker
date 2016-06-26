@@ -28,7 +28,8 @@
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
-    all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2]).
+    all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
+    get_transfers/1]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
@@ -449,6 +450,20 @@ remove_open_file(SessionId, FileUUID) ->
             {ok, _} = session:save(Doc#document{value = Session#session{
                 open_files = UpdatedOpenFiles}}),
             ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes open file UUID from session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_transfers(session:id()) -> {ok, [binary()]} | {error, Reason :: term()}.
+get_transfers(SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{transfers = Transfers}}} ->
+            {ok, Transfers};
         {error, Reason} ->
             {error, Reason}
     end.

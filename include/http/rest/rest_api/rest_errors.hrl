@@ -40,6 +40,8 @@
     {<<"error_description">>, <<"Requested limit is invalid, it must be of integer type.">>}]}).
 -define(ERROR_LIMIT_TOO_LARGE(Max), {?BAD_REQUEST, [{<<"error">>, <<"limit_too_large">>},
     {<<"error_description">>, <<"Requested limit exceeds maximal value of ", (integer_to_binary(Max))/binary, ".">>}]}).
+-define(ERROR_INVALID_STATUS, {?BAD_REQUEST, [{<<"error">>, <<"invalid_status">>},
+    {<<"error_description">>, <<"Requested transfer status is invalid.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},
