@@ -104,8 +104,8 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
             gen_server:cast(Server, transfer_completed)
         catch
             _:E ->
-                gen_server:cast(Server, transfer_failed),
-                ?error_stacktrace("Could not replicate file ~p due to ~p", [FileEntry, E])
+                ?error_stacktrace("Could not replicate file ~p due to ~p", [FileEntry, E]),
+                gen_server:cast(Server, transfer_failed)
         end
     end),
     FilePath =
@@ -142,11 +142,11 @@ handle_call(get_info, _From, State = #state{status = Status, path = Path, target
     {reply, Response, State};
 handle_call(get_status, _From, State) ->
     {reply, State#state.status, State};
+handle_call(transfer_active, _From, State) ->
+    {reply, ok, State#state{status = active}};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
-    {reply, wrong_request, State};
-handle_call(transfer_active, _From, State) ->
-    {reply, ok, State#state{status = active}}.
+    {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
 %% @private
