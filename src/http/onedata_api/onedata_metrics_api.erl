@@ -23,7 +23,7 @@ connected_users | remote_access_kbs | metada_access_ops.
 
 -export_type([gzip/0, subject_type/0, subject_id/0, metric_type/0, step/0]).
 
--export([get_metric/7]).
+-export([get_metric/9]).
 
 %%%===================================================================
 %%% API
@@ -34,17 +34,25 @@ connected_users | remote_access_kbs | metada_access_ops.
 %% Get RRD database for given metric.
 %% @end
 %%--------------------------------------------------------------------
--spec get_metric(onedata_auth_api:auth(), subject_type(), subject_id(),
-    metric_type(), step(), oneprovider:id(), format()) -> {ok, binary()}.
-get_metric(_Auth, SubjectType, SubjectId, MetricType, Step, ProviderId, Format) ->
+-spec get_metric(onedata_auth_api:auth(), subject_type(), subject_id(), subject_type(), subject_id(),
+    metric_type(), step(), oneprovider:id(), format()) -> {ok, binary()} | {error, term()}.
+get_metric(_Auth, SubjectType, SubjectId, undefined, _,
+    MetricType, Step, ProviderId, Format) ->
     MonitoringId = #monitoring_id{
         main_subject_type = SubjectType,
         main_subject_id = SubjectId,
         metric_type = MetricType,
-        %% TODO add secondary subject to API
-        secondary_subject_id = <<"">>,
-        secondary_subject_type = undefined,
         provider_id = ProviderId
     },
-    {ok, Data} = worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format}),
-    {ok, Data}.
+    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format});
+get_metric(_Auth, SubjectType, SubjectId, SecondarySubjectType, SecondarySubjectId,
+    MetricType, Step, ProviderId, Format) ->
+    MonitoringId = #monitoring_id{
+        main_subject_type = SubjectType,
+        main_subject_id = SubjectId,
+        metric_type = MetricType,
+        secondary_subject_id = SecondarySubjectId,
+        secondary_subject_type = SecondarySubjectType,
+        provider_id = ProviderId
+    },
+    worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format}).
