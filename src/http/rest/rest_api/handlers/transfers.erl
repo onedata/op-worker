@@ -130,7 +130,7 @@ list_transfers(Req, State = #{list_all := true}) ->
                 LimitedTransfers;
             _ ->
                 lists:filter(fun(TransferId) ->
-                    {ok, TransferStatus} = transfer:get_status(TransferId),
+                    TransferStatus = transfer:get_status(TransferId),
                     atom_to_binary(TransferStatus, utf8) =:= Status
                 end, LimitedTransfers)
         end,
