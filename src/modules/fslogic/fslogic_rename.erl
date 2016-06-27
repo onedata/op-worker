@@ -617,7 +617,9 @@ copy_file_contents(SessId, From, To) ->
     {ok, FromHandle} = logical_file_manager:open(SessId, From, read),
     {ok, ToHandle} = logical_file_manager:open(SessId, To, write),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ?CHUNK_SIZE_ENV_KEY),
-    copy_file_contents(SessId, FromHandle, ToHandle, 0, ChunkSize).
+    copy_file_contents(SessId, FromHandle, ToHandle, 0, ChunkSize),
+    ok = logical_file_manager:release(FromHandle),
+    ok = logical_file_manager:release(ToHandle).
 
 -spec copy_file_contents(session:id(), FromHandle :: logical_file_manager:handle(),
     ToHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),

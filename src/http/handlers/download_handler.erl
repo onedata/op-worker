@@ -95,12 +95,21 @@ handle_http_download(Req, FileId) ->
                 SessionId = g_session:get_session_id(),
                 {ok, FileHandle} = logical_file_manager:open(
                     SessionId, {guid, FileId}, read),
-                {ok, #file_attr{size = Size, name = FileName}} =
-                    logical_file_manager:stat(SessionId, {guid, FileId}),
-                StreamFun = cowboy_file_stream_fun(FileHandle, Size),
-                Headers = attachment_headers(FileName),
-                % Reply with attachment headers and a streaming function
-                g_ctx:reply(200, Headers, {Size, StreamFun})
+                try
+                    {ok, #file_attr{size = Size, name = FileName}} =
+                        logical_file_manager:stat(SessionId, {guid, FileId}),
+                    StreamFun = cowboy_file_stream_fun(FileHandle, Size),
+                    logical_file_manager:release(FileHandle),
+                    Headers = attachment_headers(FileName),
+                    % Reply with attachment headers and a streaming function
+                    g_ctx:reply(200, Headers, {Size, StreamFun})
+                catch
+                    T2:M2 ->
+                        ?error_stacktrace("Error while processing file download "
+                        "for user ~p - ~p:~p", [g_session:get_user_id(), T2, M2]),
+                        logical_file_manager:release(FileHandle), % release if possible
+                        g_ctx:reply(500, [], <<"">>)
+                end
             catch
                 T:M ->
                     ?error_stacktrace("Error while processing file download "
