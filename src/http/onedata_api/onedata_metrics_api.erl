@@ -10,6 +10,8 @@
 %%%-------------------------------------------------------------------
 -module(onedata_metrics_api).
 
+-include("global_definitions.hrl").
+
 -type gzip() :: binary().
 -type subject_type() :: provider | space | user.
 -type subject_id() :: binary().
@@ -35,6 +37,14 @@ connected_users | remote_access_kbs | metada_access_ops.
 -spec get_metric(onedata_auth_api:auth(), subject_type(), subject_id(),
     metric_type(), step(), oneprovider:id(), format()) -> {ok, binary()}.
 get_metric(_Auth, SubjectType, SubjectId, MetricType, Step, ProviderId, Format) ->
-    {ok, Data} = worker_proxy:call(monitoring_worker, {export, SubjectType,
-        SubjectId, MetricType, Step, Format, ProviderId}),
+    MonitoringId = #monitoring_id{
+        main_subject_type = SubjectType,
+        main_subject_id = SubjectId,
+        metric_type = MetricType,
+        %% TODO add secondary subject to API
+        secondary_subject_id = <<"">>,
+        secondary_subject_type = undefined,
+        provider_id = ProviderId
+    },
+    {ok, Data} = worker_proxy:call(monitoring_worker, {export, MonitoringId, Step, Format}),
     {ok, Data}.
