@@ -51,7 +51,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>], Req, State}.
+    {[<<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -116,15 +116,21 @@ list_transfers(Req, State = #{list_all := true}) ->
 
     #{auth := Auth, status := Status, limit := Limit} = State3,
 
-    Transfers = session:get_transfers(Auth),
-    LimitedTransfers = lists:sublist(Transfers, Limit),
+    {ok, Transfers} = session:get_transfers(Auth),
+    LimitedTransfers =
+        case Limit of
+            undefined ->
+                Transfers;
+            _ ->
+                lists:sublist(Transfers, Limit)
+        end,
     FilteredTransfers =
         case Status of
             undefined ->
                 LimitedTransfers;
             _ ->
-                lists:filter(fun(Pid) ->
-                    {ok, TransferStatus} = transfer:get_status(Pid),
+                lists:filter(fun(TransferId) ->
+                    {ok, TransferStatus} = transfer:get_status(TransferId),
                     atom_to_binary(TransferStatus, utf8) =:= Status
                 end, LimitedTransfers)
         end,
@@ -135,6 +141,6 @@ list_transfers(Req, State) ->
 
     #{id := Id} = State2,
 
-    {ok, Transfer} = transfer:get(Id),
+    Transfer = transfer:get(Id),
     Response = json_utils:encode(Transfer),
     {Response, Req2, State2}.

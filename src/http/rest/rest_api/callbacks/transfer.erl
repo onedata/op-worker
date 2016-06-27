@@ -26,8 +26,6 @@
 -type id() :: binary().
 -type status() :: scheduled | active | completed | cancelled | failed.
 
--define(SERVER, ?MODULE).
-
 -record(state, {
     session_id :: session:id(),
     status :: status(),
@@ -48,7 +46,7 @@
 -spec start(session:id(), file_meta:entry(), oneprovider:id(), binary()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileEntry, ProviderId, Callback) ->
-    {ok, Pid} = gen_server:start_link({local, ?SERVER}, ?MODULE,
+    {ok, Pid} = gen_server:start(?MODULE,
         [SessionId, FileEntry, ProviderId, Callback], []),
     TransferId = pid_to_id(Pid),
     session:add_transfer(SessionId, TransferId),
@@ -61,7 +59,7 @@ start(SessionId, FileEntry, ProviderId, Callback) ->
 %%--------------------------------------------------------------------
 -spec get_status(TransferId :: id()) -> status().
 get_status(TransferId)  ->
-    gen_server:call(get_status, id_to_pid(TransferId)).
+    gen_server:call(id_to_pid(TransferId), get_status).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,7 +68,7 @@ get_status(TransferId)  ->
 %%--------------------------------------------------------------------
 -spec get(TransferId :: id()) -> list().
 get(TransferId)  ->
-    gen_server:call(get_info, id_to_pid(TransferId)).
+    gen_server:call(id_to_pid(TransferId), get_info).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -157,9 +155,15 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(transfer_active, State) ->
     {noreply, State#state{status = active}};
-handle_cast(transfer_completed, State = #state{callback = Callback}) ->
-    http_client:get(Callback),
+handle_cast(transfer_completed, State = #state{callback = None}) when None =:= undefined; None =:= <<"">> ->
     {noreply, State#state{status = completed}};
+handle_cast(transfer_completed, State = #state{callback = Callback}) ->
+    case http_client:get(Callback) of
+        {ok, _, _, _} ->
+            {noreply, State#state{status = completed}};
+        _ ->
+            {noreply, State#state{status = failed}}
+    end;
 handle_cast(transfer_failed, State) ->
     {noreply, State#state{status = failed}};
 handle_cast(_Request, State) ->

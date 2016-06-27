@@ -479,7 +479,7 @@ remove_transfer(SessionId, TransferId) ->
             FilteredTransfers = lists:filter(fun(T) ->
                     T =/= TransferId
                 end, Transfers),
-            Sess#session{transfers = FilteredTransfers}
+        {ok, Sess#session{transfers = FilteredTransfers}}
         end).
 
 %%--------------------------------------------------------------------
@@ -490,7 +490,7 @@ remove_transfer(SessionId, TransferId) ->
 -spec add_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
 add_transfer(SessionId, TransferId) ->
     session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
-            Sess#session{transfers = [TransferId | Transfers]}
+        {ok, Sess#session{transfers = [TransferId | Transfers]}}
         end).
 
 

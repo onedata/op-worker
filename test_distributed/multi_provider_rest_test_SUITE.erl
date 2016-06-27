@@ -104,17 +104,31 @@ replicate_file(Config) ->
     timer:sleep(timer:seconds(10)),
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),
-    ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
+    [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
     % then
-    timer:sleep(timer:seconds(10)),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"path\":\"/space3/file\",\"status\":\"completed\",\"targetProviderId\":\"">>,
+        domain(WorkerP2),
+        <<"\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
+    timer:sleep(timer:seconds(5)),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
+    DecodedBody2 = json_utils:decode(Body),
     ?assertEqual(
         [
-            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
-            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
-        ], DecodedBody).
+            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
+        ], DecodedBody),
+    ?assertEqual(
+        [
+            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
+        ], DecodedBody2).
 
 replicate_dir(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -143,19 +157,25 @@ replicate_dir(Config) ->
     timer:sleep(timer:seconds(10)),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
-    ?assertMatch([{<<"transferId">>, _}], DecodedBody),
+    [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody),
 
     % then
-    timer:sleep(timer:seconds(10)),
-    {ok, 200, _, Body1} = do_request(WorkerP1, <<"replicas/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
-    {ok, 200, _, Body3} = do_request(WorkerP1, <<"replicas/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"path\":\"/space3/dir1\",\"status\":\"completed\",\"targetProviderId\":\"">>,
+        domain(WorkerP2),
+        <<"\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
     DecodedBody1 = json_utils:decode(Body1),
     DecodedBody2 = json_utils:decode(Body2),
     DecodedBody3 = json_utils:decode(Body3),
     Distribution = [
-        [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
-        [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+        [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
+        [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
     ],
     ?assertEqual(Distribution, DecodedBody1),
     ?assertEqual(Distribution, DecodedBody2),
@@ -360,16 +380,22 @@ replicate_file_by_id(Config) ->
     timer:sleep(timer:seconds(10)),
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),
-    ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
+    [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
     % then
-    timer:sleep(timer:seconds(10)),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"path\":\"/space3/file\",\"status\":\"completed\",\"targetProviderId\":\"">>,
+        domain(WorkerP2),
+        <<"\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
         [
-            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}],
-            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}]
+            [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
+            [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody).
 
 changes_stream_file_meta_test(Config) ->
@@ -475,10 +501,12 @@ init_per_suite(Config) ->
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
+    tracer:stop(),
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
+    tracer:stop(),
     application:start(ssl2),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
