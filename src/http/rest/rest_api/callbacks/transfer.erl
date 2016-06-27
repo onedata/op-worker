@@ -6,7 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Manages data transfers
+%%% Manages data transfers, which include starting the transfer and tracking transfer's status.
+%%% Such gen_server is created for each data transfer, process.
+%%% Server's pid is encoded in form of transfer id and stored in user's session memory.
+%%% The transfer server is deleted on user's request.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(transfer).
@@ -96,8 +99,8 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
     Server = self(),
     spawn(fun() ->
         try
-            gen_server:cast(Server, transfer_active),
-            ok = onedata_file_api:replicate_file(SessionId, FileEntry, ProviderId),
+            ok = gen_server:call(Server, transfer_active),
+            ok = logical_file_manager:replicate_file(SessionId, FileEntry, ProviderId),
             gen_server:cast(Server, transfer_completed)
         catch
             _:E ->
@@ -110,7 +113,7 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
             {path, Path} ->
                 Path;
             {guid, Guid} ->
-                {ok, Path} = onedata_file_api:get_file_path(SessionId, Guid),
+                {ok, Path} = logical_file_manager:get_file_path(SessionId, Guid),
                 Path
         end,
     {ok, #state{session_id = SessionId, status = scheduled, callback = Callback,
@@ -141,7 +144,9 @@ handle_call(get_status, _From, State) ->
     {reply, State#state.status, State};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
-    {reply, wrong_request, State}.
+    {reply, wrong_request, State};
+handle_call(transfer_active, _From, State) ->
+    {reply, ok, State#state{status = active}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -153,8 +158,6 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(transfer_active, State) ->
-    {noreply, State#state{status = active}};
 handle_cast(transfer_completed, State = #state{callback = None}) when None =:= undefined; None =:= <<"">> ->
     {noreply, State#state{status = completed}};
 handle_cast(transfer_completed, State = #state{callback = Callback}) ->

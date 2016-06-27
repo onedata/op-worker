@@ -501,12 +501,10 @@ init_per_suite(Config) ->
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
-    tracer:stop(),
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    tracer:stop(),
     application:start(ssl2),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
