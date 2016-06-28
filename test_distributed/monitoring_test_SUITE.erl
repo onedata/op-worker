@@ -29,8 +29,8 @@ all() ->
 -define(TIMEOUT, timer:seconds(60)).
 -define(COUNTER_TIMEOUT, timer:seconds(30)).
 
--define(SPACE_ID, <<"s1">>).
--define(USER_ID, <<"u1">>).
+-define(SPACE_ID, <<"674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf">>).
+-define(USER_ID, <<"674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf">>).
 
 -define(BLOCK_ACCESS_UPDATE, #{
     update_value => #{write_operations_counter => 10, read_operations_counter => 40},
