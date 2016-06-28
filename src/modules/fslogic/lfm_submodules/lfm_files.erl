@@ -157,7 +157,18 @@ create(SessId, Path, Mode) ->
                 #get_new_file_location{
                     name = Name, parent_uuid = ParentGUID, mode = Mode
                 },
-                fun(#file_location{uuid = GUID}) -> {ok, GUID} end
+                fun(#file_location{uuid = GUID, handle_id = FSLogicHandle}) ->
+                    % TODO VFS-2263
+                    spawn(fun() ->
+                        CTX = fslogic_context:new(SessId),
+                        lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX),
+                            #release{handle_id = FSLogicHandle, uuid = GUID},
+                            fun(_) ->
+                                ok
+                            end)
+                    end),
+                    {ok, GUID}
+                end
             )
         end).
 
