@@ -56,7 +56,8 @@
     memory = [] :: [{Key :: term(), Value :: term()}],
     % Handles for opened files
     handles = #{} :: #{binary() => storage_file_manager:handle()},
-    open_files = sets:new() :: sets:set(file_meta:uuid())
+    open_files = sets:new() :: sets:set(file_meta:uuid()),
+    transfers = [] :: [transfer:id()]
 }).
 
 %% Local, cached version of OZ user
