@@ -56,7 +56,8 @@
     memory = [] :: [{Key :: term(), Value :: term()}],
     % Handles for opened files
     handles = #{} :: #{binary() => storage_file_manager:handle()},
-    open_files = sets:new() :: sets:set(file_meta:uuid())
+    open_files = sets:new() :: sets:set(file_meta:uuid()),
+    transfers = [] :: [transfer:id()]
 }).
 
 %% Local, cached version of OZ user
@@ -191,11 +192,22 @@
     current_size = 0 :: non_neg_integer()
 }).
 
+%% Record that holds monitoring id
+-record(monitoring_id, {
+    main_subject_type = undefined :: atom(),
+    main_subject_id = <<"">> :: datastore:id(),
+    metric_type = undefined :: atom(),
+    secondary_subject_type = undefined :: atom(),
+    secondary_subject_id = <<"">> :: datastore:id(),
+    provider_id = oneprovider:get_provider_id() :: oneprovider:id()
+}).
+
 %% Model for holding state of monitoring
 -record(monitoring_state, {
     rrd_file = undefinied :: rrd_utils:rrd_file(),
     monitoring_interval = 0 :: non_neg_integer(),
-    active = true :: boolean()
+    active = true :: boolean(),
+    state_buffer = #{} :: maps:map()
 }).
 
 %% Model that stores open file

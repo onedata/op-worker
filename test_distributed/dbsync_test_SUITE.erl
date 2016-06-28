@@ -282,8 +282,14 @@ global_stream_with_proto_test(MultiConfig) ->
             D0
         end, lists:seq(1, 5)),
 
+    MonitoringId = #monitoring_id{
+        main_subject_type = space,
+        main_subject_id = <<"space_name1">>,
+        metric_type = storage_used,
+        provider_id = Prov1ID
+    },
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, create,
-        [space, <<"space_name1">>, storage_used, #monitoring_state{}])),
+        [#document{key = MonitoringId, value = #monitoring_state{}}])),
 
     timer:sleep(timer:seconds(10)),
 
@@ -344,8 +350,7 @@ global_stream_with_proto_test(MultiConfig) ->
                 end, maps:to_list(PathMap))
         end, RevPerPath),
 
-    ?assertEqual({ok, #monitoring_state{}}, rpc:call(WorkerP2, monitoring_state,
-        get, [space, <<"space_name1">>, storage_used, Prov1ID])),
+    ?assertEqual(true, rpc:call(WorkerP2, monitoring_state, exists, [MonitoringId])),
 
     {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/space_name1">>}, 0, 100),
     {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/space_name1">>}, 0, 100),
