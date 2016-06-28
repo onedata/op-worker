@@ -39,18 +39,16 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    {ok, Docs} = monitoring_state:decoded_list(),
-    ThisProviderId = oneprovider:get_provider_id(),
-
-    lists:foreach(fun({#monitoring_id{provider_id = ProviderId} = MonitoringId,
-        #monitoring_state{monitoring_interval = Interval}}) ->
-        case ProviderId of
-            ThisProviderId ->
-                erlang:send_after(Interval, monitoring_worker, {timer, {update, MonitoringId}});
-            _ -> ok
-        end
-    end, Docs),
-
+    case monitoring_init_state:decoded_list() of
+        {ok, Docs} ->
+            lists:foreach(fun({MonitoringId, #monitoring_init_state{
+                monitoring_interval = Interval}}) ->
+                    erlang:send_after(Interval, monitoring_worker,
+                            {timer, {update, MonitoringId}})
+            end, Docs);
+        {error, Reason} ->
+            ?error_stacktrace("Cannot restart monitoring - ~p", [Reason])
+    end,
     {ok, #{}}.
 
 %%--------------------------------------------------------------------

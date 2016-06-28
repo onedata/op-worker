@@ -56,6 +56,10 @@ create_rrd(MonitoringId, StateBuffer) ->
                     monitoring_interval = timer:seconds(StepInSeconds),
                     state_buffer = StateBuffer
                 }}),
+            {ok, _} = monitoring_init_state:save(#document{key = MonitoringId,
+                value = #monitoring_init_state{
+                    monitoring_interval = timer:seconds(StepInSeconds)
+                }}),
             ok;
         true ->
             {ok, #document{value = State}} = monitoring_state:get(MonitoringId),

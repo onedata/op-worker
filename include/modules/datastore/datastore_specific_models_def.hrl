@@ -210,6 +210,11 @@
     state_buffer = #{} :: maps:map()
 }).
 
+%% Model for holding lightweight version of monitoring state
+-record(monitoring_init_state, {
+    monitoring_interval = 0 :: non_neg_integer()
+}).
+
 %% Model that stores open file
 -record(open_file, {
     is_removed = false :: true | false,
