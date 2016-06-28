@@ -52,13 +52,14 @@ create_rrd(MonitoringId, StateBuffer) ->
 
             {ok, _} = monitoring_state:save(#document{key = MonitoringId,
                 value = #monitoring_state{
+                    monitoring_id = MonitoringId,
                     rrd_file = RRDFile,
                     monitoring_interval = timer:seconds(StepInSeconds),
                     state_buffer = StateBuffer
                 }}),
             {ok, _} = monitoring_init_state:save(#document{key = MonitoringId,
                 value = #monitoring_init_state{
-                    monitoring_interval = timer:seconds(StepInSeconds)
+                    monitoring_id = MonitoringId
                 }}),
             ok;
         true ->

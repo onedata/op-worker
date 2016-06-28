@@ -24,6 +24,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 -define(START_RETRY_TIMEOUT, timer:seconds(60)).
+-define(FIRST_UPDATE_TIMEOUT, timer:seconds(60)).
 -define(START_RETRY_LIMIT, 3).
 -define(COUNTER_LIMIT, 4294967296). %% 2^32
 
@@ -39,11 +40,11 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case monitoring_init_state:decoded_list() of
+    case monitoring_init_state:list() of
         {ok, Docs} ->
-            lists:foreach(fun({MonitoringId, #monitoring_init_state{
-                monitoring_interval = Interval}}) ->
-                    erlang:send_after(Interval, monitoring_worker,
+            lists:foreach(fun(#document{value = #monitoring_init_state{
+                monitoring_id = MonitoringId}}) ->
+                    erlang:send_after(?FIRST_UPDATE_TIMEOUT, monitoring_worker,
                             {timer, {update, MonitoringId}})
             end, Docs);
         {error, Reason} ->

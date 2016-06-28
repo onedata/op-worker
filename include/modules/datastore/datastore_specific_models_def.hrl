@@ -204,6 +204,7 @@
 
 %% Model for holding state of monitoring
 -record(monitoring_state, {
+    monitoring_id = #monitoring_id{} :: #monitoring_id{},
     rrd_file = undefinied :: rrd_utils:rrd_file(),
     monitoring_interval = 0 :: non_neg_integer(),
     active = true :: boolean(),
@@ -212,7 +213,7 @@
 
 %% Model for holding lightweight version of monitoring state
 -record(monitoring_init_state, {
-    monitoring_interval = 0 :: non_neg_integer()
+    monitoring_id = #monitoring_id{} :: #monitoring_id{}
 }).
 
 %% Model that stores open file
