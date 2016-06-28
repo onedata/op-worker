@@ -96,4 +96,13 @@
     file_uuid :: file_meta:uuid()
 }).
 
+%% definition of a subscription for accessing file
+%% counter_threshold - maximal number of aggregated events before emission
+%% time_threshold    - maximal delay in milliseconds between successive events
+%%                     emissions
+-record(file_accessed_subscription, {
+    counter_threshold :: non_neg_integer(),
+    time_threshold :: non_neg_integer()
+}).
+
 -endif.

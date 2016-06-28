@@ -82,6 +82,7 @@ init(_Args) ->
                 end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
+                monitoring_updates:handle_write_events_for_monitoring(Evts, Ctx),
                 handle_write_events(Evts, Ctx)
             end,
             terminate_handler = event_utils:send_subscription_cancellation_handler()
@@ -104,11 +105,39 @@ init(_Args) ->
 
     ReadSub = event_subscriptions:read_subscription(
         fun(Evts, Ctx) ->
+            monitoring_updates:handle_read_events_for_monitoring(Evts, Ctx),
             handle_read_events(Evts, Ctx)
         end),
 
     case event:subscribe(ReadSub) of
         {ok, _ReadSubId} ->
+            ok;
+        {error, already_exists} ->
+            ok
+    end,
+
+    {ok, FileAccessedThreshold} = application:get_env(?APP_NAME,
+        default_file_accessed_event_counter_threshold),
+    {ok, FileAccessedTimeThreshold} = application:get_env(?APP_NAME,
+        default_file_accessed_event_time_threshold_miliseconds),
+    FileAccessedSub = #subscription{
+        object = #file_accessed_subscription{
+            counter_threshold = FileAccessedThreshold,
+            time_threshold = FileAccessedTimeThreshold
+        },
+        event_stream = ?FILE_ACCESSED_EVENT_STREAM#event_stream_definition{
+            metadata = 0,
+            emission_rule = fun(_) -> true end,
+            init_handler = event_utils:send_subscription_handler(),
+            event_handler = fun(Evts, Ctx) ->
+                handle_file_accessed_events(Evts, Ctx)
+            end,
+            terminate_handler = event_utils:send_subscription_cancellation_handler()
+        }
+    },
+
+    case event:subscribe(FileAccessedSub) of
+        {ok, _FileAccessedSubId} ->
             ok;
         {error, already_exists} ->
             ok
@@ -468,6 +497,20 @@ handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
         {ok, #document{value = #session{identity = #identity{
             user_id = UserId}}}} = session:get(SessId),
         fslogic_times:update_atime({uuid, FileUUID}, UserId)
+    end, Evts).
+
+handle_file_accessed_events(Evts, #{session_id := SessId}) ->
+    lists:foreach(fun(#event{object = #file_accessed_event{file_uuid = FileGUID,
+        open_count = OpenCount, release_count = ReleaseCount}}) ->
+        {ok, FileUUID} = file_meta:to_uuid({guid, FileGUID}),
+
+        case OpenCount - ReleaseCount of
+            Count when Count > 0 ->
+                ok = open_file:register_open(FileUUID, SessId, Count);
+            Count when Count < 0 ->
+                ok = open_file:register_release(FileUUID, SessId, -Count);
+            _ -> ok
+        end
     end, Evts).
 
 %%--------------------------------------------------------------------

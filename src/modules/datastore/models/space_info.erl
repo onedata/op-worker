@@ -117,17 +117,13 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(space_info, create, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
+    monitoring_action(start, SpaceId);
 'after'(space_info, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
+    monitoring_action(start, SpaceId);
 'after'(space_info, save, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {start, space, SpaceId, storage_quota});
+    monitoring_action(start, SpaceId);
 'after'(space_info, delete, ?GLOBAL_ONLY_LEVEL, _, SpaceId) ->
-    worker_proxy:cast(monitoring_worker, {stop, space, SpaceId, storage_used}),
-    worker_proxy:cast(monitoring_worker, {stop, space, SpaceId, storage_quota});
+    monitoring_action(stop, SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -269,3 +265,16 @@ fetch(Auth, SpaceId) ->
     {ok, _} = save(Doc),
 
     {ok, Doc}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts or stops monitoring for given user id.
+%% @end
+%%--------------------------------------------------------------------
+-spec monitoring_action(start | stop, datastore:id()) -> no_return().
+monitoring_action(Action, SpaceId) ->
+    MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
+    lists:foreach(fun(MetricType) ->
+        worker_proxy:cast(monitoring_worker, {Action, MonitoringId#monitoring_id{metric_type = MetricType}})
+    end, [storage_used, storage_quota, connected_users, data_access, block_access]).
