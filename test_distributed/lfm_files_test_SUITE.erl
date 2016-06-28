@@ -81,6 +81,9 @@ ls_test(Config) ->
         {_, ListedElements2} = LSAns2,
         {_, ListedElements3} = LSAns3,
 
+        ?assertEqual({min(Limit, max(length(ElementsList) - Offset, 0)), min(Offset, length(ElementsList)),
+            max(length(ElementsList) - Offset - Limit, 0)},
+            {length(ListedElements), length(ListedElements2), length(ListedElements3)}),
         ?assertEqual(ElementsList,
             lists:sort(lists:map(fun({_, Name}) -> Name  end, ListedElements ++ ListedElements2 ++ ListedElements3)))
     end,
@@ -99,6 +102,8 @@ ls_test(Config) ->
     VerifyLS(100,15, Files),
     VerifyLS(110,40, Files),
     VerifyLS(0,200, Files),
+    VerifyLS(150,50, Files),
+    VerifyLS(175,25, Files),
 
     Dirs = lists:map(fun(I) ->
         list_to_binary(integer_to_list(I) ++ "ls_test_dir") end, lists:seq(1, 150)),
