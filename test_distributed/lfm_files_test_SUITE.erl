@@ -38,7 +38,8 @@
     lfm_truncate_test/1,
     lfm_acl_test/1,
     rm_recursive_test/1,
-    file_gap_test/1
+    file_gap_test/1,
+    ls_test/1
 ]).
 
 all() ->
@@ -52,7 +53,8 @@ all() ->
         lfm_truncate_test,
         lfm_acl_test,
         rm_recursive_test,
-        file_gap_test
+        file_gap_test,
+        ls_test
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -62,6 +64,67 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+ls_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    VerifyLS = fun(Offset, Limit, ElementsList) ->
+        LSAns = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, Offset, Limit),
+        LSAns2 = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, 0, Offset),
+        LSAns3 = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, Offset + Limit, length(ElementsList)),
+        ?assertMatch({ok, _}, LSAns),
+        ?assertMatch({ok, _}, LSAns2),
+        ?assertMatch({ok, _}, LSAns3),
+        {_, ListedElements} = LSAns,
+        {_, ListedElements2} = LSAns2,
+        {_, ListedElements3} = LSAns3,
+
+        ?assertEqual({min(Limit, max(length(ElementsList) - Offset, 0)), min(Offset, length(ElementsList)),
+            max(length(ElementsList) - Offset - Limit, 0)},
+            {length(ListedElements), length(ListedElements2), length(ListedElements3)}),
+        ?assertEqual(ElementsList,
+            lists:sort(lists:map(fun({_, Name}) -> Name  end, ListedElements ++ ListedElements2 ++ ListedElements3)))
+    end,
+
+    Files = lists:sort(lists:map(fun(I) ->
+        list_to_binary(integer_to_list(I) ++ "ls_test_file") end, lists:seq(1, 150))),
+    lists:foreach(fun(F) ->
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<"/space_name1/", F/binary>>, 8#755))
+    end, Files),
+
+    VerifyLS(0,150, Files),
+    VerifyLS(0,20, Files),
+    VerifyLS(0,75, Files),
+    VerifyLS(0,115, Files),
+    VerifyLS(60,55, Files),
+    VerifyLS(100,15, Files),
+    VerifyLS(110,40, Files),
+    VerifyLS(0,200, Files),
+    VerifyLS(150,50, Files),
+    VerifyLS(175,25, Files),
+
+    Dirs = lists:map(fun(I) ->
+        list_to_binary(integer_to_list(I) ++ "ls_test_dir") end, lists:seq(1, 150)),
+    lists:foreach(fun(D) ->
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<"/space_name1/", D/binary>>, 8#755))
+    end, Dirs),
+    FandD = lists:sort(Files ++ Dirs),
+
+    VerifyLS(0,300, FandD),
+    VerifyLS(0,115, FandD),
+    VerifyLS(60,55, FandD),
+    VerifyLS(100,15, FandD),
+    VerifyLS(110,40, FandD),
+    VerifyLS(110,115, FandD),
+    VerifyLS(225,25, FandD),
+    VerifyLS(225,75, FandD),
+    VerifyLS(50,175, FandD),
+    VerifyLS(0,400, FandD),
+
+    ok.
+
 
 fslogic_new_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
