@@ -63,10 +63,10 @@ write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
     #proxyio_response{}.
 read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 
-    UUID = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
-    lfm_utils:call_fslogic(SessionId, fuse_request, #synchronize_block{
-        uuid = UUID, block = #file_block{offset = Offset, size = Size}
-    }, fun(_) -> ok end),
+    GUID = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
+    lfm_utils:call_fslogic(SessionId, fuse_request, {guid, GUID},
+        #synchronize_block{block = #file_block{offset = Offset, size = Size}},
+        fun(_) -> ok end),
 
     {Status, Response} =
         case get_handle(SessionId, Parameters, StorageId, FileId, read) of

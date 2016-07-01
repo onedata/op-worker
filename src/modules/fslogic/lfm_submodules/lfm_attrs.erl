@@ -47,7 +47,7 @@ stat(#lfm_handle{file_guid = FileGUID,
 -spec stat(SessId :: session:id(), FileEntry :: logical_file_manager:file_key()) ->
     {ok, file_attributes()} | logical_file_manager:error_reply().
 stat(SessId, FileEntry) ->
-    lfm_utils:call_fslogic(SessId, fuse_request, #get_file_attr{entry = FileEntry},
+    lfm_utils:call_fslogic(SessId, fuse_request, FileEntry, #get_file_attr{},
         fun(#file_attr{} = Attrs) ->
             {ok, Attrs}
         end).
@@ -73,8 +73,8 @@ update_times(#lfm_handle{file_guid = FileGUID,
 update_times(SessId, FileKey, ATime, MTime, CTime) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, fuse_request,
-        #update_times{uuid = FileGUID, atime = ATime, mtime = MTime, ctime = CTime},
+    lfm_utils:call_fslogic(SessId, fuse_request, {guid, FileGUID},
+        #update_times{atime = ATime, mtime = MTime, ctime = CTime},
         fun(_) -> ok end).
 
 
@@ -96,8 +96,8 @@ get_xattr(#lfm_handle{file_guid = FileGUID,
 get_xattr(SessId, FileKey, XattrName) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #get_xattr{uuid = FileGUID, name = XattrName},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #get_xattr{name = XattrName},
         fun(#xattr{} = Xattr) ->
             {ok, Xattr}
         end).
@@ -121,8 +121,8 @@ set_xattr(#lfm_handle{file_guid = FileGUID,
 set_xattr(SessId, FileKey, Xattr) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #set_xattr{uuid = FileGUID, xattr = Xattr},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #set_xattr{xattr = Xattr},
         fun(_) -> ok end).
 
 
@@ -144,8 +144,8 @@ remove_xattr(#lfm_handle{file_guid = FileGUID,
 remove_xattr(SessId, FileKey, XattrName) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #remove_xattr{uuid = FileGUID, name = XattrName},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #remove_xattr{name = XattrName},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
@@ -165,8 +165,8 @@ list_xattr(#lfm_handle{file_guid = FileGUID,
 list_xattr(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #list_xattr{uuid = FileGUID},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #list_xattr{},
         fun(#xattr_list{names = Names}) ->
             {ok, Names}
         end).
@@ -179,8 +179,8 @@ list_xattr(SessId, FileKey) ->
 get_transfer_encoding(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #get_transfer_encoding{uuid = FileGUID},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #get_transfer_encoding{},
         fun(#transfer_encoding{value = Val}) -> {ok, Val} end).
 
 %%--------------------------------------------------------------------
@@ -192,8 +192,8 @@ get_transfer_encoding(SessId, FileKey) ->
 set_transfer_encoding(SessId, FileKey, Encoding) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #set_transfer_encoding{uuid = FileGUID, value = Encoding},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #set_transfer_encoding{value = Encoding},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
@@ -207,8 +207,8 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 get_cdmi_completion_status(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #get_cdmi_completion_status{uuid = FileGUID},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #get_cdmi_completion_status{},
         fun(#cdmi_completion_status{value = Val}) -> {ok, Val} end).
 
 %%--------------------------------------------------------------------
@@ -223,8 +223,8 @@ get_cdmi_completion_status(SessId, FileKey) ->
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #set_cdmi_completion_status{uuid = FileGUID, value = CompletionStatus},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #set_cdmi_completion_status{value = CompletionStatus},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
@@ -235,8 +235,8 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
 get_mimetype(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #get_mimetype{uuid = FileGUID},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #get_mimetype{},
         fun(#mimetype{value = Val}) -> {ok, Val} end).
 
 %%--------------------------------------------------------------------
@@ -247,6 +247,6 @@ get_mimetype(SessId, FileKey) ->
 set_mimetype(SessId, FileKey, Mimetype) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #set_mimetype{uuid = FileGUID, value = Mimetype},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #set_mimetype{value = Mimetype},
         fun(_) -> ok end).

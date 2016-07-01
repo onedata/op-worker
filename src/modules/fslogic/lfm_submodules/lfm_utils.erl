@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([call_fslogic/4, rm/2, isdir/2]).
+-export([call_fslogic/5, rm/2, isdir/2]).
 
 
 %%--------------------------------------------------------------------
@@ -29,17 +29,20 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec call_fslogic(SessId :: session:id(), RequestType :: fslogic_worker:request_type(),
-    Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
+    ContextEntry :: fslogic_worker:ext_file() | undefined, Request :: term(),
+    OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
-call_fslogic(SessId, fuse_request, Request, OKHandle) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = Request}}) of
+call_fslogic(SessId, fuse_request, ContextEntry, Request, OKHandle) ->
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
+        #fuse_request{context_entry = ContextEntry, fuse_request = Request}}) of
         #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
             OKHandle(Response);
         #fuse_response{status = #status{code = Code}} ->
             {error, Code}
     end;
-call_fslogic(SessId, provider_request, Request, OKHandle) ->
-    case worker_proxy:call(fslogic_worker, {provider_request, SessId, #provider_request{provider_request = Request}}) of
+call_fslogic(SessId, provider_request, ContextEntry, Request, OKHandle) ->
+    case worker_proxy:call(fslogic_worker, {provider_request, SessId,
+        #provider_request{context_entry = ContextEntry, provider_request = Request}}) of
         #provider_response{status = #status{code = ?OK}, provider_response = Response} ->
             OKHandle(Response);
         #provider_response{status = #status{code = Code}} ->

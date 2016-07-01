@@ -38,7 +38,9 @@ all() ->
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}], ?TIMEOUT)).
+-define(req(W, SessId, ContextEntry, FuseRequest), rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{
+        context_entry = ContextEntry, fuse_request = FuseRequest}}], ?TIMEOUT)).
 -define(fcm_req(W, Method, Args), rpc:call(W, fuse_config_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
@@ -59,19 +61,19 @@ create_storage_test_file_test(Config) ->
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
 
-    Response1 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = StorageId, file_uuid = FileGUID
+    Response1 = ?req(Worker, SessId1, {guid, FileGUID}, #create_storage_test_file{
+        storage_id = StorageId
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?OK},
         fuse_response = #storage_test_file{}}, Response1),
 
-    Response2 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = StorageId, file_uuid = <<"unknown_id">>
+    Response2 = ?req(Worker, SessId1, {guid, <<"unknown_id">>}, #create_storage_test_file{
+        storage_id = StorageId
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response2),
 
-    Response3 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = <<"unknown_id">>, file_uuid = FileGUID
+    Response3 = ?req(Worker, SessId1, {guid, FileGUID}, #create_storage_test_file{
+        storage_id = <<"unknown_id">>
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?EAGAIN}}, Response3).
 
@@ -92,25 +94,25 @@ verify_storage_test_file_test(Config) ->
     FileId = rpc:call(Worker, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}]),
     SpaceUuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [<<"space_id1">>]),
 
-    Response1 = ?req(Worker, SessId1, #verify_storage_test_file{
+    Response1 = ?req(Worker, SessId1, undefined, #verify_storage_test_file{
         storage_id = StorageId, space_uuid = SpaceUuid,
         file_id = FileId, file_content = <<"test2">>
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?EINVAL}}, Response1),
 
-    Response2 = ?req(Worker, SessId1, #verify_storage_test_file{
+    Response2 = ?req(Worker, SessId1, undefined, #verify_storage_test_file{
         storage_id = StorageId, space_uuid = SpaceUuid,
         file_id = <<"unknown_id">>, file_content = <<"test">>
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response2),
 
-    Response3 = ?req(Worker, SessId1, #verify_storage_test_file{
+    Response3 = ?req(Worker, SessId1, undefined, #verify_storage_test_file{
         storage_id = <<"unknown_id">>, space_uuid = SpaceUuid,
         file_id = FileId, file_content = <<"test">>
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?EAGAIN}}, Response3),
 
-    Response4 = ?req(Worker, SessId1, #verify_storage_test_file{
+    Response4 = ?req(Worker, SessId1, undefined, #verify_storage_test_file{
         storage_id = StorageId, space_uuid = SpaceUuid,
         file_id = FileId, file_content = <<"test">>
     }),

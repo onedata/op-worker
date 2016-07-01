@@ -56,7 +56,9 @@ all() ->
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}], ?TIMEOUT)).
+-define(req(W, SessId, ContextEntry, FuseRequest), rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{
+        context_entry = ContextEntry, fuse_request = FuseRequest}}], ?TIMEOUT)).
 -define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
@@ -72,8 +74,8 @@ fslogic_new_file_test(Config) ->
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name2">>),
 
-    Resp11 = ?req(Worker, SessId1, #get_new_file_location{parent_uuid = RootUUID1, name = <<"test">>}),
-    Resp21 = ?req(Worker, SessId2, #get_new_file_location{parent_uuid = RootUUID2, name = <<"test">>}),
+    Resp11 = ?req(Worker, SessId1, {guid, RootUUID1}, #get_new_file_location{name = <<"test">>}),
+    Resp21 = ?req(Worker, SessId2, {guid, RootUUID2}, #get_new_file_location{name = <<"test">>}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp11),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp21),
@@ -444,7 +446,7 @@ get_uuid_privileged(Worker, SessId, Path) ->
 get_uuid(Worker, SessId, Path) ->
     #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
         #fuse_response{status = #status{code = ?OK}},
-        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+        ?req(Worker, SessId, {path, Path}, #get_file_attr{}),
         30
     ),
     UUID.

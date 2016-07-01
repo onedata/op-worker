@@ -60,8 +60,8 @@ exists(_FileKey) ->
 mv(SessId, FileKey, TargetPath) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, fuse_request,
-        #rename{uuid = GUID, target_path = TargetPath},
+    lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID},
+        #rename{target_path = TargetPath},
         fun(#file_renamed{new_uuid = NewGuid}) ->
             {ok, NewGuid}
         end).
@@ -88,7 +88,8 @@ cp(_SessId, _FileKey, _TargetPath) ->
 get_parent(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, #get_parent{uuid = FileGUID},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #get_parent{},
         fun(#dir{uuid = ParentGUID}) ->
             {ok, ParentGUID}
         end).
@@ -102,8 +103,8 @@ get_parent(SessId, FileKey) ->
 -spec get_file_path(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGUID) ->
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #get_file_path{uuid = FileGUID},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #get_file_path{},
         fun(#file_path{value = Path}) ->
             {ok, Path}
         end).
@@ -124,7 +125,7 @@ unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_guid = 
 unlink(SessId, FileEntry) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileEntry),
-    lfm_utils:call_fslogic(SessId, fuse_request, #delete_file{uuid = GUID},
+    lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID}, #delete_file{},
         fun(_) -> ok end).
 
 
@@ -150,12 +151,12 @@ create(SessId, Path) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    lfm_utils:call_fslogic(SessId, fuse_request,
-        #get_file_attr{entry = {path, ParentPath}},
+    lfm_utils:call_fslogic(SessId, fuse_request, {path, ParentPath},
+        #get_file_attr{},
         fun(#file_attr{uuid = ParentGUID}) ->
-            lfm_utils:call_fslogic(SessId, fuse_request,
+            lfm_utils:call_fslogic(SessId, fuse_request, {guid, ParentGUID},
                 #get_new_file_location{
-                    name = Name, parent_uuid = ParentGUID, mode = Mode
+                    name = Name, mode = Mode
                 },
                 fun(#file_location{uuid = GUID}) -> {ok, GUID} end
             )
@@ -173,8 +174,8 @@ create(SessId, Path, Mode) ->
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, fuse_request,
-        #get_file_location{uuid = FileGUID, flags = OpenType},
+    lfm_utils:call_fslogic(SessId, fuse_request, {guid, FileGUID},
+        #get_file_location{flags = OpenType},
         fun(#file_location{provider_id = ProviderId, uuid = FileGUID,
             file_id = FileId, storage_id = StorageId} = Location) ->
             {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
@@ -205,9 +206,10 @@ open(SessId, FileKey, OpenType) ->
     ok | logical_file_manager:error_reply().
 release(#lfm_handle{file_location = #file_location{handle_id = undefined}}) ->
     {error, invalid_handle_id};
-release(#lfm_handle{file_guid = FileGUID, fslogic_ctx = CTX, file_location = #file_location{handle_id = FSLogicHandle}}) ->
+release(#lfm_handle{file_guid = FileGUID, fslogic_ctx = CTX,
+    file_location = #file_location{handle_id = FSLogicHandle}}) ->
     lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX), fuse_request,
-        #release{handle_id = FSLogicHandle, uuid = FileGUID},
+        {guid, FileGUID}, #release{handle_id = FSLogicHandle},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
@@ -290,8 +292,8 @@ truncate(#lfm_handle{file_guid = FileGUID, fslogic_ctx = #fslogic_ctx{session_id
 truncate(SessId, FileKey, Size) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, fuse_request,
-        #truncate{uuid = FileGUID, size = Size},
+    lfm_utils:call_fslogic(SessId, fuse_request, {guid, FileGUID},
+        #truncate{size = Size},
         fun(_) ->
             event:emit(#write_event{file_uuid = FileGUID, blocks = [],
                 file_size = Size}, SessId)
@@ -307,8 +309,8 @@ truncate(SessId, FileKey, Size) ->
 get_file_distribution(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #get_file_distribution{uuid = FileGUID},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
             Distribution =
                 lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
@@ -331,8 +333,8 @@ get_file_distribution(SessId, FileKey) ->
 replicate_file(SessId, FileKey, ProviderId) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #replicate_file{uuid = FileGUID, provider_id = ProviderId},
+    lfm_utils:call_fslogic(SessId, provider_request, {guid, FileGUID},
+        #replicate_file{provider_id = ProviderId},
         fun(_) -> ok end).
 
 %%%===================================================================
@@ -521,12 +523,13 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
 -spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
-read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode = OpenType,
+read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = GUID, open_mode = OpenType,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize,
     GenerateEvents, PrefetchData) ->
 
-    lfm_utils:call_fslogic(SessId, fuse_request,
-        #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}, prefetch = PrefetchData},
+    lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID},
+        #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
+            prefetch = PrefetchData},
         fun(_) -> ok end),
 
     {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
@@ -537,7 +540,7 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode 
             case GenerateEvents of
                 true ->
                     ok = event:emit(#read_event{
-                        file_uuid = UUID, blocks = [#file_block{
+                        file_uuid = GUID, blocks = [#file_block{
                             file_id = FileId, storage_id = StorageId, offset = Offset,
                             size = size(Data)
                         }]
