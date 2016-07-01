@@ -24,7 +24,10 @@
     "os_configs": {
         "cfg1": {
             "storages": [
-                "/mnt/st1"
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                }
             ],
             "users": [
                 "user1"
@@ -37,8 +40,14 @@
         },
         "cfg2": {
             "storages": [
-                "/mnt/st1",
-                "/mnt/st2"
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
+                }
             ],
             "users": [
                 "user1",
@@ -69,7 +78,6 @@
         "provider1": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
-            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -108,7 +116,6 @@
         "provider2": {
             "db_driver": "couchdb",
             "os_config": "cfg2",
-            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -147,8 +154,7 @@
     },
     "zone_domains": {
         "oz": {
-            "gui_livereload": "none",
-            "db_driver": "couchbase",
+            "db_driver": "couchdb",
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
