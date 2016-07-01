@@ -63,10 +63,15 @@ create_rrd(MonitoringId, StateBuffer) ->
                 }}),
             ok;
         true ->
-            {ok, #document{value = State}} = monitoring_state:get(MonitoringId),
-            {ok, _} = monitoring_state:save(#document{key = MonitoringId,
-                value = State#monitoring_state{active = true}}),
-            already_exists
+            {ok, #document{value = #monitoring_state{active = IsActive}}} =
+                monitoring_state:get(MonitoringId),
+            case IsActive of
+                true ->
+                    already_exists;
+                false ->
+                    {ok, _} = monitoring_state:update(MonitoringId, #{active => true}),
+                    ok
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -220,7 +225,10 @@ get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = data_
     ?DATA_ACCESS_RRD;
 
 get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = block_access}) ->
-    ?BLOCK_ACCESS_IOPS_RRD.
+    ?BLOCK_ACCESS_IOPS_RRD;
+
+get_rrd_definition(#monitoring_id{main_subject_type = space, metric_type = remote_transfer}) ->
+    ?REMOTE_TRANSFER_RRD.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -14,10 +14,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([handle_write_events_for_monitoring/2,
-    handle_read_events_for_monitoring/2, update_storage_used/3]).
+    handle_read_events_for_monitoring/2, update_storage_used/3,
+    update_remote_transfer/2]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,4 +119,34 @@ update_storage_used(SpaceId, UserId, SizeDiff) ->
         secondary_subject_type = user,
         secondary_subject_id = UserId
     }, SizeDiff}),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates remote transfer monitoring value for given user and space.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_remote_transfer(fslogic_worker:ctx(), non_neg_integer()) -> ok.
+update_remote_transfer(CTX, InBytesCount) ->
+    #fslogic_ctx{session = #session{identity = #identity{user_id = UserId}},
+        space_id = SpaceId} = CTX,
+
+    worker_proxy:cast(monitoring_worker, {update_buffer_state, #monitoring_id{
+        main_subject_type = space,
+        main_subject_id = SpaceId,
+        metric_type = remote_transfer
+    }, #{transfer_in => InBytesCount}}),
+
+    case UserId of
+        ?ROOT_USER_ID ->
+            ok;
+        _ ->
+            worker_proxy:cast(monitoring_worker, {update_buffer_state, #monitoring_id{
+                main_subject_type = space,
+                main_subject_id = SpaceId,
+                metric_type = remote_transfer,
+                secondary_subject_type = user,
+                secondary_subject_id = UserId
+            }, #{transfer_in => InBytesCount}})
+    end,
     ok.
