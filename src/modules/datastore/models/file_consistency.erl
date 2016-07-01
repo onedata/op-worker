@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([wait/2]).
+-export([wait/2, update_consistency/2, add_components_and_notify/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -64,38 +64,64 @@ wait(FileUuid, WaitFor) ->
                             MissingComponents
                     end;
                 {error, {not_found, file_consistency}} ->
-                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{}}),
+                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{waiting = [{WaitFor, self()}]}}),
                     WaitFor
             end
         end),
 
-    case MissingComponents of
+    FoundComponents = check_missing_components(FileUuid, MissingComponents, []),
+    add_components_and_notify(FileUuid, FoundComponents),
+    case MissingComponents -- FoundComponents of
         [] ->
             ok;
         _ ->
-            FoundComponents = check_missing_components(FileUuid, MissingComponents, []),
-            case MissingComponents -- FoundComponents of
-                [] ->
-                    datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
-                        fun() ->
-                            {ok, Doc = #document{value = FC = #file_consistency{
-                                components_present = ComponentsPresent, waiting = Waiting}}
-                            } = get(FileUuid),
-                            UpdatedComponents = lists:usort(ComponentsPresent ++ FoundComponents),
-                            UpdatedWaiting = lists:keydelete(self(), 2, Waiting),
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present =
-                                UpdatedComponents, waiting = UpdatedWaiting}}),
-                            {ok, _} = save(NewDoc),
-                            ok
-                        end);
-                _ ->
-                    receive
-                        file_is_now_consistent ->
-                            ok
-                    end
+            receive
+                file_is_now_consistent ->
+                    ok
             end
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks and update consistency info
+%% @end
+%%--------------------------------------------------------------------
+-spec update_consistency(file_meta:uuid(), [component()]) -> ok.
+update_consistency(FileUuid, ComponentsToUpdate) ->
+    FoundComponents = check_missing_components(FileUuid, ComponentsToUpdate, []),
+    add_components_and_notify(FileUuid, FoundComponents).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add found components to file consistency models
+%% @end
+%%--------------------------------------------------------------------
+-spec add_components_and_notify(file_meta:uuid(), [component()]) -> ok.
+add_components_and_notify(_FileUuid, []) ->
+    ok;
+add_components_and_notify(FileUuid, FoundComponents) ->
+    datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+        fun() ->
+            case get(FileUuid) of
+                {ok, Doc = #document{value = FC = #file_consistency{
+                    components_present = ComponentsPresent, waiting = Waiting}}} ->
+                    UpdatedComponents = lists:usort(ComponentsPresent ++ FoundComponents),
+
+                    NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present =
+                            UpdatedComponents, waiting = Waiting}}),
+
+                    case NewDoc =/= Doc of
+                            true ->
+                                {ok, _} = save(NewDoc),
+                                ok;
+                            false ->
+                                ok
+                        end;
+                {error, {not_found, file_consistency}} ->
+                    ok
+            end
+        end).
 
 notify_waiting(Doc = #document{value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
     NewWaiting = lists:filter(fun({Missing, Pid}) ->
@@ -109,10 +135,9 @@ notify_waiting(Doc = #document{value = FC = #file_consistency{components_present
     end, Waiting),
     Doc#document{value = FC#file_consistency{waiting = NewWaiting}}.
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks some components of file are present.
+%% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_missing_components(file_meta:uuid(), [component()], [component()]) -> [component()].
