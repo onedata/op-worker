@@ -276,5 +276,7 @@ fetch(Auth, SpaceId) ->
 monitoring_action(Action, SpaceId) ->
     MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
     lists:foreach(fun(MetricType) ->
-        worker_proxy:cast(monitoring_worker, {Action, MonitoringId#monitoring_id{metric_type = MetricType}})
-    end, [storage_used, storage_quota, connected_users, data_access, block_access]).
+        worker_proxy:cast(monitoring_worker, {Action,
+            MonitoringId#monitoring_id{metric_type = MetricType}})
+    end, [storage_used, storage_quota, connected_users, data_access,
+        block_access, remote_transfer]).
