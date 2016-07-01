@@ -222,4 +222,9 @@
     active_descriptors = #{} :: #{session:id() => non_neg_integer()}
 }).
 
+%% Model that maps onedata user to Openstack Swift user
+-record(swift_user, {
+    credentials :: #{storage:id() => swift_user:credentials()}
+}).
+
 -endif.
