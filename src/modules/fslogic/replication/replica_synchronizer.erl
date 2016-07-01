@@ -49,7 +49,7 @@ synchronize(Uuid, Block = #file_block{size = RequestedSize}, Prefetch) ->
         case Prefetch of
             true ->
                 Block#file_block{size = max(RequestedSize, ?MINIMAL_SYNC_REQUEST)};
-            false ->
+            _ ->
                 Block
         end,
     trigger_prefetching(Uuid, EnlargedBlock, Prefetch),
