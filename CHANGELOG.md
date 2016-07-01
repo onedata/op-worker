@@ -4,6 +4,18 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta7
+
+* VFS-2225 Update GUI docker image
+* VFS-1882 Postpone deletion of open files
+* VFS-2170 Improve dbsync's protocol reliability
+* VFS-2143, Improve dbsync_worker stashed changes management
+* VFS-2187 Add automatic file removal when upload fails
+* VFS-2187 Adjust rest_test to new OZ client API
+* VFS-2187 Use new OZ REST client API from ctool that uses arbitrary Auth term rather than predefined rest client.
+* VFS-2039 Extract non-client messages from fuse_messages
+
+
 ### 3.0.0-beta6
 
 * Update erlang tls

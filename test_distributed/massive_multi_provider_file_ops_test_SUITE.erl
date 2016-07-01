@@ -37,8 +37,9 @@ all() ->
 %%%===================================================================
 
 db_sync_test(Config) ->
-%%    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {3,0,0}, 60, 10, 50).
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {3,0,0}, 60, 10, 35).
+    % TODO change timeout after VFS-2197
+    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {3,0,0}, 150, 10, 50).
+%%multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {3,0,0}, 60, 10, 50).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
