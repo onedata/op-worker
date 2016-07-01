@@ -68,7 +68,7 @@ temp_put(Key, Value, Timeout) ->
 %%--------------------------------------------------------------------
 -spec temp_clear(Key :: term()) -> ok.
 temp_clear(Key) ->
-    worker_host:state_put(dbsync_worker, Key, undefined).
+    worker_host:state_delete(dbsync_worker, Key).
 
 %%--------------------------------------------------------------------
 %% @doc

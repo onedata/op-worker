@@ -13,6 +13,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -204,22 +205,22 @@ release(#fslogic_ctx{session_id = SessId}, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
-    FuseResponse :: #fuse_response{} | no_return().
+    ProviderResponse :: #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_parent(CTX, File) ->
     SpacesBaseDirUUID = ?ROOT_DIR_UUID,
     {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
     case ParentUUID of
         SpacesBaseDirUUID ->
-            #fuse_response{
+            #provider_response{
                 status = #status{code = ?OK},
-                fuse_response = #dir{uuid =
+                provider_response = #dir{uuid =
                     fslogic_uuid:to_file_guid(fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(CTX)), undefined)}
             };
         _ ->
-            #fuse_response{
+            #provider_response{
                 status = #status{code = ?OK},
-                fuse_response = #dir{uuid = fslogic_uuid:to_file_guid(ParentUUID)}
+                provider_response = #dir{uuid = fslogic_uuid:to_file_guid(ParentUUID)}
             }
     end.
 
@@ -262,7 +263,7 @@ synchronize_block_and_compute_checksum(#fslogic_ctx{session_id = SessId}, {uuid,
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    #fuse_response{}.
+    #provider_response{}.
 get_file_distribution(_CTX, {uuid, UUID})  ->
     {ok, Locations} = file_meta:get_locations({uuid, UUID}),
     ProviderDistributions = lists:map(
@@ -277,7 +278,7 @@ get_file_distribution(_CTX, {uuid, UUID})  ->
                 blocks = Blocks
             }
         end, Locations),
-    #fuse_response{status = #status{code = ?OK}, fuse_response =
+    #provider_response{status = #status{code = ?OK}, provider_response =
         #file_distribution{provider_file_distributions = ProviderDistributions}}.
 
 %%%===================================================================

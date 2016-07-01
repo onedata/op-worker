@@ -45,5 +45,7 @@ models() -> [
     posix_user,
     message_id,
     space_quota,
-    monitoring_state
+    monitoring_state,
+    open_file,
+    monitoring_init_state
 ].

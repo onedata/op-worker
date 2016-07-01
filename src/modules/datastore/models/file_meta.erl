@@ -365,7 +365,7 @@ list_children(Entry, Offset, Count) ->
             end, {Offset, Count, []}),
         case Res of
             {ok, {_, _, UUIDs}} ->
-                {ok, UUIDs};
+                {ok, lists:reverse(UUIDs)};
             {error, Reason} ->
                 {error, Reason}
         end

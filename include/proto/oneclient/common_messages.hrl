@@ -37,4 +37,8 @@
     new_path :: file_meta:path()
 }).
 
+-record(dir, {
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
+}).
+
 -endif.

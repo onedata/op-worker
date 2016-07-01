@@ -101,18 +101,26 @@ validate_block_data(FileUUID, FileId, StorageId) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(Document = #document{key = Key, value = #file_location{space_id = SpaceId}}) ->
+save(Document = #document{key = Key, value = #file_location{uuid = UUID, space_id = SpaceId}}) ->
     NewSize = count_bytes(Document),
+    UserId = get_user_id(UUID),
     case get(Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
-            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize - OldSize);
+            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize - OldSize),
+            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize - OldSize);
+
         {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
+
             space_quota:apply_size_change_and_maybe_emit(OldSpaceId,  -1 * OldSize),
-            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize);
+            monitoring_updates:update_storage_used(OldSpaceId, UserId, -1 * OldSize),
+
+            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
+            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize);
         _ ->
-            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize)
+            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
+            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize)
     end,
     datastore:save(?STORE_LEVEL, Document).
 
@@ -133,9 +141,13 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document = #document{value = #file_location{space_id = SpaceId}}) ->
+create(Document = #document{value = #file_location{uuid = UUID, space_id = SpaceId}}) ->
     NewSize = count_bytes(Document),
+    UserId = get_user_id(UUID),
+
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+    monitoring_updates:update_storage_used(SpaceId, UserId, NewSize),
+
     datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -155,8 +167,11 @@ get(Key) ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     case get(Key) of
-        {ok, #document{value = #file_location{space_id = SpaceId}} = Doc} ->
-            space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * count_bytes(Doc));
+        {ok, #document{value = #file_location{uuid = UUID, space_id = SpaceId}} = Doc} ->
+            Size = count_bytes(Doc),
+            UserId = get_user_id(UUID),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
+            monitoring_updates:update_storage_used(SpaceId, UserId, -1 * Size);
         _ ->
             ok
     end,
@@ -219,3 +234,15 @@ count_bytes([], Size) ->
     Size;
 count_bytes([#file_block{size = Size} | T], TotalSize) ->
     count_bytes(T, TotalSize + Size).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Return user id for given file uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_id(file_meta:uuid()) -> datastore:id().
+get_user_id(FileUUID) ->
+    {ok, #document{value = #file_meta{uid = UserId}}} =
+        file_meta:get({uuid, FileUUID}),
+    UserId.

@@ -97,7 +97,7 @@ unlink(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:unlink(SessId, uuid_to_guid(Worker, FileKey)),
+                logical_file_manager:unlink(SessId, uuid_to_guid(Worker, FileKey), false),
             Host ! {self(), Result}
         end).
 

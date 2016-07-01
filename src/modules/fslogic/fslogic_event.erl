@@ -19,7 +19,7 @@
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_file_location_update/3,
     emit_permission_changed/1, emit_file_removal/1, emit_file_renamed/3,
-    emit_quota_exeeded/0]).
+    emit_quota_exeeded/0, emit_file_renamed/4]).
 
 %%%===================================================================
 %%% API
@@ -178,6 +178,21 @@ emit_file_removal(FileGUID) ->
 emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
     event:emit(#event{object = #file_renamed_event{top_entry = TopEntry, child_entries = ChildEntries}},
         {exclude, ExcludedSessions}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Send event informing given client about file rename.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_renamed(file_meta:uuid(), space_info:id(), file_meta:path(),
+    session:id()) -> ok | {error, Reason :: term()}.
+emit_file_renamed(FileUUID, SpaceId, Path, SessionId) ->
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID, SpaceId),
+    event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
+        old_uuid = FileGUID,
+        new_uuid = FileGUID,
+        new_path = Path
+    }}, SessionId).
 
 %%%===================================================================
 %%% Internal functions
