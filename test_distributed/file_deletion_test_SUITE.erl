@@ -199,7 +199,7 @@ deletion_of_not_open_file_test(Config) ->
 
     ?assertEqual(false, rpc:call(Worker, open_file, exists, [FileUUID])),
     ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request,
-        #fslogic_ctx{session_id = SessId, space_id = <<"SpaceId">>} ,FileUUID})),
+        #fslogic_ctx{session_id = SessId, space_id = <<"SpaceId">>}, FileUUID, false})),
 
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
@@ -217,7 +217,7 @@ deletion_of_open_file_test(Config) ->
 
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, #fslogic_ctx{
-        session_id = SessId, space_id = <<"SpaceId">>, session = Session}, FileUUID})),
+        session_id = SessId, space_id = <<"SpaceId">>, session = Session}, FileUUID, false})),
     ?assertEqual(true, rpc:call(Worker, open_file, exists, [FileUUID])),
 
     %% File should be marked to remove and renamed.

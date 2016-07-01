@@ -40,7 +40,8 @@
 }).
 
 -record(delete_file, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid(),
+    silent = false :: boolean()
 }).
 
 -record(update_times, {
