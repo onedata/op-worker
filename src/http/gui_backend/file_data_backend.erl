@@ -19,6 +19,8 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([init/0, terminate/0]).
@@ -66,7 +68,10 @@ find(<<"file">>, FileId) ->
             FileId, T, M
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
-    end.
+    end;
+find(<<"file-acl">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    file_acl_record(SessionId, FileId).
 
 
 %%--------------------------------------------------------------------
@@ -203,6 +208,19 @@ update_record(<<"file">>, FileId, Data) ->
         end
     catch _:_ ->
         gui_error:report_warning(<<"Cannot change permissions.">>)
+    end;
+update_record(<<"file-acl">>, FileId, Data) ->
+    try
+        SessionId = g_session:get_session_id(),
+        Acl = acl_utils:json_to_acl(Data),
+        case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
+            ok ->
+                ok;
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Cannot change acl - access denied.">>)
+        end
+    catch _:_ ->
+        gui_error:report_warning(<<"Cannot change acl.">>)
     end.
 
 
@@ -218,9 +236,18 @@ delete_record(<<"file">>, FileId) ->
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
             ok;
-        {error, eacces} ->
+        {error, ?EACCES} ->
             gui_error:report_warning(
                 <<"Cannot remove file or directory - access denied.">>)
+    end;
+delete_record(<<"file-acl">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
+        ok ->
+            ok;
+        {error, ?EACCES} ->
+            gui_error:report_warning(
+                <<"Cannot remove acl - access denied.">>)
     end.
 
 
@@ -264,7 +291,7 @@ get_user_root_dir_uuid(SessionId) ->
     {ok, proplists:proplist()}.
 file_record(SessionId, FileId) ->
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
-        {error, enoent} ->
+        {error, ?ENOENT} ->
             gui_error:report_error(<<"No such file or directory.">>);
         {ok, FileAttr} ->
             #file_attr{
@@ -311,3 +338,25 @@ file_record(SessionId, FileId) ->
             ],
             {ok, Res}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a file acl record from given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_acl_record(SessionId :: binary(), FileId :: binary()) ->
+    {ok, proplists:proplist()}.
+file_acl_record(SessionId, FileId) ->
+    case logical_file_manager:get_acl(SessionId, {guid, FileId}) of
+        {error, ?ENOENT} ->
+            gui_error:report_error(<<"No such file or directory.">>);
+        {error, ?ENOATTR} ->
+            gui_error:report_error(<<"No acl defined.">>);
+        {error, ?EACCES} ->
+            gui_error:report_error(<<"Cannot read acl - access denied.">>);
+        {ok, Acl} ->
+            Res = acl_utils:acl_to_json(FileId, Acl),
+            {ok, Res}
+    end.
+
