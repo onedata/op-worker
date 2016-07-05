@@ -181,7 +181,7 @@ create_record(<<"file">>, Data) ->
         end
     end;
 create_record(<<"file-acl">>, Data) ->
-    Id = proplists:get_value(<<"id">>, Data),
+    Id = proplists:get_value(<<"file">>, Data),
     update_record(<<"file-acl">>, Id, Data).
 
 
