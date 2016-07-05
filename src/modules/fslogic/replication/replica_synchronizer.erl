@@ -76,7 +76,7 @@ synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = Requ
                             replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false, LocalVersion);
                         {error, Error} ->
                             ?error("Transfer of ~p range (~p, ~p) failed with error: ~p.", [Uuid, RequestedOffset, RequestedSize, Error]),
-                            throw(?EAGAIN)
+                            throw(?EIO)
                     end
                 end, Blocks)
         end, ProvidersAndBlocks),
