@@ -40,7 +40,7 @@
     rename/2, setup_onedata_user/2]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
--export([fix_parent_links/2, fix_parent_links/1, set_link_context/1]).
+-export([fix_parent_links/2, fix_parent_links/1, set_link_context/1, set_link_context_for_space/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -895,17 +895,41 @@ set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, 
 set_link_context(#document{value = #file_meta{is_scope = false, scope = ScopeUUID}}) ->
     set_link_context(ScopeUUID);
 set_link_context(ScopeUUID) ->
-    MyProvID = oneprovider:get_provider_id(),
-    erlang:put(mother_scope, MyProvID),
     try
         SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-        OtherScopes = dbsync_utils:get_providers_for_space(SpaceId) -- [MyProvID],
-        erlang:put(other_scopes, OtherScopes)
+        set_link_context_for_space(SpaceId)
     catch
         throw:{not_a_space, _} ->
-            erlang:put(other_scopes, []);
+            set_link_context_default();
         E1:E2 ->
             ?error_stacktrace("Cannot set other_scopes for uuid ~p, error: ~p:~p", [ScopeUUID, E1, E2]),
-            erlang:put(other_scopes, [])
+            set_link_context_default()
     end,
+    ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets link's scopes for links connected with given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_link_context_for_space(SpaceId :: datastore:key()) -> ok.
+set_link_context_for_space(SpaceId) ->
+    MyProvID = oneprovider:get_provider_id(),
+    erlang:put(mother_scope, MyProvID),
+    OtherScopes = dbsync_utils:get_providers_for_space(SpaceId) -- [MyProvID],
+    erlang:put(other_scopes, OtherScopes),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets default link's scopes.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_link_context_default() -> ok.
+set_link_context_default() ->
+    MyProvID = oneprovider:get_provider_id(),
+    erlang:put(mother_scope, MyProvID),
+    erlang:put(other_scopes, []),
     ok.

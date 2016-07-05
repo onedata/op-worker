@@ -165,12 +165,10 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         VerifyLocation = fun() ->
             Verify(fun(W) ->
                 lists:map(fun(ProvID) ->
-                    case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                        {error, {not_found, _}} ->
+                    case get_links(W, FileUUID, ProvID) of
+                        not_found ->
                             0;
-                        GetAns ->
-                            ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                            {ok, #document{value = Links}} = GetAns,
+                        Links ->
                             verify_locations(W, Links)
                     end
                 end, ProvIDs)
@@ -209,12 +207,10 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
             {W, lists:flatten(lists:foldl(fun(ProvID, Acc) ->
-                case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                    {error, {not_found, _}} ->
+                case get_links(W, FileUUID, ProvID) of
+                    not_found ->
                         Acc;
-                    GetAns ->
-                        ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                        {ok, #document{value = Links}} = GetAns,
+                    Links ->
                         [get_locations(W, Links) | Acc]
                 end
             end, [], ProvIDs))}
@@ -229,8 +225,8 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             %,
 %%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
 %%            lists:foreach(fun(ProvID) ->
-%%                ?match({error, {not_found, _}},
-%%                    rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]), Attempts)
+%%                ?match(not_found,
+%%                    get_links(W, FileUUID, ProvID), Attempts)
 %%            end, ProvIDs),
 %%            lists:foreach(fun(Location) ->
 %%                ?match({error, {not_found, _}},
@@ -288,12 +284,10 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
             lists:map(fun(ProvID) ->
-                case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                    {error, {not_found, _}} ->
+                case get_links(W, FileUUID, ProvID) of
+                    not_found ->
                         0;
-                    GetAns ->
-                        ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                        {ok, #document{value = Links}} = GetAns,
+                    Links ->
                         count_links(W, Links)
                 end
             end, ProvIDs)
@@ -444,6 +438,26 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+get_links(W, FileUUID, ProvID) ->
+    ModelConfig = file_meta:model_init(),
+    case rpc:call(W, mnesia_cache_driver, get_link_doc,
+        [ModelConfig, links_utils:links_doc_key(FileUUID, ProvID)]) of
+        {error, {not_found, _}} ->
+            case rpc:call(W, couchdb_datastore_driver, get_link_doc,
+                [ModelConfig, links_utils:links_doc_key(FileUUID, ProvID)]) of
+                {error, {not_found, _}} ->
+                    not_found;
+                GetAns2 ->
+                    ?assertMatch({ok, #document{value = #links{}}}, GetAns2),
+                    {ok, #document{value = Links2}} = GetAns2,
+                    Links2
+            end;
+        GetAns ->
+            ?assertMatch({ok, #document{value = #links{}}}, GetAns),
+            {ok, #document{value = Links}} = GetAns,
+            Links
+    end.
 
 count_links(W, #links{link_map = Map, children = Children}) ->
     case maps:size(Children) of

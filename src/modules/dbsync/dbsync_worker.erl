@@ -478,8 +478,7 @@ apply_changes(SpaceId,
             #links{} ->
                 % TODO - work only on local tree (after refactoring of link_utils)
                 MDK = Value#links.doc_key,
-                {ok, MD} = file_meta:get({uuid, MDK}),
-                file_meta:set_link_context(MD),
+                file_meta:set_link_context_for_space(SpaceId),
                 lists:foreach(fun(LName) ->
                     ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
                 end, maps:keys(Value#links.link_map)),
