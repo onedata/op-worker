@@ -74,11 +74,11 @@ json_to_acl(Json) ->
 %%--------------------------------------------------------------------
 -spec type_enum(non_neg_integer()) -> binary().
 type_enum(?allow_mask) ->
-    ?allow;
+    <<"allow">>;
 type_enum(?deny_mask) ->
-    ?deny;
+    <<"deny">>;
 type_enum(?audit_mask) ->
-    ?audit.
+    <<"audit">>.
 
 
 %%--------------------------------------------------------------------
@@ -87,11 +87,11 @@ type_enum(?audit_mask) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec type_mask(binary()) -> non_neg_integer().
-type_mask(?allow) ->
+type_mask(<<"allow">>) ->
     ?allow_mask;
-type_mask(?deny) ->
+type_mask(<<"deny">>) ->
     ?deny_mask;
-type_mask(?audit) ->
+type_mask(<<"audit">>) ->
     ?audit_mask.
 
 %%--------------------------------------------------------------------

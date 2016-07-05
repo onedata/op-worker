@@ -30,7 +30,7 @@ user_acl_conversion_test() ->
     Json = acl_utils:acl_to_json(FileId, Acl),
     DecodedAcl = acl_utils:json_to_acl(Json),
 
-    ?assertEqual(?JSON(FileId, [?JSON_ACE(?allow, Mask, <<"user">>, UserId, null)]),
+    ?assertEqual(?JSON(FileId, [?JSON_ACE(<<"allow">>, Mask, <<"user">>, UserId, null)]),
         Json),
     ?assertEqual(Acl, DecodedAcl).
 
@@ -43,7 +43,7 @@ group_acl_conversion_test() ->
     Json = acl_utils:acl_to_json(FileId, Acl),
     DecodedAcl = acl_utils:json_to_acl(Json),
 
-    ?assertEqual(?JSON(FileId, [?JSON_ACE(?allow, Mask, <<"group">>, null, GroupId)]),
+    ?assertEqual(?JSON(FileId, [?JSON_ACE(<<"allow">>, Mask, <<"group">>, null, GroupId)]),
         Json),
     ?assertEqual(Acl, DecodedAcl).
 
@@ -55,7 +55,7 @@ everyone_acl_conversion_test() ->
     Json = acl_utils:acl_to_json(FileId, Acl),
     DecodedAcl = acl_utils:json_to_acl(Json),
 
-    ?assertEqual(?JSON(FileId, [?JSON_ACE(?allow, Mask, <<"everyone">>, null, null)]),
+    ?assertEqual(?JSON(FileId, [?JSON_ACE(<<"allow">>, Mask, <<"everyone">>, null, null)]),
         Json),
     ?assertEqual(Acl, DecodedAcl).
 
@@ -67,7 +67,7 @@ owner_acl_conversion_test() ->
     Json = acl_utils:acl_to_json(FileId, Acl),
     DecodedAcl = acl_utils:json_to_acl(Json),
 
-    ?assertEqual(?JSON(FileId, [?JSON_ACE(?allow, Mask, <<"owner">>, null, null)]),
+    ?assertEqual(?JSON(FileId, [?JSON_ACE(<<"allow">>, Mask, <<"owner">>, null, null)]),
         Json),
     ?assertEqual(Acl, DecodedAcl).
 
@@ -86,8 +86,8 @@ miltiple_acl_conversion_test() ->
     DecodedAcl = acl_utils:json_to_acl(Json),
 
     ?assertEqual(?JSON(FileId, [
-            ?JSON_ACE(?allow, Mask, <<"user">>, UserId, null),
-            ?JSON_ACE(?deny, Mask, <<"group">>, null, GroupId)
+            ?JSON_ACE(<<"allow">>, Mask, <<"user">>, UserId, null),
+            ?JSON_ACE(<<"deny">>, Mask, <<"group">>, null, GroupId)
         ]),
         Json),
     ?assertEqual(Acl, DecodedAcl).
