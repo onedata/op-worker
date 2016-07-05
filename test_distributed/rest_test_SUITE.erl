@@ -43,7 +43,7 @@ all() -> ?ALL([
     custom_error_when_handler_throws_error
 ]).
 
--define(MACAROON, element(2, macaroon:serialize(macaroon:create("a", "b", "c")))).
+-define(MACAROON, element(2, token_utils:serialize62(macaroon:create("a", "b", "c")))).
 -define(BASIC_AUTH_HEADER, <<"Basic ", (base64:encode(<<"user:password">>))/binary>>).
 
 %%%===================================================================
@@ -261,7 +261,7 @@ mock_oz_certificates(Config) ->
         fun
             % @todo for now, in rest we only use the root macaroon
             (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
+                {ok, SrlzdMacaroon} = token_utils:serialize62(Macaroon),
                 AuthorizationHeader = {<<"macaroon">>, SrlzdMacaroon},
                 do_request(Method, OzRestApiUrl ++ URN,
                     [{<<"content-type">>, <<"application/json">>},

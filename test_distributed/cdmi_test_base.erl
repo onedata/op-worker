@@ -54,7 +54,7 @@
 
 user_1_token_header(Config) ->
     #token_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
-    {ok, Srlzd} = macaroon:serialize(Macaroon),
+    {ok, Srlzd} = token_utils:serialize62(Macaroon),
     {<<"X-Auth-Token">>, Srlzd}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).

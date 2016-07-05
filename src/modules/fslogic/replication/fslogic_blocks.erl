@@ -100,7 +100,7 @@ get_file_size(#document{value = #file_location{} = Value}) ->
     get_file_size(Value);
 get_file_size(#document{value = #file_meta{type = ?DIRECTORY_TYPE}}) ->
     0;
-get_file_size(#document{value = #file_meta{type = ?LINK_TYPE}}) ->
+get_file_size(#document{value = #file_meta{type = ?SYMLINK_TYPE}}) ->
     0;
 get_file_size(#file_location{size = undefined} = Location) ->
     calculate_file_size(Location);

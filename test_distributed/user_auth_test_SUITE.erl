@@ -29,7 +29,7 @@
 -export([token_authentication/1]).
 
 -define(MACAROON, macaroon:create("a", "b", "c")).
--define(MACAROON_TOKEN, element(2, macaroon:serialize(?MACAROON))).
+-define(MACAROON_TOKEN, element(2, token_utils:serialize62(?MACAROON))).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
@@ -175,7 +175,7 @@ mock_oz_certificates(Config) ->
         fun
             % @todo for now, in rest we only use the root macaroon
             (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
+                {ok, SrlzdMacaroon} = token_utils:serialize62(Macaroon),
                 http_client:request(Method, OzRestApiUrl ++ URN, [
                     {<<"content-type">>, <<"application/json">>},
                     {<<"macaroon">>, SrlzdMacaroon} | Headers

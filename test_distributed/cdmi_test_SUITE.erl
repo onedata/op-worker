@@ -83,7 +83,7 @@ all() ->
 -define(TIMEOUT, timer:seconds(5)).
 
 user_1_token_header() ->
-    {ok, Srlzd} = macaroon:serialize(macaroon:create("a", "b", "c")),
+    {ok, Srlzd} = token_utils:serialize62(macaroon:create("a", "b", "c")),
     {<<"X-Auth-Token">>, Srlzd}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).

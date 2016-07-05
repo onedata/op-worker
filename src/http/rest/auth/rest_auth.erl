@@ -93,7 +93,7 @@ authenticate(Req) ->
 -spec authenticate_using_token(req(), Token :: binary()) ->
     {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
-    case macaroon:deserialize(Token) of
+    case token_utils:deserialize(Token) of
         {ok, Macaroon} ->
             Auth = #token_auth{macaroon = Macaroon},
             case identity:get_or_fetch(Auth) of

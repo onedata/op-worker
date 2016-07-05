@@ -47,7 +47,7 @@
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | datastore:document().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?LINK_TYPE.
+-type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE.
 -type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
