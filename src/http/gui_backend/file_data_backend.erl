@@ -1,6 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @author Jakub Liput
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2015-2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -14,6 +15,7 @@
 -module(file_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
+-author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -82,6 +84,8 @@ find(<<"file-acl">>, FileId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"file">>) ->
+    gui_error:report_error(<<"Not iplemented">>);
+find_all(<<"file-acl">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -93,8 +97,9 @@ find_all(<<"file">>) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"file">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
-
+    gui_error:report_error(<<"Not implemented">>);
+find_query(<<"file-acl">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = g_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
@@ -163,7 +168,8 @@ create_record(<<"file">>, Data) ->
             {<<"modificationTime">>, ModificationTime},
             {<<"size">>, Size},
             {<<"parent">>, ParentGUID},
-            {<<"children">>, []}
+            {<<"children">>, []},
+            {<<"fileAcl">>, FileId}
         ],
         {ok, Res}
     catch _:_ ->
@@ -173,7 +179,10 @@ create_record(<<"file">>, Data) ->
             <<"file">> ->
                 gui_error:report_warning(<<"Failed to create new file.">>)
         end
-    end.
+    end;
+create_record(<<"file-acl">>, Data) ->
+    Id = proplists:get_value(<<"id">>, Data),
+    update_record(<<"file-acl">>, Id, Data).
 
 
 %%--------------------------------------------------------------------
@@ -217,10 +226,10 @@ update_record(<<"file-acl">>, FileId, Data) ->
             ok ->
                 ok;
             {error, ?EACCES} ->
-                gui_error:report_warning(<<"Cannot change acl - access denied.">>)
+                gui_error:report_warning(<<"Cannot change ACL - access denied.">>)
         end
     catch _:_ ->
-        gui_error:report_warning(<<"Cannot change acl.">>)
+        gui_error:report_warning(<<"Cannot change ACL.">>)
     end.
 
 
@@ -247,7 +256,7 @@ delete_record(<<"file-acl">>, FileId) ->
             ok;
         {error, ?EACCES} ->
             gui_error:report_warning(
-                <<"Cannot remove acl - access denied.">>)
+                <<"Cannot remove ACL - access denied.">>)
     end.
 
 
@@ -352,9 +361,9 @@ file_acl_record(SessionId, FileId) ->
         {error, ?ENOENT} ->
             gui_error:report_error(<<"No such file or directory.">>);
         {error, ?ENOATTR} ->
-            gui_error:report_error(<<"No acl defined.">>);
+            gui_error:report_error(<<"No ACL defined.">>);
         {error, ?EACCES} ->
-            gui_error:report_error(<<"Cannot read acl - access denied.">>);
+            gui_error:report_error(<<"Cannot read ACL - access denied.">>);
         {ok, Acl} ->
             Res = acl_utils:acl_to_json(FileId, Acl),
             {ok, Res}

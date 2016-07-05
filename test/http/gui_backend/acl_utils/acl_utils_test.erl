@@ -16,12 +16,14 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 -define(ACE(Type_, Mask_, Flag_, Id_), #accesscontrolentity{acetype = Type_, acemask = Mask_, aceflags = Flag_, identifier = Id_}).
--define(JSON_ACE(Type__, Mask__, Subject__, User__, Group__), [{<<"type">>, Type__}, {<<"mask">>, Mask__}, {<<"subject">>, Subject__}, {<<"user">>, User__}, {<<"group">>, Group__}]).
--define(JSON(FileId_, JsonAcl_), [{<<"id">>, FileId_}, {<<"fileId">>, FileId_}, {<<"acl">>, JsonAcl_}]).
+
+-define(JSON_ACE(Type__, Mask__, Subject__, User__, Group__), [{<<"type">>, Type__}, {<<"permissions">>, Mask__}, {<<"subject">>, Subject__}, {<<"user">>, User__}, {<<"group">>, Group__}]).
+
+-define(JSON(FileId_, JsonAcl_), [{<<"id">>, FileId_}, {<<"file">>, FileId_}, {<<"acl">>, JsonAcl_}]).
 
 user_acl_conversion_test() ->
     UserId = <<"userId">>,
-    FileId = <<"fileId">>,
+    FileId = <<"file">>,
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?no_flags_mask, UserId)],
 
@@ -34,7 +36,7 @@ user_acl_conversion_test() ->
 
 group_acl_conversion_test() ->
     GroupId = <<"groupId">>,
-    FileId = <<"fileId">>,
+    FileId = <<"file">>,
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?identifier_group_mask, GroupId)],
 
@@ -46,7 +48,7 @@ group_acl_conversion_test() ->
     ?assertEqual(Acl, DecodedAcl).
 
 everyone_acl_conversion_test() ->
-    FileId = <<"fileId">>,
+    FileId = <<"file">>,
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?no_flags_mask, ?everyone)],
 
@@ -58,7 +60,7 @@ everyone_acl_conversion_test() ->
     ?assertEqual(Acl, DecodedAcl).
 
 owner_acl_conversion_test() ->
-    FileId = <<"fileId">>,
+    FileId = <<"file">>,
     Mask = 17,
     Acl = [?ACE(?allow_mask, Mask, ?no_flags_mask, ?owner)],
 
@@ -73,7 +75,7 @@ owner_acl_conversion_test() ->
 miltiple_acl_conversion_test() ->
     UserId = <<"userId">>,
     GroupId = <<"groupId">>,
-    FileId = <<"fileId">>,
+    FileId = <<"file">>,
     Mask = 17,
     Acl = [
         ?ACE(?allow_mask, Mask, ?no_flags_mask, UserId),

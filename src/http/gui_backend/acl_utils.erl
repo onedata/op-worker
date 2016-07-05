@@ -32,12 +32,12 @@ acl_to_json(FileId, Acl) ->
             fun(#accesscontrolentity{aceflags = Flag, acemask = Mask, acetype = Type, identifier = Identifier}) ->
                 [
                     {<<"type">>, type_enum(Type)},
-                    {<<"mask">>, Mask}
+                    {<<"permissions">>, Mask}
                 ] ++ subject(Flag, Identifier)
             end, Acl),
     [
         {<<"id">>, FileId},
-        {<<"fileId">>, FileId},
+        {<<"file">>, FileId},
         {<<"acl">>, AclJson}
     ].
 
@@ -49,7 +49,7 @@ json_to_acl(Json) ->
     AclJson = proplists:get_value(<<"acl">>, Json),
     lists:map(fun(Ace) ->
         Type = proplists:get_value(<<"type">>, Ace),
-        Mask = proplists:get_value(<<"mask">>, Ace),
+        Mask = proplists:get_value(<<"permissions">>, Ace),
         Subject = proplists:get_value(<<"subject">>, Ace),
         User = proplists:get_value(<<"user">>, Ace),
         Group = proplists:get_value(<<"group">>, Ace),
