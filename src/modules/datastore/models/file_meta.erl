@@ -13,10 +13,12 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -41,22 +43,24 @@
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1]).
+-export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | datastore:document().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE.
+-type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?PHANTOM_TYPE.
 -type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
+-type symlink_value() :: binary().
 -type file_meta() :: model_record().
 -type posix_permissions() :: non_neg_integer().
 
 -export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
-    size/0, mode/0, time/0, posix_permissions/0, file_meta/0]).
+    size/0, mode/0, time/0, symlink_value/0, posix_permissions/0, file_meta/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -612,6 +616,50 @@ to_uuid({path, Path}) ->
 -spec is_root_dir(datastore:document()) -> boolean().
 is_root_dir(#document{key = Key}) ->
     Key =:= ?ROOT_DIR_UUID.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates phantom file serving as redirection to file that has
+%% recently changed its GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_phantom_file(uuid(), uuid(), fslogic_worker:file_guid()) ->
+    {ok, uuid()} | datastore:generic_error().
+create_phantom_file(OldUUID, OldScope, NewGUID) ->
+    {ok, PhantomUuid} = save(#document{key = fslogic_uuid:uuid_to_phantom_uuid(OldUUID),
+        value = #file_meta{type = ?PHANTOM_TYPE, scope = OldScope, link_value = NewGUID}}),
+    CreationTime = erlang:system_time(seconds),
+    task_manager:start_task(fun() ->
+        TimeSinceCreation = erlang:system_time(seconds) - CreationTime,
+        {ok, PhantomLifespan} = application:get_env(?APP_NAME, phantom_lifespan_seconds),
+        case TimeSinceCreation > PhantomLifespan of
+            false ->
+                timer:sleep(timer:seconds(PhantomLifespan));
+            true ->
+                ok
+        end,
+        case file_meta:delete(PhantomUuid) of
+            ok ->
+                ?debug("Deleted phantom file redirecting to ~p", [NewGUID]),
+                ok;
+            Error ->
+                ?debug("Error deleting phantom file redirecting to ~p: ~p", [NewGUID, Error]),
+                Error
+        end
+    end, ?NODE_LEVEL),
+    {ok, PhantomUuid}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves new GUID from phantom file basing on missing file UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_guid_from_phantom_file(uuid()) ->
+    {ok, fslogic_worker:file_guid()} | datastore:get_error().
+get_guid_from_phantom_file(OldUUID) ->
+    {ok, #document{value = #file_meta{link_value = NewGuid, type = ?PHANTOM_TYPE}}} =
+        get(fslogic_uuid:uuid_to_phantom_uuid(OldUUID)),
+    {ok, NewGuid}.
 
 %%%===================================================================
 %%% Internal functions
