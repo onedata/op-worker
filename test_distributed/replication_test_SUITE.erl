@@ -44,7 +44,8 @@
     remote_change_of_blocks_should_notify_clients/1,
     remote_irrelevant_change_should_not_notify_clients/1,
     conflicting_remote_changes_should_be_reconciled/1,
-    rtransfer_config_should_work/1
+    rtransfer_config_should_work/1,
+    external_file_location_notification_should_wait_for_local_file_location/1
 ]).
 
 
@@ -67,7 +68,8 @@ all() ->
         remote_change_of_blocks_should_notify_clients,
         remote_irrelevant_change_should_not_notify_clients,
         conflicting_remote_changes_should_be_reconciled,
-        rtransfer_config_should_work
+        rtransfer_config_should_work,
+        external_file_location_notification_should_wait_for_local_file_location
     ]).
 
 
@@ -775,6 +777,54 @@ rtransfer_config_should_work(Config) ->
             ok
         end, []
     ])).
+
+external_file_location_notification_should_wait_for_local_file_location(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    UserId = <<"user1">>,
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    CTime = erlang:monotonic_time(micro_seconds),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    FileMeta = #file_meta{
+        mode = 8#777,
+        name = <<"file">>,
+        type = ?REGULAR_FILE_TYPE,
+        mtime = CTime,
+        atime = CTime,
+        ctime = CTime,
+        uid = UserId
+    },
+    ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(W1)),
+    ExternalProviderId = <<"external_provider_id">>,
+    ExternalFileId = <<"external_file_id">>,
+    {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+
+    % attach external location
+    ExternalLocationId = <<"external_location_id">>,
+    RemoteLocation = version_vector:bump_version(#document{key = ExternalLocationId, value = #file_location{size = 0, space_id = SpaceId,
+        storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
+        blocks = [], file_id = ExternalFileId, uuid = FileUuid,
+        version_vector = #{}, recent_changes = {[], [#file_block{offset = 2, size = 2}]}}}),
+    RemoteVersion = RemoteLocation#document.value#file_location.version_vector,
+
+    %when
+    spawn(fun() ->
+        rpc:call(W1, dbsync_events, change_replicated, [SpaceId,
+            #change{model = file_location, doc = RemoteLocation}])
+        end),
+    timer:sleep(timer:seconds(5)),
+    ?assertMatch({ok, []}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    rpc:call(W1, dbsync_events, change_replicated,
+        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+    timer:sleep(timer:seconds(2)),
+
+    %then
+    {ok, [Id1]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    ?assertMatch({ok, #document{value = #file_location{version_vector = RemoteVersion}}},
+        rpc:call(W1, file_location, get, [Id1])),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
+    ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
+    ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
 
 
 %%%===================================================================
