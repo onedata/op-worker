@@ -181,8 +181,14 @@ create_record(<<"file">>, Data) ->
         end
     end;
 create_record(<<"file-acl">>, Data) ->
+    SessionId = g_session:get_session_id(),
     Id = proplists:get_value(<<"file">>, Data),
-    update_record(<<"file-acl">>, Id, Data).
+    case update_record(<<"file-acl">>, Id, Data) of
+        ok ->
+            file_acl_record(SessionId, Id);
+        Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
