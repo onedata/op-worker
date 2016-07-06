@@ -93,7 +93,7 @@ resource_exists(Req, State = #{path := Path, auth := Auth}, Type) ->
             redirect_to_container(Req, State);
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == container ->
             redirect_to_object(Req, State);
-        {ok, #file_attr{type = ?LINK_TYPE}} ->
+        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
             {false, Req, State};
         {error, ?ENOENT} ->
             {false, Req, State}

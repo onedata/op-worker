@@ -13,6 +13,7 @@
 -author("Mateusz Paciorek").
 
 -include("global_definitions.hrl").
+-include("modules/events/definitions.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -24,6 +25,7 @@
 -define(FAILURE_RETURN_VALUE, deliberate_failure).
 -define(LINK_FAILURE_SUFFIX, "_with_failing_link").
 -define(LINK_AND_MV_FAILURE_SUFFIX, "_with_failing_link_and_mv").
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%-------------------------------------------------------------------
 %%% API
@@ -59,7 +61,8 @@
     times_update_test/1,
     moving_dir_into_itself_test/1,
     moving_file_onto_itself_test/1,
-    reading_from_open_file_after_rename_test/1]).
+    reading_from_open_file_after_rename_test/1,
+    redirecting_event_to_renamed_file_test/1]).
 
 all() ->
     ?ALL([
@@ -89,7 +92,8 @@ all() ->
         times_update_test,
         moving_dir_into_itself_test,
         moving_file_onto_itself_test,
-        reading_from_open_file_after_rename_test
+        reading_from_open_file_after_rename_test,
+        redirecting_event_to_renamed_file_test
     ]).
 
 %%%===================================================================
@@ -652,6 +656,43 @@ reading_from_open_file_after_rename_test(Config) ->
 
     ok.
 
+redirecting_event_to_renamed_file_test(Config) ->
+    [W1, W2] = sorted_workers(Config),
+    TestDir = ?config(test_dir, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(1, TestDir, ""))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(2, TestDir, ""))),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, filename(3, TestDir, ""))),
+    {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, filename(1, TestDir, "/file1"), 8#770)),
+    {_, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, filename(1, TestDir, "/file2"), 8#770)),
+
+    {_, NewFile1Guid} = ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File1Guid}, filename(2, TestDir, "/file1_target"))),
+    {_, NewFile2Guid} = ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File2Guid}, filename(3, TestDir, "/file2_target"))),
+
+    Self = self(),
+    lists:foreach(fun(W) ->
+        ?assertMatch({ok, _}, rpc:call(W, event, subscribe, [#subscription{
+            event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
+                emission_time = infinity, event_handler = fun(Events, _) ->
+                    Self ! {events, Events}
+                end}}]))
+        end, [W1, W2]),
+
+    BaseEvent = #write_event{size = 1, file_size = 1,
+        blocks = [#file_block{offset = 0, size = 1}]},
+
+    ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#write_event{file_uuid = File1Guid}])),
+    {_, [#event{key = Evt1Guid}]} = ?assertReceivedMatch({events, [#event{}]}, ?TIMEOUT),
+    ?assertEqual(fslogic_uuid:file_guid_to_uuid(NewFile1Guid), fslogic_uuid:file_guid_to_uuid(Evt1Guid)),
+
+    flush(),
+    ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#write_event{file_uuid = File2Guid}])),
+    {_, [#event{key = Evt2Guid}]} = ?assertReceivedMatch({events, [#event{}]}, ?TIMEOUT),
+    ?assertEqual(fslogic_uuid:file_guid_to_uuid(NewFile2Guid), fslogic_uuid:file_guid_to_uuid(Evt2Guid)),
+
+    ok.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -707,12 +748,19 @@ end_per_testcase(CaseName, Config) ->
     end,
 
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+flush() ->
+    receive
+        _ -> flush()
+    after timer:seconds(1) ->
+        ok
+    end.
 
 filename(SpaceNo, TestDir, Suffix) ->
     SpaceNoBinary = integer_to_binary(SpaceNo),

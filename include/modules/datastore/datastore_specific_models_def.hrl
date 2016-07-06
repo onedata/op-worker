@@ -102,7 +102,9 @@
     size = 0 :: file_meta:size(),
     version = 1, %% Snapshot version
     is_scope = false :: boolean(),
-    scope :: datastore:key()
+    scope :: datastore:key(),
+    %% symlink_value for symlinks, file_guid for phantom files (redirection)
+    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid()
 }).
 
 

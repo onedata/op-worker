@@ -45,11 +45,12 @@ def _tweak_config(config, os_config, name, uid):
     return cfg
 
 
-def _node_up(image, bindir, config, config_path, dns_servers, logdir):
+def _node_up(image, bindir, config, config_path, dns_servers, logdir, storages_dockers):
     node = config['node']
     hostname = node['name']
     shortname = hostname.split(".")[0]
     os_config = config['os_config']
+    mount_commands = common.mount_nfs_command(config, storages_dockers)
 
     client_data = {}
 
@@ -63,8 +64,8 @@ def _node_up(image, bindir, config, config_path, dns_servers, logdir):
 chmod 777 /tmp
 mkdir /tmp/certs
 mkdir /tmp/keys
-echo 'while ((1)); do chown -R {uid}:{gid} /tmp; sleep 1; done' > /root/bin/chown_logs.sh
-bash /root/bin/chown_logs.sh &
+{mount_commands}
+bindfs --create-for-user={uid} --create-for-group={gid} /tmp /tmp
 '''
 
     for client in node['clients']:
@@ -96,7 +97,8 @@ EOF
             cert_file=open(cert_file_path, 'r').read(),
             key_file=open(key_file_path, 'r').read(),
             uid=os.geteuid(),
-            gid=os.getegid())
+            gid=os.getegid(),
+            mount_commands=mount_commands)
 
         client_data[client_name]['user_cert'] = os.path.join('/tmp', 'certs',
                                                              client_name,
@@ -107,7 +109,25 @@ EOF
     command += '''bash'''
 
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes += [common.volume_for_storage(s) for s in os_config['storages']]
+    posix_storages = []
+    if os_config['storages']:
+        if isinstance(os_config['storages'][0], basestring):
+            posix_storages = config['os_config']['storages']
+        else:
+            posix_storages = [s['name'] for s in os_config['storages']
+                              if s['type'] == 'posix']
+
+        for s in posix_storages:
+            if not (storages_dockers and s in storages_dockers['posix'].keys()):
+                v = common.volume_for_storage(s)
+                (host_path, docker_path, mode) = v
+                if not storages_dockers:
+                    storages_dockers = {'posix': {}}
+                storages_dockers['posix'][s] = {"host_path": host_path, "docker_path": docker_path}
+            else:
+                d = storages_dockers['posix'][s]
+                v = (d['host_path'], d['docker_path'], 'rw')
+            volumes.append(v)
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -123,7 +143,7 @@ EOF
         workdir='/root/bin',
         volumes=volumes,
         dns_list=dns_servers,
-        run_params=["--privileged"],
+        privileged=True,
         command=command)
 
     # create system users and groups
@@ -134,7 +154,7 @@ EOF
             'client_data': {shortname: client_data}}
 
 
-def up(image, bindir, dns_server, uid, config_path, logdir=None):
+def up(image, bindir, dns_server, uid, config_path, logdir=None, storages_dockers=None):
     json_config = common.parse_json_config_file(config_path)
     config = json_config['oneclient']
     os_config = json_config['os_configs']
@@ -143,7 +163,8 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
     for cfg in configs:
-        node_out = _node_up(image, bindir, cfg, config_path, dns_servers, logdir)
+        node_out = _node_up(image, bindir, cfg, config_path, dns_servers,
+                            logdir, storages_dockers)
         common.merge(output, node_out)
 
     return output
