@@ -349,7 +349,8 @@ file_record(SessionId, FileId) ->
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
                 {<<"parent">>, ParentUUID},
-                {<<"children">>, ChildrenIds}
+                {<<"children">>, ChildrenIds},
+                {<<"fileAcl">>, FileId}
             ],
             {ok, Res}
     end.
@@ -374,4 +375,3 @@ file_acl_record(SessionId, FileId) ->
             Res = acl_utils:acl_to_json(FileId, Acl),
             {ok, Res}
     end.
-
