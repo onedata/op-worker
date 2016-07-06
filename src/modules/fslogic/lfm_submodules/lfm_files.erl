@@ -526,7 +526,7 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode 
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize,
     GenerateEvents, PrefetchData) ->
 
-    lfm_utils:call_fslogic(SessId, fuse_request,
+    ok = lfm_utils:call_fslogic(SessId, fuse_request,
         #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}, prefetch = PrefetchData},
         fun(_) -> ok end),
 

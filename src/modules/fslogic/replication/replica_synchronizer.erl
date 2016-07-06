@@ -45,7 +45,7 @@ synchronize(CTX, Uuid, Block) ->
 %%--------------------------------------------------------------------
 -spec synchronize(fslogic_worker:ctx(), file_meta:uuid(), fslogic_blocks:block(),
     boolean()) -> ok.
-synchronize(CTX, Uuid, Block = #file_block{size = RequestedSize}, Prefetch) ->
+synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = RequestedSize}, Prefetch) ->
     EnlargedBlock =
         case Prefetch of
             true ->
@@ -70,10 +70,14 @@ synchronize(CTX, Uuid, Block = #file_block{size = RequestedSize}, Prefetch) ->
                 fun(BlockToSync = #file_block{offset = O, size = S}) ->
                     Ref = rtransfer:prepare_request(ProviderId, fslogic_uuid:to_file_guid(Uuid), O, S),
                     NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
-                    {ok, Size} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT),
-
-                    monitoring_updates:update_remote_transfer(CTX, Size),
-                    replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false, LocalVersion)
+                    case receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT) of
+                        {ok, Size} ->
+                            monitoring_updates:update_remote_transfer(CTX, Size),
+                            replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false, LocalVersion);
+                        {error, Error} ->
+                            ?error("Transfer of ~p range (~p, ~p) failed with error: ~p.", [Uuid, RequestedOffset, RequestedSize, Error]),
+                            throw(?EIO)
+                    end
                 end, Blocks)
         end, ProvidersAndBlocks),
     fslogic_event:emit_file_location_update({uuid, Uuid}, [], Block).
