@@ -17,6 +17,7 @@
 -author("Jakub Liput").
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -181,11 +182,10 @@ create_record(<<"file">>, Data) ->
         end
     end;
 create_record(<<"file-acl">>, Data) ->
-    SessionId = g_session:get_session_id(),
     Id = proplists:get_value(<<"file">>, Data),
     case update_record(<<"file-acl">>, Id, Data) of
         ok ->
-            file_acl_record(SessionId, Id);
+            file_acl_record(?ROOT_SESS_ID, Id);
         Error ->
             Error
     end.
