@@ -109,7 +109,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyStats = fun(File, IsDir) ->
         VerAns = Verify(fun(W) ->
-%%            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
+            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
             case IsDir of
                 true ->
                     ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
@@ -165,21 +165,16 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         VerifyLocation = fun() ->
             Verify(fun(W) ->
                 lists:map(fun(ProvID) ->
-                    case get_links(W, FileUUID, ProvID) of
-                        not_found ->
-                            0;
-                        Links ->
-                            verify_locations(W, Links)
-                    end
+                    verify_locations(W, FileUUID, ProvID)
                 end, ProvIDs)
             end)
         end,
 
         VerAns0 = VerifyLocation(),
-%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
 
         Verify(fun(W) ->
-%%            ct:print("Verify file ~p", [{File, W}]),
+            ct:print("Verify file ~p", [{File, W}]),
             OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
             ?assertMatch({ok, _}, OpenAns),
             {ok, Handle} = OpenAns,
@@ -189,7 +184,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         AssertLocations = fun() ->
             VerAns = VerifyLocation(),
             Flattened = lists:flatten(VerAns),
-%%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
 
             ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
             LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
@@ -207,12 +202,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
             {W, lists:flatten(lists:foldl(fun(ProvID, Acc) ->
-                case get_links(W, FileUUID, ProvID) of
-                    not_found ->
-                        Acc;
-                    Links ->
-                        [get_locations(W, Links) | Acc]
-                end
+                [get_locations(W, FileUUID, ProvID) | Acc]
             end, [], ProvIDs))}
         end),
         {File, FileUUID, LocToAns}
@@ -220,12 +210,12 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyDel = fun({F,  FileUUID, Locations}) ->
         Verify(fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
+            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
             ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
             %,
 %%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
 %%            lists:foreach(fun(ProvID) ->
-%%                ?match(not_found,
+%%                ?match(#{},
 %%                    get_links(W, FileUUID, ProvID), Attempts)
 %%            end, ProvIDs),
 %%            lists:foreach(fun(Location) ->
@@ -239,13 +229,13 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
+        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
         VerifyStats(Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
+            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
@@ -283,17 +273,13 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             {ok, #file_attr{uuid = FileGUID}} = StatAns,
             FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
-            lists:map(fun(ProvID) ->
-                case get_links(W, FileUUID, ProvID) of
-                    not_found ->
-                        0;
-                    Links ->
-                        count_links(W, Links)
-                end
-            end, ProvIDs)
+            TmpAns = lists:map(fun(ProvID) ->
+                count_links(W, FileUUID, ProvID)
+            end, ProvIDs),
+            TmpAns
         end),
         Flattened = lists:flatten(VerAns),
-%%        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, Flattened),
@@ -346,7 +332,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         Verify(fun(W2) ->
-%%            ct:print("Verify write ~p", [{Level2File, W2}]),
+            ct:print("Verify write ~p", [{Level2File, W2}]),
             OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,
@@ -374,7 +360,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end,
         ?assertMatch({_, {ok, _}}, MkAnsCheck),
         {Level2TmpDir, _} = MkAnsCheck,
-%%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
+        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
         VerifyStats(Level2TmpDir, true),
         [Level2TmpDir | Acc]
     end, [], Workers),
@@ -400,7 +386,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
                 end,
             ?assertMatch({_, {ok, _}}, MkAnsCheck),
             {Level3TmpDir, _} = MkAnsCheck,
-%%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
+            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
     end, Level2TmpDirs),
@@ -428,7 +414,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
     initializer:unload_quota_mocks(Config),
@@ -440,40 +426,46 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 get_links(W, FileUUID, ProvID) ->
+    LinkDocKey = links_utils:links_doc_key(FileUUID, ProvID),
+    TmpAns = get_links(W, FileUUID, LinkDocKey, couchdb_datastore_driver, #{}),
+    get_links(W, FileUUID, LinkDocKey, mnesia_cache_driver, TmpAns).
+
+get_links(W, FileUUID, LinkDocKey, Driver, Ans) ->
     ModelConfig = file_meta:model_init(),
-    case rpc:call(W, mnesia_cache_driver, get_link_doc,
-        [ModelConfig, links_utils:links_doc_key(FileUUID, ProvID)]) of
+    case rpc:call(W, Driver, get_link_doc, [ModelConfig, LinkDocKey]) of
         {error, {not_found, _}} ->
-            case rpc:call(W, couchdb_datastore_driver, get_link_doc,
-                [ModelConfig, links_utils:links_doc_key(FileUUID, ProvID)]) of
-                {error, {not_found, _}} ->
-                    not_found;
-                GetAns2 ->
-                    ?assertMatch({ok, #document{value = #links{}}}, GetAns2),
-                    {ok, #document{value = Links2}} = GetAns2,
-                    Links2
-            end;
+            Ans;
         GetAns ->
             ?assertMatch({ok, #document{value = #links{}}}, GetAns),
             {ok, #document{value = Links}} = GetAns,
-            Links
+            TmpAns = maps:fold(fun(K, V, Acc) ->
+                case Driver of
+                    mnesia_cache_driver ->
+                        maps:put(K, V, Acc);
+                    _ ->
+                        case rpc:call(W, cache_controller, check_fetch, [{FileUUID, K}, file_meta, ?GLOBAL_ONLY_LEVEL]) of
+                            ok ->
+                                maps:put(K, V, Acc);
+                            _ ->
+                                Acc
+                        end
+                end
+            end, Ans, Links#links.link_map),
+
+            maps:fold(fun(_, DocKey, Acc) ->
+                case DocKey of
+                    <<"non">> -> Acc;
+                    _ -> get_links(W, FileUUID, DocKey, Driver, Acc)
+                end
+            end, TmpAns, Links#links.children)
     end.
 
-count_links(W, #links{link_map = Map, children = Children}) ->
-    case maps:size(Children) of
-        0 ->
-            maps:size(Map);
-        _ ->
-            maps:fold(fun(_, Uuid, Acc) ->
-                GetAns = rpc:call(W, file_meta, get, [Uuid]),
-                ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                {ok, #document{value = Links}} = GetAns,
-                Acc + count_links(W, Links)
-            end, maps:size(Map), Children)
-    end.
+count_links(W, FileUUID, ProvID) ->
+    Links = get_links(W, FileUUID, ProvID),
+    maps:size(Links).
 
-verify_locations(W, Links) ->
-    IDs = get_locations(W, Links),
+verify_locations(W, FileUUID, ProvID) ->
+    IDs = get_locations(W, FileUUID, ProvID),
     lists:foldl(fun(ID, Acc) ->
         case rpc:call(W, file_location, get, [ID]) of
             {ok, _} -> Acc + 1;
@@ -481,18 +473,9 @@ verify_locations(W, Links) ->
         end
     end, 0, IDs).
 
-get_locations(W, #links{link_map = Map, children = Children}) ->
-    case maps:size(Children) of
-        0 ->
-            get_locations_from_map(Map);
-        _ ->
-            maps:fold(fun(_, Uuid, Acc) ->
-                GetAns = rpc:call(W, file_meta, get, [Uuid]),
-                ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                {ok, #document{value = Links}} = GetAns,
-                Acc ++ get_locations(W, Links)
-            end, get_locations_from_map(Map), Children)
-    end.
+get_locations(W, FileUUID, ProvID) ->
+    Links = get_links(W, FileUUID, ProvID),
+    get_locations_from_map(Links).
 
 get_locations_from_map(Map) ->
     maps:fold(fun(_, V, Acc) ->
