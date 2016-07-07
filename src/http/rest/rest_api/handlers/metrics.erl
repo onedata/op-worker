@@ -20,10 +20,10 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 -define(AVAILABLE_SPACE_METRICS, [storage_quota, storage_used, data_access,
-    block_access, connected_users, remote_transfer
+    block_access, connected_users
 ]).
 -define(AVAILABLE_USER_METRICS, [storage_used, data_access,
-    block_access, remote_transfer
+    block_access
 ]).
 
 -define(DEFAULT_STEP, '5m').

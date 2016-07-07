@@ -34,23 +34,14 @@
     '1m' => "1y"
 }).
 
--define(LAST_RRAS, #{
-    '5m' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_5_MIN,   ?_5_MIN_COUNT_IN_1_DAY},
-    '1h' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_1_H,     ?_1_H_COUNT_IN_1_WEEK},
-    '1d' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_1_DAY,   ?_1_DAY_COUNT_IN_31_DAYS},
-    '1m' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_31_DAYS, ?_31_DAYS_COUNT_IN_1_YEAR}
-}).
-
--define(AVERAGE_RRAS, #{
-    '5m' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_5_MIN,   ?_5_MIN_COUNT_IN_1_DAY},
-    '1h' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_1_H,     ?_1_H_COUNT_IN_1_WEEK},
-    '1d' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_1_DAY,   ?_1_DAY_COUNT_IN_31_DAYS},
-    '1m' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_31_DAYS, ?_31_DAYS_COUNT_IN_1_YEAR}
-}).
-
 -record(rrd_definition, {
     datastores = [] :: [rrd_utils:datastore()],
-    rras_map = #{} :: #{atom() => rrd_utils:rra()},
+    rras_map = #{
+        '5m' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_5_MIN,   ?_5_MIN_COUNT_IN_1_DAY},
+        '1h' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_1_H,     ?_1_H_COUNT_IN_1_WEEK},
+        '1d' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_1_DAY,   ?_1_DAY_COUNT_IN_31_DAYS},
+        '1m' => {'LAST', 0.5, ?_5_MIN_COUNT_IN_31_DAYS, ?_31_DAYS_COUNT_IN_1_YEAR}
+    } :: #{atom() => rrd_utils:rra()},
     options = [{step, ?DEFAULT_STEP_IN_SECONDS}] :: rrd_utils:options(),
     unit = "" :: string()
 }).
@@ -58,21 +49,18 @@
 -define(STORAGE_USED_RRD, #rrd_definition{
     datastores = [{"storage_used", 'GAUGE',
         [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]}],
-    rras_map = ?LAST_RRAS,
     unit = "bytes"
 }).
 
 -define(STORAGE_QUOTA_RRD, #rrd_definition{
     datastores = [{"storage_quota", 'GAUGE',
         [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]}],
-    rras_map = ?LAST_RRAS,
     unit = "bytes"
 }).
 
 -define(CONNECTED_USERS_RRD, #rrd_definition{
     datastores = [{"connected_users", 'GAUGE',
         [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]}],
-    rras_map = ?LAST_RRAS,
     unit = "users_count"
 }).
 
@@ -81,7 +69,12 @@
         [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]},
         {"data_access_write", 'COUNTER',
             [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]}],
-    rras_map = ?AVERAGE_RRAS,
+    rras_map = #{
+        '5m' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_5_MIN,   ?_5_MIN_COUNT_IN_1_DAY},
+        '1h' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_1_H,     ?_1_H_COUNT_IN_1_WEEK},
+        '1d' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_1_DAY,   ?_1_DAY_COUNT_IN_31_DAYS},
+        '1m' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_31_DAYS, ?_31_DAYS_COUNT_IN_1_YEAR}
+    },
     unit = "bytes/s"
 }).
 
@@ -90,15 +83,13 @@
         [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]},
         {"block_access_write", 'COUNTER',
             [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]}],
-    rras_map = ?AVERAGE_RRAS,
+    rras_map = #{
+        '5m' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_5_MIN,   ?_5_MIN_COUNT_IN_1_DAY},
+        '1h' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_1_H,     ?_1_H_COUNT_IN_1_WEEK},
+        '1d' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_1_DAY,   ?_1_DAY_COUNT_IN_31_DAYS},
+        '1m' => {'AVERAGE', 0.5, ?_5_MIN_COUNT_IN_31_DAYS, ?_31_DAYS_COUNT_IN_1_YEAR}
+    },
     unit = "iops/s"
-}).
-
--define(REMOTE_TRANSFER_RRD, #rrd_definition{
-    datastores = [{"remote_transfer_in", 'COUNTER',
-        [?DEFAULT_HEARTBEAT_IN_SECONDS, undefined, undefined]}],
-    rras_map = ?AVERAGE_RRAS,
-    unit = "bits/s"
 }).
 
 -endif.

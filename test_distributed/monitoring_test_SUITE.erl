@@ -66,18 +66,6 @@ all() ->
     end
 }).
 
--define(REMOTE_TRANSFER_UPDATE, #{
-    update_value => #{transfer_in => 10},
-    is_updated => fun(BufferState) ->
-        case maps:get(transfer_in, BufferState) of
-            80 ->
-                true;
-            _ ->
-                false
-        end
-    end
-}).
-
 -define(MONITORING_TYPES, [
     {#monitoring_id{
         main_subject_type = space,
@@ -134,19 +122,7 @@ all() ->
         metric_type = data_access,
         secondary_subject_type = user,
         secondary_subject_id = ?USER_ID
-    }, ?DATA_ACCESS_UPDATE, [100, 100]},
-    {#monitoring_id{
-        main_subject_type = space,
-        main_subject_id = ?SPACE_ID,
-        metric_type = remote_transfer
-    }, ?REMOTE_TRANSFER_UPDATE, [100]},
-    {#monitoring_id{
-        main_subject_type = space,
-        main_subject_id = ?SPACE_ID,
-        metric_type = remote_transfer,
-        secondary_subject_type = user,
-        secondary_subject_id = ?USER_ID
-    }, ?REMOTE_TRANSFER_UPDATE, [100]}
+    }, ?DATA_ACCESS_UPDATE, [100, 100]}
 ]).
 
 -define(FORMATS, [json, xml]).
@@ -175,13 +151,6 @@ rrd_test(Config) ->
         %% second create
         ?assertEqual(already_exists, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId, #{}])),
         ?assertEqual({ok, Doc}, rpc:call(Worker, monitoring_state, get, [MonitoringId])),
-
-        %% restart monitoring
-        ?assertMatch({ok, _}, rpc:call(Worker, monitoring_state, save,
-            [Doc#document{value = State#monitoring_state{active = false}}])),
-        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId, #{}])),
-        ?assertMatch({ok, #document{value = #monitoring_state{active = true}}},
-            rpc:call(Worker, monitoring_state, get, [MonitoringId])),
 
         %% update
         {ok, #monitoring_state{rrd_file = UpdatedRRDFile}} = ?assertMatch(
@@ -212,7 +181,7 @@ monitoring_test(Config) ->
 
         ?assertEqual(true, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        {ok, #document{value = #monitoring_state{rrd_file = RRDFile, active = Active} = State}} =
+        {ok, #document{value = #monitoring_state{rrd_file = RRDFile, active = Active} = State} = Doc} =
             rpc:call(Worker, monitoring_state, get, [MonitoringId]),
         ?assertNotEqual(undefinied, RRDFile),
         ?assertEqual(true, Active),
