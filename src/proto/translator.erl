@@ -263,6 +263,7 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
+        handle_id = Record#'FileLocation'.handle_id,
         blocks = lists:map(
             fun(Block) ->
                 translate_from_protobuf(Block)
