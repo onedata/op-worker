@@ -617,13 +617,14 @@ copy_file_contents(SessId, From, To) ->
     {ok, FromHandle} = logical_file_manager:open(SessId, From, read),
     {ok, ToHandle} = logical_file_manager:open(SessId, To, write),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ?CHUNK_SIZE_ENV_KEY),
-    copy_file_contents(SessId, FromHandle, ToHandle, 0, ChunkSize),
-    ok = logical_file_manager:release(FromHandle),
-    ok = logical_file_manager:release(ToHandle).
+    {NewFromHandle, NewToHandle} = copy_file_contents(SessId, FromHandle, ToHandle, 0, ChunkSize),
+    ok = logical_file_manager:release(NewFromHandle),
+    ok = logical_file_manager:release(NewToHandle).
 
 -spec copy_file_contents(session:id(), FromHandle :: logical_file_manager:handle(),
     ToHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
-    Size :: non_neg_integer()) -> ok.
+    Size :: non_neg_integer()) ->
+    {NewFromHandle :: logical_file_manager:handle(), NewToHandle :: logical_file_manager:handle()}.
 copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
     {ok, NewFromHandle, Data} = logical_file_manager:read(FromHandle, Offset, Size),
     DataSize = size(Data),
@@ -633,7 +634,7 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
             copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset + Size, Size);
         _ ->
             logical_file_manager:fsync(ToHandle),
-            ok
+            {NewFromHandle, NewToHandle}
     end.
 
 %%--------------------------------------------------------------------

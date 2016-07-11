@@ -99,7 +99,6 @@ handle_http_download(Req, FileId) ->
                     {ok, #file_attr{size = Size, name = FileName}} =
                         logical_file_manager:stat(SessionId, {guid, FileId}),
                     StreamFun = cowboy_file_stream_fun(FileHandle, Size),
-                    logical_file_manager:release(FileHandle),
                     Headers = attachment_headers(FileName),
                     % Reply with attachment headers and a streaming function
                     g_ctx:reply(200, Headers, {Size, StreamFun})
@@ -174,7 +173,7 @@ stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
     NewSent = BytesSent + size(BytesRead),
     case NewSent >= Size of
         true ->
-            ok;
+            ok = logical_file_manager:release(NewHandle);
         false ->
             stream_file(Socket, Transport, NewHandle, Size, NewSent, BufSize)
     end.
