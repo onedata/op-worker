@@ -13,6 +13,8 @@
 -ifndef(OP_WORKER_MODULES_EVENTS_TYPES_HRL).
 -define(OP_WORKER_MODULES_EVENTS_TYPES_HRL, 1).
 
+-include("proto/oneclient/common_messages.hrl").
+
 %% definition of a top level event wrapper
 %% key     - arbitrary value that distinguish events, i.e. events with the same
 %%           key can be aggregated
@@ -27,6 +29,14 @@
 %% definition of a events container
 -record(events, {
     events = [] :: [#event{}]
+}).
+
+%% definition of a events container
+-record(flush_events, {
+    provider_id :: oneprovider:id(),
+    subscription_id :: subscription:id(),
+    context :: term(),
+    notify :: fun((term()) -> ok)
 }).
 
 %% definition of an event associated with a read operation in the file system
@@ -67,6 +77,29 @@
 %% file_uuid - UUID of a file
 -record(file_removal_event, {
     file_uuid :: file_meta:uuid()
+}).
+
+%% definition of an event triggered when any of spaces becomes (un)available
+-record(quota_exeeded_event, {
+   spaces = [] :: [space_info:id()]
+}).
+
+%% definition of an event triggered when file is renamed
+%% old_uuid - old UUID of renamed file
+%% new_uuid - new UUID of renamed file
+-record(file_renamed_event, {
+    top_entry :: #file_renamed_entry{},
+    child_entries = [] :: [#file_renamed_entry{}]
+}).
+
+%% definition of an event triggered when file is accessed
+%% file_uuid     - UUID of a file
+%% open_count    - Number of open operation on file
+%% release_count - Number of release operation on file
+-record(file_accessed_event, {
+    file_uuid :: file_meta:uuid(),
+    open_count :: non_neg_integer(),
+    release_count :: non_neg_integer()
 }).
 
 -endif.

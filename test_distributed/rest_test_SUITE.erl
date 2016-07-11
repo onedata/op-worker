@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -23,16 +24,27 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([token_auth/1, cert_auth/1, internal_error_when_handler_crashes/1,
-    custom_code_when_handler_throws_code/1, custom_error_when_handler_throws_error/1]).
+-export([
+    token_auth/1,
+    cert_auth/1,
+    basic_auth/1,
+    internal_error_when_handler_crashes/1,
+    custom_code_when_handler_throws_code/1,
+    custom_error_when_handler_throws_error/1
+]).
 
-%todo reenable rest_cert_auth after appmock repair
+
 all() -> ?ALL([
-            token_auth, internal_error_when_handler_crashes,
-            custom_code_when_handler_throws_code,
-            custom_error_when_handler_throws_error]).
+    token_auth,
+%%    cert_auth, %todo reenable rest_cert_auth after appmock repair
+    basic_auth,
+    internal_error_when_handler_crashes,
+    custom_code_when_handler_throws_code,
+    custom_error_when_handler_throws_error
+]).
 
 -define(MACAROON, element(2, macaroon:serialize(macaroon:create("a", "b", "c")))).
+-define(BASIC_AUTH_HEADER, <<"Basic ", (base64:encode(<<"user:password">>))/binary>>).
 
 %%%===================================================================
 %%% Test functions
@@ -44,12 +56,14 @@ token_auth(Config) ->
     Endpoint = rest_endpoint(Worker),
 
     % when
-    AuthFail = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, <<"invalid">>}]),
-    AuthSuccess = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, ?MACAROON}]),
+    AuthFail = do_request(get, Endpoint ++ "files", [{<<"X-Auth-Token">>, <<"invalid">>}]),
+    AuthSuccess1 = do_request(get, Endpoint ++ "files", [{<<"X-Auth-Token">>, ?MACAROON}]),
+    AuthSuccess2 = do_request(get, Endpoint ++ "files", [{<<"Macaroon">>, ?MACAROON}]),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
-    ?assertMatch({ok, 404, _, _}, AuthSuccess).
+    ?assertMatch({ok, 200, _, _}, AuthSuccess1),
+    ?assertMatch({ok, 200, _, _}, AuthSuccess2).
 
 cert_auth(Config) ->
     % given
@@ -61,25 +75,38 @@ cert_auth(Config) ->
     KnownCertOpt = {ssl_options, [{certfile, CertKnown}, {reuse_sessions, false}]},
 
     % then - unauthorized access
-    {ok, 307, Headers, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [UnknownCertOpt]),
+    {ok, 307, Headers, _} = do_request(get, Endpoint ++ "files", [], <<>>, [UnknownCertOpt]),
     Loc = proplists:get_value(<<"location">>, Headers),
     ?assertMatch({ok, 401, _, _}, do_request(get, Loc, [], <<>>, [UnknownCertOpt])),
 
     % then - authorized access
-    {ok, 307, Headers2, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [KnownCertOpt]),
+    {ok, 307, Headers2, _} = do_request(get, Endpoint ++ "files", [], <<>>, [KnownCertOpt]),
     Loc2 = proplists:get_value(<<"location">>, Headers2),
     {ok, 307, Headers3, _} = do_request(get, Loc2, [], <<>>, [KnownCertOpt]),
     Loc3 = proplists:get_value(<<"location">>, Headers3),
     ?assertMatch({ok, 404, _, _}, do_request(get, Loc3, [], <<>>, [KnownCertOpt])).
 
+basic_auth(Config) ->
+    % given
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Endpoint = rest_endpoint(Worker),
+
+    % when
+    AuthFail = do_request(get, Endpoint ++ "files", [{<<"Authorization">>, <<"invalid">>}]),
+    AuthSuccess = do_request(get, Endpoint ++ "files", [{<<"Authorization">>, ?BASIC_AUTH_HEADER}]),
+
+    % then
+    ?assertMatch({ok, 401, _, _}, AuthFail),
+    ?assertMatch({ok, 200, _, _}, AuthSuccess).
+
 internal_error_when_handler_crashes(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_crash/2),
+    test_utils:mock_expect(Workers, files, is_authorized, fun test_crash/2),
 
     % when
-    {ok, Status, _, _} = do_request(get, Endpoint ++ "random_path"),
+    {ok, Status, _, _} = do_request(get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(500, Status).
@@ -88,10 +115,10 @@ custom_code_when_handler_throws_code(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400/2),
+    test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400/2),
 
     % when
-    {ok, Status, _, _} = do_request(get, Endpoint ++ "random_path"),
+    {ok, Status, _, _} = do_request(get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(400, Status).
@@ -100,10 +127,10 @@ custom_error_when_handler_throws_error(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400_with_description/2),
+    test_utils:mock_expect(Workers, files, is_authorized, fun test_throw_400_with_description/2),
 
     % when
-    {ok, Status, _, Body} = do_request(get, Endpoint ++ "random_path"),
+    {ok, Status, _, Body} = do_request(get, Endpoint ++ "files"),
 
     % then
     ?assertEqual(400, Status),
@@ -130,7 +157,7 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     application:start(ssl2),
     hackney:start(),
-    test_utils:mock_new(Workers, rest_handler),
+    test_utils:mock_new(Workers, files),
     Config;
 init_per_testcase(_, Config) ->
     application:start(ssl2),
@@ -144,7 +171,7 @@ end_per_testcase(Case, Config) when
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, rest_handler),
+    test_utils:mock_unload(Workers, files),
     hackney:stop(),
     application:stop(ssl2);
 end_per_testcase(_, Config) ->
@@ -178,7 +205,7 @@ rest_endpoint(Node) ->
                 PStr;
             P -> P
         end,
-    string:join(["https://", utils:get_host(Node), ":", Port, "/rest/latest/"], "").
+    string:join(["https://", utils:get_host(Node), ":", Port, "/api/v3/oneprovider/"], "").
 
 mock_oz_spaces(Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -195,7 +222,14 @@ unmock_oz_spaces(Config) ->
 
 mock_oz_certificates(Config) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    Url = rpc:call(Worker1, oz_plugin, get_oz_url, []),
+    OZUrl = rpc:call(Worker1, oz_plugin, get_oz_url, []),
+    OZRestPort = rpc:call(Worker1, oz_plugin, get_oz_rest_port, []),
+    OZRestApiPrefix = rpc:call(Worker1, oz_plugin, get_oz_rest_api_prefix, []),
+    OzRestApiUrl = str_utils:format("~s:~B~s", [
+        OZUrl,
+        OZRestPort,
+        OZRestApiPrefix
+    ]),
 
     % save key and cert files on the workers
     % read the files
@@ -225,25 +259,23 @@ mock_oz_certificates(Config) ->
 
     test_utils:mock_expect(Workers, oz_endpoint, auth_request,
         fun
-            (provider, URN, Method, Headers, Body, Options) ->
-                do_request(Method, Url ++ URN,
-                    [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
-            (client, URN, Method, Headers, Body, Options) ->
-                do_request(Method, Url ++ URN,
-                    [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
-            ({_, undefined}, URN, Method, Headers, Body, Options) ->
-                do_request(Method, Url ++ URN,
-                    [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
             % @todo for now, in rest we only use the root macaroon
-            ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
+            (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
                 {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
                 AuthorizationHeader = {<<"macaroon">>, SrlzdMacaroon},
-                do_request(Method, Url ++ URN,
-                    [{<<"content-type">>,<< "application/json">>},
+                do_request(Method, OzRestApiUrl ++ URN,
+                    [{<<"content-type">>, <<"application/json">>},
                         AuthorizationHeader | Headers],
+                    Body, [SSLOpts | Options]);
+            (#basic_auth{credentials =  Credentials}, URN, Method, Headers, Body, Options) ->
+                AuthorizationHeader = {<<"Authorization">>, Credentials},
+                do_request(Method, OzRestApiUrl ++ URN,
+                    [{<<"content-type">>, <<"application/json">>},
+                        AuthorizationHeader | Headers],
+                    Body, [SSLOpts | Options]);
+            (_, URN, Method, Headers, Body, Options) ->
+                do_request(Method, OzRestApiUrl ++ URN,
+                    [{<<"content-type">>, <<"application/json">>} | Headers],
                     Body, [SSLOpts | Options])
         end
     ).

@@ -57,7 +57,8 @@ start_link() ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([]) ->
     {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, [
-        cluster_worker_specs:main_worker_sup_spec()
+        cluster_worker_specs:main_worker_sup_spec(),
+        rrdtool_supervisor:specification()
     ]}}.
 
 %%%===================================================================

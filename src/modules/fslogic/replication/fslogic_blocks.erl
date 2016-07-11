@@ -23,12 +23,25 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
+-export([merge/2, aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
     lower/1, calculate_file_size/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Merges given blocks to one blocks list. Blocks from he first list override
+%% blocks with the same ranges from second list. This function returns
+%% consolidated list.
+%% @end
+%%--------------------------------------------------------------------
+-spec merge(blocks(), blocks()) -> blocks().
+merge(Blocks1, Blocks2) ->
+    NewBlocks = fslogic_blocks:invalidate(Blocks2, Blocks1) ++ Blocks1,
+    fslogic_blocks:consolidate(lists:sort(NewBlocks)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -46,6 +59,7 @@ aggregate(Blocks, []) ->
 
 aggregate(Blocks1, Blocks2) ->
     aggregate_blocks(Blocks1, Blocks2, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -80,18 +94,24 @@ lower([]) ->
 %% For given file / location or multiple locations, reads file size assigned to those locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_size(datastore:document() | #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
-    Size :: non_neg_integer() | no_return().
+-spec get_file_size(datastore:document() | [datastore:document()] | #file_location{} | [#file_location{}] |
+    fslogic_worker:file()) -> Size :: non_neg_integer() | no_return().
 get_file_size(#document{value = #file_location{} = Value}) ->
     get_file_size(Value);
+get_file_size(#document{value = #file_meta{type = ?DIRECTORY_TYPE}}) ->
+    0;
+get_file_size(#document{value = #file_meta{type = ?SYMLINK_TYPE}}) ->
+    0;
 get_file_size(#file_location{size = undefined} = Location) ->
     calculate_file_size(Location);
 get_file_size(#file_location{size = Size}) ->
     Size;
+get_file_size([Location]) ->
+    get_file_size(Location);
 get_file_size([Location | T]) ->
     max(get_file_size(Location), get_file_size(T));
 get_file_size([]) ->
-    0;
+    throw(locations_not_found);
 get_file_size(Entry) ->
     LocalLocations = fslogic_utils:get_local_file_locations(Entry),
     get_file_size(LocalLocations).
@@ -99,7 +119,7 @@ get_file_size(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Internal impl. of invalidate/2
+%% Invalidates second list's blocks in first list.
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate(blocks(), blocks() | block()) -> blocks().

@@ -93,6 +93,52 @@ inject_event_stream_definition(#subscription{
                 message_body = #events{events = Events}
             }, SessId)
         end
+    }};
+
+inject_event_stream_definition(#subscription{object = #quota_subscription{}} = Sub) ->
+    Sub#subscription{event_stream = #event_stream_definition{
+        admission_rule = fun
+                             (#event{object = #quota_exeeded_event{}}) ->
+                                 true;
+                             (_) -> false
+                         end,
+        emission_rule = fun(_) -> true end,
+        emission_time = 200,
+        init_handler = open_sequencer_stream_handler(),
+        terminate_handler = close_sequencer_stream_handler(),
+        event_handler = send_events_handler()
+    }};
+
+inject_event_stream_definition(#subscription{
+    object = #file_renamed_subscription{file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{event_stream = ?FILE_RENAMED_EVENT_STREAM#event_stream_definition{
+        admission_rule = fun
+            (#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}})
+                when Uuid =:= FileUuid -> true;
+            (_) -> false
+        end,
+        init_handler = fun(_, SessId, _) -> #{session_id => SessId} end,
+        event_handler = fun(Events, #{session_id := SessId}) ->
+            communicator:send(#server_message{
+                message_body = #events{events = Events}
+            }, SessId)
+        end
+    }};
+
+inject_event_stream_definition(#subscription{
+    object = #file_accessed_subscription{}} = Sub) ->
+    Sub#subscription{event_stream = ?FILE_ACCESSED_EVENT_STREAM#event_stream_definition{
+        admission_rule = fun
+            (#event{object = #file_accessed_event{}}) ->
+                true;
+            (_) -> false
+        end,
+        init_handler = fun(_, SessId, _) -> #{session_id => SessId} end,
+        event_handler = fun(Events, #{session_id := SessId}) ->
+            communicator:send(#server_message{
+                message_body = #events{events = Events}
+            }, SessId)
+        end
     }}.
 
 %%--------------------------------------------------------------------

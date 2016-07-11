@@ -39,6 +39,8 @@ def _tweak_config(config, os_config, name, uid):
                          'user_cert': client['user_cert'],
                          'mounting_path': client['mounting_path'],
                          'token_for': client['token_for']}
+        if 'default_timeout' in client.keys():
+            client_config['default_timeout'] = client['default_timeout']
 
         node['clients'].append(client_config)
 
@@ -65,8 +67,7 @@ chmod 777 /tmp
 mkdir /tmp/certs
 mkdir /tmp/keys
 {mount_commands}
-echo 'while ((1)); do chown -R {uid}:{gid} /tmp; sleep 1; done' > /root/bin/chown_logs.sh
-bash /root/bin/chown_logs.sh &
+bindfs --create-for-user={uid} --create-for-group={gid} /tmp /tmp
 '''
 
     for client in node['clients']:
@@ -77,6 +78,9 @@ bash /root/bin/chown_logs.sh &
                                     'zone_domain': client['zone_domain'],
                                     'mounting_path': client['mounting_path'],
                                     'token_for': client['token_for']}
+        if 'default_timeout' in client.keys():
+            client_data[client_name]['default_timeout'] = client['default_timeout']
+
         # cert_file_path and key_file_path can both be an absolute path
         # or relative to gen_dev_args.json
         cert_file_path = os.path.join(common.get_file_dir(config_path),
@@ -144,7 +148,7 @@ EOF
         workdir='/root/bin',
         volumes=volumes,
         dns_list=dns_servers,
-        run_params=["--privileged"],
+        privileged=True,
         command=command)
 
     # create system users and groups

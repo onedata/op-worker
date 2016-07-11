@@ -26,14 +26,15 @@
 
 %% API
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
-    get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
-    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1,
-    all_with_user/0, get_user_id/1]).
+    get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
+    get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
+    all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
+    get_transfers/1, remove_transfer/2, add_transfer/2]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
--type auth() :: #auth{}.
--type type() :: fuse | rest | gui | provider_outgoing | provider.
+-type auth() :: #token_auth{} | #basic_auth{}.
+-type type() :: fuse | rest | gui | provider_outgoing | provider_incoming.
 -type status() :: active | inactive.
 -type identity() :: #identity{}.
 
@@ -132,6 +133,15 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
+    case session:get(Key) of
+        {ok, #document{value = #session{open_files = OpenFiles}}} ->
+            lists:foreach(
+                fun(FileUUID) ->
+                    open_file:invalidate_session_entry(FileUUID, Key)
+                end, sets:to_list(OpenFiles));
+        _ -> ok
+    end,
+
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -289,6 +299,7 @@ get_sequencer_manager(SessId) ->
             {error, Reason}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns random connection associated with session.
@@ -297,11 +308,23 @@ get_sequencer_manager(SessId) ->
 -spec get_random_connection(SessId :: session:id()) ->
     {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId) ->
-    case get_connections(SessId) of
+    get_random_connection(SessId, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns random connection associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_random_connection(SessId :: session:id(), HideOverloaded :: boolean()) ->
+    {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
+get_random_connection(SessId, HideOverloaded) ->
+    case get_connections(SessId, HideOverloaded) of
         {ok, []} -> {error, empty_connection_pool};
         {ok, Cons} -> {ok, utils:random_element(Cons)};
         {error, Reason} -> {error, Reason}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -309,15 +332,46 @@ get_random_connection(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_connections(SessId :: id()) ->
-    {ok, Comm :: pid()} | {error, Reason :: term()}.
+    {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
+    get_connections(SessId, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns connections associated with session. If HideOverloaded is set to true, hides connections that
+%% have too long request queue and and removes invalid connections.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connections(SessId :: id(), HideOverloaded :: boolean()) ->
+    {ok, [Comm :: pid()]} | {error, Reason :: term()}.
+get_connections(SessId, HideOverloaded) ->
+    case session:const_get(SessId) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),
-            get_connections(ProxyViaSession);
-        {ok, #document{value = #session{connections = Cons}}} ->
-            {ok, Cons};
+            get_connections(ProxyViaSession, HideOverloaded);
+        {ok, #document{value = #session{connections = Cons, watcher = SessionWatcher}}} ->
+            case HideOverloaded of
+                false ->
+                    {ok, Cons};
+                true ->
+                    NewCons = lists:foldl( %% Foreach connection
+                        fun(Pid, AccIn) ->
+                            case utils:process_info(Pid, message_queue_len) of
+                                undefined ->
+                                    %% Connection died, removing from session
+                                    ok = session:remove_connection(SessId, Pid),
+                                    AccIn;
+                                {message_queue_len, QueueLen} when QueueLen > 15 ->
+                                    SessionWatcher ! {overloaded_connection, Pid},
+                                    AccIn;
+                                _ ->
+                                    [Pid | AccIn]
+                            end
+                        end, [], Cons),
+                    {ok, NewCons}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.
@@ -342,11 +396,11 @@ remove_connection(SessId, Con) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns #auth{} record associated with session.
+%% Returns #token_auth{} record associated with session.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(SessId :: id()) ->
-    {ok, Auth :: #auth{}} | {ok, undefined} | {error, Reason :: term()}.
+    {ok, Auth :: #token_auth{}} | {ok, undefined} | {error, Reason :: term()}.
 get_auth(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} ->
@@ -362,7 +416,83 @@ get_auth(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_rest_session_id(session:identity()) -> id().
 get_rest_session_id(#identity{user_id = Uid}) ->
-    <<Uid/binary, "_rest_session">>.
+    <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds open file UUID to session.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_open_file(session:id(), file_meta:uuid()) ->
+    ok | {error, Reason :: term()}.
+add_open_file(SessionId, FileUUID) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
+            UpdatedOpenFiles= sets:add_element(FileUUID, OpenFiles),
+            {ok, _} = session:save(Doc#document{value = Session#session{
+                open_files = UpdatedOpenFiles}}),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes open file UUID from session.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_open_file(session:id(), file_meta:uuid()) ->
+    ok | {error, Reason :: term()}.
+remove_open_file(SessionId, FileUUID) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
+            UpdatedOpenFiles= sets:del_element(FileUUID, OpenFiles),
+            {ok, _} = session:save(Doc#document{value = Session#session{
+                open_files = UpdatedOpenFiles}}),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes open file UUID from session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_transfers(session:id()) -> {ok, [binary()]} | {error, Reason :: term()}.
+get_transfers(SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{transfers = Transfers}}} ->
+            {ok, Transfers};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes transfer from session memory
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+remove_transfer(SessionId, TransferId) ->
+    session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
+            FilteredTransfers = lists:filter(fun(T) ->
+                    T =/= TransferId
+                end, Transfers),
+        {ok, Sess#session{transfers = FilteredTransfers}}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add transfer to session memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+add_transfer(SessionId, TransferId) ->
+    session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
+        {ok, Sess#session{transfers = [TransferId | Transfers]}}
+        end).
+
 
 %%%===================================================================
 %%% Internal functions

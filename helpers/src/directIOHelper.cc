@@ -160,7 +160,7 @@ void DirectIOHelper::ash_mknod(CTXPtr rawCTX, const boost::filesystem::path &p,
     mode_t mode, FlagsSet flags, dev_t rdev, VoidCallback callback)
 {
     auto ctx = getCTX(std::move(rawCTX));
-    mode |= getFlagsValue(std::move(flags));
+    mode |= flagsToMask(std::move(flags));
     m_workerService.post(
         [ =, ctx = std::move(ctx), callback = std::move(callback) ]() mutable {
             auto userCTX = m_userCTXFactory(std::move(ctx));
@@ -550,10 +550,7 @@ DirectIOHelper::DirectIOHelper(
 {
 }
 
-bool DirectIOHelper::needsDataConsistencyCheck()
-{
-    return true;
-}
+bool DirectIOHelper::needsDataConsistencyCheck() { return true; }
 
 std::shared_ptr<PosixHelperCTX> DirectIOHelper::getCTX(CTXPtr rawCTX) const
 {

@@ -33,15 +33,13 @@
 -spec on_file_location_change(space_info:id(), file_location:doc()) ->
     ok | {error, term()}.
 on_file_location_change(_SpaceId, ChangedLocationDoc =
-    #document{key = Key, value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->
+    #document{value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->
     file_location:run_synchronized(Uuid,
         fun() ->
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
-                    {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
-                    lists:foreach(fun(Id) ->
-                        ok = update_location_replica(Id, ChangedLocationDoc) end,
-                        [LocationId || LocationId <- Locations, LocationId =/= Key]);
+                    [LocalLocation] = fslogic_utils:get_local_file_locations_once({uuid, Uuid}),
+                    update_local_location_replica(LocalLocation, ChangedLocationDoc);
                 false ->
                     ok
             end
@@ -50,23 +48,6 @@ on_file_location_change(_SpaceId, ChangedLocationDoc =
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if given replica is local and updates it according to external changes.
-%% @end
-%%--------------------------------------------------------------------
--spec update_location_replica(file_location:id(), file_location:doc()) -> ok.
-update_location_replica(LocationId, ChangedLocationDoc) ->
-    LocalProviderId = oneprovider:get_provider_id(),
-    case file_location:get(LocationId) of
-        {ok, LocalLocationDoc = #document{value = #file_location{provider_id = LocalProviderId}}} ->
-            update_local_location_replica(LocalLocationDoc, ChangedLocationDoc);
-        {ok, _} ->
-            ok;
-        Error ->
-            ?error("Cannot get file_location: ~p for replica update, due to ~p", [LocationId, Error])
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -158,8 +139,10 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
         end,
 
     NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
-    {ok, _} = file_meta:save(NewDoc#document{value = NewDoc#document.value#file_location{blocks = TruncatedNewBlocks, size = NewSize}}),
-    ok.
+    NewDoc2 = NewDoc#document{value = NewDoc#document.value#file_location{blocks = TruncatedNewBlocks, size = NewSize}},
+    {ok, _} = file_location:save(NewDoc2),
+    notify_block_change_if_necessary(LocalDoc, NewDoc2),
+    notify_size_change_if_necessary(LocalDoc, NewDoc2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -167,9 +150,9 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_block_change_if_necessary(file_location:doc(), file_location:doc()) -> ok.
-notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}},
-    #document{value = #file_location{blocks = SameBlocks}}) ->
-    ok;
+%%notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}}, %todo VFS-2132
+%%    #document{value = #file_location{blocks = SameBlocks}}) ->
+%%    ok;
 notify_block_change_if_necessary(#document{value = #file_location{uuid = FileUuid}}, _) ->
     ok = fslogic_event:emit_file_location_update({uuid, FileUuid}, []).
 

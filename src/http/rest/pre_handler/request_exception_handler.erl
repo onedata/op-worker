@@ -22,6 +22,8 @@
 
 -include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([handle/4]).
@@ -36,6 +38,21 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(cowboy_req:req(), term(), atom(), term()) -> no_return().
+handle(Req, State, error, {badmatch, Badmatch}) ->
+    handle(Req, State, error, Badmatch);
+handle(Req, State, error, {case_clause, CaseClause}) ->
+    handle(Req, State, error, CaseClause);
+handle(Req, State, error, {error, no_peer_certificate}) ->
+    {ok, Req2} = cowboy_req:reply(?NOT_AUTHORIZED, [], [], Req),
+    {halt, Req2, State};
+handle(Req, State, error, {error,{not_found,file_meta}}) ->
+    handle(Req, State, error, ?ERROR_NOT_FOUND);
+handle(Req, State, error, {error, ?ENOENT}) ->
+    handle(Req, State, error, ?ERROR_NOT_FOUND);
+handle(Req, State, error, {error, ?EACCES}) ->
+    handle(Req, State, error, ?ERROR_PERMISSION_DENIED);
+handle(Req, State, error, {error, ?EPERM}) ->
+    handle(Req, State, error, ?ERROR_FORBIDDEN);
 handle(Req, State, _Type, Status) when is_integer(Status) ->
     {ok, Req2} = cowboy_req:reply(Status, [], [], Req),
     {halt, Req2, State};

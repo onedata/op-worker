@@ -23,8 +23,10 @@
 -export([reuse_or_create_session/5]).
 -export([create_gui_session/2]).
 -export([remove_session/1]).
--export([get_provider_session_id/2, session_id_to_provider_id/1]).
+-export([get_provider_session_id/2, session_id_to_provider_id/1, is_provider_session_id/1]).
 -export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
+
+-define(PROVIDER_SESSION_PREFIX, "$$PRV$$__").
 
 %%%===================================================================
 %%% API
@@ -135,7 +137,7 @@ remove_session(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
 get_provider_session_id(Type, ProviderId) ->
-    http_utils:base64url_encode(term_to_binary({Type, provider, ProviderId})).
+    <<?PROVIDER_SESSION_PREFIX, (http_utils:base64url_encode(term_to_binary({Type, provider_incoming, ProviderId})))/binary>>.
 
 
 %%--------------------------------------------------------------------
@@ -144,9 +146,20 @@ get_provider_session_id(Type, ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_id_to_provider_id(session:id()) -> oneprovider:id().
-session_id_to_provider_id(SessId) ->
+session_id_to_provider_id(<<?PROVIDER_SESSION_PREFIX, SessId/binary>>) ->
     {_, _, ProviderId} = binary_to_term(http_utils:base64url_decode(SessId)),
     ProviderId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given session belongs to provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_provider_session_id(session:id()) -> boolean().
+is_provider_session_id(<<?PROVIDER_SESSION_PREFIX, _SessId/binary>>) ->
+    true;
+is_provider_session_id(_) ->
+    false.
 
 %%%===================================================================
 %%% Internal functions

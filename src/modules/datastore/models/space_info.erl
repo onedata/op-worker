@@ -105,7 +105,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_info_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(space_info_bucket, [{space_info, create}, {space_info, save},
+        {space_info, delete}, {space_info, create_or_update}], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,6 +116,14 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
+'after'(space_info, create, _, _, {ok, SpaceId}) ->
+    monitoring_action(start, SpaceId);
+'after'(space_info, create_or_update, _, _, {ok, SpaceId}) ->
+    monitoring_action(start, SpaceId);
+'after'(space_info, save, _, _, {ok, SpaceId}) ->
+    monitoring_action(start, SpaceId);
+'after'(space_info, delete, _, _, SpaceId) ->
+    monitoring_action(stop, SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -179,9 +188,8 @@ get(SpaceId, UserId) ->
 -spec get_or_fetch(session:id(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(SessionId, SpaceId) ->
-    Client = fslogic_utils:session_to_rest_client(SessionId),
     {ok, UserId} = session:get_user_id(SessionId),
-    get_or_fetch(Client, SpaceId, UserId).
+    get_or_fetch(SessionId, SpaceId, UserId).
 
 
 %%--------------------------------------------------------------------
@@ -190,18 +198,18 @@ get_or_fetch(SessionId, SpaceId) ->
 %% fetches it from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Client :: oz_endpoint:client(), SpaceId :: binary(),
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
     UserId :: onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Client, SpaceId, ?ROOT_USER_ID) ->
+get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) ->
     case get(SpaceId, ?ROOT_USER_ID) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Client, SpaceId);
+        {error, {not_found, _}} -> fetch(Auth, SpaceId);
         {error, Reason} -> {error, Reason}
     end;
-get_or_fetch(Client, SpaceId, UserId) ->
-    case get_or_fetch(Client, SpaceId, ?ROOT_USER_ID) of
+get_or_fetch(Auth, SpaceId, UserId) ->
+    case get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-            case onedata_user:get_or_fetch(Client, UserId) of
+            case onedata_user:get_or_fetch(Auth, UserId) of
                 {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
                     case lists:keyfind(SpaceId, 1, Spaces) of
                         false ->
@@ -226,24 +234,24 @@ get_or_fetch(Client, SpaceId, UserId) ->
 %% Fetches space info from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
+-spec fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(Client, SpaceId) ->
+fetch(Auth, SpaceId) ->
     {ok, #space_details{name = Name, providers_supports = Supports}} =
-        oz_spaces:get_details(Client, SpaceId),
-    {ok, GroupIds} = oz_spaces:get_groups(Client, SpaceId),
-    {ok, UserIds} = oz_spaces:get_users(Client, SpaceId),
+        oz_spaces:get_details(Auth, SpaceId),
+    {ok, GroupIds} = oz_spaces:get_groups(Auth, SpaceId),
+    {ok, UserIds} = oz_spaces:get_users(Auth, SpaceId),
 
-    {ok, ProviderIds} = oz_spaces:get_providers(Client, SpaceId),
+    {ok, ProviderIds} = oz_spaces:get_providers(Auth, SpaceId),
 
     GroupsWithPrivileges = utils:pmap(fun(GroupId) ->
         {ok, Privileges} =
-            oz_spaces:get_group_privileges(Client, SpaceId, GroupId),
+            oz_spaces:get_group_privileges(Auth, SpaceId, GroupId),
         {GroupId, Privileges}
     end, GroupIds),
     UsersWithPrivileges = utils:pmap(fun(UserId) ->
         {ok, Privileges} =
-            oz_spaces:get_user_privileges(Client, SpaceId, UserId),
+            oz_spaces:get_user_privileges(Auth, SpaceId, UserId),
         {UserId, Privileges}
     end, UserIds),
 
@@ -257,3 +265,16 @@ fetch(Client, SpaceId) ->
     {ok, _} = save(Doc),
 
     {ok, Doc}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts or stops monitoring for given user id.
+%% @end
+%%--------------------------------------------------------------------
+-spec monitoring_action(start | stop, datastore:id()) -> no_return().
+monitoring_action(Action, SpaceId) ->
+    MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
+    lists:foreach(fun(MetricType) ->
+        worker_proxy:cast(monitoring_worker, {Action, MonitoringId#monitoring_id{metric_type = MetricType}})
+    end, [storage_used, storage_quota, connected_users, data_access, block_access]).

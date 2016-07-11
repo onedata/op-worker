@@ -20,7 +20,7 @@
 
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("gui/include/gui.hrl").
 
 -export([route/1, data_backend/2, private_rpc_backend/0, public_rpc_backend/0]).
@@ -81,14 +81,18 @@ route(<<"/index.html">>) -> ?INDEX.
 -spec data_backend(HasSession :: boolean(), Identifier :: binary()) ->
     HandlerModule :: module().
 data_backend(true, <<"file">>) -> file_data_backend;
+data_backend(true, <<"file-acl">>) -> file_data_backend;
 data_backend(true, <<"file-distribution">>) -> file_data_backend;
-data_backend(true, <<"provider">>) -> provider_data_backend;
 data_backend(true, <<"data-space">>) -> data_space_data_backend;
 data_backend(true, <<"space">>) -> space_data_backend;
-data_backend(true, <<"space-user">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
-data_backend(true, <<"space-group">>) -> space_data_backend;
-data_backend(true, <<"space-group-permission">>) -> space_data_backend.
+data_backend(true, <<"space-group-permission">>) -> space_data_backend;
+data_backend(true, <<"group">>) -> group_data_backend;
+data_backend(true, <<"group-user-permission">>) -> group_data_backend;
+data_backend(true, <<"group-group-permission">>) -> group_data_backend;
+data_backend(true, <<"system-provider">>) -> system_data_backend;
+data_backend(true, <<"system-user">>) -> system_data_backend;
+data_backend(true, <<"system-group">>) -> system_data_backend.
 
 
 %%--------------------------------------------------------------------
@@ -121,10 +125,15 @@ session_details() ->
         value = #onedata_user{
             name = Name
         }}} = onedata_user:get(g_session:get_user_id()),
+    ConnectionRef = base64:encode(pid_to_list(self())),
     Res = [
         {<<"userName">>, Name},
         {<<"manageProvidersURL">>,
-            str_utils:to_binary(oneprovider:get_oz_providers_page())}
+            str_utils:to_binary(oneprovider:get_oz_providers_page())},
+        % @todo VFS-2051 temporary solution for model pushing during upload
+        % Used for model pushing during file upload - the client informs which
+        % connection is his and updates are pushed to that pid.
+        {<<"connectionRef">>, ConnectionRef}
     ],
     {ok, Res}.
 

@@ -37,7 +37,9 @@ new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_posix_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_s3_user_ctx(SessionId, SpaceUUID).
+    new_s3_user_ctx(SessionId, SpaceUUID);
+new_user_ctx(#helper_init{name = ?SWIFT_HELPER_NAME}, SessionId, SpaceUUID) ->
+    new_swift_user_ctx(SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -59,8 +61,8 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
                 gid = posix_user:gid(Credentials)
             };
         _ ->
-            {ok, Response} = get_credentials_from_luma(UserId,
-                ?DIRECTIO_HELPER_NAME, ?DIRECTIO_HELPER_NAME, SessionIdOrIdentity),
+            {ok, Response} = get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
+                undefined, SessionIdOrIdentity, SpaceUUID),
 
             UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
@@ -95,7 +97,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
         undefined ->
             StorageType = luma_utils:get_storage_type(StorageId),
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionId),
+                StorageId, SessionId, SpaceUUID),
 
             UserName = proplists:get_value(<<"user_name">>, Response),
             UserKey = proplists:get_value(<<"user_key">>, Response),
@@ -125,7 +127,7 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
         _ ->
             StorageType = luma_utils:get_storage_type(StorageId),
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionId),
+                StorageId, SessionId, SpaceUUID),
 
             AccessKey = proplists:get_value(<<"access_key">>, Response),
             SecretKey = proplists:get_value(<<"secret_key">>, Response),
@@ -134,6 +136,40 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
             #s3_user_ctx{
                 access_key = AccessKey,
                 secret_key = SecretKey
+            }
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for Swift storage helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_swift_user_ctx(SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+new_swift_user_ctx(SessionId, SpaceUUID) ->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
+    case luma_utils:get_swift_user(UserId, StorageId) of
+        {ok, Credentials} ->
+            #swift_user_ctx{
+                user_name = swift_user:user_name(Credentials),
+                password = swift_user:password(Credentials)
+            };
+        _ ->
+            StorageType = luma_utils:get_storage_type(StorageId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
+                StorageId, SessionId, SpaceUUID),
+
+            UserName = proplists:get_value(<<"user_name">>, Response),
+            Password = proplists:get_value(<<"password">>, Response),
+            swift_user:add(UserId, StorageId, UserName, Password),
+
+            #swift_user_ctx{
+                user_name = UserName,
+                password = Password
             }
     end.
 
@@ -160,7 +196,7 @@ new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
             StorageType = luma_utils:get_storage_type(StorageId),
 
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionIdOrIdentity),
+                StorageId, SessionIdOrIdentity, SpaceUUID),
 
             UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
@@ -174,15 +210,18 @@ new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
-    StorageId :: storage:id() | helpers:name(), SessionIdOrIdentity :: session:id() | session:identity()) ->
+    StorageId :: storage:id() | undefined, SessionIdOrIdentity :: session:id() | session:identity(),
+    SpaceUUID :: file_meta:uuid()) ->
     {ok, proplists:proplist()} | {error, binary()}.
-get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity) ->
+get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, SpaceUUID) ->
     {ok, LUMAHostname} = application:get_env(?APP_NAME, luma_hostname),
     {ok, LUMAPort} = application:get_env(?APP_NAME, luma_port),
     {ok, Hostname} = inet:gethostname(),
     {ok, {hostent, FullHostname, _, inet, _, IPList}} = inet:gethostbyname(Hostname),
+    {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
 
-    IPListParsed = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IPList),
+    IPListParsed = lists:map(fun(IP) ->
+        list_to_binary(inet_parse:ntoa(IP)) end, IPList),
 
     UserDetailsJSON = case get_auth(SessionIdOrIdentity) of
         {ok, undefined} ->
@@ -202,11 +241,17 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity) -
                 {error, {not_found, onedata_user}} ->
                     <<"{}">>
             end;
-        {ok, #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}} ->
-            {ok, UserDetails} = oz_users:get_details({user,
-                {Macaroon, DMacaroons}}),
+        {ok, Auth} ->
+            {ok, UserDetails} = oz_users:get_details(Auth),
             UserDetailsList = ?record_to_list(user_details, UserDetails),
             json_utils:encode(UserDetailsList)
+    end,
+
+    StorageIdParam = case StorageId of
+        undefined ->
+            <<"">>;
+        _ ->
+            <<"&storage_id=", StorageId/binary>>
     end,
 
     case http_client:get(
@@ -215,9 +260,10 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity) -
             "/get_user_credentials?"
             "global_id=", UserId/binary,
             "&storage_type=", StorageType/binary,
-            "&storage_id=", StorageId/binary,
+            StorageIdParam/binary,
             "&source_ips=", (json_utils:encode(IPListParsed))/binary,
             "&source_hostname=", (list_to_binary(FullHostname))/binary,
+            "&space_name=", SpaceName/binary,
             "&user_details=", (http_utils:url_encode(UserDetailsJSON))/binary>>,
         [],
         [],

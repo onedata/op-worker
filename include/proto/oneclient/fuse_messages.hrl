@@ -33,10 +33,6 @@
     size :: file_meta:size()
 }).
 
--record(get_parent, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
 -record(create_dir, {
     name :: file_meta:name(),
     parent_uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
@@ -44,7 +40,8 @@
 }).
 
 -record(delete_file, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid(),
+    silent = false :: boolean()
 }).
 
 -record(update_times, {
@@ -91,75 +88,14 @@
 }).
 
 -record(release, {
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     handle_id :: binary()
-}).
-
--record(get_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    name :: xattr:name()
-}).
-
--record(set_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    xattr :: #xattr{}
-}).
-
--record(remove_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    name :: xattr:name()
-}).
-
--record(list_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
--record(acl, {
-    value :: binary()
-}).
-
--record(get_acl, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
--record(set_acl, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    acl :: #acl{}
-}).
-
--record(remove_acl, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
--record(get_transfer_encoding, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
--record(set_transfer_encoding, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    value :: binary()
-}).
-
--record(get_cdmi_completion_status, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
--record(set_cdmi_completion_status, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    value :: binary()
-}).
-
--record(get_mimetype, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
--record(set_mimetype, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    value :: binary()
 }).
 
 -record(synchronize_block, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    block :: #file_block{}
+    block :: #file_block{},
+    prefetch = false :: boolean()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
@@ -179,23 +115,16 @@
     file_content :: binary()
 }).
 
--type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
-                        #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
-                        #release{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
-                        #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-                        #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
-                        #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
-                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
-                        #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{} |
-                        #synchronize_block_and_compute_checksum{}.
+-type fuse_request() ::
+    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
+    #update_times{} | #change_mode{} | #rename{} | #release{} | #truncate{} |
+    #get_helper_params{} | #get_new_file_location{} | #get_file_location{} |
+    #synchronize_block{} | #create_storage_test_file{} |
+    #verify_storage_test_file{} | #synchronize_block_and_compute_checksum{}.
 
 
 -record(file_children, {
     child_links :: [#child_link{}]
-}).
-
--record(dir, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(helper_arg, {
@@ -206,22 +135,6 @@
 -record(helper_params, {
     helper_name :: binary(),
     helper_args :: [#helper_arg{}]
-}).
-
--record(xattr_list, {
-    names :: [xattr:name()]
-}).
-
--record(transfer_encoding, {
-    value :: binary()
-}).
-
--record(cdmi_completion_status, {
-    value :: binary()
-}).
-
--record(mimetype, {
-    value :: binary()
 }).
 
 -record(storage_test_file, {
@@ -235,10 +148,14 @@
     value :: binary()
 }).
 
--type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
-    #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
-    #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
-    #checksum{}.
+-record(file_renamed, {
+    new_uuid :: fslogic_worker:file_guid(),
+    child_entries :: [#file_renamed_entry{}]
+}).
+
+-type fuse_response() ::
+    #file_attr{} | #file_children{} | #helper_params{} | #file_location{} |
+    #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

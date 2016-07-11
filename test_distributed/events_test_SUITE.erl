@@ -16,6 +16,7 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/common/credentials.hrl").
@@ -127,8 +128,8 @@ flush_should_notify_awaiting_process(Config) ->
     Evt = read_event(1, [{0, 1}]),
     SessId = ?config(session_id, Config),
     emit(Worker, SessId, Evt),
-    flush(Worker, ?config(subscription_id, Config), self(), SessId),
-    ?assertReceivedEqual(event_handler, ?TIMEOUT).
+    Ref = flush(Worker, ?config(subscription_id, Config), self(), SessId),
+    ?assertReceivedMatch({Ref, ok}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -181,18 +182,32 @@ init_per_testcase(Case, Config) when
     end, lists:seq(0, 4)),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
+    test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
+        fun(_) -> <<"spaceid">> end),
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]),
+    test_utils:mock_expect(Worker, file_meta, get, fun
+        (<<"file_uuid">>) -> {ok, #document{}};
+        (Entry) -> meck:passthrough([Entry])
+    end),
+    NewConfig;
 
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
+        fun(_) -> <<"spaceid">> end),
     test_utils:mock_new(Workers, space_info),
     test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
         {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
     end),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]),
+    test_utils:mock_expect(Worker, file_meta, get, fun
+        (<<"file_uuid">>) -> {ok, #document{}};
+        (Entry) -> meck:passthrough([Entry])
+    end),
+    NewConfig.
 
 end_per_testcase(Case, Config) when
     Case =:= emit_read_event_should_execute_handler;
@@ -255,7 +270,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user1">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, #auth{}, [Self]]
+        reuse_or_create_session, [SessId, fuse, Iden, #token_auth{}, [Self]]
     )),
     {ok, SessId}.
 
@@ -354,7 +369,7 @@ forward_events_event_handler() ->
 -spec notify_event_handler() -> Handler :: event_stream:event_handler().
 notify_event_handler() ->
     fun
-        (_, #{notify := Notify}) -> Notify ! event_handler;
+        (_, #{notify := NotifyFun}) -> NotifyFun(#server_message{message_body = #status{code = ?OK}});
         (_, _) -> ok
     end.
 
@@ -408,7 +423,8 @@ emit(Worker, SessId, Evt) ->
 -spec flush(Worker :: node(), SubId :: subscription:id(), Notify :: pid(),
     SessId :: session:id()) -> ok.
 flush(Worker, SubId, Notify, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, event, flush, [SubId, Notify, SessId])).
+    ProvId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    rpc:call(Worker, event, flush, [ProvId, undefined, SubId, Notify, SessId]).
 
 %%--------------------------------------------------------------------
 %% @private

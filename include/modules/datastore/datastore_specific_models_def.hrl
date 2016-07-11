@@ -14,6 +14,7 @@
 
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% Message ID containing recipient for remote response.
 -record(message_id, {
@@ -46,6 +47,7 @@
     node :: node(),
     supervisor :: pid(),
     event_manager :: pid(),
+    watcher :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
     proxy_via :: session:id() | undefined,
@@ -53,7 +55,9 @@
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
     % Handles for opened files
-    handles = #{} :: #{binary() => storage_file_manager:handle()}
+    handles = #{} :: #{binary() => storage_file_manager:handle()},
+    open_files = sets:new() :: sets:set(file_meta:uuid()),
+    transfers = [] :: [transfer:id()]
 }).
 
 %% Local, cached version of OZ user
@@ -62,6 +66,7 @@
     spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
     group_ids :: [binary()],
+    effective_group_ids = [] :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],
     alias :: binary(),
     email_list :: [binary()],
@@ -77,7 +82,11 @@
 %% Local, cached version of OZ group
 -record(onedata_group, {
     name :: binary(),
+    type :: onedata_group:type(),
     users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
+    parent_groups = [] :: [binary()],
     spaces = [] :: [SpaceId :: binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -92,7 +101,10 @@
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
     version = 1, %% Snapshot version
-    is_scope = false :: boolean()
+    is_scope = false :: boolean(),
+    scope :: datastore:key(),
+    %% symlink_value for symlinks, file_guid for phantom files (redirection)
+    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid()
 }).
 
 
@@ -113,13 +125,13 @@
 -record(file_location, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     provider_id :: oneprovider:id(),
-    space_uuid :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     handle_id :: binary() | undefined,
+    space_id :: space_info:id(),
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
@@ -129,14 +141,17 @@
 %% Model for caching provider details fetched from OZ
 -record(provider_info, {
     client_name :: binary(),
+    urls = [] :: [binary()],
+    space_ids = [] :: [SpaceId :: binary()],
+    public_only = false :: boolean(), %% see comment in onedata_users
     revision_history = [] :: [subscriptions:rev()]
 }).
 
 %% Model for caching space details fetched from OZ
 -record(space_info, {
     name :: binary(),
-    providers = [],
-    providers_supports = [] :: [{ProviderId :: binary(), Size :: pos_integer()}],
+    providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
+    providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
     revision_history = [] :: [subscriptions:rev()]
@@ -172,6 +187,46 @@
 %% Model that maps onedata user to POSIX user
 -record(posix_user, {
     credentials :: #{storage:id() => posix_user:credentials()}
+}).
+
+%% Model for holding current quota state for spaces
+-record(space_quota, {
+    current_size = 0 :: non_neg_integer()
+}).
+
+%% Record that holds monitoring id
+-record(monitoring_id, {
+    main_subject_type = undefined :: atom(),
+    main_subject_id = <<"">> :: datastore:id(),
+    metric_type = undefined :: atom(),
+    secondary_subject_type = undefined :: atom(),
+    secondary_subject_id = <<"">> :: datastore:id(),
+    provider_id = oneprovider:get_provider_id() :: oneprovider:id()
+}).
+
+%% Model for holding state of monitoring
+-record(monitoring_state, {
+    monitoring_id = #monitoring_id{} :: #monitoring_id{},
+    rrd_file = undefinied :: rrd_utils:rrd_file(),
+    monitoring_interval = 0 :: non_neg_integer(),
+    active = true :: boolean(),
+    state_buffer = #{} :: maps:map()
+}).
+
+%% Model for holding lightweight version of monitoring state
+-record(monitoring_init_state, {
+    monitoring_id = #monitoring_id{} :: #monitoring_id{}
+}).
+
+%% Model that stores open file
+-record(open_file, {
+    is_removed = false :: true | false,
+    active_descriptors = #{} :: #{session:id() => non_neg_integer()}
+}).
+
+%% Model that maps onedata user to Openstack Swift user
+-record(swift_user, {
+    credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
 -endif.

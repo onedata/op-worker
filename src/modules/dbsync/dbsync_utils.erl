@@ -21,12 +21,64 @@
 %% API
 -export([get_providers_for_space/1]).
 -export([get_spaces_for_provider/0, get_spaces_for_provider/1]).
--export([get_provider_url/1, encode_term/1, decode_term/1, gen_request_id/0]).
+-export([get_provider_url/1, get_provider_urls/1, encode_term/1, decode_term/1, gen_request_id/0]).
 -export([communicate/2]).
+-export([temp_get/1, temp_put/3, temp_clear/1]).
+-export([validate_space_access/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given provider supports given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_space_access(ProviderId :: oneprovider:id(), SpaceId :: space_info:id()) ->
+    ok | {error, space_not_supported_locally}.
+validate_space_access(ProviderId, SpaceId) ->
+    IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),
+    ?debug("validate_space_access ~p ~p: ~p", [ProviderId, SpaceId, IsMember]),
+    case IsMember of
+        true -> ok;
+        false ->
+
+            {error, space_not_supported_locally}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Puts given Value in datastore worker's temporary state
+%% @end
+%%--------------------------------------------------------------------
+-spec temp_put(Key :: term(), Value :: term(), Timeout :: non_neg_integer()) -> ok.
+temp_put(Key, Value, 0) ->
+    worker_host:state_put(dbsync_worker, Key, Value);
+temp_put(Key, Value, Timeout) ->
+    timer:send_after(Timeout, whereis(dbsync_worker), {timer, {clear_temp, Key}}),
+    worker_host:state_put(dbsync_worker, Key, Value).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears given Key in datastore worker's temporary state
+%% @end
+%%--------------------------------------------------------------------
+-spec temp_clear(Key :: term()) -> ok.
+temp_clear(Key) ->
+    worker_host:state_delete(dbsync_worker, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Puts Value from datastore worker's temporary state
+%% @end
+%%--------------------------------------------------------------------
+-spec temp_get(Key :: term()) -> Value :: term().
+temp_get(Key) ->
+    worker_host:state_get(dbsync_worker, Key).
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns list of providers that supports given space. If provider is nor properly configured to work
@@ -62,24 +114,48 @@ get_spaces_for_provider() ->
 -spec get_spaces_for_provider(oneprovider:id()) ->
     [SpaceId :: binary()].
 get_spaces_for_provider(ProviderId) ->
-    {ok, SpaceIds} = oz_providers:get_spaces(provider),
-    lists:foldl(
-        fun(SpaceId, Acc) ->
-            {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
-            case lists:member(ProviderId, Providers) of
-                true -> [SpaceId | Acc];
-                false -> Acc
-            end
-        end, [], SpaceIds).
+    Key = {spaces_for, ProviderId},
+    case temp_get(Key) of
+        SpaceIds0 when is_list(SpaceIds0) ->
+            SpaceIds0;
+        _ ->
+            {ok, SpaceIds} = oz_providers:get_spaces(provider),
+            SpaceIds1 = lists:foldl(
+                fun(SpaceId, Acc) ->
+                    {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
+                    case lists:member(ProviderId, Providers) of
+                        true -> [SpaceId | Acc];
+                        false -> Acc
+                    end
+                end, [], SpaceIds),
+            temp_put(Key, SpaceIds1, timer:seconds(15)),
+            SpaceIds1
+    end.
 
 
 %%--------------------------------------------------------------------
-%% @doc Selects URL of the provider
+%% @doc Get list of URLs for the provider
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_urls(ProviderId :: oneprovider:id()) -> [URL :: binary()] | no_return().
+get_provider_urls(ProviderId) ->
+    Key = {urls_for, ProviderId},
+    case temp_get(Key) of
+       [_ | _] = URLs0 ->
+           URLs0;
+       _ ->
+           {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
+           temp_put(Key, URLs, timer:seconds(15)),
+           URLs
+   end.
+
+%%--------------------------------------------------------------------
+%% @doc Selects random URL of the provider
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_url(ProviderId :: oneprovider:id()) -> URL :: binary() | no_return().
 get_provider_url(ProviderId) ->
-    {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
+    URLs = get_provider_urls(ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
 

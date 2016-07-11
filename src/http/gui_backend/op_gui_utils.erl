@@ -13,16 +13,15 @@
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_user_rest_auth/0]).
+-export([get_user_auth/0]).
 -export([ids_to_association/2, association_to_ids/1]).
 
 % @todo temporary solution, fix when subscriptions work better
--export([find_all_spaces/2]).
+-export([find_all_spaces/2, find_all_groups/2]).
 
 %%%===================================================================
 %%% API functions
@@ -34,14 +33,10 @@
 %% current user.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_rest_auth() -> {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
-get_user_rest_auth() ->
-    SessionId = g_session:get_session_id(),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {user, {Mac, DMacs}}.
+-spec get_user_auth() -> #token_auth{}.
+get_user_auth() ->
+    {ok, Auth} = session:get_auth(g_session:get_session_id()),
+    Auth.
 
 
 %%--------------------------------------------------------------------
@@ -73,11 +68,10 @@ association_to_ids(AssocId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_spaces(UserAuth, UserId :: binary()) -> [SpaceId :: binary()]
-    when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_spaces(UserAuth :: oz_endpoint:auth(), UserId :: binary()) ->
+    [SpaceId :: binary()].
 find_all_spaces(UserAuth, UserId) ->
-    find_all_spaces(UserAuth, UserId, 500).
+    find_all_spaces(UserAuth, UserId, 100).
 
 
 %%--------------------------------------------------------------------
@@ -88,10 +82,8 @@ find_all_spaces(UserAuth, UserId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_spaces(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary()] when UserAuth :: {user, {
-    Macaroon :: macaroon:macaroon(),
-    DischargeMacaroons :: [macaroon:macaroon()]}}.
+-spec find_all_spaces(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary()].
 find_all_spaces(_, _, 0) ->
     [];
 
@@ -104,6 +96,46 @@ find_all_spaces(UserAuth, UserId, MaxRetries) ->
             find_all_spaces(UserAuth, UserId, MaxRetries - 1);
         _ ->
             SpaceIds
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of all group ids for given user. Blocks until the groups
+%% are synchronized (by repetitive polling).
+% @todo temporary solution, fix when subscriptions work better
+%% @end
+%%--------------------------------------------------------------------
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary()) ->
+    [SpaceId :: binary()].
+find_all_groups(UserAuth, UserId) ->
+    find_all_groups(UserAuth, UserId, 100).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of all group ids for given user. Blocks until the groups
+%% are synchronized (by repetitive polling).
+%% Retries up to given amount of times. Retries every 500 milliseconds.
+% @todo temporary solution, fix when subscriptions work better
+%% @end
+%%--------------------------------------------------------------------
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary()].
+find_all_groups(_, _, 0) ->
+    [];
+
+find_all_groups(UserAuth, UserId, MaxRetries) ->
+    {ok, GroupIds} = user_logic:get_groups(UserAuth, UserId),
+    {ok, EffGroupIds} = user_logic:get_effective_groups(UserAuth, UserId),
+    % Make sure that effective groups are synchronized - there should be at
+    % least as many as direct groups.
+    case length(EffGroupIds) < length(GroupIds) of
+        true ->
+            timer:sleep(500),
+            find_all_groups(UserAuth, UserId, MaxRetries - 1);
+        false ->
+            EffGroupIds
     end.
 
 

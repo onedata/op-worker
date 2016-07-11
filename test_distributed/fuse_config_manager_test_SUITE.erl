@@ -54,9 +54,9 @@ get_configuration_test(Config) ->
 create_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
 
     Response1 = ?req(Worker, SessId1, #create_storage_test_file{
@@ -78,11 +78,11 @@ create_storage_test_file_test(Config) ->
 verify_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
-    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     test_utils:set_env(Worker, ?APP_NAME, verify_storage_test_file_delay_seconds, 1),
     test_utils:set_env(Worker, ?APP_NAME, remove_storage_test_file_attempts, 1),
 
-    FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
+    FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
     FileUuid = fslogic_uuid:file_guid_to_uuid(FileGuid),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId1, {guid, FileGuid}, write)),
@@ -130,9 +130,11 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:disable_quota_limit(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
+    initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config).
 

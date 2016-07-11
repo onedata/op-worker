@@ -28,7 +28,10 @@
     "os_configs": {
         "cfg1": {
             "storages": [
-                "/mnt/st1"
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                }
             ],
             "users": [
                 "user1"
@@ -41,8 +44,14 @@
         },
         "cfg2": {
             "storages": [
-                "/mnt/st1",
-                "/mnt/st2"
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
+                }
             ],
             "users": [
                 "user1",
@@ -283,7 +292,7 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/s1",
+                        "storage": "/mnt/st1",
                         "supported_size": 1000000000
                     }
                 }
@@ -298,7 +307,7 @@
                 ],
                 "providers": {
                     "p2.oz": {
-                        "storage": "/mnt/s2",
+                        "storage": "/mnt/st2",
                         "supported_size": 1000000000
                     }
                 }

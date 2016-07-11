@@ -122,4 +122,20 @@
     end
 }).
 
+%% Default file renamed event stream specialization
+-define(FILE_RENAMED_EVENT_STREAM, #event_stream_definition{
+    admission_rule = fun
+        (#event{object = #file_renamed_event{}}) -> true;
+        (_) -> false
+    end
+}).
+
+%% Default file accessed event stream specialization
+-define(FILE_ACCESSED_EVENT_STREAM, #event_stream_definition{
+    admission_rule = fun
+        (#event{object = #file_accessed_event{}}) -> true;
+        (_) -> false
+    end
+}).
+
 -endif.

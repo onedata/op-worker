@@ -4,6 +4,134 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta8
+
+
+* VFS-2254 Additional GUI model relations
+* VFS-2254 Always allow to get acl after creation.
+* VFS-2254 Return full acl record on create operation in file-acl backend..
+* VFS-2254 Change EAGAIN to EIO error on sync fail.
+* VFS-2254 Adjust file-acl protocol.
+* VFS-2197 Fail sync when rtransfer fails.
+* VFS-2254 Add acls to file_data_backend.
+* VFS-2115 Fix changing file GUID in request after merge
+* VFS-2115 Add file redirection to rename, add phantom files expiration
+* VFS-2115 Add file redirection
+
+
+### 3.0.0-beta7
+
+* VFS-2225 Update GUI docker image
+* VFS-1882 Postpone deletion of open files
+* VFS-2170 Improve dbsync's protocol reliability
+* VFS-2143, Improve dbsync_worker stashed changes management
+* VFS-2187 Add automatic file removal when upload fails
+* VFS-2187 Adjust rest_test to new OZ client API
+* VFS-2187 Use new OZ REST client API from ctool that uses arbitrary Auth term rather than predefined rest client.
+* VFS-2039 Extract non-client messages from fuse_messages
+
+
+### 3.0.0-beta6
+
+* Update erlang tls
+* VFS-2112 Integrate monitoring with REST API
+* VFS-2109 Adjust cdmi tests to new error messages.
+* VFS-2108 Add prefetching for unsynchronized files.
+* VFS-2109 Accept Macaroon header with token, as auth method for REST.
+* VFS-2031 Improve queue flushing in dbsync
+* VFS-2031 Remove default space
+* VFS-2109 Add support for dir replication through REST api.
+* VFS-2109 Move rest error handling logic from cdmi_exception_handler to more generic request_exception_handler.
+* VFS-2019 Add space name to luma proxy call
+* VFS-1506 Make security rules more generic.
+* VFS-2081 Make dbsync singleton
+* VFS-2018 Add response after rename
+* VFS-1506 Fix sending file attributes after replica reconciliation.
+* VFS-1506 Include file gaps in file_location's blocks.
+* VFS-1999 Use message origin instead of message sender as dbsync's provider context
+* VFS-1506 Add permission checking to utime operation.
+* VFS-2071 Adjust code to the new S3 helper
+* VFS-1999 Quota implementation
+* VFS-2018 Adding file renamed subscription
+* VFS-2018 Adding file_renamed_event
+* VFS-1854 Enable inter-provider sequencer
+
+
+### 3.0.0-beta5
+
+* VFS-2050, Get file size update
+* VFS-2050, Repair errors in connections usage and dbsync batch applying
+* VFS-1987 group privileges as atoms
+* VFS-1772 unify imports in gui backend, add returned value to group join group
+* Increase limit for cdmi_id, as guid of default space in production environment has 199 bytes.
+* VFS-1772 add relation to child groups in group record
+* VFS-2050, Extend multiprovider tests
+* Cache provider info pulled from onezone
+* Allow for zombie-file delete
+* Hotfix: Ignore sequencer messages that are received from provider
+* Hotfix: Fix sending changes of unsupported spaces
+* Ignore proxied subscription messages in router.
+* Ignore dbsync changes from unsupported spaces. Do not catch exceptions inside mnesia transactions (mnesia does not like it).
+* VFS-1772 update group logic concerning privileges
+* VFS-1772 align group logic with new group API
+* VFS-1987 set & get for nested group privileges
+* VFS-2059 change default create modes for files and directories
+* VFS-2059 use recursive remove in gui backend
+* VFS-2003 Add read_event subscription to rest api.
+* VFS-1987 nested groups via fetch
+* VFS-1987 nested groups in subscriptions
+* VFS-2003 Add replicate_file rest handler.
+* VFS-2003 Add rtransfer management api to fslogic.
+* VFS-1772 add backend for groups
+* VFS-2003 Reorganize rest modules.
+* VFS-1772 introduce models for system-user system-group system-provider
+
+
+### 3.0.0-beta4
+
+* VFS-1995 Syncing locations update
+* Fixing updating times in rename interprovider
+* VFS-1999 Fix Write/read subscription translate
+* VFS-1618 Fix old rmdir usage
+* VFS-1671 Update cluster_worker ref.
+* VFS-1618 Move configurable values to config
+* VFS-1618 Sort synchronization keys to avoid potential deadlocks
+* VFS-1975 Add uuid to release message, update release routing
+* VFS-1618 Add synchronization for file_meta:rename
+* VFS-1854 Improve dbsync's temp state clearing
+* VFS-1854 Disable rereplication in dbsync
+* VFS-1954 Make session:get_connections const.
+* VFS-1854 Fix GUI upload
+* VFS-1854 Fix uuid_to_path/2
+* VFS-1618 Fix storage files mode changing
+* VFS-1854 Fix merge
+* VFS-1964 Adjust permission tests to changes in required permissions for dir removal.
+* VFS-1854 Fix several cdmi tests
+* VFS-1964 Remove unnecessary unlink.
+* VFS-1964 Adjust existing implementation of recursive remove to behave like linux.
+* VFS-1618 Delete target file after checking all permissions, add ls assertions in tests
+* VFS-1618 Change tests to check acl on proper provider
+* VFS-1618 Change moving into itself detection to interprovider-friendly
+* VFS-1854 Fix fslogic's events subscribtion
+* VFS-1618 Improve permissions handling
+* VFS-1618 Enable grpca in rename tests
+* VFS-1887 Add missing implementation of release.
+* VFS-1854 Introduce logical_file_manager:release/1
+* VFS-1841 Fix target parent path usage
+* VFS-1841 Fix target path usage
+* VFS-1841 Change usage of fslogic_req modules to logical_files_manager
+* VFS-1841 Use get_file_attr to check if target exists
+* VFS-1841 Use space_info:get_or_fetch instead of oz_spaces:get_providers
+* VFS-1954 Implement Ceph helper tests.
+* VFS-1841 Fix timestamps update
+* VFS-1841 Fix usage of gen_path after merge
+* VFS-1841 Fix chmod usage in rename
+* VFS-1841 Fix sfm file copy fallback
+* VFS-1781 Fix rename permissions annotations
+* VFS-1781 Inter-space and inter-provider rename
+* VFS-1618 First sketch of interspace rename
+
+
 ### 3.0.0-beta3
 
 * VFS-1932 Create StorageHelperFactory with unset BufferAgent.

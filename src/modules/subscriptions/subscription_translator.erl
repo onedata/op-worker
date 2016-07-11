@@ -80,13 +80,20 @@ props_to_value(onedata_user, Props) ->
         public_only = proplists:get_value(<<"public_only">>, Props),
         name = proplists:get_value(<<"name">>, Props),
         group_ids = proplists:get_value(<<"group_ids">>, Props, []),
+        effective_group_ids = proplists:get_value(<<"effective_group_ids">>, Props, []),
         spaces = proplists:get_value(<<"space_names">>, Props, [])
     };
 props_to_value(onedata_group, Props) ->
     #onedata_group{
         name = proplists:get_value(<<"name">>, Props),
+        type = binary_to_atom(proplists:get_value(<<"type">>, Props), latin1),
         spaces = proplists:get_value(<<"spaces">>, Props, []),
-        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, []))
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
+        effective_users = process_ids_with_privileges(
+            proplists:get_value(<<"effective_users">>, Props, [])),
+        nested_groups = process_ids_with_privileges(
+            proplists:get_value(<<"nested_groups">>, Props, [])),
+        parent_groups = proplists:get_value(<<"parent_groups">>, Props, [])
     };
 props_to_value(space_info, Props) ->
     #space_info{
@@ -97,7 +104,10 @@ props_to_value(space_info, Props) ->
     };
 props_to_value(provider_info, Props) ->
     #provider_info{
-        client_name = proplists:get_value(<<"client_name">>, Props)
+        client_name = proplists:get_value(<<"client_name">>, Props),
+        urls = proplists:get_value(<<"urls">>, Props),
+        space_ids = proplists:get_value(<<"space_ids">>, Props),
+        public_only = proplists:get_value(<<"public_only">>, Props)
     }.
 
 

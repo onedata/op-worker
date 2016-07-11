@@ -43,5 +43,10 @@ models() -> [
     dbsync_state,
     files_to_chown,
     posix_user,
-    message_id
+    message_id,
+    space_quota,
+    monitoring_state,
+    open_file,
+    monitoring_init_state,
+    swift_user
 ].

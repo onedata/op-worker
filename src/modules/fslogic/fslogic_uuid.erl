@@ -17,11 +17,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
+-export([user_root_dir_uuid/1, path_to_uuid/2, uuid_to_path/2,
     guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2,
     default_space_owner/1]).
--export([file_uuid_to_space_id/1, gen_file_uuid/1, gen_file_uuid/0]).
+-export([gen_file_uuid/1, gen_file_uuid/0]).
 -export([to_file_guid/2, unpack_file_guid/1, file_guid_to_uuid/1, to_file_guid/1, ensure_guid/2]).
+-export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
 
 %%%===================================================================
 %%% API
@@ -47,8 +48,13 @@ to_file_guid(FileUUID, SpaceId) ->
 -spec to_file_guid(file_meta:uuid()) ->
     fslogic_worker:file_guid().
 to_file_guid(FileUUID) ->
-    SpaceId = fslogic_spaces:get_space_id(FileUUID),
-    to_file_guid(FileUUID, SpaceId).
+    try fslogic_spaces:get_space_id({uuid, FileUUID}) of
+        SpaceId ->
+            to_file_guid(FileUUID, SpaceId)
+    catch
+        {not_a_space, _} ->
+            to_file_guid(FileUUID, undefined)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,27 +84,6 @@ unpack_file_guid(FileGUID) ->
 file_guid_to_uuid(FileGUID) ->
     {FileUUID, _} = unpack_file_guid(FileGUID),
     FileUUID.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given file's UUID returns Space's ID that contains this file.
-%% @end
-%%--------------------------------------------------------------------
--spec file_uuid_to_space_id(file_meta:uuid()) ->
-    {ok, binary()} | {error, {not_in_space_scope, file_meta:uuid(), Reason :: term()}}.
-file_uuid_to_space_id(FileUUID) ->
-    BinParentUUID = http_utils:base64url_decode(FileUUID),
-    try binary_to_term(BinParentUUID) of
-        {space, SpaceId} ->
-            {ok, SpaceId};
-        {{s, SpaceId}, _} ->
-            {ok, SpaceId}
-    catch
-        _:Reason ->
-            ?error("Unable to decode file UUID ~p due to: ~p", [FileUUID, Reason]),
-            {error, {not_in_space_scope, FileUUID, Reason}}
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -159,10 +144,11 @@ ensure_uuid(CTX, {path, Path}) ->
 ensure_guid(_CTX, {guid, FileGUID}) ->
     {guid, FileGUID};
 ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
-    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, Path}}, fun
-        (#file_attr{uuid = GUID}) ->
+    lfm_utils:call_fslogic(SessId, fuse_request,
+        #get_file_attr{entry = {path, Path}},
+        fun (#file_attr{uuid = GUID}) ->
             {guid, GUID}
-    end).
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -172,9 +158,10 @@ ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
 -spec uuid_to_path(fslogic_worker:ctx(), file_meta:uuid()) -> file_meta:path().
 uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
     identity = #identity{user_id = UserId}}}, FileUuid) ->
-    case default_space_uuid(UserId) =:= FileUuid of
-        true -> <<"/">>;
-        false ->
+    UserRoot = user_root_dir_uuid(UserId),
+    case FileUuid of
+        UserRoot -> <<"/">>;
+        _ ->
             {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
     end.
@@ -203,27 +190,16 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
     case binary_to_term(http_utils:base64url_decode(SpaceUuid)) of
         {space, SpaceId} ->
             SpaceId;
-        {root_space, UserId} ->
-            {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(UserId),
-            fslogic_uuid:space_dir_uuid_to_spaceid(DefaultSpaceUUID);
         _ ->
             throw({not_a_space, {uuid, SpaceUuid}})
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns UUID of user's main 'spaces' directory.
+%% @doc Returns UUID of user's root directory.
 %% @end
 %%--------------------------------------------------------------------
--spec spaces_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
-spaces_uuid(UserId) ->
-    http_utils:base64url_encode(term_to_binary({UserId, ?SPACES_BASE_DIR_NAME})).
-
-%%--------------------------------------------------------------------
-%% @doc Returns UUID of user's default space directory.
-%% @end
-%%--------------------------------------------------------------------
--spec default_space_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
-default_space_uuid(UserId) ->
+-spec user_root_dir_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
+user_root_dir_uuid(UserId) ->
     http_utils:base64url_encode(term_to_binary({root_space, UserId})).
 
 
@@ -236,6 +212,25 @@ default_space_uuid(UserId) ->
 default_space_owner(DefaultSpaceUUID) ->
     {root_space, UserId} = binary_to_term(http_utils:base64url_decode(DefaultSpaceUUID)),
     UserId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID generates phantom's UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec uuid_to_phantom_uuid(file_meta:uuid()) -> file_meta:uuid().
+uuid_to_phantom_uuid(FileUUID) ->
+    http_utils:base64url_encode(term_to_binary({phantom, FileUUID})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID generates phantom's UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec phantom_uuid_to_uuid(file_meta:uuid()) -> file_meta:uuid().
+phantom_uuid_to_uuid(PhantomUUID) ->
+    {phantom, FileUUID} = binary_to_term(http_utils:base64url_decode(PhantomUUID)),
+    FileUUID.
 
 %%%===================================================================
 %%% Internal functions

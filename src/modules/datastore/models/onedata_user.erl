@@ -92,6 +92,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
+    monitoring_action(stop, Key),
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -111,7 +112,8 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     % TODO migrate to GLOBALLY_CACHED_LEVEL
-    ?MODEL_CONFIG(onedata_user_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(onedata_user_bucket, [{onedata_user, create}, {onedata_user, save},
+        {onedata_user, create_or_update}, {onedata_user, update}], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -121,6 +123,14 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
+'after'(onedata_user, create, _, _, {ok, UserId}) ->
+    monitoring_action(start, UserId);
+'after'(onedata_user, create_or_update, _, _, {ok, UserId}) ->
+    monitoring_action(start, UserId);
+'after'(onedata_user, save, _, _, {ok, UserId}) ->
+    monitoring_action(start, UserId);
+'after'(onedata_user, update, _, _, {ok, UserId}) ->
+    monitoring_action(start, UserId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -154,20 +164,21 @@ create_or_update(Doc, Diff) ->
 %% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Client :: oz_endpoint:client()) ->
+-spec fetch(Auth :: oz_endpoint:auth()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(Client) ->
+fetch(Auth) ->
     {ok, #user_details{
         id = UserId, name = Name, connected_accounts = ConnectedAccounts,
         alias = Alias, email_list = EmailList}
-    } = oz_users:get_details(Client),
+    } = oz_users:get_details(Auth),
     {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-        oz_users:get_spaces(Client),
-    {ok, GroupIds} = oz_users:get_groups(Client),
+        oz_users:get_spaces(Auth),
+    {ok, GroupIds} = oz_users:get_groups(Auth),
+    {ok, EffectiveGroupIds} = oz_users:get_effective_groups(Auth),
 
     Spaces = utils:pmap(fun(SpaceId) ->
         {ok, #space_details{name = SpaceName}} =
-            oz_spaces:get_details(Client, SpaceId),
+            oz_spaces:get_details(Auth, SpaceId),
         {SpaceId, SpaceName}
     end, SpaceIds),
 
@@ -176,6 +187,7 @@ fetch(Client) ->
         spaces = Spaces,
         default_space = DefaultSpaceId,
         group_ids = GroupIds,
+        effective_group_ids = EffectiveGroupIds,
         connected_accounts = ConnectedAccounts,
         alias = Alias,
         email_list = EmailList
@@ -184,11 +196,11 @@ fetch(Client) ->
     {ok, _} = onedata_user:save(OnedataUserDoc),
 
     utils:pforeach(fun(SpaceId) ->
-        space_info:get_or_fetch(Client, SpaceId, UserId)
+        space_info:get_or_fetch(Auth, SpaceId, UserId)
     end, SpaceIds),
 
     utils:pforeach(fun(GroupId) ->
-        onedata_group:get_or_fetch(Client, GroupId)
+        onedata_group:get_or_fetch(Auth, GroupId)
     end, GroupIds),
 
     {ok, OnedataUserDoc}.
@@ -198,13 +210,13 @@ fetch(Client) ->
 %% Get user from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Client :: oz_endpoint:client(), UserId :: id()) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Client, UserId) ->
+get_or_fetch(Auth, UserId) ->
     try
         case onedata_user:get(UserId) of
             {ok, Doc} -> {ok, Doc};
-            {error, {not_found, _}} -> fetch(Client);
+            {error, {not_found, _}} -> fetch(Auth);
             Error -> Error
         end
     catch
@@ -212,4 +224,34 @@ get_or_fetch(Client, UserId) ->
             ?error_stacktrace("Cannot get or fetch details of onedata user ~p due to: ~p",
                 [UserId, Reason]),
             {error, Reason}
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts or stops monitoring for given user id.
+%% @end
+%%--------------------------------------------------------------------
+-spec monitoring_action(start | stop, datastore:id()) -> no_return().
+monitoring_action(Action, UserId) ->
+    case onedata_user:get(UserId) of
+        {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
+            MonitoringId = #monitoring_id{
+                main_subject_type = space,
+                secondary_subject_type = user,
+                secondary_subject_id = UserId
+            },
+            lists:foreach(fun({SpaceId, _}) ->
+                lists:foreach(fun(MetricType) ->
+                    worker_proxy:cast(monitoring_worker, {Action, MonitoringId#monitoring_id{
+                        main_subject_id = SpaceId,
+                        metric_type = MetricType
+                    }})
+                end, [storage_used, data_access, block_access])
+            end, Spaces);
+        _ -> ok
     end.

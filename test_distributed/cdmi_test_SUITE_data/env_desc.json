@@ -82,7 +82,7 @@
         },
         "spaces": {
             "space1": {
-                "displayed_name": "space1",
+                "displayed_name": "space_name1",
                 "users": [
                     "user1"
                 ],
@@ -90,7 +90,8 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             }

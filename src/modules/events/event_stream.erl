@@ -115,12 +115,7 @@ init([SessType, EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, 
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+    {reply, Reply :: term(), NewState :: #state{}}.
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, ok, State}.
@@ -139,15 +134,15 @@ handle_cast(#event{} = Evt, #state{subscription_id = SubId, session_id = SessId,
     definition = StmDef} = State) ->
     case apply_admission_rule(Evt, StmDef) of
         true ->
-            ?info("Handling event ~p in event stream for subscription ~p and "
+            ?debug("Handling event ~p in event stream for subscription ~p and "
             "session ~p", [Evt, SubId, SessId]),
             {noreply, process_event(Evt, State)};
         false -> {noreply, State}
     end;
 
-handle_cast({flush, Pid}, #state{ctx = Ctx} = State) ->
+handle_cast({flush, NotifyFun}, #state{ctx = Ctx} = State) ->
     #state{ctx = NewCtx} = NewState = execute_event_handler(
-        State#state{ctx = Ctx#{notify => Pid}}
+        State#state{ctx = Ctx#{notify => NotifyFun}}
     ),
     {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
 

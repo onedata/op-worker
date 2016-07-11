@@ -324,7 +324,7 @@ get_write_event(FileUuid, Size, FileSize, Num, MaxS) ->
 
 get_token(Val) ->
     {ok, M} = macaroon:deserialize(Val),
-    {#auth{macaroon = M}, #'Token'{value = Val}}.
+    {#token_auth{macaroon = M}, #'Token'{value = Val}}.
 
 get_handshake_request(TokenVal, SessionId) ->
     {IntToken, PBToken} = get_token(TokenVal),

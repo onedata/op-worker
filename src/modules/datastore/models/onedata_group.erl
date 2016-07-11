@@ -17,16 +17,18 @@
 -include("proto/common/credentials.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_groups.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
 -export([fetch/2, get_or_fetch/2, create_or_update/2]).
 
--export_type([id/0]).
+-export_type([id/0, type/0]).
 
+-type type() :: 'organization' | 'unit' | 'team' | 'role'.
 -type id() :: binary().
 
 %%%===================================================================
@@ -69,6 +71,15 @@ create(Document) ->
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -139,22 +150,41 @@ create_or_update(Doc, Diff) ->
 %% Fetch group from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Client :: oz_endpoint:client(), GroupId :: id()) ->
+-spec fetch(Auth :: oz_endpoint:auth(), GroupId :: id()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(Client, GroupId) ->
+fetch(Auth, GroupId) ->
     try
-        {ok, #group_details{id = Id, name = Name}} =
-            oz_groups:get_details(Client, GroupId),
-        {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
-        {ok, UserIds} = oz_groups:get_users(Client, Id),
+        {ok, #group_details{id = Id, name = Name, type = Type}} =
+            oz_groups:get_details(Auth, GroupId),
+        {ok, SpaceIds} = oz_groups:get_spaces(Auth, Id),
+        {ok, ParentIds} = oz_groups:get_parents(Auth, Id),
+
+        % nested groups
+        {ok, NestedIds} = oz_groups:get_nested(Auth, Id),
+        NestedGroupsWithPrivileges = utils:pmap(fun(UID) ->
+            {ok, Privileges} = oz_groups:get_nested_privileges(Auth, Id, UID),
+            {UID, Privileges}
+        end, NestedIds),
+
+        % users
+        {ok, UserIds} = oz_groups:get_users(Auth, Id),
         UsersWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_user_privileges(Client, Id, UID),
+            {ok, Privileges} = oz_groups:get_user_privileges(Auth, Id, UID),
             {UID, Privileges}
         end, UserIds),
 
+        % effective users
+        {ok, EffectiveUserIds} = oz_groups:get_effective_users(Auth, Id),
+        EffectiveUsersWithPrivileges = utils:pmap(fun(UID) ->
+            {ok, Privileges} = oz_groups:get_effective_user_privileges(Auth, Id, UID),
+            {UID, Privileges}
+        end, EffectiveUserIds),
+
         %todo consider getting user_details for each group member and storing it as onedata_user
         OnedataGroupDoc = #document{key = Id, value = #onedata_group{
-            users = UsersWithPrivileges, spaces = SpaceIds, name = Name}},
+            users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
+            effective_users = EffectiveUsersWithPrivileges, type = Type,
+            parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
         {ok, OnedataGroupDoc}
     catch
@@ -167,11 +197,11 @@ fetch(Client, GroupId) ->
 %% Get group from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Client :: oz_endpoint:client(), GroupId :: onedata_group:id()) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), GroupId :: onedata_group:id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Client, GroupId) ->
+get_or_fetch(Auth, GroupId) ->
     case onedata_group:get(GroupId) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Client, GroupId);
+        {error, {not_found, _}} -> fetch(Auth, GroupId);
         Error -> Error
     end.

@@ -329,8 +329,10 @@ set_threads_number() ->
     {ok, CephThreads} = application:get_env(?APP_NAME, ceph_helper_threads_number),
     {ok, DioThreads} = application:get_env(?APP_NAME, direct_io_helper_threads_number),
     {ok, S3Threads} = application:get_env(?APP_NAME, s3_helper_threads_number),
+    {ok, SwiftThreads} = application:get_env(?APP_NAME, swift_helper_threads_number),
     set_threads_number(#{
         ?CEPH_HELPER_NAME => CephThreads,
         ?DIRECTIO_HELPER_NAME => DioThreads,
-        ?S3_HELPER_NAME => S3Threads
+        ?S3_HELPER_NAME => S3Threads,
+        ?SWIFT_HELPER_NAME => SwiftThreads
     }).

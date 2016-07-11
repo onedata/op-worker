@@ -19,37 +19,13 @@
 
 %% API
 -export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
--export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
--export([session_to_rest_client/1]).
--export([wait_for_links/2, wait_for_file_meta/2]).
+-export([get_local_file_location/1, get_local_file_locations/1, get_local_file_locations_once/1,
+    get_local_storage_file_locations/1]).
+-export([wait_for_links/3, wait_for_file_meta/2, wait_for_local_file_location/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns most suitable rest client for onezone request for given session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_to_rest_client(session:id()) -> oz_endpoint:client().
-session_to_rest_client(?ROOT_SESS_ID) ->
-    provider;
-session_to_rest_client(SessId) ->
-    {ok, #document{value = #session{auth = Auth, type = Type}}} = session:get(SessId),
-    case Type of
-        provider_outgoing -> provider;
-        provider -> provider;
-        _ ->
-            case Auth of
-                #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc} ->
-                    {try_user, {Macaroon, MacaroonDsc}};
-                _ ->
-                    provider
-            end
-    end.
-
-
 
 %%--------------------------------------------------------------------
 %% @doc Create random sequence consisting of lowercase ASCII letters.
@@ -90,9 +66,31 @@ get_local_file_location(Entry) -> %todo get rid of single file location and use 
 
 -spec get_local_file_locations(fslogic_worker:ext_file()) ->
     [datastore:document()] | no_return().
-get_local_file_locations({guid, FileGUID}) ->
-    get_local_file_locations({uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 get_local_file_locations(Entry) ->
+    get_local_file_locations(Entry, 10).
+
+-spec get_local_file_locations(fslogic_worker:ext_file(), integer()) ->
+    [datastore:document()] | no_return().
+get_local_file_locations(Entry, 0) ->
+    get_local_file_locations_once(Entry);
+get_local_file_locations(Entry, Num) ->
+    try get_local_file_locations_once(Entry) of
+        [] ->
+            timer:sleep(timer:seconds(3)),
+            get_local_file_locations(Entry, Num - 1);
+        Ans ->
+            Ans
+    catch
+        _:_ ->
+            timer:sleep(timer:seconds(3)),
+            get_local_file_locations(Entry, Num - 1)
+    end.
+
+-spec get_local_file_locations_once(fslogic_worker:ext_file()) ->
+    [datastore:document()] | no_return().
+get_local_file_locations_once({guid, FileGUID}) ->
+    get_local_file_locations_once({uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
+get_local_file_locations_once(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),
     Locations = [file_location:get(LocId) || LocId <- LocIds],
@@ -118,17 +116,27 @@ get_local_storage_file_locations(Entry) ->
 %% Waiting for links document associated with file_meta to be present.
 %% @end
 %%--------------------------------------------------------------------
--spec wait_for_links(file_meta:uuid(), non_neg_integer()) -> ok | no_return().
-wait_for_links(FileUuid, 0) ->
+-spec wait_for_links(file_meta:uuid(), non_neg_integer(), SpaceId :: binary()) -> ok | no_return().
+% TODO - check if still needed
+wait_for_links(FileUuid, 0, _) ->
     ?error("Waiting for links document, for file ~p failed.", [FileUuid]),
     throw(no_link_document);
-wait_for_links(FileUuid, Retries) ->
-    case file_meta:exists({uuid, links_utils:links_doc_key(FileUuid)}) of
+wait_for_links(FileUuid, Retries, SpaceId) ->
+    IDs = dbsync_utils:get_providers_for_space(SpaceId),
+    IsOk = lists:foldl(fun(ID, Acc) ->
+        case Acc of
+            true ->
+                file_meta:exists({uuid, links_utils:links_doc_key(FileUuid, ID)});
+            _ ->
+                Acc
+        end
+    end, true, IDs -- [oneprovider:get_provider_id()]),
+    case IsOk of
         true ->
             ok;
         false ->
-            timer:sleep(timer:seconds(1)),
-            wait_for_links(FileUuid, Retries - 1)
+            timer:sleep(timer:seconds(3)),
+            wait_for_links(FileUuid, Retries - 1, SpaceId)
     end.
 
 
@@ -146,6 +154,16 @@ wait_for_file_meta(FileUuid, Retries) ->
         true ->
             ok;
         false ->
-            timer:sleep(timer:seconds(1)),
-            wait_for_links(FileUuid, Retries - 1)
+            timer:sleep(timer:seconds(3)),
+            wait_for_file_meta(FileUuid, Retries - 1)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waiting for local file_location to be present.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_local_file_location(file_meta:uuid()) -> ok | no_return().
+wait_for_local_file_location(Uuid) ->
+    [#document{}] = get_local_file_locations({uuid, Uuid}, 30),
+    ok.
