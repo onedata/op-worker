@@ -40,7 +40,8 @@
 }).
 
 -record(delete_file, {
-    uuid :: file_meta:uuid()
+    uuid :: file_meta:uuid(),
+    silent = false :: boolean()
 }).
 
 -record(update_times, {
@@ -94,7 +95,7 @@
 -record(synchronize_block, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     block :: #file_block{},
-    prefetch :: boolean()
+    prefetch = false :: boolean()
 }).
 
 -record(synchronize_block_and_compute_checksum, {

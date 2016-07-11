@@ -56,7 +56,8 @@
     memory = [] :: [{Key :: term(), Value :: term()}],
     % Handles for opened files
     handles = #{} :: #{binary() => storage_file_manager:handle()},
-    open_files = sets:new() :: sets:set(file_meta:uuid())
+    open_files = sets:new() :: sets:set(file_meta:uuid()),
+    transfers = [] :: [transfer:id()]
 }).
 
 %% Local, cached version of OZ user
@@ -101,7 +102,9 @@
     size = 0 :: file_meta:size(),
     version = 1, %% Snapshot version
     is_scope = false :: boolean(),
-    scope :: datastore:key()
+    scope :: datastore:key(),
+    %% symlink_value for symlinks, file_guid for phantom files (redirection)
+    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid()
 }).
 
 
@@ -191,17 +194,39 @@
     current_size = 0 :: non_neg_integer()
 }).
 
+%% Record that holds monitoring id
+-record(monitoring_id, {
+    main_subject_type = undefined :: atom(),
+    main_subject_id = <<"">> :: datastore:id(),
+    metric_type = undefined :: atom(),
+    secondary_subject_type = undefined :: atom(),
+    secondary_subject_id = <<"">> :: datastore:id(),
+    provider_id = oneprovider:get_provider_id() :: oneprovider:id()
+}).
+
 %% Model for holding state of monitoring
 -record(monitoring_state, {
+    monitoring_id = #monitoring_id{} :: #monitoring_id{},
     rrd_file = undefinied :: rrd_utils:rrd_file(),
     monitoring_interval = 0 :: non_neg_integer(),
-    active = true :: boolean()
+    active = true :: boolean(),
+    state_buffer = #{} :: maps:map()
+}).
+
+%% Model for holding lightweight version of monitoring state
+-record(monitoring_init_state, {
+    monitoring_id = #monitoring_id{} :: #monitoring_id{}
 }).
 
 %% Model that stores open file
 -record(open_file, {
     is_removed = false :: true | false,
     active_descriptors = #{} :: #{session:id() => non_neg_integer()}
+}).
+
+%% Model that maps onedata user to Openstack Swift user
+-record(swift_user, {
+    credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
 -endif.

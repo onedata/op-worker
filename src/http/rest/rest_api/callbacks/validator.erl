@@ -27,22 +27,15 @@
 -define(DEFAULT_OFFSET, <<"0">>).
 
 %% API
--export([malformed_metrics_request/2, malformed_request/2, parse_path/2,
+-export([malformed_request/2, parse_path/2,
     parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
-    parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_timeout/2,
-    parse_last_seq/2, parse_offset/2, parse_limit/2]).
+    parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
+    parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_limit/2,
+    parse_status/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc Extract the REST api version and put it in State.
-%%--------------------------------------------------------------------
--spec malformed_metrics_request(req(), #{}) -> {false, req(), #{}}.
-malformed_metrics_request(Req, State) ->
-    {State2, Req2} = parse_id(Req, State),
-    {false, Req2, State2}.
 
 %%--------------------------------------------------------------------
 %% @doc Extract the REST api version and path and put it in State.
@@ -78,6 +71,17 @@ parse_path(Req, State) ->
 parse_id(Req, State) ->
     {Id, NewReq} = cowboy_req:binding(id, Req),
     {State#{id => Id}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's user_id and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_user_id(cowboy_req:req(), #{}) ->
+    {#{user_id => binary()}, cowboy_req:req()}.
+parse_user_id(Req, State) ->
+    {Id, NewReq} = cowboy_req:binding(uid, Req),
+    {State#{user_id => Id}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -181,7 +185,7 @@ parse_callback(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_space_id(cowboy_req:req(), #{}) ->
-    {#{id => binary()}, cowboy_req:req()}.
+    {#{space_id => binary()}, cowboy_req:req()}.
 parse_space_id(Req, State = #{auth := Auth}) ->
     {Id, NewReq} = cowboy_req:binding(sid, Req),
     {ok, UserId} = session:get_user_id(Auth),
@@ -279,6 +283,17 @@ parse_limit(Req, State) ->
                     throw(?ERROR_INVALID_LIMIT)
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's limit and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_status(cowboy_req:req(), #{}) ->
+    {#{id => binary()}, cowboy_req:req()}.
+parse_status(Req, State) ->
+    {Status, NewReq} = cowboy_req:qs_val(<<"status">>, Req),
+    {State#{status => Status}, NewReq}.
 
 %%%===================================================================
 %%% Internal functions

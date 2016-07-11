@@ -169,8 +169,8 @@ translate_from_protobuf(#'GetFileChildren'{uuid = UUID, offset = Offset, size = 
     #get_file_children{uuid = UUID, offset = Offset, size = Size};
 translate_from_protobuf(#'CreateDir'{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
     #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode};
-translate_from_protobuf(#'DeleteFile'{uuid = UUID}) ->
-    #delete_file{uuid = UUID};
+translate_from_protobuf(#'DeleteFile'{uuid = UUID, silent = Silent}) ->
+    #delete_file{uuid = UUID, silent = Silent};
 translate_from_protobuf(#'UpdateTimes'{uuid = UUID, atime = ATime, mtime = MTime,
     ctime = CTime}) ->
     #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime};
@@ -611,8 +611,8 @@ translate_to_protobuf(#get_file_children{uuid = UUID, offset = Offset, size = Si
     {get_file_children, #'GetFileChildren'{uuid = UUID, offset = Offset, size = Size}};
 translate_to_protobuf(#create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
     {create_dir, #'CreateDir'{parent_uuid = ParentUUID, name = Name, mode = Mode}};
-translate_to_protobuf(#delete_file{uuid = UUID}) ->
-    {delete_file, #'DeleteFile'{uuid = UUID}};
+translate_to_protobuf(#delete_file{uuid = UUID, silent = Silent}) ->
+    {delete_file, #'DeleteFile'{uuid = UUID, silent = Silent}};
 translate_to_protobuf(#update_times{uuid = UUID, atime = ATime, mtime = MTime,
     ctime = CTime}) ->
     {update_times, #'UpdateTimes'{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}};

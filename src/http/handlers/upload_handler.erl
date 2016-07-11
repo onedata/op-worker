@@ -248,7 +248,7 @@ multipart(Req, Params) ->
                         "from user ~p - ~p:~p",
                             [g_session:get_user_id(), Type, Message]),
                         logical_file_manager:release(FileHandle), % release if possible
-                        logical_file_manager:unlink(SessionId, {guid, FileId}),
+                        logical_file_manager:unlink(SessionId, {guid, FileId}, false),
                         throw(stream_file_error)
                     end,
                     multipart(Req3, Params)

@@ -4,6 +4,33 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta8
+
+
+* VFS-2254 Additional GUI model relations
+* VFS-2254 Always allow to get acl after creation.
+* VFS-2254 Return full acl record on create operation in file-acl backend..
+* VFS-2254 Change EAGAIN to EIO error on sync fail.
+* VFS-2254 Adjust file-acl protocol.
+* VFS-2197 Fail sync when rtransfer fails.
+* VFS-2254 Add acls to file_data_backend.
+* VFS-2115 Fix changing file GUID in request after merge
+* VFS-2115 Add file redirection to rename, add phantom files expiration
+* VFS-2115 Add file redirection
+
+
+### 3.0.0-beta7
+
+* VFS-2225 Update GUI docker image
+* VFS-1882 Postpone deletion of open files
+* VFS-2170 Improve dbsync's protocol reliability
+* VFS-2143, Improve dbsync_worker stashed changes management
+* VFS-2187 Add automatic file removal when upload fails
+* VFS-2187 Adjust rest_test to new OZ client API
+* VFS-2187 Use new OZ REST client API from ctool that uses arbitrary Auth term rather than predefined rest client.
+* VFS-2039 Extract non-client messages from fuse_messages
+
+
 ### 3.0.0-beta6
 
 * Update erlang tls

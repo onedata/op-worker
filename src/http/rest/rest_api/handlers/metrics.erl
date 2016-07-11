@@ -17,18 +17,20 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("http/rest/http_status.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
--define(AVAILABLE_METRICS, [storage_quota, storage_used
-    %% TODO VFS-2160 Implement new metrics
-    %data_access_kbs, block_access_iops, block_access_latency, remote_transfer_kbs,
-    %connected_users, remote_access_kbs, metada_access_ops
+-define(AVAILABLE_SPACE_METRICS, [storage_quota, storage_used, data_access,
+    block_access, connected_users
+]).
+-define(AVAILABLE_USER_METRICS, [storage_used, data_access,
+    block_access
 ]).
 
 -define(DEFAULT_STEP, '5m').
 -define(AVAILABLE_STEPS, ['5m', '1h', '1d', '1m']).
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
+-export([rest_init/2, terminate/3, allowed_methods/2,
     is_authorized/2, content_types_provided/2]).
 
 %% resource functions
@@ -60,13 +62,6 @@ allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:malformed_request/2
-%%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
-malformed_request(Req, State) ->
-    validator:malformed_metrics_request(Req, State).
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
@@ -91,23 +86,36 @@ content_types_provided(Req, State) ->
 %% @doc Handles GET
 %%--------------------------------------------------------------------
 -spec get_metric(req(), #{}) -> {term(), req(), #{}}.
-get_metric(Req, #{auth := Auth, subject_type := space, id:= Id} = State) ->
-    {Metric, Req2} = cowboy_req:qs_val(<<"metric">>, Req),
-    {Step, Req2} = cowboy_req:qs_val(<<"step">>, Req),
+get_metric(Req, State) ->
+    {State2, Req2} = validator:parse_space_id(Req, State),
+    {State3, Req3} = validator:parse_user_id(Req2, State2),
+    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3),
+    {Step, Req5} = cowboy_req:qs_val(<<"step">>, Req4),
+
+    #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := Id, user_id := UId} = State3,
 
     case space_info:get_or_fetch(Auth, Id) of
         {ok, #document{value = #space_info{providers = Providers}}} ->
             Json =
                 lists:map(fun(ProviderId) ->
-                    {ok, Data} = onedata_metrics_api:get_metric(Auth, space, Id,
-                        transform_metric(Metric), transform_step(Step), ProviderId, json),
-                    [
-                        {<<"providerId">>, ProviderId},
-                        {<<"rrd">>, Data}
-                    ]
+                    case onedata_metrics_api:get_metric(Auth, SubjectType, Id, SecondarySubjectType, UId,
+                        transform_metric(Metric, SubjectType, SecondarySubjectType), transform_step(Step), ProviderId, json)
+                    of
+                        {ok, Data} ->
+                            DecodedJson = json_utils:decode(Data),
+                            [
+                                {<<"providerId">>, ProviderId},
+                                {<<"rrd">>, DecodedJson}
+                            ];
+                        {error, ?ENOENT} ->
+                            [
+                                {<<"providerId">>, ProviderId},
+                                {<<"rrd">>, <<>>}
+                            ]
+                    end
                 end, Providers),
             Response = json_utils:encode(Json),
-            {Response, Req2, State};
+            {Response, Req5, State3};
         {error, {not_found, _}} ->
             throw(?ERROR_NOT_FOUND)
     end.
@@ -117,12 +125,20 @@ get_metric(Req, #{auth := Auth, subject_type := space, id:= Id} = State) ->
 %% Transform metric type to atom and validate it.
 %% @end
 %%--------------------------------------------------------------------
--spec transform_metric(binary() | undefined) -> onedata_metrics_api:metric_type().
-transform_metric(undefined) ->
+-spec transform_metric(binary() | undefined, onedata_metrics_api:subject_type(), onedata_metrics_api:subject_type()) -> onedata_metrics_api:metric_type().
+transform_metric(undefined, _, _) ->
     throw(?ERROR_INVALID_METRIC);
-transform_metric(MetricType) ->
+transform_metric(MetricType, space, undefined) ->
     MetricTypeAtom = binary_to_atom(MetricType, utf8),
-    case lists:member(MetricTypeAtom, ?AVAILABLE_METRICS) of
+    case lists:member(MetricTypeAtom, ?AVAILABLE_SPACE_METRICS) of
+        true ->
+            MetricTypeAtom;
+        false ->
+            throw(?ERROR_INVALID_METRIC)
+    end;
+transform_metric(MetricType, space, user) ->
+    MetricTypeAtom = binary_to_atom(MetricType, utf8),
+    case lists:member(MetricTypeAtom, ?AVAILABLE_USER_METRICS) of
         true ->
             MetricTypeAtom;
         false ->
