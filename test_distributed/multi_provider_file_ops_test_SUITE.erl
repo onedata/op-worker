@@ -61,6 +61,8 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
 synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider},
     Attempts, DirsNum, FilesNum) ->
+    RepNum = ?config(rep_num, Config),
+
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfWriteProvider,
     Workers = ?config(op_worker_nodes, Config),
     Worker1 = lists:foldl(fun(W, Acc) ->
@@ -414,6 +416,9 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     Verify(fun(W) ->
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
+
+    ct:print("Sleep: ~p sek", [30 * RepNum]),
+    timer:sleep(timer:seconds(30 * RepNum)),
 
     ok.
 
