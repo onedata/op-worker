@@ -160,8 +160,7 @@ create(SessId, Path, Mode) ->
                 fun(#file_location{uuid = GUID, handle_id = FSLogicHandle}) ->
                     % TODO VFS-2263
                     spawn(fun() ->
-                        CTX = fslogic_context:new(SessId),
-                        lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX),
+                        lfm_utils:call_fslogic(SessId, fuse_request,
                             #release{handle_id = FSLogicHandle, uuid = GUID},
                             fun(_) ->
                                 ok

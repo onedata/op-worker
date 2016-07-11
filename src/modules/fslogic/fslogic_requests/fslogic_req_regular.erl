@@ -196,7 +196,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 release(#fslogic_ctx{session_id = SessId}, HandleId) ->
     UpdatedHandles = fun(#session{handles = Handles} = Session) ->
         {ok, Session#session{handles = maps:remove(HandleId, Handles)}}
-                     end,
+    end,
     {ok, SessId} = session:update(SessId, UpdatedHandles),
     #fuse_response{status = #status{code = ?OK}}.
 
