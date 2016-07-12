@@ -251,7 +251,7 @@ monitoring_action(Action, UserId) ->
                         main_subject_id = SpaceId,
                         metric_type = MetricType
                     }})
-                end, [storage_used, data_access, block_access])
+                end, [storage_used, data_access, block_access, remote_transfer])
             end, Spaces);
         _ -> ok
     end.

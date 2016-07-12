@@ -235,8 +235,8 @@ get_parent(CTX, File) ->
 synchronize_block(CTX, {uuid, FileUUID}, undefined, Prefetch)  ->
     Size = fslogic_blocks:get_file_size({uuid, FileUUID}),
     synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size}, Prefetch);
-synchronize_block(_CTX, {uuid, FileUUID}, Block, Prefetch)  ->
-    ok = replica_synchronizer:synchronize(FileUUID, Block, Prefetch),
+synchronize_block(CTX, {uuid, FileUUID}, Block, Prefetch)  ->
+    ok = replica_synchronizer:synchronize(CTX, FileUUID, Block, Prefetch),
     #fuse_response{status = #status{code = ?OK}}.
 
 
