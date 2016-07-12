@@ -231,8 +231,9 @@ handle({flush_queue, QueueKey}) ->
         _ -> ok
     end,
 
-    ?info("Load ~p ~p ~p", [cpu_sup:util(), erlang:memory(),
-        lists:reverse(lists:sort(lists:map(fun(N) -> {ets:info(N, memory), ets:info(N, size), N} end, ets:all())))]),
+    ?info("Load ~p~n~p~n~p", [cpu_sup:util(), erlang:memory(),
+        lists:reverse(lists:sort(lists:map(fun(N) -> {ets:info(N, memory), ets:info(N, size), N} end, ets:all())))
+        ]),
     state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved, until = Until} = Queue) ->
             NewBatchMap = maps:map(
