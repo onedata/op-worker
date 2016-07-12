@@ -16,7 +16,6 @@
         {applications, [
             kernel,
             stdlib,
-            os_mon,
             sasl,
             public_key,
             crypto,
