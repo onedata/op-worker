@@ -29,7 +29,7 @@
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
-    get_transfers/1, remove_transfer/2, add_transfer/2]).
+    get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
@@ -492,6 +492,12 @@ add_transfer(SessionId, TransferId) ->
     session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
         {ok, Sess#session{transfers = [TransferId | Transfers]}}
         end).
+
+add_handle(SessionId, HandleID, Handle) ->
+    datastore:add_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [{HandleID, {Handle, sfm_handle}}]).
+
+remove_handle(SessionId, HandleID) ->
+    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]).
 
 
 %%%===================================================================

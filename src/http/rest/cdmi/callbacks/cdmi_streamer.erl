@@ -120,15 +120,16 @@ stream_range(Socket, Transport, #{attributes := #file_attr{size = Size}} = State
     stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
 stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
-    case ToRead > BufferSize of
-        true ->
-            {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
-            Transport:send(Socket, cdmi_encoder:encode(Data, Encoding)),
-            stream_range(Socket, Transport, State, {From + BufferSize, To},
-                Encoding, BufferSize, NewFileHandle);
+    ReadBufSize = min(ToRead, BufferSize),
+    {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ReadBufSize),
+    Transport:send(Socket, cdmi_encoder:encode(Data, Encoding)),
+    DataSize = size(Data),
+    case DataSize of
+        0 ->
+           ok;
         false ->
-            {ok, _NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ToRead),
-            Transport:send(Socket, cdmi_encoder:encode(Data, Encoding))
+            stream_range(Socket, Transport, State, {From + DataSize, To},
+                Encoding, BufferSize, NewFileHandle)
     end.
 
 %%%===================================================================

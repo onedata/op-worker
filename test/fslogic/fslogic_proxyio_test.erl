@@ -425,7 +425,7 @@ read_should_fail_on_failed_read_when_given_file_uuid(_) ->
 %%%===================================================================
 
 start() ->
-    meck:new([storage_file_manager, storage, fslogic_spaces, session, lfm_utils]),
+    meck:new([storage_file_manager, storage, fslogic_spaces, session, lfm_utils, sfm_handle]),
 
     meck:expect(storage_file_manager, new_handle, 5, sfm_handle_mock),
     meck:expect(storage_file_manager, open, 2, {ok, file_handle_mock}),
@@ -442,6 +442,8 @@ start() ->
         #document{value = #session{
             identity = #identity{user_id = <<"UserId">>},
             handles = #{<<"HandleId">> => file_handle_mock}}}}),
+
+    meck:expect(session, get, 1, {ok, #document{value = file_handle_mock}}),
 
     meck:expect(fslogic_spaces, get_space, 2, {ok, #document{key = ?SPACE_ID}}),
     meck:expect(lfm_utils, call_fslogic, 4, ok),
