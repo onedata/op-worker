@@ -73,53 +73,22 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc Gets helper params based on given storage ID.
-%% @end
 %%--------------------------------------------------------------------
--spec get_helper_params(fslogic_worker:ctx(),
-    StorageId :: storage:id(), ForceCL :: boolean()) ->
-    FuseResponse :: #fuse_response{} | no_return().
+-spec get_helper_params(fslogic_worker:ctx(), StorageId :: storage:id(),
+    ForceCL :: boolean()) -> FuseResponse :: #fuse_response{} | no_return().
 get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #helper_params{helper_name = <<"ProxyIO">>,
-            helper_args = [
-                #helper_arg{key = <<"storage_id">>, value = StorageId}
-            ]}};
+    #fuse_response{status = #status{code = ?OK}, fuse_response = #helper_params{
+        helper_name = <<"ProxyIO">>,
+        helper_args = [#helper_arg{key = <<"storage_id">>, value = StorageId}]
+    }};
 get_helper_params(#fslogic_ctx{session_id = SessId, space_id = SpaceId},
     StorageId, false = _ForceProxy) ->
-    {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
-    {HelperName, HelperArgsMap} = case fslogic_storage:select_helper(StorageDoc) of
-        {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args} = HelperInit} ->
-            #ceph_user_ctx{user_name = UserName, user_key = UserKey} =
-                fslogic_storage:new_user_ctx(HelperInit, SessId,
-                    fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
-            {?CEPH_HELPER_NAME, Args#{
-                <<"user_name">> => UserName,
-                <<"key">> => UserKey
-            }};
-        {ok, #helper_init{name = ?S3_HELPER_NAME, args = Args} = HelperInit} ->
-            #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey} =
-                fslogic_storage:new_user_ctx(HelperInit, SessId,
-                    fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
-            {?S3_HELPER_NAME, Args#{
-                <<"access_key">> => AccessKey,
-                <<"secret_key">> => SecretKey
-            }};
-        {ok, #helper_init{name = ?SWIFT_HELPER_NAME, args = Args} = HelperInit} ->
-            #swift_user_ctx{user_name = UserName, password =  Password} =
-                fslogic_storage:new_user_ctx(HelperInit, SessId,
-                    fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
-            {?SWIFT_HELPER_NAME, Args#{
-                <<"user_name">> => UserName,
-                <<"password">> => Password
-            }};
-        {ok, #helper_init{name = Name, args = Args}} ->
-            {Name, Args}
-    end,
-
-    HelperArgs = [#helper_arg{key = K, value = V} || {K, V} <- maps:to_list(HelperArgsMap)],
-
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #helper_params{helper_name = HelperName, helper_args = HelperArgs}}.
+    {ok, StorageDoc} = storage:get(StorageId),
+    {ok, HelperInit} = fslogic_storage:select_helper(StorageDoc),
+    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
+    HelperParams = helpers_utils:get_params(HelperInit, UserCtx),
+    #fuse_response{status = #status{code = ?OK}, fuse_response = HelperParams}.
 
 
 %%--------------------------------------------------------------------

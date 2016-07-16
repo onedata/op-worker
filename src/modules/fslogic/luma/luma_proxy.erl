@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
--include("deps/ctool/include/utils/utils.hrl").
+-include_lib("ctool/include/utils/utils.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 
 %% API
@@ -25,48 +25,40 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Retrieves user context from LUMA server.
+%% @doc Retrieves user context from LUMA server.
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+-spec new_user_ctx(HelperInit :: helpers:init(), SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers_user:ctx().
 new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_ceph_user_ctx(SessionId, SpaceUUID);
+    get_or_fetch_user_ctx(ceph_user, SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_posix_user_ctx(SessionId, SpaceUUID);
+    get_or_fetch_user_ctx(posix_user, SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_s3_user_ctx(SessionId, SpaceUUID);
+    get_or_fetch_user_ctx(s3_user, SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?SWIFT_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_swift_user_ctx(SessionId, SpaceUUID).
+    get_or_fetch_user_ctx(swift_user, SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves posix user ctx for file attrs from LUMA server
-%% @end
+%% @doc Retrieves posix user ctx for file attrs from LUMA server.
 %%--------------------------------------------------------------------
 -spec get_posix_user_ctx(StorageType :: helpers:name(), SessionIdOrIdentity :: session:id() | session:identity(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
 get_posix_user_ctx(?DIRECTIO_HELPER_NAME, SessionIdOrIdentity, SpaceUUID) ->
-    new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID);
+    get_or_fetch_user_ctx(posix_user, SessionIdOrIdentity, SpaceUUID);
 get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
     UserId = luma_utils:get_user_id(SessionIdOrIdentity),
     StorageId = luma_utils:get_storage_id(SpaceUUID),
 
-    case luma_utils:get_posix_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #posix_user_ctx{
-                uid = posix_user:uid(Credentials),
-                gid = posix_user:gid(Credentials)
-            };
-        _ ->
+    case posix_user:get_ctx(UserId, StorageId) of
+        #posix_user_ctx{} = Ctx -> Ctx;
+        undefined ->
             {ok, Response} = get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
                 undefined, SessionIdOrIdentity, SpaceUUID),
-
-            UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
-            posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
-                UserCtx#posix_user_ctx.gid),
+            UserCtx = make_user_ctx(posix_user, Response, SpaceUUID),
+            posix_user:add(UserId, StorageId, UserCtx),
             UserCtx
     end.
 
@@ -76,126 +68,63 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Retrieves user context from LUMA server for Ceph storage helper.
+%% @private @doc Retrieves user context from LUMA server for given storage helper.
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_user_ctx(SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_ceph_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    StorageId = luma_utils:get_storage_id(SpaceUUID),
-
-    case luma_utils:get_ceph_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #ceph_user_ctx{
-                user_name = ceph_user:name(Credentials),
-                user_key = ceph_user:key(Credentials)
-            };
-        undefined ->
-            StorageType = luma_utils:get_storage_type(StorageId),
-            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionId, SpaceUUID),
-
-            UserName = proplists:get_value(<<"user_name">>, Response),
-            UserKey = proplists:get_value(<<"user_key">>, Response),
-            ceph_user:add(UserId, StorageId, UserName, UserKey),
-            #ceph_user_ctx{user_name = UserName, user_key = UserKey}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves user context from LUMA server for Amazon S3 storage helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_s3_user_ctx(SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_s3_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    StorageId = luma_utils:get_storage_id(SpaceUUID),
-    case luma_utils:get_s3_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #s3_user_ctx{
-                access_key = s3_user:access_key(Credentials),
-                secret_key = s3_user:secret_key(Credentials)
-            };
-        _ ->
-            StorageType = luma_utils:get_storage_type(StorageId),
-            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionId, SpaceUUID),
-
-            AccessKey = proplists:get_value(<<"access_key">>, Response),
-            SecretKey = proplists:get_value(<<"secret_key">>, Response),
-            s3_user:add(UserId, StorageId, AccessKey, SecretKey),
-
-            #s3_user_ctx{
-                access_key = AccessKey,
-                secret_key = SecretKey
-            }
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for Swift storage helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_swift_user_ctx(SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_swift_user_ctx(SessionId, SpaceUUID) ->
+-spec get_or_fetch_user_ctx(UserModel :: helpers_user:model(), SessId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> UserCtx :: helpers_user:ctx().
+get_or_fetch_user_ctx(swift_user, _SessionId, SpaceUUID) ->
     %% TODO VFS-2117 call luma service
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
-        space_storage:get(SpaceId),
-    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
-        storage:get(StorageId),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
+    Args = luma_utils:get_helper_args(StorageId),
 
     #swift_user_ctx{
         user_name = maps:get(<<"user_name">>, Args),
         password = maps:get(<<"password">>, Args)
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves user context from LUMA server for all posix-compilant helpers
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_posix_user_ctx(SessionIdOrIdentity :: session:id() | session:identity(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
-    UserId = luma_utils:get_user_id(SessionIdOrIdentity),
+    };
+get_or_fetch_user_ctx(UserModel, SessionId, SpaceUUID) ->
+    UserId = luma_utils:get_user_id(SessionId),
     StorageId = luma_utils:get_storage_id(SpaceUUID),
 
-    case luma_utils:get_posix_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #posix_user_ctx{
-                uid = posix_user:uid(Credentials),
-                gid = posix_user:gid(Credentials)
-            };
-        _ ->
+    case UserModel:get_ctx(UserId, StorageId) of
+        undefined ->
             StorageType = luma_utils:get_storage_type(StorageId),
-
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionIdOrIdentity, SpaceUUID),
-
-            UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
-            posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
-                UserCtx#posix_user_ctx.gid),
-            UserCtx
+                StorageId, SessionId, SpaceUUID),
+            UserCtx = make_user_ctx(UserModel, Response, SpaceUUID),
+            UserModel:add(UserId, StorageId, UserCtx),
+            UserCtx;
+        UserCtx -> UserCtx
     end.
+
+%%--------------------------------------------------------------------
+%% @private @doc Creates user context from LUMA server response.
+%%--------------------------------------------------------------------
+-spec make_user_ctx(UserModel :: helpers_user:model(), Response :: proplists:proplist(),
+    SpaceUUID :: file_meta:uuid()) -> UserCtx :: helpers_user:ctx().
+make_user_ctx(ceph_user, Response, _SpaceUUID) ->
+    UserName = proplists:get_value(<<"user_name">>, Response),
+    UserKey = proplists:get_value(<<"user_key">>, Response),
+    ceph_user:new_ctx(UserName, UserKey);
+make_user_ctx(s3_user, Response, _SpaceUUID) ->
+    AccessKey = proplists:get_value(<<"access_key">>, Response),
+    SecretKey = proplists:get_value(<<"secret_key">>, Response),
+    s3_user:new_ctx(AccessKey, SecretKey);
+make_user_ctx(posix_user, Response, SpaceUUID) ->
+    GID = case proplists:get_value(<<"gid">>, Response) of
+        undefined ->
+            {ok, #document{value = #file_meta{name = SpaceName}}} =
+                file_meta:get({uuid, SpaceUUID}),
+            luma_utils:gen_storage_gid(SpaceName, SpaceUUID);
+        Val ->
+            Val
+    end,
+    #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = GID}.
 
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves user credentials to storage from LUMA
-%% @end
+%% @private @doc Retrieves user credentials to storage from LUMA server.
 %%--------------------------------------------------------------------
 -spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
     StorageId :: storage:id() | undefined, SessionIdOrIdentity :: session:id() | session:identity(),
@@ -270,29 +199,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
             Error
     end.
 
-
 %%--------------------------------------------------------------------
-%% @doc Parses LUMA response to posix user ctx
-%% @end
-%%--------------------------------------------------------------------
--spec parse_posix_ctx_from_luma(proplists:proplist(),
-    SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
-parse_posix_ctx_from_luma(Response, SpaceUUID) ->
-    GID = case proplists:get_value(<<"gid">>, Response) of
-        undefined ->
-            {ok, #document{value = #file_meta{name = SpaceName}}} =
-                file_meta:get({uuid, SpaceUUID}),
-            luma_utils:gen_storage_gid(SpaceName, SpaceUUID);
-        Val ->
-            Val
-    end,
-    #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = GID}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get auth from session_id, returns undefined when identity is given.
-%% @end
+%% @private @doc Get auth from session ID, returns undefined when identity is given.
 %%--------------------------------------------------------------------
 -spec get_auth(session:id() | session:identity()) ->
     {ok, session:auth() | undefined} | {error, term()}.

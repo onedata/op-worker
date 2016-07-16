@@ -5,34 +5,29 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc
-%%% Cache that maps onedata user to POSIX user.
-%%% @end
+%%% @doc Cache that maps onedata user to POSIX user.
 %%%-------------------------------------------------------------------
 -module(posix_user).
 -author("Michal Wrona").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/4, uid/1, gid/1]).
+-export([new_ctx/2, new/3, add_ctx/3, add/3, get_all_ctx/1, get_ctx/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--record(posix_user_credentials, {
-    uid :: uid(),
-    gid :: gid()
-}).
-
 -type uid() :: non_neg_integer().
 -type gid() :: non_neg_integer().
--type credentials() :: #posix_user_credentials{}.
+-type ctx() :: #posix_user_ctx{}.
+-type type() :: #posix_user{}.
 
--export_type([uid/0, gid/0, credentials/0]).
+-export_type([uid/0, gid/0, ctx/0, type/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -128,77 +123,47 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Adds POSIX storage credentials for onedata user.
-%% @end
+%% @doc Creates POSIX user context.
 %%--------------------------------------------------------------------
--spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), Uid :: uid(), Gid :: gid())
-        -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
-add(UserId, StorageId, Uid, Gid) ->
-    case posix_user:get(UserId) of
-        {ok, #document{value = POSIXUser} = Doc} ->
-            NewPOSIXUser = add_credentials(POSIXUser, StorageId, Uid, Gid),
-            posix_user:save(Doc#document{value = NewPOSIXUser});
-        {error, {not_found, _}} ->
-            POSIXUser = new(UserId, StorageId, Uid, Gid),
-            case create(POSIXUser) of
-                {ok, POSIXUserId} -> {ok, POSIXUserId};
-                {error, already_exists} ->
-                    add(UserId, StorageId, Uid, Gid);
-                {error, Reason} -> {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+-spec new_ctx(Uid :: uid(), Gid :: gid()) -> UserCtx :: ctx().
+new_ctx(Uid, Gid) ->
+    #posix_user_ctx{uid = Uid, gid = Gid}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns POSIX user uid.
-%% @end
+%% @doc Creates POSIX user document.
 %%--------------------------------------------------------------------
--spec uid(Credentials :: #posix_user_credentials{}) -> Uid :: uid().
-uid(#posix_user_credentials{uid = Uid}) ->
-    Uid.
+-spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    UserDoc :: datastore:document().
+new(UserId, StorageId, #posix_user_ctx{} = UserCtx) ->
+    #document{key = UserId, value = add_ctx(StorageId, UserCtx, #posix_user{})}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns POSIX user gid.
-%% @end
+%% @doc Adds POSIX storage context to onedata user.
 %%--------------------------------------------------------------------
--spec gid(Credentials :: #posix_user_credentials{}) -> Gid :: gid().
-gid(#posix_user_credentials{gid = Gid}) ->
-    Gid.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+-spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #posix_user{}) ->
+    User :: #posix_user{}.
+add_ctx(StorageId, UserCtx, #posix_user{ctx = Ctx} = User) ->
+    User#posix_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns POSIX user datastore document.
-%% @end
+%% @doc Returns all POSIX storage contexts for onedata user.
 %%--------------------------------------------------------------------
--spec new(UserId :: onedata_user:id(), StorageId :: storage:id(),
-    Uid :: uid(), Gid :: gid()) -> Doc :: #document{}.
-new(UserId, StorageId, Uid, Gid) ->
-    #document{key = UserId, value = #posix_user{
-        credentials = maps:put(StorageId, #posix_user_credentials{
-            uid = Uid,
-            gid = Gid
-        }, #{})}
-    }.
+-spec get_all_ctx(User :: #posix_user{}) -> Ctx :: #{storage:id() => ctx()}.
+get_all_ctx(#posix_user{ctx = Ctx}) ->
+    Ctx.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Adds credentials to existing POSIX user.
-%% @end
+%% @doc Returns POSIX storage context for onedata user.
 %%--------------------------------------------------------------------
--spec add_credentials(POSIXUser :: #posix_user{}, StorageId :: storage:id(),
-    Uid :: uid(), Gid :: gid()) -> NewPOSIXUser :: #posix_user{}.
-add_credentials(#posix_user{credentials = Credentials} = POSIXUser, StorageId, Uid, Gid) ->
-    POSIXUser#posix_user{credentials = maps:put(StorageId, #posix_user_credentials{
-        uid = Uid,
-        gid = Gid
-    }, Credentials)}.
+-spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
+    UserCtx :: ctx() | undefined.
+get_ctx(UserId, StorageId) ->
+    helpers_user:get_ctx(?MODULE, UserId, StorageId).
+
+%%--------------------------------------------------------------------
+%% @doc @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%%--------------------------------------------------------------------
+-spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+add(UserId, StorageId, UserCtx) ->
+    helpers_user:add(?MODULE, UserId, StorageId, UserCtx).

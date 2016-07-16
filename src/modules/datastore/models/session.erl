@@ -208,14 +208,14 @@ all_with_user() ->
 %% Returns ID of user associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(SessId :: id()) ->
+-spec get_user_id(SessIdOrSession :: id() | #session{}) ->
     {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+get_user_id(#session{identity = #identity{user_id = UserId}}) ->
+    {ok, UserId};
 get_user_id(SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} ->
-            {ok, UserId};
-        {error, Reason} ->
-            {error, Reason}
+        {ok, #document{value = Session}} -> get_user_id(Session);
+        {error, Reason} -> {error, Reason}
     end.
 
 %%--------------------------------------------------------------------

@@ -5,34 +5,29 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc
-%%% Cache that maps onedata user to Amazon S3 user.
-%%% @end
+%%% @doc Cache that maps onedata user to Amazon S3 user.
 %%%-------------------------------------------------------------------
 -module(s3_user).
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/4, access_key/1, secret_key/1]).
+-export([new_ctx/2, new/3, add_ctx/3, add/3, get_all_ctx/1, get_ctx/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--record(s3_user_credentials, {
-    access_key :: access_key(),
-    secret_key :: secret_key()
-}).
-
 -type access_key() :: binary().
 -type secret_key() :: binary().
--type credentials() :: #s3_user_credentials{}.
+-type ctx() :: #s3_user_ctx{}.
+-type type() :: #s3_user{}.
 
--export_type([access_key/0, secret_key/0, credentials/0]).
+-export_type([access_key/0, secret_key/0, ctx/0, type/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -128,77 +123,47 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Adds Amazon S3 storage credentials for onedata user.
-%% @end
+%% @doc Creates S3 user context.
 %%--------------------------------------------------------------------
--spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), AccessKey :: access_key(),
-    SecretKey :: secret_key()) -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
-add(UserId, StorageId, AccessKey, SecretKey) ->
-    case s3_user:get(UserId) of
-        {ok, #document{value = S3User} = Doc} ->
-            NewS3User = add_credentials(S3User, StorageId, AccessKey, SecretKey),
-            s3_user:save(Doc#document{value = NewS3User});
-        {error, {not_found, _}} ->
-            S3User = new(UserId, StorageId, AccessKey, SecretKey),
-            case create(S3User) of
-                {ok, S3UserId} -> {ok, S3UserId};
-                {error, already_exists} ->
-                    add(UserId, StorageId, AccessKey, SecretKey);
-                {error, Reason} -> {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+-spec new_ctx(AccessKey :: access_key(), SecretKey :: secret_key()) -> UserCtx :: ctx().
+new_ctx(AccessKey, SecretKey) ->
+    #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns Amazon S3 user access key.
-%% @end
+%% @doc Creates S3 user document.
 %%--------------------------------------------------------------------
--spec access_key(Credentials :: #s3_user_credentials{}) -> AccessKey :: access_key().
-access_key(#s3_user_credentials{access_key = AccessKey}) ->
-    AccessKey.
+-spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    UserDoc :: datastore:document().
+new(UserId, StorageId, #s3_user_ctx{} = UserCtx) ->
+    #document{key = UserId, value = add_ctx(StorageId, UserCtx, #s3_user{})}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns S3 user secret key.
-%% @end
+%% @doc Adds S3 storage ctx to onedata user.
 %%--------------------------------------------------------------------
--spec secret_key(Credentials :: #s3_user_credentials{}) -> SecretKey :: secret_key().
-secret_key(#s3_user_credentials{secret_key = SecretKey}) ->
-    SecretKey.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+-spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #s3_user{}) ->
+    User :: #s3_user{}.
+add_ctx(StorageId, UserCtx, #s3_user{ctx = Ctx} = User) ->
+    User#s3_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns Amazon S3 user datastore document.
-%% @end
+%% @doc Returns all S3 storage contexts for onedata user. 
 %%--------------------------------------------------------------------
--spec new(UserId :: onedata_user:id(), StorageId :: storage:id(),
-    AccessKey :: access_key(), SecretKey :: secret_key()) -> Doc :: #document{}.
-new(UserId, StorageId, AccessKey, SecretKey) ->
-    #document{key = UserId, value = #s3_user{
-        credentials = maps:put(StorageId, #s3_user_credentials{
-            access_key = AccessKey,
-            secret_key = SecretKey
-        }, #{})}
-    }.
+-spec get_all_ctx(User :: #s3_user{}) -> Ctx :: #{storage:id() => ctx()}.
+get_all_ctx(#s3_user{ctx = Ctx}) ->
+    Ctx.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Adds credentials to existing Amazon S3 user.
-%% @end
+%% @doc Returns S3 storage context for onedata user. 
 %%--------------------------------------------------------------------
--spec add_credentials(S3User :: #s3_user{}, StorageId :: storage:id(),
-    AccessKey :: access_key(), SecretKey :: secret_key()) -> NewS3User :: #s3_user{}.
-add_credentials(#s3_user{credentials = Credentials} = S3User, StorageId, AccessKey, SecretKey) ->
-    S3User#s3_user{credentials = maps:put(StorageId, #s3_user_credentials{
-        access_key = AccessKey,
-        secret_key = SecretKey
-    }, Credentials)}.
+-spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
+    UserCtx :: ctx() | undefined.
+get_ctx(UserId, StorageId) ->
+    helpers_user:get_ctx(?MODULE, UserId, StorageId).
+
+%%--------------------------------------------------------------------
+%% @doc Saves storage ctx in S3 user document.
+%%--------------------------------------------------------------------
+-spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+add(UserId, StorageId, UserCtx) ->
+    helpers_user:add(?MODULE, UserId, StorageId, UserCtx).

@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([new_handle/1, new_handle/2, set_user_ctx/2]).
+-export([get_name/1, get_args/1, new_handle/1, new_handle/2, set_user_ctx/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
 -export([chown/4, truncate/3, open/3, read/4, write/4, release/2, flush/2, fsync/3]).
 
@@ -35,17 +35,28 @@
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
 -type args() :: helpers_nif:helper_args().
--type user_ctx() :: #ceph_user_ctx{} | #posix_user_ctx{} | #s3_user_ctx{}
-| #swift_user_ctx{}.
--type user_ctx_map() :: #{binary() => binary()}.
 -type init() :: #helper_init{}.
 
 -export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0,
-    user_ctx/0, user_ctx_map/0, init/0]).
+    init/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Returns helper name.
+%%--------------------------------------------------------------------
+-spec get_name(Helper :: init()) -> Name :: name().
+get_name(#helper_init{name = Name}) ->
+    Name.
+
+%%--------------------------------------------------------------------
+%% @doc Returns helper arguments map.
+%%--------------------------------------------------------------------
+-spec get_args(Helper :: init()) -> Args :: args().
+get_args(#helper_init{args = Args}) ->
+    Args.
 
 %% new_handle/1
 %%--------------------------------------------------------------------
@@ -76,7 +87,7 @@ new_handle(HelperName, HelperArgs) ->
 %%      This method uses abstract user_ctx() to set correct user context in lower layers.
 %% @end
 %%--------------------------------------------------------------------
--spec set_user_ctx(handle(), user_ctx()) -> ok.
+-spec set_user_ctx(handle(), helpers_user:ctx()) -> ok.
 set_user_ctx(#helper_handle{ctx = CTX}, #ceph_user_ctx{user_name = UserName, user_key = UserKey}) ->
     UserCTX = #{<<"user_name">> => UserName, <<"key">> => UserKey},
     ok = helpers_nif:set_user_ctx(CTX, UserCTX);
