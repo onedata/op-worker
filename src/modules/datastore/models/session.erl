@@ -493,9 +493,22 @@ add_transfer(SessionId, TransferId) ->
         {ok, Sess#session{transfers = [TransferId | Transfers]}}
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Add link to handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_handle(SessionId :: session:id(), HandleID :: binary(),
+    Handle :: storage_file_manager:handle()) -> ok | datastore:generic_error().
 add_handle(SessionId, HandleID, Handle) ->
     datastore:add_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [{HandleID, {Handle, sfm_handle}}]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove link to handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_handle(SessionId :: session:id(), HandleID :: binary()) -> ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
     datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]).
 

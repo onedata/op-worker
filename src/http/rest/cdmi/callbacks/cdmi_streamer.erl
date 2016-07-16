@@ -127,7 +127,7 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
     case DataSize of
         0 ->
            ok;
-        false ->
+        _ ->
             stream_range(Socket, Transport, State, {From + DataSize, To},
                 Encoding, BufferSize, NewFileHandle)
     end.

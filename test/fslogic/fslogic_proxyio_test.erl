@@ -440,10 +440,9 @@ start() ->
 
     meck:expect(session, get, 1, {ok,
         #document{value = #session{
-            identity = #identity{user_id = <<"UserId">>},
-            handles = #{<<"HandleId">> => file_handle_mock}}}}),
+            identity = #identity{user_id = <<"UserId">>}}}}),
 
-    meck:expect(session, get, 1, {ok, #document{value = file_handle_mock}}),
+    meck:expect(sfm_handle, get, 1, {ok, #document{value = file_handle_mock}}),
 
     meck:expect(fslogic_spaces, get_space, 2, {ok, #document{key = ?SPACE_ID}}),
     meck:expect(lfm_utils, call_fslogic, 4, ok),
