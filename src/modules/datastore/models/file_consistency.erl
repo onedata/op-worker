@@ -124,6 +124,13 @@ add_components_and_notify(FileUuid, FoundComponents) ->
             end
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Notify waiting processes and return file_consistency doc with updated
+%% waiting list
+%% @end
+%%--------------------------------------------------------------------
+-spec notify_waiting(datastore:document()) -> datastore:document().
 notify_waiting(Doc = #document{value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
     NewWaiting = lists:filter(fun({Missing, Pid, Args}) ->
         case Missing -- Components of
