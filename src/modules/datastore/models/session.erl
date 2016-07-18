@@ -29,7 +29,7 @@
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
-    get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2]).
+    get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
@@ -501,7 +501,12 @@ add_transfer(SessionId, TransferId) ->
 -spec add_handle(SessionId :: session:id(), HandleID :: binary(),
     Handle :: storage_file_manager:handle()) -> ok | datastore:generic_error().
 add_handle(SessionId, HandleID, Handle) ->
-    datastore:add_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [{HandleID, {Handle, sfm_handle}}]).
+    case sfm_handle:create(#document{value = Handle}) of
+        {ok, Key} ->
+            datastore:add_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [{HandleID, {Key, sfm_handle}}]);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -510,8 +515,27 @@ add_handle(SessionId, HandleID, Handle) ->
 %%--------------------------------------------------------------------
 -spec remove_handle(SessionId :: session:id(), HandleID :: binary()) -> ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
-    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]).
+    case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+        {ok, {HandleKey, sfm_handle}} ->
+            case sfm_handle:delete(HandleKey) of
+                ok ->
+                    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleKey]);
+                {error, Reason2} ->
+                    {error, Reason2}
+            end;
+        {error, link_not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
+get_handle(SessionId, HandleID) ->
+    case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+        {ok, #document{value = Handle}} ->
+            {ok, Handle};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% Internal functions

@@ -113,8 +113,7 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
                 storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
             storage_file_manager:open(SFMHandle, OpenMode);
         HandleId ->
-            {ok, #document{value = H}} = sfm_handle:get(HandleId),
-            {ok, H}
+            session:get_handle(SessionId, HandleId)
     end.
 
 
