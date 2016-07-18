@@ -37,6 +37,7 @@
 }).
 
 -record(delete_file, {
+    silent = false :: boolean()
 }).
 
 -record(update_times, {
@@ -78,7 +79,7 @@
 
 -record(synchronize_block, {
     block :: #file_block{},
-    prefetch :: boolean()
+    prefetch = false :: boolean()
 }).
 
 -record(create_storage_test_file, {

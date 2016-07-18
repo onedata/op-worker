@@ -119,8 +119,7 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 %%--------------------------------------------------------------------
 -spec new_swift_user_ctx(SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_swift_user_ctx(SessionId, SpaceUUID) ->
-    %% TODO create provider luma
+new_swift_user_ctx(_SessionId, SpaceUUID) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
         space_storage:get(SpaceId),

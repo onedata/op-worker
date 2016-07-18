@@ -22,6 +22,7 @@
     default_space_owner/1]).
 -export([gen_file_uuid/1, gen_file_uuid/0]).
 -export([to_file_guid/2, unpack_file_guid/1, file_guid_to_uuid/1, to_file_guid/1, ensure_guid/2]).
+-export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
 
 %%%===================================================================
 %%% API
@@ -47,7 +48,7 @@ to_file_guid(FileUUID, SpaceId) ->
 -spec to_file_guid(file_meta:uuid()) ->
     fslogic_worker:file_guid().
 to_file_guid(FileUUID) ->
-    try fslogic_spaces:get_space_id(FileUUID) of
+    try fslogic_spaces:get_space_id({uuid, FileUUID}) of
         SpaceId ->
             to_file_guid(FileUUID, SpaceId)
     catch
@@ -211,6 +212,25 @@ user_root_dir_uuid(UserId) ->
 default_space_owner(DefaultSpaceUUID) ->
     {root_space, UserId} = binary_to_term(http_utils:base64url_decode(DefaultSpaceUUID)),
     UserId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID generates phantom's UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec uuid_to_phantom_uuid(file_meta:uuid()) -> file_meta:uuid().
+uuid_to_phantom_uuid(FileUUID) ->
+    http_utils:base64url_encode(term_to_binary({phantom, FileUUID})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file UUID generates phantom's UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec phantom_uuid_to_uuid(file_meta:uuid()) -> file_meta:uuid().
+phantom_uuid_to_uuid(PhantomUUID) ->
+    {phantom, FileUUID} = binary_to_term(http_utils:base64url_decode(PhantomUUID)),
+    FileUUID.
 
 %%%===================================================================
 %%% Internal functions

@@ -63,7 +63,7 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/1, unlink/2]).
+-export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/2, unlink/3]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
     truncate/3, release/1, get_file_distribution/2, replicate_file/3]).
@@ -190,13 +190,14 @@ get_file_path(SessId, FileGUID) ->
 %% Removes a file or an empty directory.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(handle()) -> ok | error_reply().
-unlink(Handle) ->
-    ?run(fun() -> lfm_files:unlink(Handle) end).
+-spec unlink(handle(), boolean()) -> ok | error_reply().
+unlink(Handle, Silent) ->
+    ?run(fun() -> lfm_files:unlink(Handle, Silent) end).
 
--spec unlink(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
-unlink(SessId, FileEntry) ->
-    ?run(fun() -> lfm_files:unlink(SessId, FileEntry) end).
+-spec unlink(session:id(), fslogic_worker:file_guid_or_path(), boolean()) ->
+    ok | error_reply().
+unlink(SessId, FileEntry, Silent) ->
+    ?run(fun() -> lfm_files:unlink(SessId, FileEntry, Silent) end).
 
 
 %%--------------------------------------------------------------------

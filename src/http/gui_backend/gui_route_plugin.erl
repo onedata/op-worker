@@ -81,6 +81,7 @@ route(<<"/index.html">>) -> ?INDEX.
 -spec data_backend(HasSession :: boolean(), Identifier :: binary()) ->
     HandlerModule :: module().
 data_backend(true, <<"file">>) -> file_data_backend;
+data_backend(true, <<"file-acl">>) -> file_data_backend;
 data_backend(true, <<"file-distribution">>) -> file_data_backend;
 data_backend(true, <<"data-space">>) -> data_space_data_backend;
 data_backend(true, <<"space">>) -> space_data_backend;

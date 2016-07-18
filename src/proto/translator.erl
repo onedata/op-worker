@@ -198,8 +198,8 @@ translate_from_protobuf(#'GetFileChildren'{offset = Offset, size = Size}) ->
     #get_file_children{offset = Offset, size = Size};
 translate_from_protobuf(#'CreateDir'{name = Name, mode = Mode}) ->
     #create_dir{name = Name, mode = Mode};
-translate_from_protobuf(#'DeleteFile'{}) ->
-    #delete_file{};
+translate_from_protobuf(#'DeleteFile'{silent = Silent}) ->
+    #delete_file{silent = Silent};
 translate_from_protobuf(#'UpdateTimes'{atime = ATime, mtime = MTime,
     ctime = CTime}) ->
     #update_times{atime = ATime, mtime = MTime, ctime = CTime};
@@ -260,6 +260,7 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
+        handle_id = Record#'FileLocation'.handle_id,
         blocks = lists:map(
             fun(Block) ->
                 translate_from_protobuf(Block)
@@ -582,8 +583,8 @@ translate_to_protobuf(#get_file_children{offset = Offset, size = Size}) ->
     {get_file_children, #'GetFileChildren'{offset = Offset, size = Size}};
 translate_to_protobuf(#create_dir{name = Name, mode = Mode}) ->
     {create_dir, #'CreateDir'{name = Name, mode = Mode}};
-translate_to_protobuf(#delete_file{}) ->
-    {delete_file, #'DeleteFile'{}};
+translate_to_protobuf(#delete_file{silent = Silent}) ->
+    {delete_file, #'DeleteFile'{silent = Silent}};
 translate_to_protobuf(#update_times{atime = ATime, mtime = MTime, ctime = CTime}) ->
     {update_times, #'UpdateTimes'{atime = ATime, mtime = MTime, ctime = CTime}};
 translate_to_protobuf(#change_mode{mode = Mode}) ->

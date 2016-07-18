@@ -29,7 +29,7 @@
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
     read/3, read_without_events/3, silent_read/3,
-    truncate/2, truncate/3, unlink/1, unlink/2, release/1,
+    truncate/2, truncate/3, unlink/2, unlink/3, release/1,
     get_file_distribution/2, replicate_file/3]).
 
 -compile({no_auto_import, [unlink/1]}).
@@ -113,19 +113,20 @@ get_file_path(SessId, FileGUID) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file or an empty directory.
+%% If parameter Silent is true, file_removal_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(logical_file_manager:handle()) ->
+-spec unlink(logical_file_manager:handle(), boolean()) ->
     ok | logical_file_manager:error_reply().
-unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_guid = GUID}) ->
-    unlink(SessId, {guid, GUID}).
+unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_guid = GUID}, Silent) ->
+    unlink(SessId, {guid, GUID}, Silent).
 
--spec unlink(session:id(), fslogic_worker:ext_file()) ->
+-spec unlink(session:id(), fslogic_worker:ext_file(), boolean()) ->
     ok | logical_file_manager:error_reply().
-unlink(SessId, FileEntry) ->
+unlink(SessId, FileEntry, Silent) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileEntry),
-    lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID}, #delete_file{},
+    lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID}, #delete_file{silent = Silent},
         fun(_) -> ok end).
 
 
@@ -158,7 +159,17 @@ create(SessId, Path, Mode) ->
                 #get_new_file_location{
                     name = Name, mode = Mode
                 },
-                fun(#file_location{uuid = GUID}) -> {ok, GUID} end
+                fun(#file_location{uuid = GUID, handle_id = FSLogicHandle}) ->
+                    % TODO VFS-2263
+                    spawn(fun() ->
+                        lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID},
+                            #release{handle_id = FSLogicHandle},
+                            fun(_) ->
+                                ok
+                            end)
+                    end),
+                    {ok, GUID}
+                end
             )
         end).
 
@@ -527,6 +538,8 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = GUID, open_mode 
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize,
     GenerateEvents, PrefetchData) ->
 
+    ok = lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID},
+        #synchronize_block{block = #file_block{offset = Offset, size = MaxSize}, prefetch = PrefetchData},
     lfm_utils:call_fslogic(SessId, fuse_request, {guid, GUID},
         #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
             prefetch = PrefetchData},

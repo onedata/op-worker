@@ -29,11 +29,18 @@
 %% Returns space ID for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id(FileUUID :: file_meta:uuid()) ->
+-spec get_space_id(Entry :: {uuid, file_meta:uuid()} | {guid, fslogic_worker:file_guid()}) ->
     SpaceId :: binary().
-get_space_id(FileUUID) ->
+get_space_id({uuid, FileUUID}) ->
     {ok, #document{key = SpaceUUID}} = get_space({uuid, FileUUID}),
-    fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID).
+    fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID);
+get_space_id({guid, FileGUID}) ->
+    case fslogic_uuid:unpack_file_guid(FileGUID) of
+        {FileUUID, undefined} ->
+            get_space_id({uuid, FileUUID});
+        {_, SpaceId} ->
+            SpaceId
+    end.
 
 
 %%--------------------------------------------------------------------

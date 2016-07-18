@@ -18,7 +18,8 @@
 
 %% API
 -export([get_user_id/1, get_s3_user/2, get_ceph_user/2, get_posix_user/2,
-    gen_storage_uid/1, gen_storage_gid/2, get_storage_id/1, get_storage_type/1]).
+    gen_storage_uid/1, gen_storage_gid/2, get_storage_id/1, get_storage_type/1,
+    get_swift_user/2]).
 
 %%%===================================================================
 %%% API
@@ -74,6 +75,26 @@ get_ceph_user(UserId, StorageId) ->
 get_posix_user(UserId, StorageId) ->
     case posix_user:get(UserId) of
         {ok, #document{value = #posix_user{credentials = CredentialsMap}}} ->
+            case maps:find(StorageId, CredentialsMap) of
+                {ok, Credentials} ->
+                    {ok, Credentials};
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets Swift credentials from datastore.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_swift_user(UserId :: binary(), StorageId :: storage:id()) ->
+    {ok, swift_user:credentials()} | undefined.
+get_swift_user(UserId, StorageId) ->
+    case swift_user:get(UserId) of
+        {ok, #document{value = #swift_user{credentials = CredentialsMap}}} ->
             case maps:find(StorageId, CredentialsMap) of
                 {ok, Credentials} ->
                     {ok, Credentials};

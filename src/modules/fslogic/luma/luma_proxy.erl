@@ -149,17 +149,29 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 -spec new_swift_user_ctx(SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_swift_user_ctx(SessionId, SpaceUUID) ->
-    %% TODO VFS-2117 call luma service
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
-        space_storage:get(SpaceId),
-    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
-        storage:get(StorageId),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
+    case luma_utils:get_swift_user(UserId, StorageId) of
+        {ok, Credentials} ->
+            #swift_user_ctx{
+                user_name = swift_user:user_name(Credentials),
+                password = swift_user:password(Credentials)
+            };
+        _ ->
+            StorageType = luma_utils:get_storage_type(StorageId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
+                StorageId, SessionId, SpaceUUID),
 
-    #swift_user_ctx{
-        user_name = maps:get(<<"user_name">>, Args),
-        password = maps:get(<<"password">>, Args)
-    }.
+            UserName = proplists:get_value(<<"user_name">>, Response),
+            Password = proplists:get_value(<<"password">>, Response),
+            swift_user:add(UserId, StorageId, UserName, Password),
+
+            #swift_user_ctx{
+                user_name = UserName,
+                password = Password
+            }
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -102,7 +102,9 @@
     size = 0 :: file_meta:size(),
     version = 1, %% Snapshot version
     is_scope = false :: boolean(),
-    scope :: datastore:key()
+    scope :: datastore:key(),
+    %% symlink_value for symlinks, file_guid for phantom files (redirection)
+    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid()
 }).
 
 
@@ -220,6 +222,11 @@
 -record(open_file, {
     is_removed = false :: true | false,
     active_descriptors = #{} :: #{session:id() => non_neg_integer()}
+}).
+
+%% Model that maps onedata user to Openstack Swift user
+-record(swift_user, {
+    credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
 -endif.
