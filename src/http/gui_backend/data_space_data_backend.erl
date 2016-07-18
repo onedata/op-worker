@@ -77,7 +77,8 @@ find(<<"data-space">>, SpaceId) ->
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
         {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"rootDir">>, RootDir}
+        {<<"rootDir">>, RootDir},
+        {<<"space">>, SpaceId}
     ],
     {ok, Res}.
 

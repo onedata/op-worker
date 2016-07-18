@@ -48,5 +48,6 @@ models() -> [
     monitoring_state,
     open_file,
     monitoring_init_state,
+    swift_user,
     file_consistency
 ].
