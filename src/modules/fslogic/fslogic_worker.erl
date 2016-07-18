@@ -317,66 +317,10 @@ resolve_provider_for_file(Context, Entry, Request, UserRootDir) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec change_file_in_request(any(), fslogic_worker:file_guid()) -> any().
-change_file_in_request(#fuse_request{fuse_request = #get_file_attr{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#get_file_attr{entry = {guid, GUID}}};
-change_file_in_request(#fuse_request{fuse_request = #delete_file{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#delete_file{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #create_dir{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#create_dir{parent_uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #get_file_children{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#get_file_children{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #change_mode{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#change_mode{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #rename{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#rename{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #update_times{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#update_times{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #get_new_file_location{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#get_new_file_location{parent_uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #get_file_location{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#get_file_location{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #truncate{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#truncate{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #synchronize_block{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#synchronize_block{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #synchronize_block_and_compute_checksum{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#synchronize_block_and_compute_checksum{uuid = GUID}};
-change_file_in_request(#fuse_request{fuse_request = #release{} = IRequest} = Request, GUID) ->
-    Request#fuse_request{fuse_request = IRequest#release{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_parent{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_parent{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_xattr{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_xattr{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #set_xattr{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#set_xattr{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #remove_xattr{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#remove_xattr{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #list_xattr{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#list_xattr{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_acl{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_acl{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #set_acl{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#set_acl{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #remove_acl{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#remove_acl{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_transfer_encoding{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_transfer_encoding{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #set_transfer_encoding{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#set_transfer_encoding{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_cdmi_completion_status{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_cdmi_completion_status{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #set_cdmi_completion_status{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#set_cdmi_completion_status{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_mimetype{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_mimetype{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #set_mimetype{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#set_mimetype{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_file_path{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_file_path{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #fsync{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#fsync{uuid = GUID}};
-change_file_in_request(#provider_request{provider_request = #get_file_distribution{} = IRequest} = Request, GUID) ->
-    Request#provider_request{provider_request = IRequest#get_file_distribution{uuid = GUID}};
+change_file_in_request(#fuse_request{} = Request, GUID) ->
+    Request#fuse_request{context_entry = {guid, GUID}};
+change_file_in_request(#provider_request{} = Request, GUID) ->
+    Request#provider_request{context_entry = {guid, GUID}};
 change_file_in_request(#proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := _} = Parameters} = Request, GUID) ->
     Request#proxyio_request{parameters = Parameters#{?PROXYIO_PARAMETER_FILE_UUID => GUID}};
 change_file_in_request(Request, _) ->
