@@ -42,8 +42,8 @@ model_init/0, 'after'/5, before/4]).
 %% Wait for file metadata to become consistent
 %% @end
 %%--------------------------------------------------------------------
--spec wait(file_meta:uuid(), list(), term()) -> ok.
-wait(FileUuid, WaitFor, Change) ->
+-spec wait(file_meta:uuid(), list(), list()) -> ok.
+wait(FileUuid, WaitFor, Args) ->
     MissingComponents = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
         fun() ->
             case get(FileUuid) of
@@ -59,12 +59,12 @@ wait(FileUuid, WaitFor, Change) ->
                                     []
                             end;
                         MissingComponents ->
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{waiting = [{MissingComponents, self(), Change} | Waiting]}}),
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{waiting = [{MissingComponents, self(), Args} | Waiting]}}),
                             {ok, _} = save(NewDoc),
                             MissingComponents
                     end;
                 {error, {not_found, file_consistency}} ->
-                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{waiting = [{WaitFor, self(), Change}]}}),
+                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{waiting = [{WaitFor, self(), Args}]}}),
                     WaitFor
             end
         end),
@@ -125,10 +125,15 @@ add_components_and_notify(FileUuid, FoundComponents) ->
         end).
 
 notify_waiting(Doc = #document{value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
-    NewWaiting = lists:filter(fun({Missing, Pid, _Change}) ->
+    NewWaiting = lists:filter(fun({Missing, Pid, Args}) ->
         case Missing -- Components of
             [] ->
-                Pid ! file_is_now_consistent,
+                case is_process_alive(Pid) of
+                    true ->
+                        Pid ! file_is_now_consistent;
+                    _ ->
+                        spawn(dbsync_events, change_replicated, Args)
+                end,
                 false;
             _ ->
                 true
