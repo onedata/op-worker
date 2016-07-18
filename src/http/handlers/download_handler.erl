@@ -153,7 +153,7 @@ cowboy_file_stream_fun(FileHandle, Size) ->
 -spec stream_file(Socket :: term(), Transport :: atom(),
     FileHandle :: #lfm_handle{}, Size :: integer(), BufSize :: integer()) -> ok.
 stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
-    stream_file(Socket, Transport, FileHandle, Size, 0, BufSize, 0).
+    stream_file(Socket, Transport, FileHandle, Size, 0, BufSize).
 
 
 %%--------------------------------------------------------------------
@@ -165,21 +165,19 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 %%--------------------------------------------------------------------
 -spec stream_file(Socket :: term(), Transport :: atom(),
     FileHandle :: #lfm_handle{}, Size :: integer(),
-    Sent :: integer(), BufSize :: integer(), EmptyReads :: integer()) -> ok.
-stream_file(_, _, FileHandle, _, _, _, 3) ->
+    Sent :: integer(), BufSize :: integer()) -> ok.
+stream_file(_, _, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
     ok = logical_file_manager:release(FileHandle);
-stream_file(_, _, FileHandle, Size, BytesSent, _, _) when BytesSent >= Size ->
-    ok = logical_file_manager:release(FileHandle);
-stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize, EmptyReads) ->
+stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
     {ok, NewHandle, BytesRead} = logical_file_manager:read(
         FileHandle, BytesSent, min(Size - BytesSent, BufSize)),
     ok = Transport:send(Socket, BytesRead),
     NewSent = BytesSent + size(BytesRead),
     case size(BytesRead) of
         0 ->
-            stream_file(Socket, Transport, NewHandle, Size, NewSent, BufSize, EmptyReads + 1);
+            ok = logical_file_manager:release(FileHandle);
         _ ->
-            stream_file(Socket, Transport, NewHandle, Size, NewSent, BufSize, 0)
+            stream_file(Socket, Transport, NewHandle, Size, NewSent, BufSize)
     end.
 
 
