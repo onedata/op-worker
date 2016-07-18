@@ -86,7 +86,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(identity_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(sfm_handle_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
