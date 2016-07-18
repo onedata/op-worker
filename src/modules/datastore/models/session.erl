@@ -519,7 +519,7 @@ remove_handle(SessionId, HandleID) ->
         {ok, {HandleKey, sfm_handle}} ->
             case sfm_handle:delete(HandleKey) of
                 ok ->
-                    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleKey]);
+                    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]);
                 {error, Reason2} ->
                     {error, Reason2}
             end;
