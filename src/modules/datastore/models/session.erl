@@ -529,6 +529,13 @@ remove_handle(SessionId, HandleID) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_handle(SessionId :: session:id(), HandleID :: binary()) ->
+    {ok, storage_file_manager:handle()} | datastore:generic_error().
 get_handle(SessionId, HandleID) ->
     case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
         {ok, #document{value = Handle}} ->
