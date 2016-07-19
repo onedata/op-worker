@@ -141,7 +141,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                     FileDoc0#document{value = FM1}
             end,
         false = is_snapshot(FileName),
-        datastore:run_synchronized(?MODEL_NAME, ParentUUID,
+        datastore:run_transaction(?MODEL_NAME, ParentUUID,
             fun() ->
                 case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                     {error, {not_found, _}} ->
@@ -533,7 +533,7 @@ get_scope(Entry) ->
 -spec setup_onedata_user(oz_endpoint:auth(), UserId :: onedata_user:id()) -> ok.
 setup_onedata_user(_Client, UserId) ->
     ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
-    datastore:run_synchronized(onedata_user, UserId, fun() ->
+    datastore:run_transaction(onedata_user, UserId, fun() ->
         {ok, #document{value = #onedata_user{spaces = Spaces}}} =
             onedata_user:get(UserId),
 
@@ -675,7 +675,7 @@ get_guid_from_phantom_file(OldUUID) ->
     ok | datastore:generic_error().
 rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-        datastore:run_synchronized(?MODEL_NAME, ParentUUID, fun() ->
+        datastore:run_transaction(?MODEL_NAME, ParentUUID, fun() ->
             {ok, FileUUID} = update(Subject, #{name => NewName}),
             ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
         end)
@@ -699,8 +699,8 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
                         {NewParentUUID, OldParentUUID}
                 end,
 
-                datastore:run_synchronized(?MODEL_NAME, Key1, fun() ->
-                    datastore:run_synchronized(?MODEL_NAME, Key2, fun() ->
+                datastore:run_transaction(?MODEL_NAME, Key1, fun() ->
+                    datastore:run_transaction(?MODEL_NAME, Key2, fun() ->
                         {ok, #document{key = NewScopeUUID} = NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName, scope => NewScopeUUID}),
                         set_link_context(NewScope),
