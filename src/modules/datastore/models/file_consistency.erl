@@ -20,18 +20,17 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([wait/3, update_consistency/2, add_components_and_notify/2]).
+-export([wait/3, add_components_and_notify/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
 model_init/0, 'after'/5, before/4]).
 
-
--export_type([id/0]).
-
 -type id() :: file_meta:id().
 -type component() :: file_meta | local_file_location | parent_links | links.
+-type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
 
+-export_type([id/0, component/0, waiting/0]).
 
 %%%===================================================================
 %%% API
@@ -39,11 +38,13 @@ model_init/0, 'after'/5, before/4]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Wait for file metadata to become consistent
+%% Wait for file metadata to become consistent, the arguments for
+%% dbsync_events:change_replicated call are passed to be able to re trigger
+%% the change after system restart
 %% @end
 %%--------------------------------------------------------------------
--spec wait(file_meta:uuid(), list(), list()) -> ok.
-wait(FileUuid, WaitFor, Args) ->
+-spec wait(file_meta:uuid(), [file_consistency:component()], list()) -> ok.
+wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
     MissingComponents = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
         fun() ->
             case get(FileUuid) of
@@ -59,12 +60,12 @@ wait(FileUuid, WaitFor, Args) ->
                                     []
                             end;
                         MissingComponents ->
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{waiting = [{MissingComponents, self(), Args} | Waiting]}}),
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{waiting = [{MissingComponents, self(), DbsyncPosthookArguments} | Waiting]}}),
                             {ok, _} = save(NewDoc),
                             MissingComponents
                     end;
                 {error, {not_found, file_consistency}} ->
-                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{waiting = [{WaitFor, self(), Args}]}}),
+                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{waiting = [{WaitFor, self(), DbsyncPosthookArguments}]}}),
                     WaitFor
             end
         end),
@@ -80,17 +81,6 @@ wait(FileUuid, WaitFor, Args) ->
                     ok
             end
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks and update consistency info
-%% @end
-%%--------------------------------------------------------------------
--spec update_consistency(file_meta:uuid(), [component()]) -> ok.
-update_consistency(FileUuid, ComponentsToUpdate) ->
-    FoundComponents = check_missing_components(FileUuid, ComponentsToUpdate, []),
-    add_components_and_notify(FileUuid, FoundComponents).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -132,14 +122,15 @@ add_components_and_notify(FileUuid, FoundComponents) ->
 %%--------------------------------------------------------------------
 -spec notify_waiting(datastore:document()) -> datastore:document().
 notify_waiting(Doc = #document{value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
-    NewWaiting = lists:filter(fun({Missing, Pid, Args}) ->
+    NewWaiting = lists:filter(fun({Missing, Pid, DbsyncPosthookArguments}) ->
         case Missing -- Components of
             [] ->
+                Pid ! file_is_now_consistent,
                 case is_process_alive(Pid) of
                     true ->
-                        Pid ! file_is_now_consistent;
+                        ok;
                     _ ->
-                        spawn(dbsync_events, change_replicated, Args)
+                        spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
                 end,
                 false;
             _ ->
@@ -252,7 +243,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_consistency_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(file_consistency_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -262,6 +253,8 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
+'after'(file_meta, delete, ?DISK_ONLY_LEVEL, [Key, _], ok) ->
+    file_consistency:delete(Key);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 

@@ -49,7 +49,8 @@
     external_file_location_notification_should_wait_for_local_file_location/1,
     external_file_location_notification_should_wait_for_links/1,
     external_file_location_notification_should_wait_for_file_meta/1,
-    changes_should_be_applied_even_when_the_issuer_process_is_dead/1
+    changes_should_be_applied_even_when_the_issuer_process_is_dead/1,
+    file_consistency_doc_should_be_deleted_on_file_meta_delete/1
 ]).
 
 
@@ -76,7 +77,8 @@ all() ->
         external_file_location_notification_should_wait_for_local_file_location,
         external_file_location_notification_should_wait_for_links,
         external_file_location_notification_should_wait_for_file_meta,
-        changes_should_be_applied_even_when_the_issuer_process_is_dead
+        changes_should_be_applied_even_when_the_issuer_process_is_dead,
+        file_consistency_doc_should_be_deleted_on_file_meta_delete
     ]).
 
 
@@ -996,6 +998,19 @@ changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
 
+file_consistency_doc_should_be_deleted_on_file_meta_delete(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    {ok, Guid} = lfm_proxy:create(W1, SessionId, <<"space_name1/file">>, 8#777),
+    Uuid = ?RPC(fslogic_uuid, file_guid_to_uuid, [Guid]),
+    ok = ?RPC(file_consistency, wait, [Uuid, [file_meta], undefined]),
+    ?assertMatch({ok, #document{}}, ?RPC(file_consistency, get, [Uuid])),
+
+    % when
+    ok = lfm_proxy:unlink(W1, SessionId, {guid, Guid}),
+
+    % then
+    ?assertMatch({error, {not_found, file_consistency}}, ?RPC(file_consistency, get, [Uuid])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
