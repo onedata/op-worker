@@ -20,7 +20,8 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([run_synchronized/2, save_and_bump_version/1, ensure_blocks_not_empty/1]).
+-export([critical_section/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
+    validate_block_data/3]).
 
 -type id() :: binary().
 -type doc() :: datastore:document().
@@ -37,9 +38,9 @@
 %% run at the same time.
 %% @end
 %%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
+-spec critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
+critical_section(ResourceId, Fun) ->
+    critical_section:run([?MODEL_NAME, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -63,6 +64,31 @@ ensure_blocks_not_empty(Loc = #file_location{blocks = [], file_id = FileId, stor
         storage_id = StorageId, file_id = FileId}]};
 ensure_blocks_not_empty(Loc) ->
     Loc.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns valid fileId and storageId for given file. If provided values are
+%% already valid, they will not be changed, otherwise default values
+%% will be returned .
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_block_data(file_meta:uuid(), helpers:file(), storage:id()) ->
+    {helpers:file(), storage:id()}.
+validate_block_data(FileUUID, FileId, StorageId) ->
+    #document{value = #file_location{file_id = LocalFileId, storage_id = LocalStorageId}} =
+        fslogic_utils:get_local_file_location({uuid, FileUUID}),
+    %% file_location will probably contain lists instead of single values
+    LocalFileIds = [LocalFileId],
+    LocalStorageIds = [LocalStorageId],
+    ValidFileId = case lists:member(FileId, LocalFileIds) of
+        true -> FileId;
+        false -> lists:nth(1, LocalFileIds)
+    end,
+    ValidStorageId = case lists:member(StorageId, LocalStorageIds) of
+        true -> StorageId;
+        false -> lists:nth(1, LocalStorageIds)
+    end,
+    {ValidFileId, ValidStorageId}.
 
 %%%===================================================================
 %%% model_behaviour callbacks

@@ -38,7 +38,7 @@
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
     fslogic_utils:wait_for_local_file_location(FileUUID),
-    file_location:run_synchronized(FileUUID,
+    file_location:critical_section(FileUUID,
         fun() ->
             [Location = #document{value = #file_location{size = OldSize,
                 version_vector = Version}} | _] =

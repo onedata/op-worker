@@ -54,10 +54,24 @@
     response_map = #{} :: #{},
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
-    % Handles for opened files
-    handles = #{} :: #{binary() => storage_file_manager:handle()},
     open_files = sets:new() :: sets:set(file_meta:uuid()),
     transfers = [] :: [transfer:id()]
+}).
+
+%% File handle used by the module
+-record(sfm_handle, {
+    helper_handle :: helpers:handle(),
+    file :: helpers:file(),
+    session_id :: session:id(),
+    file_uuid :: file_meta:uuid(),
+    space_uuid :: file_meta:uuid(),
+    storage :: datastore:document() | undefined,
+    storage_id :: storage:id(),
+    open_mode :: helpers:open_mode(),
+    needs_root_privileges :: boolean(),
+    is_local = false :: boolean(),
+    provider_id :: oneprovider:id(),
+    file_size :: non_neg_integer() %% Available only if file is_local
 }).
 
 %% Local, cached version of OZ user
@@ -102,7 +116,9 @@
     size = 0 :: file_meta:size(),
     version = 1, %% Snapshot version
     is_scope = false :: boolean(),
-    scope :: datastore:key()
+    scope :: datastore:key(),
+    %% symlink_value for symlinks, file_guid for phantom files (redirection)
+    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid()
 }).
 
 
@@ -220,6 +236,11 @@
 -record(open_file, {
     is_removed = false :: true | false,
     active_descriptors = #{} :: #{session:id() => non_neg_integer()}
+}).
+
+%% Model that maps onedata user to Openstack Swift user
+-record(swift_user, {
+    credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
 -endif.

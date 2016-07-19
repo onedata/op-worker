@@ -150,10 +150,10 @@ get_file_path(Auth, Uuid) ->
 %%--------------------------------------------------------------------
 -spec unlink(file_handle()) -> ok | error_reply().
 unlink(Handle) ->
-    logical_file_manager:unlink(Handle).
+    logical_file_manager:unlink(Handle, false).
 -spec unlink(onedata_auth_api:auth(), file_id_or_path()) -> ok | error_reply().
 unlink(Auth, FileEntry) ->
-    logical_file_manager:unlink(Auth, FileEntry).
+    logical_file_manager:unlink(Auth, FileEntry, false).
 
 %%--------------------------------------------------------------------
 %% @doc Flushes waiting events for session connected with handler.

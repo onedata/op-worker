@@ -15,7 +15,7 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/sfm_handle.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").

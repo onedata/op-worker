@@ -34,7 +34,7 @@
     ok | {error, term()}.
 on_file_location_change(_SpaceId, ChangedLocationDoc =
     #document{value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->
-    file_location:run_synchronized(Uuid,
+    file_location:critical_section(Uuid,
         fun() ->
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->

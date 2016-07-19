@@ -62,12 +62,12 @@ rm(SessId, FileKey) ->
         true ->
             case rm_children(CTX, GUID, 0, Chunk, ok) of
                 ok ->
-                    lfm_files:unlink(SessId, {guid, GUID});
+                    lfm_files:unlink(SessId, {guid, GUID}, false);
                 Error ->
                     Error
             end;
         false ->
-            lfm_files:unlink(SessId, {guid, GUID})
+            lfm_files:unlink(SessId, {guid, GUID}, false)
     end.
 
 %%--------------------------------------------------------------------

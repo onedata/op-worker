@@ -43,7 +43,7 @@ init(_Args) ->
                 end, Docs),
 
             lists:foreach(fun(#document{key = FileUUID}) ->
-                try remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID)
+                try remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false)
                 catch
                     T:M ->
                         ?error_stacktrace("Cannot remove file - ~p:~p", [T, M])
@@ -73,7 +73,7 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, FileUUID}) ->
+handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, FileUUID, Silent}) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(FileUUID),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
 
@@ -92,14 +92,14 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
                         fslogic_event:emit_file_renamed(FileUUID, SpaceId, Path, SessId)
                     end);
                 {error, {not_found, _}} ->
-                    remove_file_and_file_meta(FileUUID, SessId)
+                    remove_file_and_file_meta(FileUUID, SessId, Silent)
             end;
         false ->
-            remove_file_and_file_meta(FileUUID, SessId)
+            remove_file_and_file_meta(FileUUID, SessId, Silent)
     end,
     ok;
 handle({open_file_deletion_request, FileUUID}) ->
-    remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID);
+    remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -123,11 +123,12 @@ cleanup() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes file and file meta.
+%% Removes file and file meta. If parameter Silent is true, file_removal_event
+%% will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file_and_file_meta(file_meta:uuid(), session:id()) -> ok.
-remove_file_and_file_meta(FileUUID, SessId) ->
+-spec remove_file_and_file_meta(file_meta:uuid(), session:id(), boolean()) -> ok.
+remove_file_and_file_meta(FileUUID, SessId, Silent) ->
     {ok, #document{value = #file_meta{uid = UID, type = Type}} = FileDoc} =
         file_meta:get(FileUUID),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, UID),
@@ -143,10 +144,15 @@ remove_file_and_file_meta(FileUUID, SessId) ->
     ok = file_meta:delete(FileDoc),
 
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    spawn(fun() ->
-        fslogic_event:emit_file_removal(fslogic_uuid:to_file_guid(FileUUID,
-            SpaceId))
-    end),
+
+    case Silent of
+        true -> ok;
+        false ->
+            spawn(fun() ->
+                fslogic_event:emit_file_removal(
+                    fslogic_uuid:to_file_guid(FileUUID, SpaceId))
+            end)
+    end,
     ok.
 
 %%--------------------------------------------------------------------
