@@ -243,4 +243,10 @@
     credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
+%% Model that keeps track of consistency of file metadata
+-record(file_consistency, {
+    components_present = [], % file_meta, local_file_location, parent, file_meta_links
+    waiting = []
+}).
+
 -endif.

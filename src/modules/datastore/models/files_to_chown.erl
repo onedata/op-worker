@@ -19,16 +19,61 @@
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% API
+-export([add/2, chown_file/3]).
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
-%% API
--export([add/2, chown_file/3]).
-
 -export_type([id/0]).
 
 -type id() :: onedata_user:id().
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add file that need to be chowned in future.
+%% @end
+%%--------------------------------------------------------------------
+-spec add(onedata_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
+add(UserId, FileUuid) ->
+    %todo add create_or_update operation to datastore
+    UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
+        {ok, Val#files_to_chown{file_uuids = [FileUuid | Uuids]}}
+    end,
+    case update(UserId, UpdateFun) of
+        {ok, Key} ->
+            {ok, Key};
+        {error, {not_found, files_to_chown}} ->
+            create(#document{key = UserId, value = #files_to_chown{file_uuids = [FileUuid]}});
+        Other ->
+            Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Chown specific file according to given UserId and SpaceId
+%% @end
+%%--------------------------------------------------------------------
+-spec chown_file(file_meta:uuid(), onedata_user:id(), space_info:id()) -> ok.
+chown_file(FileUuid, UserId, SpaceId) ->
+    LocalLocations = fslogic_utils:get_local_storage_file_locations({uuid, FileUuid}),
+    lists:foreach(fun({StorageId, FileId}) ->
+        try
+            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+            {ok, Storage} = storage:get(StorageId),
+            SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUuid, Storage, FileId),
+
+            ok = storage_file_manager:chown(SFMHandle, UserId, SpaceId)
+        catch
+            _:Error ->
+                ?error_stacktrace("Cannot chown file ~p, due to error ~p", [FileUuid, Error])
+        end
+    end, LocalLocations).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -126,51 +171,6 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Add file that need to be chowned in future.
-%% @end
-%%--------------------------------------------------------------------
--spec add(onedata_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
-add(UserId, FileUuid) ->
-    %todo add create_or_update operation to datastore
-    UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
-        {ok, Val#files_to_chown{file_uuids = [FileUuid | Uuids]}}
-    end,
-    case update(UserId, UpdateFun) of
-        {ok, Key} ->
-            {ok, Key};
-        {error, {not_found, files_to_chown}} ->
-            create(#document{key = UserId, value = #files_to_chown{file_uuids = [FileUuid]}});
-        Other ->
-            Other
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Chown specific file according to given UserId and SpaceId
-%% @end
-%%--------------------------------------------------------------------
--spec chown_file(file_meta:uuid(), onedata_user:id(), space_info:id()) -> ok.
-chown_file(FileUuid, UserId, SpaceId) ->
-    LocalLocations = fslogic_utils:get_local_storage_file_locations({uuid, FileUuid}),
-    lists:foreach(fun({StorageId, FileId}) ->
-        try
-            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            {ok, Storage} = storage:get(StorageId),
-            SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUuid, Storage, FileId),
-
-            ok = storage_file_manager:chown(SFMHandle, UserId, SpaceId)
-        catch
-            _:Error ->
-                ?error_stacktrace("Cannot chown file ~p, due to error ~p", [FileUuid, Error])
-        end
-    end, LocalLocations).
 
 %%%===================================================================
 %%% Internal functions
