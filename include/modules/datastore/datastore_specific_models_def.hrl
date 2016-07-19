@@ -135,7 +135,8 @@
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
-    }
+    },
+    last_rename :: {{helpers:file(), binary()}, non_neg_integer()}
 }).
 
 %% Model for caching provider details fetched from OZ

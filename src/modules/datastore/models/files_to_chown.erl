@@ -140,7 +140,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 add(UserId, FileUuid) ->
     %todo add create_or_update operation to datastore
     UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
-        {ok, Val#files_to_chown{file_uuids = [FileUuid | Uuids]}}
+        {ok, Val#files_to_chown{file_uuids = lists:usort([FileUuid | Uuids])}}
     end,
     case update(UserId, UpdateFun) of
         {ok, Key} ->
