@@ -229,4 +229,9 @@
     credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
+%% Model that holds file's custom metadata
+-record(custom_metadata, {
+    json = #{} :: #{}
+}).
+
 -endif.
