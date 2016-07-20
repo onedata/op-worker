@@ -64,7 +64,8 @@ redirect_event_test(Config) ->
 
     Self = self(),
     ?assertMatch({ok, _}, rpc:call(W1, event, subscribe,
-        [#subscription{event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
+        [#subscription{object = test_subscription,
+            event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
             emission_time = infinity,
             event_handler = fun(Events, _) -> Self ! {events, Events} end
         }}])),

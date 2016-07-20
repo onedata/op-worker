@@ -102,4 +102,45 @@
     release_count :: non_neg_integer()
 }).
 
+%% definition of event triggered when storage usage is changed
+%% space_id        - ID of space
+%% user_id         - ID of user
+%% size_difference - size deference in bytes of given update
+-record(storage_used_updated, {
+    space_id :: datastore:id(),
+    user_id :: datastore:id(),
+    size_difference :: integer()
+}).
+
+%% definition of event triggered when space info is changed
+-record(space_info_updated, {
+    space_id :: datastore:id()
+}).
+
+%% definition of event with read/write statistics
+%% space_id           - ID of space
+%% user_id            - ID of user
+%% data_access_read   - number of read bytes
+%% data_access_write  - number of write bytes
+%% block_access_write - number of read blocks
+%% block_access_read  - number of write blocks
+-record(file_operations_statistics, {
+    space_id :: datastore:id(),
+    user_id :: datastore:id(),
+    data_access_read = 0 :: non_neg_integer() ,
+    data_access_write = 0 :: non_neg_integer(),
+    block_access_read = 0 :: non_neg_integer(),
+    block_access_write = 0 :: non_neg_integer()
+}).
+
+%% definition of event with read/write statistics
+%% space_id    - ID of space
+%% user_id     - ID of user
+%% transfer_in - number of transferred in bytes
+-record(rtransfer_statistics, {
+    space_id :: datastore:id(),
+    user_id :: datastore:id(),
+    transfer_in= 0 :: non_neg_integer()
+}).
+
 -endif.

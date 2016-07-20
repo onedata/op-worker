@@ -108,19 +108,19 @@ save(Document = #document{key = Key, value = #file_location{uuid = UUID, space_i
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize - OldSize),
-            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize - OldSize);
+            monitoring_event:spawn_and_emit_storage_used_updated(SpaceId, UserId, NewSize - OldSize);
 
-        {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
+            {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
 
             space_quota:apply_size_change_and_maybe_emit(OldSpaceId,  -1 * OldSize),
-            monitoring_updates:update_storage_used(OldSpaceId, UserId, -1 * OldSize),
+            monitoring_event:spawn_and_emit_storage_used_updated(OldSpaceId, UserId, -1 * OldSize),
 
             space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
-            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize);
+            monitoring_event:spawn_and_emit_storage_used_updated(SpaceId, UserId, NewSize);
         _ ->
             space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
-            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize)
+            monitoring_event:spawn_and_emit_storage_used_updated(SpaceId, UserId, NewSize)
     end,
     datastore:save(?STORE_LEVEL, Document).
 
@@ -146,7 +146,7 @@ create(Document = #document{value = #file_location{uuid = UUID, space_id = Space
     UserId = get_user_id(UUID),
 
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-    monitoring_updates:update_storage_used(SpaceId, UserId, NewSize),
+    monitoring_event:spawn_and_emit_storage_used_updated(SpaceId, UserId, NewSize),
 
     datastore:create(?STORE_LEVEL, Document).
 
@@ -171,7 +171,7 @@ delete(Key) ->
             Size = count_bytes(Doc),
             UserId = get_user_id(UUID),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
-            monitoring_updates:update_storage_used(SpaceId, UserId, -1 * Size);
+            monitoring_event:spawn_and_emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok
     end,

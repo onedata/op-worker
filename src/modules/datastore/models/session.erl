@@ -34,7 +34,7 @@
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
 -type auth() :: #token_auth{} | #basic_auth{}.
--type type() :: fuse | rest | gui | provider_outgoing | provider_incoming.
+-type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | monitoring.
 -type status() :: active | inactive.
 -type identity() :: #identity{}.
 

@@ -92,7 +92,6 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    monitoring_action(stop, Key),
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -112,8 +111,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     % TODO migrate to GLOBALLY_CACHED_LEVEL
-    ?MODEL_CONFIG(onedata_user_bucket, [{onedata_user, create}, {onedata_user, save},
-        {onedata_user, create_or_update}, {onedata_user, update}], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(onedata_user_bucket, [], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,14 +121,6 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, _, _, {ok, UserId}) ->
-    monitoring_action(start, UserId);
-'after'(onedata_user, create_or_update, _, _, {ok, UserId}) ->
-    monitoring_action(start, UserId);
-'after'(onedata_user, save, _, _, {ok, UserId}) ->
-    monitoring_action(start, UserId);
-'after'(onedata_user, update, _, _, {ok, UserId}) ->
-    monitoring_action(start, UserId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -229,29 +219,3 @@ get_or_fetch(Auth, UserId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts or stops monitoring for given user id.
-%% @end
-%%--------------------------------------------------------------------
--spec monitoring_action(start | stop, datastore:id()) -> no_return().
-monitoring_action(Action, UserId) ->
-    case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
-            MonitoringId = #monitoring_id{
-                main_subject_type = space,
-                secondary_subject_type = user,
-                secondary_subject_id = UserId
-            },
-            lists:foreach(fun({SpaceId, _}) ->
-                lists:foreach(fun(MetricType) ->
-                    worker_proxy:cast(monitoring_worker, {Action, MonitoringId#monitoring_id{
-                        main_subject_id = SpaceId,
-                        metric_type = MetricType
-                    }})
-                end, [storage_used, data_access, block_access, remote_transfer])
-            end, Spaces);
-        _ -> ok
-    end.
