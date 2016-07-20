@@ -411,6 +411,10 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         end, Workers)
     end, Level2TmpDirs),
 
+    Verify(fun(W) ->
+        ?assertEqual(ok, lfm_proxy:close_all(W))
+    end),
+
     ok.
 
 %%%===================================================================

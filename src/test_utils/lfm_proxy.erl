@@ -17,7 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2,
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
     read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
     get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
@@ -127,6 +127,18 @@ close(Worker, TestHandle) ->
             logical_file_manager:fsync(Handle),
             logical_file_manager:release(Handle),
             ets:delete(lfm_handles, TestHandle),
+            Host ! {self(), ok}
+        end).
+
+-spec close_all(node()) -> ok.
+close_all(Worker) ->
+    exec(Worker,
+        fun(Host) ->
+            lists:foreach(fun({_, Handle}) ->
+                logical_file_manager:fsync(Handle),
+                logical_file_manager:release(Handle)
+            end, ets:tab2list(lfm_handles)),
+            true = ets:delete_all_objects(lfm_handles),
             Host ! {self(), ok}
         end).
 
