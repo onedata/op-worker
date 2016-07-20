@@ -13,7 +13,6 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/sfm_handle.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/fslogic/helpers.hrl").
 -include_lib("ctool/include/posix/errors.hrl").

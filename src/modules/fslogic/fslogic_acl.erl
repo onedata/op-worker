@@ -132,6 +132,12 @@ proplist_to_ace(List) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec uid_to_ace_name(Uid :: binary()) -> binary().
+uid_to_ace_name(?owner) ->
+    ?owner;
+uid_to_ace_name(?everyone) ->
+    ?everyone;
+uid_to_ace_name(?group) ->
+    ?group;
 uid_to_ace_name(Uid) ->
     {ok, #document{value = #onedata_user{name = Name}}} = onedata_user:get(Uid),
     <<Name/binary,"#", Uid/binary>>.
@@ -142,6 +148,12 @@ uid_to_ace_name(Uid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ace_name_to_uid(Name :: binary()) -> binary().
+ace_name_to_uid(?owner) ->
+    ?owner;
+ace_name_to_uid(?everyone) ->
+    ?everyone;
+ace_name_to_uid(?group) ->
+    ?group;
 ace_name_to_uid(AceName) ->
     case binary:split(AceName, <<"#">>, [global]) of
         [_UserName, Uid] ->

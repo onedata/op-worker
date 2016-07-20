@@ -491,6 +491,8 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
+
+    catch test_utils:mock_new(AllWorkers, oneprovider),
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
@@ -508,7 +510,6 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    catch test_utils:mock_new(AllWorkers, oneprovider),
     catch test_utils:mock_new(AllWorkers, oz_providers),
 
     %% Setup storage
@@ -627,7 +628,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     end, Spaces),
 
     %% Set expiration time for session to 1d.
-    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 24 * 60 * 60]),
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 240 * 60 * 60]),
 
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])

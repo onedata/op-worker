@@ -1,6 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @author Jakub Liput
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2015-2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -14,11 +15,15 @@
 -module(file_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
+-author("Tomasz Lichon").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([init/0, terminate/0]).
@@ -66,7 +71,10 @@ find(<<"file">>, FileId) ->
             FileId, T, M
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
-    end.
+    end;
+find(<<"file-acl">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    file_acl_record(SessionId, FileId).
 
 
 %%--------------------------------------------------------------------
@@ -77,6 +85,8 @@ find(<<"file">>, FileId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"file">>) ->
+    gui_error:report_error(<<"Not iplemented">>);
+find_all(<<"file-acl">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -88,8 +98,9 @@ find_all(<<"file">>) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"file">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
-
+    gui_error:report_error(<<"Not implemented">>);
+find_query(<<"file-acl">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = g_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
@@ -158,7 +169,8 @@ create_record(<<"file">>, Data) ->
             {<<"modificationTime">>, ModificationTime},
             {<<"size">>, Size},
             {<<"parent">>, ParentGUID},
-            {<<"children">>, []}
+            {<<"children">>, []},
+            {<<"fileAcl">>, FileId}
         ],
         {ok, Res}
     catch _:_ ->
@@ -168,6 +180,14 @@ create_record(<<"file">>, Data) ->
             <<"file">> ->
                 gui_error:report_warning(<<"Failed to create new file.">>)
         end
+    end;
+create_record(<<"file-acl">>, Data) ->
+    Id = proplists:get_value(<<"file">>, Data),
+    case update_record(<<"file-acl">>, Id, Data) of
+        ok ->
+            file_acl_record(?ROOT_SESS_ID, Id);
+        Error ->
+            Error
     end.
 
 
@@ -203,6 +223,19 @@ update_record(<<"file">>, FileId, Data) ->
         end
     catch _:_ ->
         gui_error:report_warning(<<"Cannot change permissions.">>)
+    end;
+update_record(<<"file-acl">>, FileId, Data) ->
+    try
+        SessionId = g_session:get_session_id(),
+        Acl = acl_utils:json_to_acl(Data),
+        case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
+            ok ->
+                ok;
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Cannot change ACL - access denied.">>)
+        end
+    catch _:_ ->
+        gui_error:report_warning(<<"Cannot change ACL.">>)
     end.
 
 
@@ -218,9 +251,18 @@ delete_record(<<"file">>, FileId) ->
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
             ok;
-        {error, eacces} ->
+        {error, ?EACCES} ->
             gui_error:report_warning(
                 <<"Cannot remove file or directory - access denied.">>)
+    end;
+delete_record(<<"file-acl">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
+        ok ->
+            ok;
+        {error, ?EACCES} ->
+            gui_error:report_warning(
+                <<"Cannot remove ACL - access denied.">>)
     end.
 
 
@@ -264,7 +306,7 @@ get_user_root_dir_uuid(SessionId) ->
     {ok, proplists:proplist()}.
 file_record(SessionId, FileId) ->
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
-        {error, enoent} ->
+        {error, ?ENOENT} ->
             gui_error:report_error(<<"No such file or directory.">>);
         {ok, FileAttr} ->
             #file_attr{
@@ -307,7 +349,29 @@ file_record(SessionId, FileId) ->
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
                 {<<"parent">>, ParentUUID},
-                {<<"children">>, ChildrenIds}
+                {<<"children">>, ChildrenIds},
+                {<<"fileAcl">>, FileId}
             ],
+            {ok, Res}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a file acl record from given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_acl_record(SessionId :: binary(), FileId :: binary()) ->
+    {ok, proplists:proplist()}.
+file_acl_record(SessionId, FileId) ->
+    case logical_file_manager:get_acl(SessionId, {guid, FileId}) of
+        {error, ?ENOENT} ->
+            gui_error:report_error(<<"No such file or directory.">>);
+        {error, ?ENOATTR} ->
+            gui_error:report_error(<<"No ACL defined.">>);
+        {error, ?EACCES} ->
+            gui_error:report_error(<<"Cannot read ACL - access denied.">>);
+        {ok, Acl} ->
+            Res = acl_utils:acl_to_json(FileId, Acl),
             {ok, Res}
     end.
