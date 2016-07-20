@@ -137,7 +137,7 @@ close_all(Worker) ->
             lists:foreach(fun({_, Handle}) ->
                 logical_file_manager:fsync(Handle),
                 logical_file_manager:release(Handle)
-                          end, ets:tab2list(lfm_handles)),
+            end, ets:tab2list(lfm_handles)),
             true = ets:delete_all_objects(lfm_handles),
             Host ! {self(), ok}
         end).
