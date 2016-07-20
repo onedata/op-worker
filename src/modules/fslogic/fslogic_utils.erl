@@ -53,8 +53,8 @@ get_parent(File) ->
     helpers:file() | no_return().
 gen_storage_file_id(Entry) ->
     {ok, Path} = fslogic_path:gen_storage_path(Entry),
-    {ok, #document{value = #file_meta{version = Version}}} = file_meta:get(Entry),
-    file_meta:snapshot_name(Path, Version).
+    {ok, #document{key = Key, value = #file_meta{version = Version}}} = file_meta:get(Entry),
+    file_meta:snapshot_name(<<Path/binary, "///", Key/binary>>, Version).
 
 
 -spec get_local_file_location(fslogic_worker:ext_file()) ->

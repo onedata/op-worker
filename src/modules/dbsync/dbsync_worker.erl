@@ -481,7 +481,21 @@ apply_changes(SpaceId,
             _ -> Key
         end,
         datastore:run_synchronized(ModelName, MainDocKey, fun() ->
-            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
+            case Value of
+                #links{} ->
+                    OldLinks = case couchdb_datastore_driver:get(ModelConfig, Key) of
+                        {ok, #document{value = OldLinks0}} ->
+                            OldLinks0;
+                        {error, _} ->
+                            #links{link_map = #{}, model = ModelName}
+                    end,
+                    {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+                    {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = couchdb_datastore_driver:get(ModelConfig, Key),
+                    {AddedMap, DeletedNames} = links_utils:diff(OldLinks, CurrentLinks),
+                    spawn(fun() -> dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedNames) end);
+                _ ->
+                    {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
+            end
         end),
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),

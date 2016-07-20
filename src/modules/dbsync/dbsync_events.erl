@@ -14,11 +14,11 @@
 -include("modules/dbsync/common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([change_replicated/2]).
+-export([change_replicated/2, links_changed/5]).
 
 %%%===================================================================
 %%% API
@@ -67,6 +67,49 @@ change_replicated_internal(SpaceId, #change{model = file_location, doc = Doc = #
     ok = fslogic_utils:wait_for_local_file_location(FileUUID),
     ok = replication_dbsync_hook:on_file_location_change(SpaceId, Doc);
 change_replicated_internal(_SpaceId, _Change) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Hook that runs just after link change was replicated from remote provider.
+%% Return value and any errors are ignored.
+%% @end
+%%--------------------------------------------------------------------
+-spec links_changed(Origin :: links_utils:scope(), ModelName :: model_behaviour:model_type(),
+    MainDocKey :: datastore:ext_key(), AddedMap :: #{}, DeletedMap :: #{}) ->
+    ok.
+links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) ->
+    #model_config{link_store_level = LinkStoreLevel} = ModelName:model_init(),
+    datastore:run_synchronized(ModelName, term_to_binary({links, MainDocKey}),
+        fun() ->
+            try
+                MyProvID = oneprovider:get_provider_id(),
+                erlang:put(mother_scope, MyProvID),
+                erlang:put(other_scopes, []),
+
+                maps:fold(
+                    fun(K, V, _AccIn) ->
+                        ok = datastore:add_links(LinkStoreLevel, MainDocKey, ModelName, [{K, V}])
+                    end, [], AddedMap),
+
+                maps:fold(
+                    fun(K, V, _AccIn) ->
+                        {_, DelTargets} = V,
+                        lists:foreach(
+                            fun({_, _, S}) ->
+                                ok = datastore:delete_links(LinkStoreLevel, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S)])
+                            end, DelTargets)
+                    end, [], DeletedMap)
+
+
+            catch
+                _:Reason ->
+                    ?error_stacktrace("links_changed error ~p", [Reason])
+            end
+        end),
+    ok;
+links_changed(_, _, _, _, _) ->
     ok.
 
 %%%===================================================================
