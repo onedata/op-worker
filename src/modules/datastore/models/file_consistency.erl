@@ -44,7 +44,7 @@ model_init/0, 'after'/5, before/4]).
 %%--------------------------------------------------------------------
 -spec wait(file_meta:uuid(), list(), list()) -> ok.
 wait(FileUuid, WaitFor, Args) ->
-    MissingComponents = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+    MissingComponents = datastore:run_transaction(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
         fun() ->
             case get(FileUuid) of
                 {ok, Doc = #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}}} ->
@@ -101,7 +101,7 @@ update_consistency(FileUuid, ComponentsToUpdate) ->
 add_components_and_notify(_FileUuid, []) ->
     ok;
 add_components_and_notify(FileUuid, FoundComponents) ->
-    datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+    datastore:run_transaction(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
         fun() ->
             case get(FileUuid) of
                 {ok, Doc = #document{value = FC = #file_consistency{
