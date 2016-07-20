@@ -99,7 +99,7 @@ wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
     end,
     case NeedsToWaitForParent of
         true ->
-            {ok, ParentUuid} = file_meta:get_parent({uuid, FileUuid}),
+            {ok, ParentUuid} = file_meta:get_parent_uuid({uuid, FileUuid}),
             file_consistency:wait(ParentUuid, [file_meta, links, parent_links], DbsyncPosthookArguments);
         false ->
             ok
