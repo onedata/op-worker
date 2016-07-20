@@ -860,6 +860,8 @@ external_file_location_notification_should_wait_for_links(Config) ->
     ExternalFileId = <<"external_file_id">>,
     {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
 
+    tracer:start(W1),
+    tracer:trace_calls(file_consistency,wait),
     % prepare external location
     ExternalLocationId = <<"external_location_id">>,
     RemoteLocation = version_vector:bump_version(#document{key = ExternalLocationId, value = #file_location{size = 0, space_id = SpaceId,

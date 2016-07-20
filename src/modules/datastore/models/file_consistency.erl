@@ -45,7 +45,7 @@ model_init/0, 'after'/5, before/4]).
 %%--------------------------------------------------------------------
 -spec wait(file_meta:uuid(), [file_consistency:component()], list()) -> ok.
 wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
-    NeedsToWait = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+    {NeedsToWait, NeedsToWaitForParent} = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
         fun() ->
             case get(FileUuid) of
                 {ok, Doc = #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}}} ->
@@ -55,26 +55,35 @@ wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
                     UpdatedPresentComponents = lists:usort(ComponentsPresent ++ FoundComponents),
 
                     case UpdatedMissingComponents of
-                        [] ->
+                        []->
                             NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents}}),
                             {ok, _} = save(NewDoc),
-                            false;
-                        MissingComponents ->
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents, waiting = [{MissingComponents, self(), DbsyncPosthookArguments} | Waiting]}}),
+                            {false, false};
+                        [parent_links] ->
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents}}),
                             {ok, _} = save(NewDoc),
-                            true
+                            {false, true};
+                        _ ->
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents, waiting = [{UpdatedMissingComponents -- [parent_links], self(), DbsyncPosthookArguments} | Waiting]}}),
+                            {ok, _} = save(NewDoc),
+                            {true, lists:member(parent_links, UpdatedMissingComponents)}
                     end;
                 {error, {not_found, file_consistency}} ->
                     FoundComponents = check_missing_components(FileUuid, WaitFor, []),
-                        case WaitFor -- FoundComponents of
+                    UpdatedMissingComponents = WaitFor -- FoundComponents,
+                        case UpdatedMissingComponents of
                             [] ->
                                 NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents}},
                                 {ok, _} = create(NewDoc),
-                                false;
-                            _ ->
-                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents, waiting = [{WaitFor, self(), DbsyncPosthookArguments}]}},
+                                {false, false};
+                            [parent_links] ->
+                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents}},
                                 {ok, _} = create(NewDoc),
-                                true
+                                {false, true};
+                            _ ->
+                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents, waiting = [{WaitFor -- [parent_links], self(), DbsyncPosthookArguments}]}},
+                                {ok, _} = create(NewDoc),
+                                {true, lists:member(parent_links, UpdatedMissingComponents)}
                         end
             end
         end),
@@ -85,6 +94,13 @@ wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
                 file_is_now_consistent ->
                     ok
             end;
+        false ->
+            ok
+    end,
+    case NeedsToWaitForParent of
+        true ->
+            {ok, ParentUuid} = file_meta:get_parent({uuid, FileUuid}),
+            file_consistency:wait(ParentUuid, [file_meta, links, parent_links], DbsyncPosthookArguments);
         false ->
             ok
     end.
