@@ -66,8 +66,8 @@ wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
                     end;
                 {error, {not_found, file_consistency}} ->
                     FoundComponents = check_missing_components(FileUuid, WaitFor, []),
-                        case FoundComponents of
-                            WaitFor ->
+                        case WaitFor -- FoundComponents of
+                            [] ->
                                 NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents}},
                                 {ok, _} = create(NewDoc),
                                 false;
