@@ -56,7 +56,7 @@ change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document
 change_replicated_internal(SpaceId, Change = #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-    ok = file_consistency:wait(FileUUID, [file_meta, links], [SpaceId, Change]),
+    ok = file_consistency:wait(FileUUID, [file_meta, links, parent_links], [SpaceId, Change]),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
     ok = file_consistency:add_components_and_notify(FileUUID, [local_file_location]);
