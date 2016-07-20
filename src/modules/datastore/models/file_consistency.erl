@@ -45,41 +45,48 @@ model_init/0, 'after'/5, before/4]).
 %%--------------------------------------------------------------------
 -spec wait(file_meta:uuid(), [file_consistency:component()], list()) -> ok.
 wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
-    MissingComponents = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+    NeedsToWait = datastore:run_synchronized(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
         fun() ->
             case get(FileUuid) of
                 {ok, Doc = #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}}} ->
-                    case WaitFor -- ComponentsPresent of
+                    MissingComponents = WaitFor -- ComponentsPresent,
+                    FoundComponents = check_missing_components(FileUuid, MissingComponents, []),
+                    UpdatedMissingComponents = MissingComponents -- FoundComponents,
+                    UpdatedPresentComponents = lists:usort(ComponentsPresent ++ FoundComponents),
+
+                    case UpdatedMissingComponents of
                         [] ->
-                            NewDoc = notify_waiting(Doc),
-                            case NewDoc == Doc of
-                                true ->
-                                    [];
-                                false ->
-                                    {ok, _} = save(NewDoc),
-                                    []
-                            end;
-                        MissingComponents ->
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{waiting = [{MissingComponents, self(), DbsyncPosthookArguments} | Waiting]}}),
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents}}),
                             {ok, _} = save(NewDoc),
-                            MissingComponents
+                            false;
+                        MissingComponents ->
+                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents, waiting = [{MissingComponents, self(), DbsyncPosthookArguments} | Waiting]}}),
+                            {ok, _} = save(NewDoc),
+                            true
                     end;
                 {error, {not_found, file_consistency}} ->
-                    {ok, _} = create(#document{key = FileUuid, value = #file_consistency{waiting = [{WaitFor, self(), DbsyncPosthookArguments}]}}),
-                    WaitFor
+                    FoundComponents = check_missing_components(FileUuid, WaitFor, []),
+                        case FoundComponents of
+                            WaitFor ->
+                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents}},
+                                {ok, _} = create(NewDoc),
+                                false;
+                            _ ->
+                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents, waiting = [{WaitFor, self(), DbsyncPosthookArguments}]}},
+                                {ok, _} = create(NewDoc),
+                                true
+                        end
             end
         end),
 
-    FoundComponents = check_missing_components(FileUuid, MissingComponents, []),
-    add_components_and_notify(FileUuid, FoundComponents),
-    case MissingComponents -- FoundComponents of
-        [] ->
-            ok;
-        _ ->
+    case NeedsToWait of
+        true ->
             receive
                 file_is_now_consistent ->
                     ok
-            end
+            end;
+        false ->
+            ok
     end.
 
 %%--------------------------------------------------------------------
