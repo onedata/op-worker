@@ -71,7 +71,7 @@ gen_storage_gid(SpaceName, SpaceUUID) ->
 get_storage_type(StorageId) ->
     {ok, Doc} = storage:get(StorageId),
     {ok, HelperInit} = fslogic_storage:select_helper(Doc),
-    helpers:get_name(HelperInit).
+    helpers:name(HelperInit).
 
 %%--------------------------------------------------------------------
 %% @doc Returns helper arguments for given StorageId
@@ -80,7 +80,7 @@ get_storage_type(StorageId) ->
 get_helper_args(StorageId) ->
     {ok, Doc} = storage:get(StorageId),
     {ok, HelperInit} = fslogic_storage:select_helper(Doc),
-    helpers:get_args(HelperInit).
+    helpers:args(HelperInit).
 
 %%--------------------------------------------------------------------
 %% @doc Returns StorageId for given SpaceUUID

@@ -21,6 +21,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -200,6 +201,17 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = Origin
     end),
     ok;
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
+    message_body = #provider_request{} = ProviderRequest}) ->
+    ?debug("Provider request ~p ~p", [ProviderRequest, effective_session_id(Msg)]),
+    spawn(fun() ->
+        ProviderResponse = worker_proxy:call(fslogic_worker,
+            {provider_request, effective_session_id(Msg), ProviderRequest}),
+        ?debug("Provider response ~p", [ProviderResponse]),
+        communicator:send(#server_message{message_id = Id,
+            message_body = ProviderResponse}, OriginSessId)
+    end),
+    ok;
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
     spawn(fun() ->
@@ -215,7 +227,6 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = Origin
 route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId,
     message_body = #dbsync_request{} = DBSyncRequest} = Msg) ->
     ?debug("DBSync request ~p", [DBSyncRequest]),
-    Connection = self(),
     spawn(fun() ->
         DBSyncResponse = worker_proxy:call(dbsync_worker,
             {dbsync_request, effective_session_id(Msg), DBSyncRequest}),

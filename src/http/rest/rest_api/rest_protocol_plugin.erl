@@ -32,17 +32,18 @@ routes() ->
         {"/api/v3/oneprovider/attributes/[...]", #{handler => attributes}},
         {"/api/v3/oneprovider/changes/metadata/:sid", #{handler => changes}},
         {"/api/v3/oneprovider/files/[...]", #{handler => files}},
-        {"/api/v3/oneprovider/metrics/provider/:id", #{handler => metrics,
-            handler_initial_opts => #{subject_type => provider}}},
-        {"/api/v3/oneprovider/metrics/space/:id", #{handler => metrics,
-            handler_initial_opts => #{subject_type => space}}},
-        {"/api/v3/oneprovider/metrics/user/:id", #{handler => metrics,
-            handler_initial_opts => #{subject_type => user}}},
+        {"/api/v3/oneprovider/metrics/space/:sid", #{handler => metrics,
+            handler_initial_opts => #{subject_type => space, secondary_subject_type => undefined}}},
+        {"/api/v3/oneprovider/metrics/space/:sid/user/:uid", #{handler => metrics,
+            handler_initial_opts => #{subject_type => space, secondary_subject_type => user}}},
         {"/api/v3/oneprovider/replicas/[...]", #{handler => replicas}},
         {"/api/v3/oneprovider/replicas-id/:id", #{handler => replicas,
             handler_initial_opts => #{resource_type => id}}},
         {"/api/v3/oneprovider/spaces", #{handler => spaces}},
-        {"/api/v3/oneprovider/spaces/:sid", #{handler => spaces_by_id}}
+        {"/api/v3/oneprovider/spaces/:sid", #{handler => spaces_by_id}},
+        {"/api/v3/oneprovider/transfers", #{handler => transfers,
+            handler_initial_opts => #{list_all => true}}},
+        {"/api/v3/oneprovider/transfers/:id", #{handler => transfers}}
 ].
 
 

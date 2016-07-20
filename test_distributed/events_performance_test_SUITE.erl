@@ -516,7 +516,14 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
         {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
     end),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
+    test_utils:mock_expect(Workers, fslogic_spaces, get_space_id,
+        fun(_) -> <<"spaceid">> end),
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    test_utils:mock_expect(Workers, file_meta, get, fun
+        (<<"file_", _/binary>>) -> {ok, #document{}};
+        (Entry) -> meck:passthrough([Entry])
+    end),
+    NewConfig;
 
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -533,8 +540,15 @@ init_per_testcase(_, Config) ->
         {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
     end),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    test_utils:mock_expect(Workers, fslogic_spaces, get_space_id,
+        fun(_) -> <<"spaceid">> end),
     session_setup(Worker, SessId, Iden, Self),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]),
+    test_utils:mock_expect(Workers, file_meta, get, fun
+        (<<"file_", _/binary>>) -> {ok, #document{}};
+        (Entry) -> meck:passthrough([Entry])
+    end),
+    NewConfig.
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),

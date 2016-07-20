@@ -48,8 +48,8 @@
 %% Record holding user's identity that may be used on Openstack Swift
 %% storage system
 -record(swift_user_ctx, {
-    user_name :: binary(),
-    password :: binary()
+    user_name :: swift_user:user_name(),
+    password :: swift_user:password()
 }).
 
 -endif.

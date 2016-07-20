@@ -15,6 +15,9 @@
 
 -behaviour(supervisor).
 
+-include("global_definitions.hrl").
+-include("modules/monitoring/rrd_definitions.hrl").
+
 %% API
 -export([start_link/0, specification/0]).
 
@@ -71,15 +74,13 @@ specification() ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([]) ->
     {ok, {#{strategy => one_for_one, intensity => 3, period => 1}, [
-        #{
-            id => rrdtool,
-            start => {gen_server, start_link, [{local, rrdtool}, rrdtool,
-                [os:find_executable("rrdtool")], []]},
-            restart => permanent,
-            shutdown => timer:seconds(10),
-            type => worker,
-            modules => [rrdtool]
-    }]}}.
+        poolboy:child_spec(?RRDTOOL_POOL_NAME, [
+            {name, {local, ?RRDTOOL_POOL_NAME}},
+            {worker_module, rrdtool},
+            {size, application:get_env(?APP_NAME, rrdtool_pool_size, 10)},
+            {max_overflow, application:get_env(?APP_NAME, rrdtool_pool_max_overflow, 20)}
+        ], [os:find_executable("rrdtool")])
+    ]}}.
 
 %%%===================================================================
 %%% Internal functions

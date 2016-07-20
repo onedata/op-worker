@@ -26,6 +26,11 @@
                     "name": "s3",
                     "bucket": "onedata",
                     "disable_iam_mock": true
+                },
+                {
+                    "type": "swift",
+                    "name": "swift",
+                    "container": "swift"
                 }
             ],
             "users": [

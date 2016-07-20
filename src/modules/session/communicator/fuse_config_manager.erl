@@ -67,8 +67,8 @@ create_storage_test_file(SessId, #create_storage_test_file{storage_id = StorageI
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}, UserId),
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, HelperInit} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helpers:get_name(HelperInit),
-    HelperArgs = helpers:get_args(HelperInit),
+    HelperName = helpers:name(HelperInit),
+    HelperArgs = helpers:args(HelperInit),
     UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
     Handle = helpers_utils:create_test_file_handle(HelperName, HelperArgs, UserCtx),
     HelperParams = helpers_utils:get_params(HelperInit, UserCtx),
@@ -101,8 +101,8 @@ verify_storage_test_file(SessId, #verify_storage_test_file{storage_id = StorageI
     space_uuid = SpaceUUID, file_id = FileId, file_content = FileContent}) ->
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, HelperInit} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helpers:get_name(HelperInit),
-    HelperArgs = helpers:get_args(HelperInit),
+    HelperName = helpers:name(HelperInit),
+    HelperArgs = helpers:args(HelperInit),
     UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
     Handle = helpers_utils:create_test_file_handle(HelperName, HelperArgs, UserCtx),
     verify_storage_test_file_loop(Handle, FileId, FileContent, ?ENOENT, ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).

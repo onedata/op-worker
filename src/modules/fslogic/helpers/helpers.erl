@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_name/1, get_args/1, new_handle/1, new_handle/2, set_user_ctx/2]).
+-export([name/1, args/1, new_handle/1, new_handle/2, set_user_ctx/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
 -export([chown/4, truncate/3, open/3, read/4, write/4, release/2, flush/2, fsync/3]).
 
@@ -47,15 +47,15 @@
 %%--------------------------------------------------------------------
 %% @doc Returns helper name.
 %%--------------------------------------------------------------------
--spec get_name(Helper :: init()) -> Name :: name().
-get_name(#helper_init{name = Name}) ->
+-spec name(Helper :: init()) -> Name :: name().
+name(#helper_init{name = Name}) ->
     Name.
 
 %%--------------------------------------------------------------------
 %% @doc Returns helper arguments map.
 %%--------------------------------------------------------------------
--spec get_args(Helper :: init()) -> Args :: args().
-get_args(#helper_init{args = Args}) ->
+-spec args(Helper :: init()) -> Args :: args().
+args(#helper_init{args = Args}) ->
     Args.
 
 %% new_handle/1

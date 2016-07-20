@@ -74,15 +74,6 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
 %%--------------------------------------------------------------------
 -spec get_or_fetch_user_ctx(UserModel :: helpers_user:model(), SessId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> UserCtx :: helpers_user:ctx().
-get_or_fetch_user_ctx(swift_user, _SessionId, SpaceUUID) ->
-    %% TODO VFS-2117 call luma service
-    StorageId = luma_utils:get_storage_id(SpaceUUID),
-    Args = luma_utils:get_helper_args(StorageId),
-
-    #swift_user_ctx{
-        user_name = maps:get(<<"user_name">>, Args),
-        password = maps:get(<<"password">>, Args)
-    };
 get_or_fetch_user_ctx(UserModel, SessionId, SpaceUUID) ->
     UserId = luma_utils:get_user_id(SessionId),
     StorageId = luma_utils:get_storage_id(SpaceUUID),
@@ -111,6 +102,10 @@ make_user_ctx(s3_user, Response, _SpaceUUID) ->
     AccessKey = proplists:get_value(<<"access_key">>, Response),
     SecretKey = proplists:get_value(<<"secret_key">>, Response),
     s3_user:new_ctx(AccessKey, SecretKey);
+make_user_ctx(swift_user, Response, _SpaceUUID) ->
+    UserName = proplists:get_value(<<"user_name">>, Response),
+    Password = proplists:get_value(<<"password">>, Response),
+    swift_user:new_ctx(UserName, Password);
 make_user_ctx(posix_user, Response, SpaceUUID) ->
     GID = case proplists:get_value(<<"gid">>, Response) of
         undefined ->

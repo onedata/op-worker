@@ -28,7 +28,8 @@
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
-    all_with_user/0, get_user_id/1]).
+    all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
+    get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
@@ -132,6 +133,15 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
+    case session:get(Key) of
+        {ok, #document{value = #session{open_files = OpenFiles}}} ->
+            lists:foreach(
+                fun(FileUUID) ->
+                    open_file:invalidate_session_entry(FileUUID, Key)
+                end, sets:to_list(OpenFiles));
+        _ -> ok
+    end,
+
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -407,6 +417,132 @@ get_auth(SessId) ->
 -spec get_rest_session_id(session:identity()) -> id().
 get_rest_session_id(#identity{user_id = Uid}) ->
     <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds open file UUID to session.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_open_file(session:id(), file_meta:uuid()) ->
+    ok | {error, Reason :: term()}.
+add_open_file(SessionId, FileUUID) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
+            UpdatedOpenFiles= sets:add_element(FileUUID, OpenFiles),
+            {ok, _} = session:save(Doc#document{value = Session#session{
+                open_files = UpdatedOpenFiles}}),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes open file UUID from session.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_open_file(session:id(), file_meta:uuid()) ->
+    ok | {error, Reason :: term()}.
+remove_open_file(SessionId, FileUUID) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
+            UpdatedOpenFiles= sets:del_element(FileUUID, OpenFiles),
+            {ok, _} = session:save(Doc#document{value = Session#session{
+                open_files = UpdatedOpenFiles}}),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes open file UUID from session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_transfers(session:id()) -> {ok, [binary()]} | {error, Reason :: term()}.
+get_transfers(SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{transfers = Transfers}}} ->
+            {ok, Transfers};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes transfer from session memory
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+remove_transfer(SessionId, TransferId) ->
+    session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
+            FilteredTransfers = lists:filter(fun(T) ->
+                    T =/= TransferId
+                end, Transfers),
+        {ok, Sess#session{transfers = FilteredTransfers}}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add transfer to session memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+add_transfer(SessionId, TransferId) ->
+    session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
+        {ok, Sess#session{transfers = [TransferId | Transfers]}}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add link to handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_handle(SessionId :: session:id(), HandleID :: binary(),
+    Handle :: storage_file_manager:handle()) -> ok | datastore:generic_error().
+add_handle(SessionId, HandleID, Handle) ->
+    case sfm_handle:create(#document{value = Handle}) of
+        {ok, Key} ->
+            datastore:add_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [{HandleID, {Key, sfm_handle}}]);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove link to handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_handle(SessionId :: session:id(), HandleID :: binary()) -> ok | datastore:generic_error().
+remove_handle(SessionId, HandleID) ->
+    case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+        {ok, {HandleKey, sfm_handle}} ->
+            case sfm_handle:delete(HandleKey) of
+                ok ->
+                    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]);
+                {error, Reason2} ->
+                    {error, Reason2}
+            end;
+        {error, link_not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_handle(SessionId :: session:id(), HandleID :: binary()) ->
+    {ok, storage_file_manager:handle()} | datastore:generic_error().
+get_handle(SessionId, HandleID) ->
+    case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+        {ok, #document{value = Handle}} ->
+            {ok, Handle};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% Internal functions

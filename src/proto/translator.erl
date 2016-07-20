@@ -22,6 +22,7 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -67,6 +68,16 @@ translate_from_protobuf(#'UpdateEvent'{object = {_, Obj}}) ->
     #update_event{
         object = translate_from_protobuf(Obj)
     };
+translate_from_protobuf(#'FileRemovalEvent'{} = Record) ->
+    #file_removal_event{
+        file_uuid = Record#'FileRemovalEvent'.file_uuid
+    };
+translate_from_protobuf(#'FileAccessedEvent'{} = Record) ->
+    #file_accessed_event{
+        file_uuid = Record#'FileAccessedEvent'.file_uuid,
+        open_count = Record#'FileAccessedEvent'.open_count,
+        release_count = Record#'FileAccessedEvent'.release_count
+    };
 translate_from_protobuf(#'Subscription'{id = Id, object = {_, Record}}) ->
     #subscription{
         id = Id,
@@ -110,6 +121,11 @@ translate_from_protobuf(#'WriteSubscription'{} = Record) ->
     };
 translate_from_protobuf(#'QuotaSubscription'{}) ->
     #quota_subscription{};
+translate_from_protobuf(#'FileAccessedSubscription'{} = Record) ->
+    #file_accessed_subscription{
+        counter_threshold = Record#'FileAccessedSubscription'.counter_threshold,
+        time_threshold = Record#'FileAccessedSubscription'.time_threshold
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
@@ -153,8 +169,8 @@ translate_from_protobuf(#'GetFileChildren'{uuid = UUID, offset = Offset, size = 
     #get_file_children{uuid = UUID, offset = Offset, size = Size};
 translate_from_protobuf(#'CreateDir'{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
     #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode};
-translate_from_protobuf(#'DeleteFile'{uuid = UUID}) ->
-    #delete_file{uuid = UUID};
+translate_from_protobuf(#'DeleteFile'{uuid = UUID, silent = Silent}) ->
+    #delete_file{uuid = UUID, silent = Silent};
 translate_from_protobuf(#'UpdateTimes'{uuid = UUID, atime = ATime, mtime = MTime,
     ctime = CTime}) ->
     #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime};
@@ -247,6 +263,7 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
+        handle_id = Record#'FileLocation'.handle_id,
         blocks = lists:map(
             fun(Block) ->
                 translate_from_protobuf(Block)
@@ -268,6 +285,17 @@ translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
     #'proxyio_request'{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
+translate_from_protobuf(#'ProviderRequest'{provider_request = {_, Record}}) ->
+    #'provider_request'{provider_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'ProviderResponse'{status = Status, provider_response = {_, ProviderResponse}}) ->
+    #'provider_response'{
+        status = translate_from_protobuf(Status),
+        provider_response = translate_from_protobuf(ProviderResponse)
+    };
+translate_from_protobuf(#'ProviderResponse'{status = Status}) ->
+    #'provider_response'{
+        status = translate_from_protobuf(Status)
+    };
 translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = ChildEntries}) ->
     #'file_renamed'{new_uuid = NewUuid,
         child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]};
@@ -410,6 +438,12 @@ translate_to_protobuf(#file_renamed_event{top_entry =  TopEntry, child_entries =
         child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};
 translate_to_protobuf(#file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
     #'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
+translate_to_protobuf(#file_accessed_event{} = Record) ->
+    {file_accessed_event, #'FileAccessedEvent'{
+        file_uuid = Record#file_accessed_event.file_uuid,
+        open_count = Record#file_accessed_event.open_count,
+        release_count = Record#file_accessed_event.release_count
+    }};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
@@ -442,6 +476,15 @@ translate_to_protobuf(#'permission_changed_subscription'{} = Record) ->
     }};
 translate_to_protobuf(#'quota_subscription'{}) ->
     {quota_subscription, #'QuotaSubscription'{}};
+translate_to_protobuf(#'file_removal_subscription'{} = Record) ->
+    {file_removal_subscription, #'FileRemovalSubscription'{
+        file_uuid = Record#'file_removal_subscription'.file_uuid
+    }};
+translate_to_protobuf(#'file_accessed_subscription'{} = Record) ->
+    {file_accessed_subscription, #'FileAccessedSubscription'{
+        counter_threshold = Record#'file_accessed_subscription'.counter_threshold,
+        time_threshold = Record#'file_accessed_subscription'.time_threshold
+    }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
 translate_to_protobuf(#handshake_response{session_id = Id}) ->
@@ -568,8 +611,8 @@ translate_to_protobuf(#get_file_children{uuid = UUID, offset = Offset, size = Si
     {get_file_children, #'GetFileChildren'{uuid = UUID, offset = Offset, size = Size}};
 translate_to_protobuf(#create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
     {create_dir, #'CreateDir'{parent_uuid = ParentUUID, name = Name, mode = Mode}};
-translate_to_protobuf(#delete_file{uuid = UUID}) ->
-    {delete_file, #'DeleteFile'{uuid = UUID}};
+translate_to_protobuf(#delete_file{uuid = UUID, silent = Silent}) ->
+    {delete_file, #'DeleteFile'{uuid = UUID, silent = Silent}};
 translate_to_protobuf(#update_times{uuid = UUID, atime = ATime, mtime = MTime,
     ctime = CTime}) ->
     {update_times, #'UpdateTimes'{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}};
@@ -625,6 +668,14 @@ translate_to_protobuf(#'proxyio_request'{parameters = Parameters, storage_id = S
             #'Parameter'{key = Key, value = Value}
         end, maps:to_list(Parameters)),
     {proxyio_request, #'ProxyIORequest'{parameters = ParametersProto, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#provider_request{provider_request = Record}) ->
+    {provider_request, #'ProviderRequest'{provider_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#provider_response{status = #status{code = Code,
+    description = Description}, provider_response = ProviderResponse}) ->
+    {provider_response, #'ProviderResponse'{
+        status = #'Status'{code = Code, description = Description},
+        provider_response = translate_to_protobuf(ProviderResponse)
+    }};
 translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
     {remote_read, #'RemoteRead'{offset = Offset, size = Size}};
 translate_to_protobuf(#'dir'{uuid = UUID}) ->
