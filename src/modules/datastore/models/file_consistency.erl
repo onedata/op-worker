@@ -195,7 +195,12 @@ check_missing_components(FileUuid, [links | RestMissing], Found) ->
     ProviderId = oneprovider:get_provider_id(),
     case catch file_meta:exists({uuid, links_utils:links_doc_key(FileUuid, ProviderId)}) of
         true ->
-            check_missing_components(FileUuid, RestMissing, [links | Found]);
+            case catch file_meta:get_parent_uuid({uuid, FileUuid}) of
+                {ok, _} ->
+                    check_missing_components(FileUuid, RestMissing, [links | Found]);
+                _ ->
+                    check_missing_components(FileUuid, RestMissing, Found)
+            end;
         _ ->
             check_missing_components(FileUuid, RestMissing, Found)
     end.
