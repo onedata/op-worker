@@ -330,15 +330,9 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = C
 
     {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
         false ->
-            try
-                SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
-                {ok, Handle} = storage_file_manager:open(SFMHandle, Mode),
-                save_handle(SessId, Handle)
-            catch
-                E1:E2 ->
-                    ?error_stacktrace("Error during opening file ~p: ~p:~p", [File, E1, E2]),
-                    throw(E2)
-            end;
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
+            {ok, Handle} = storage_file_manager:open(SFMHandle, Mode),
+            save_handle(SessId, Handle);
         true ->
             {ok, undefined}
     end,
