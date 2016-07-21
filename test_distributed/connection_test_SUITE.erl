@@ -58,7 +58,7 @@
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(MACAROON, macaroon:create("a", "b", "c")).
--define(MACAROON_TOKEN, element(2, macaroon:serialize(?MACAROON))).
+-define(MACAROON_TOKEN, element(2, token_utils:serialize62(?MACAROON))).
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
