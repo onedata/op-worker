@@ -68,10 +68,10 @@ change_replicated_internal(SpaceId, Change = #change{model = file_location, doc 
     ?info("change_replicated_internal: changed file_location ~p", [FileUUID]),
     ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, links, local_file_location], [SpaceId, Change]),
     ok = replica_dbsync_hook:on_file_location_change(SpaceId, Doc);
-change_replicated_internal(_SpaceId, #change{model = file_meta, doc = #document{value = #links{model = file_meta, doc_key = FileUUID}}}) ->
+change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{value = #links{model = file_meta, doc_key = FileUUID}}}) ->
     ?info("change_replicated_internal: changed links ~p", [FileUUID]),
     ok = file_consistency:add_components_and_notify(FileUUID, [links]),
-    ok = file_consistency:check_and_add_components(FileUUID, [link_to_parent]);
+    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [link_to_parent]);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
