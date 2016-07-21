@@ -45,7 +45,7 @@ model_init/0, 'after'/5, before/4]).
 %%--------------------------------------------------------------------
 -spec wait(file_meta:uuid(), [file_consistency:component()], list()) -> ok.
 wait(FileUuid, WaitFor, DbsyncPosthookArguments) ->
-    {NeedsToWait, NeedsToWaitForParent} = datastore:run_transaction(?MODEL_NAME, <<"consistency_", FileUuid/binary>>,
+    {NeedsToWait, NeedsToWaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
             case get(FileUuid) of
                 {ok, Doc = #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}}} ->
