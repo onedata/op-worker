@@ -768,12 +768,6 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
                 ok ->
                     timer:sleep(timer:seconds(2)),
                     Batches = get_stashed_batches(ProviderId, SpaceId),
-%%                    Batches = case state_get({stash, ProviderId, SpaceId}) of
-%%                                  undefined ->
-%%                                      #{};
-%%                                  Map ->
-%%                                      Map
-%%                              end,
                     SortedKeys = lists:sort(maps:keys(Batches)),
                     Stashed = lists:foldl(fun(S, Acc) ->
                         case Acc + 1 >= S of
@@ -864,23 +858,7 @@ stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUnt
             end
         end),
     ok.
-%%    state_update({stash, ProviderId, SpaceId},
-%%        fun
-%%            (undefined) ->
-%%                maps:put(NewSince, Batch, #{});
-%%            (Batches) ->
-%%                case (CurrentUntil + 1 < NewSince) andalso (size(term_to_binary(Batches)) > ?CHANGES_STASH_MAX_SIZE_BYTES) of
-%%                    true -> Batches;
-%%                    false ->
-%%                        #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
-%%                        case NewUntil > Until of
-%%                            true ->
-%%                                maps:put(NewSince, Batch, Batches);
-%%                            false ->
-%%                                Batches
-%%                        end
-%%                end
-%%        end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -903,19 +881,6 @@ retrieve_stashed_batch(ProviderId, SpaceId, #batch{since = NewSince, until = New
             {ok, BatchesRecord#dbsync_batches{batches = NewBatches}}
         end),
     ok.
-%%    state_update({stash, ProviderId, SpaceId},
-%%        fun
-%%            (undefined) ->
-%%                #{};
-%%            (Batches) ->
-%%                #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
-%%                case NewUntil >= Until of
-%%                    true ->
-%%                        maps:remove(NewSince, Batches);
-%%                    false ->
-%%                        Batches
-%%                end
-%%        end).
 
 
 %%--------------------------------------------------------------------
@@ -930,12 +895,6 @@ consume_batches(_, _, CurrentUntil, _, NewBranchUntil) when CurrentUntil >= NewB
     ok;
 consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUntil) ->
     Batches = get_stashed_batches(ProviderId, SpaceId),
-%%    Batches = case state_get({stash, ProviderId, SpaceId}) of
-%%                  undefined ->
-%%                      #{};
-%%                  Map ->
-%%                      Map
-%%              end,
     SortedKeys = lists:sort(maps:keys(Batches)),
 
     % check if we have all needed changes to start batches application
