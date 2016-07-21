@@ -39,7 +39,7 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    get_parent_uuid/1, rename/2, setup_onedata_user/2]).
+    get_parent_uuid/2, rename/2, setup_onedata_user/2]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1, set_link_context/1, set_link_context_for_space/1]).
@@ -410,18 +410,15 @@ get_parent(Entry) ->
 %% Returns file's parent uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_uuid(Entry :: entry()) -> {ok, datastore:key()} | datastore:get_error().
-get_parent_uuid(Entry) ->
+-spec get_parent_uuid(file_meta:uuid(), space_info:id()) -> {ok, datastore:key()} | datastore:get_error().
+get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
+    ?ROOT_DIR_UUID;
+get_parent_uuid(FileUuid, SpaceId) ->
     ?run(begin
-        case get(Entry) of
-            {ok, #document{key = ?ROOT_DIR_UUID}} ->
-                ?ROOT_DIR_UUID;
-            {ok, #document{key = Key} = Doc} ->
-                set_link_context(Doc),
-                {ok, {ParentKey, ?MODEL_NAME}} =
-                    datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
-                {ok, ParentKey}
-        end
+        set_link_context(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+        {ok, {ParentKey, ?MODEL_NAME}} =
+            datastore:fetch_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, parent),
+        {ok, ParentKey}
     end).
 
 %%--------------------------------------------------------------------
