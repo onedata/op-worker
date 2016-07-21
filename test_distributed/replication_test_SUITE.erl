@@ -1005,7 +1005,7 @@ file_consistency_doc_should_be_deleted_on_file_meta_delete(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     {ok, Guid} = lfm_proxy:create(W1, SessionId, <<"space_name1/file">>, 8#777),
     Uuid = ?RPC(fslogic_uuid, file_guid_to_uuid, [Guid]),
-    ok = ?RPC(file_consistency, wait, [Uuid, [file_meta], undefined]),
+    ok = ?RPC(file_consistency, wait, [Uuid, undefined, [file_meta], undefined]),
     ?assertMatch({ok, #document{}}, ?RPC(file_consistency, get, [Uuid])),
 
     % when
