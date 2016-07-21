@@ -53,7 +53,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     ct:timetrap({minutes, 60}),
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     initializer:enable_grpca_based_communication(Config),
     initializer:disable_quota_limit(Config),
@@ -67,4 +67,4 @@ end_per_testcase(_, Config) ->
     initializer:unload_quota_mocks(Config),
     initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
-    application:stop(ssl2).
+    application:stop(etls).

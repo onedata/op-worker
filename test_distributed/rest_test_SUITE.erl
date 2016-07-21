@@ -155,12 +155,12 @@ init_per_testcase(Case, Config) when
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     test_utils:mock_new(Workers, files),
     Config;
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     mock_oz_spaces(Config),
     mock_oz_certificates(Config),
@@ -173,12 +173,12 @@ end_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, files),
     hackney:stop(),
-    application:stop(ssl2);
+    application:stop(etls);
 end_per_testcase(_, Config) ->
     unmock_oz_spaces(Config),
     unmock_oz_certificates(Config),
     hackney:stop(),
-    application:stop(ssl2).
+    application:stop(etls).
 
 %%%===================================================================
 %%% Internal functions
