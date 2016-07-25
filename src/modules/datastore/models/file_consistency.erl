@@ -27,7 +27,7 @@
 model_init/0, 'after'/5, before/4]).
 
 -type id() :: file_meta:id().
--type component() :: file_meta | local_file_location | parent_links | links.
+-type component() :: file_meta | local_file_location | parent_links | links | link_to_parent.
 -type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
 
 -export_type([id/0, component/0, waiting/0]).
