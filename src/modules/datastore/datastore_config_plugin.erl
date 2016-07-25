@@ -50,5 +50,6 @@ models() -> [
     monitoring_init_state,
     swift_user,
     sfm_handle,
+    dbsync_batches,
     file_consistency
 ].

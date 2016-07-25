@@ -83,7 +83,7 @@ all() ->
 -define(TIMEOUT, timer:seconds(5)).
 
 user_1_token_header() ->
-    {ok, Srlzd} = macaroon:serialize(macaroon:create("a", "b", "c")),
+    {ok, Srlzd} = token_utils:serialize62(macaroon:create("a", "b", "c")),
     {<<"X-Auth-Token">>, Srlzd}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
@@ -184,7 +184,7 @@ init_per_testcase(choose_adequate_handler_test, Config) ->
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -198,7 +198,7 @@ end_per_testcase(_, Config) ->
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
-    application:stop(ssl2).
+    application:stop(etls).
 
 %%%===================================================================
 %%% Internal functions

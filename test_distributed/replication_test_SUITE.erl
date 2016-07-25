@@ -1073,7 +1073,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
@@ -1085,7 +1085,7 @@ end_per_testcase(_, Config) ->
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
-    application:stop(ssl2).
+    application:stop(etls).
 
 %%%===================================================================
 %%% Internal functions
