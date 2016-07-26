@@ -49,5 +49,6 @@ models() -> [
     open_file,
     monitoring_init_state,
     swift_user,
-    sfm_handle
+    sfm_handle,
+    dbsync_batches
 ].

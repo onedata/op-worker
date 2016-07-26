@@ -441,7 +441,7 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_, Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
     start_applier(Worker1, ?REMOTE_APPLIER),
@@ -452,7 +452,7 @@ end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun stop_applier/1, Workers),
     hackney:stop(),
-    application:stop(ssl2),
+    application:stop(etls),
     test_node_starter:clean_environment(Config).
 
 %%%===================================================================
