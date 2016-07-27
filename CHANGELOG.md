@@ -4,6 +4,21 @@
 CHANGELOG
 ---------
 
+### 3.0.0-RC1
+
+* VFS-2316 Update etls.
+* VFS-2292, Update dbsync batches storing
+* VFS-2215 Disable blocks prefetching.
+* VFS-2215 Exclude file removal originator from event recipients.
+* VFS-2215 Wrap event_manager's handle_cast in try/catch.
+* VFS-2292 Session managmenet update
+* VFS-2292 Minor initializer update
+* VFS-2292 Add os-mon
+* VFS-2250 Use wrappers for macaroon serialization
+* VFS-2214, Release handles for created files
+* VFS-2214, Update session management and lfm proxy
+
+
 ### 3.0.0-beta8
 
 
