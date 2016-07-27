@@ -103,8 +103,9 @@ start() ->
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, timer:seconds(Timeout)},
-            % On every request add headers that improve security of the response
-            {onrequest, fun gui_utils:onrequest_adjust_headers/1}
+            % On every request, add headers that improve
+            % security to the response
+            {onrequest, fun gui:response_headers/1}
         ]),
     case Result of
         {ok, _} -> ok;
