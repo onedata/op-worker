@@ -498,7 +498,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
     end,
 
     {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
-    SleepTime = round(CacheDelay / 1000 + 1),
+    SleepTime = round(CacheDelay / 1000 + 5),
 
     T1 = [
         {create_doc, 1},
@@ -523,7 +523,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {sleep, SleepTime},
         {set_link_to_location, 3}
     ],
-    DoTest(T1),
+%%    DoTest(T1),
 
     T2 = [
         {create_doc, 1},
@@ -538,9 +538,176 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {create_location, 3},
         {set_link_to_location, 3}
     ],
-    DoTest(T2),
+%%    DoTest(T2),
 
     T3 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2}
+    ],
+%%    DoTest(T3),
+
+    T4 = [
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {sleep, SleepTime},
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1}
+    ],
+%%    DoTest(T4),
+
+    T5 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {set_link_to_location, 3}
+    ],
+%%    DoTest(T5),
+
+    T6 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T6),
+
+    T7 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {create_location, 3}
+    ],
+    DoTest(T7),
+
+    T8 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 3}
+    ],
+    DoTest(T8),
+
+    T9 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3}
+    ],
+    DoTest(T9),
+
+    T10 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3}
+    ],
+    DoTest(T10),
+
+    T11 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_location, 3}
+    ],
+    DoTest(T11),
+
+    T12 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {sleep, SleepTime},
+        {create_doc, 3}
+    ],
+    DoTest(T12),
+
+    T13 = [
         {set_link_to_location, 3},
         {sleep, SleepTime},
         {create_location, 3},
@@ -563,9 +730,9 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {sleep, SleepTime},
         {set_parent_link, 1}
     ],
-    DoTest(T3),
+    DoTest(T13),
 
-    T4 = [
+    T14 = [
         {create_doc, 1},
         {set_parent_link, 1},
         {set_link_to_parent, 1},
@@ -585,7 +752,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {create_location, 3},
         {set_link_to_location, 3}
     ],
-    DoTest(T4),
+    DoTest(T14),
 
     ok.
 
