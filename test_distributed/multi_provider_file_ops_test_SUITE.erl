@@ -17,19 +17,24 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, proxy_test1/1, proxy_test2/1
+    db_sync_test/1, proxy_test1/1, proxy_test2/1, file_consistency_test/1
 ]).
 -export([synchronization_test_base/6]).
 
+% for file consistency testing
+-export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4]).
+
 all() ->
     ?ALL([
-        proxy_test1, proxy_test2, db_sync_test
+        proxy_test1, proxy_test2, db_sync_test, file_consistency_test
     ]).
 
 -define(match(Expect, Expr, Attempts),
@@ -40,6 +45,9 @@ all() ->
             ?assertMatch(Expect, Expr, Attempts)
     end
 ).
+
+-define(RPC(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
+-define(RPC_TEST(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
 %%%===================================================================
 %%% Test functions
@@ -396,6 +404,249 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     end),
 
     ok.
+
+file_consistency_test(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    {Worker1, Worker2} = lists:foldl(fun(W, {Acc1, Acc2}) ->
+        NAcc1 = case is_atom(Acc1) of
+            true ->
+                Acc1;
+            _ ->
+                case string:str(atom_to_list(W), "p1") of
+                    0 -> Acc1;
+                    _ -> W
+                end
+        end,
+        NAcc2 = case is_atom(Acc2) of
+            true ->
+                Acc2;
+            _ ->
+                case string:str(atom_to_list(W), "p2") of
+                    0 -> Acc2;
+                    _ -> W
+                end
+        end,
+        {NAcc1, NAcc2}
+    end, {[], []}, Workers),
+
+    file_consistency_test_base(Config, Worker1, Worker2, Worker1).
+
+file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
+    timer:sleep(10000), % TODO - connection must appear after mock setup
+    Attempts = 15,
+    User = <<"user1">>,
+
+    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    A1 = ?RPC(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
+    ?assertMatch({ok, _}, A1),
+    {ok, SpaceDoc} = A1,
+    SpaceKey = SpaceDoc#document.key,
+
+    DoTest = fun(TaskList) ->
+        ct:print("Do test"),
+
+        GenerateDoc = fun(Type) ->
+            Name = generator:gen_name(),
+            Doc = #document{key = datastore_utils:gen_uuid(), value =
+            #file_meta{
+                name = Name,
+                type = Type,
+                mode = 8#775,
+                uid = User,
+                scope = SpaceKey
+                }
+            },
+            {Doc, Name}
+        end,
+
+        {Doc1, Name1} = GenerateDoc(?DIRECTORY_TYPE),
+        {Doc2, Name2} = GenerateDoc(?DIRECTORY_TYPE),
+        {Doc3, Name3} = GenerateDoc(?REGULAR_FILE_TYPE),
+        Loc3ID = datastore_utils:gen_uuid(),
+        {Doc4, Name4} = GenerateDoc(?REGULAR_FILE_TYPE),
+        Loc4ID = datastore_utils:gen_uuid(),
+
+        D1Path = <<SpaceName/binary, "/",  Name1/binary>>,
+        D2Path = <<D1Path/binary, "/",  Name2/binary>>,
+        D3Path = <<D2Path/binary, "/",  Name3/binary>>,
+        D4Path = <<D2Path/binary, "/",  Name4/binary>>,
+
+        Doc1Args = [Doc1, SpaceDoc, non, D1Path],
+        Doc2Args = [Doc2, Doc1, non, D2Path],
+        Doc3Args = [Doc3, Doc2, Loc3ID, D3Path],
+        Doc4Args = [Doc4, Doc2, Loc4ID, D4Path],
+
+        DocsList = [{1, Doc1Args}, {2, Doc2Args}, {3, Doc3Args}, {4, Doc4Args}],
+
+        lists:foreach(fun(
+            {sleep, Sek}) ->
+                timer:sleep(timer:seconds(Sek));
+            ({Fun, DocNum}) ->
+                ?assertEqual(ok, ?RPC_TEST(Worker1, Fun, proplists:get_value(DocNum, DocsList)));
+            ({Fun, DocNum, W}) ->
+                ?assertEqual(ok, ?RPC_TEST(W, Fun, proplists:get_value(DocNum, DocsList)))
+        end, TaskList),
+
+        ?match({ok, #file_attr{}},
+            lfm_proxy:stat(Worker2, SessId(Worker2), {path, D3Path}), Attempts),
+        OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, D3Path}, rdwr),
+        ?assertMatch({ok, _}, OpenAns),
+        {ok, Handle} = OpenAns,
+        ?match({ok, <<"abc">>}, lfm_proxy:read(Worker2, Handle, 0, 10), Attempts),
+        ?assertMatch(ok, lfm_proxy:close(Worker2, Handle))
+    end,
+
+    {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
+    SleepTime = round(CacheDelay / 1000 + 1),
+
+    T1 = [
+        {create_doc, 1},
+        {sleep, SleepTime},
+        {set_parent_link, 1},
+        {sleep, SleepTime},
+        {set_link_to_parent, 1},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {sleep, SleepTime},
+        {set_parent_link, 2},
+        {sleep, SleepTime},
+        {set_link_to_parent, 2},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T1),
+
+    T2 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T2),
+
+    T3 = [
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 2},
+        {sleep, SleepTime},
+        {set_link_to_parent, 2},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {sleep, SleepTime},
+        {set_link_to_parent, 1},
+        {sleep, SleepTime},
+        {create_doc, 1},
+        {sleep, SleepTime},
+        {set_parent_link, 1}
+    ],
+    DoTest(T3),
+
+    T4 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {create_doc, 4, Worker3},
+        {set_parent_link, 4, Worker3},
+        {set_link_to_parent, 4, Worker3},
+        {create_location, 4, Worker3},
+        {set_link_to_location, 4, Worker3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T4),
+
+    ok.
+
+create_doc(Doc, _ParentDoc, _LocId, _Path) ->
+    {ok, _} = file_meta:save(Doc),
+    ok.
+
+set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
+    FDoc = Doc#document.value,
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, ParentDoc, {FDoc#file_meta.name, Doc}).
+
+set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, Doc, {parent, ParentDoc}).
+
+create_location(Doc, _ParentDoc, LocId, Path) ->
+    FDoc = Doc#document.value,
+    FileUuid = Doc#document.key,
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
+
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    FileId = file_meta:snapshot_name(Path, FDoc#file_meta.version),
+    Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
+        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
+        space_id = SpaceId},
+
+    MC = file_location:model_init(),
+    LSL = MC#model_config.link_store_level,
+    {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
+
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    LeafLess = fslogic_path:dirname(FileId),
+    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
+    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok -> ok;
+        {error, eexist} ->
+            ok
+    end,
+
+
+    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
+    storage_file_manager:unlink(SFMHandle1),
+    ok = storage_file_manager:create(SFMHandle1, 8#775),
+    {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
+    {ok, 3} = storage_file_manager:write(SFMHandle2, 0, <<"abc">>),
+    storage_file_manager:fsync(SFMHandle2),
+    ok.
+
+set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
+    FileUuid = Doc#document.key,
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
+    ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

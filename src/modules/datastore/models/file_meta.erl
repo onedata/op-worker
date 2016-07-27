@@ -40,7 +40,7 @@
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     get_parent_uuid/2, rename/2, setup_onedata_user/2]).
--export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
+-export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1, set_link_context/1, set_link_context_for_space/1]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
