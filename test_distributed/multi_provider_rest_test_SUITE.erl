@@ -46,7 +46,8 @@
     changes_stream_file_meta_test/1,
     changes_stream_xattr_test/1,
     list_spaces/1,
-    get_space/1
+    get_space/1,
+    set_get_metadata/1
 ]).
 
 all() ->
@@ -67,7 +68,8 @@ all() ->
         changes_stream_file_meta_test,
         changes_stream_xattr_test,
         list_spaces,
-        get_space
+        get_space,
+        set_get_metadata
     ]).
 
 %%%===================================================================
@@ -488,6 +490,24 @@ get_space(Config) ->
                 ]
             ]},
             {<<"spaceId">>, <<"space3">>}
+        ],
+        DecodedBody
+    ).
+
+set_get_metadata(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put, [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"key\": \"value\"}")),
+
+    % then
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get, [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(
+        [
+            {<<"key">>, <<"value">>}
         ],
         DecodedBody
     ).

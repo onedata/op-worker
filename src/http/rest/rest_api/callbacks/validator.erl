@@ -26,12 +26,14 @@
 
 -define(DEFAULT_OFFSET, <<"0">>).
 
+-define(DEFAULT_METADATA_TYPE, <<"json">>).
+
 %% API
 -export([malformed_request/2, parse_path/2,
     parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
     parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
     parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_limit/2,
-    parse_status/2]).
+    parse_status/2, parse_metadata_type/2]).
 
 %%%===================================================================
 %%% API
@@ -294,6 +296,17 @@ parse_limit(Req, State) ->
 parse_status(Req, State) ->
     {Status, NewReq} = cowboy_req:qs_val(<<"status">>, Req),
     {State#{status => Status}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's offset and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_metadata_type(cowboy_req:req(), #{}) ->
+    {#{metadata_type => binary()}, cowboy_req:req()}.
+parse_metadata_type(Req, State) ->
+    {MetadataType, NewReq} = cowboy_req:qs_val(<<"metadata_type">>, Req, ?DEFAULT_METADATA_TYPE),
+    {State#{metadata_type => MetadataType}, NewReq}.
 
 %%%===================================================================
 %%% Internal functions

@@ -32,7 +32,8 @@
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
-    get_file_path/2, chmod_storage_files/3, replicate_file/3]).
+    get_file_path/2, chmod_storage_files/3, replicate_file/3,
+    get_metadata/4, set_metadata/5]).
 
 %%%===================================================================
 %%% API functions
@@ -509,6 +510,26 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
             end;
         _ -> ok
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()]) -> {ok, #{}}.
+get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names) ->
+    {ok, Meta} = custom_metadata:get_json_metadata(FileUuid, Names),
+    #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Set metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), #{}, [binary()]) -> ok.
+set_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Value, Names) ->
+    {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
+    #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
 %% Internal functions

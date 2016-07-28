@@ -13,6 +13,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -23,6 +24,13 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
+
+-type type() :: binary().
+-type name() :: binary().
+-type names() :: [name()].
+-type metadata() :: #metadata{}.
+
+-export_type([type/0, name/0, names/0, metadata/0]).
 
 %%%===================================================================
 %%% API
@@ -40,11 +48,11 @@ get_json_metadata(FileUuid) ->
 %% @doc Gets json metadata subtree
 %%--------------------------------------------------------------------
 -spec get_json_metadata(file_meta:uuid(), [binary()]) ->
-    #{} | datastore:get_error().
+    {ok, #{}} | datastore:get_error().
 get_json_metadata(FileUuid, Names) ->
     case custom_metadata:get(FileUuid) of
         {ok, #document{value = #custom_metadata{json = Json}}} ->
-            custom_meta_manipulation:find(Json, Names);
+            {ok, custom_meta_manipulation:find(Json, Names)};
         Error ->
             Error
     end.
@@ -63,11 +71,12 @@ set_json_metadata(FileUuid, Json) ->
 -spec set_json_metadata(file_meta:uuid(), #{}, [binary()]) ->
     {ok, datastore:document()} | datastore:get_error().
 set_json_metadata(FileUuid, JsonToInsert, Names) ->
-    case custom_metadata:get(FileUuid) of
-        {ok, #document{value = #custom_metadata{json = Json}}} ->
-            custom_meta_manipulation:insert(Json, JsonToInsert, Names);
+    case custom_metadata:get(FileUuid) of %todo use create or update
+        {ok, Doc = #document{value = Meta = #custom_metadata{json = Json}}} ->
+            NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
+            save(Doc#document{value = Meta#custom_metadata{json = NewJson}});
         {error, {not_found, custom_metadata}} ->
-            create(#document{value = #custom_metadata{json = custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}});
+            create(#document{key = FileUuid, value = #custom_metadata{json = custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}});
         Error ->
             Error
     end.

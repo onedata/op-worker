@@ -392,6 +392,12 @@ translate_from_protobuf(#'FilePath'{value = Value}) ->
     #'file_path'{value = Value};
 translate_from_protobuf(#'FSync'{uuid = UUID}) ->
     #'fsync'{uuid = UUID};
+translate_from_protobuf(#'GetMetadata'{uuid = UUID, type = Type, names = Names}) ->
+    #get_metadata{uuid = UUID, type = Type, names = Names};
+translate_from_protobuf(#'SetMetadata'{uuid = UUID, metadata = Metadata, names = Names}) ->
+    #set_metadata{uuid = UUID, metadata = translate_from_protobuf(Metadata), names = Names};
+translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
+    #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -740,6 +746,13 @@ translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
 translate_to_protobuf(#fsync{uuid = UUID}) ->
     {fsync, #'FSync'{uuid = UUID}};
+
+translate_to_protobuf(#get_metadata{uuid = UUID, type = Type, names = Names}) ->
+    #'GetMetadata'{uuid = UUID, type = Type, names = Names};
+translate_to_protobuf(#set_metadata{uuid = UUID, metadata = Metadata, names = Names}) ->
+    #'SetMetadata'{uuid = UUID, metadata = translate_to_protobuf(Metadata), names = Names};
+translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
+    #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)};
 
 translate_to_protobuf(undefined) ->
     undefined.
