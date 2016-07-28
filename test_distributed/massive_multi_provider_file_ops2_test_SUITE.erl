@@ -24,12 +24,12 @@
     end_per_testcase/2]).
 
 -export([
-    db_sync_test/1
+    db_sync_test/1, file_consistency_test/1
 ]).
 
 all() ->
     ?ALL([
-        db_sync_test
+        db_sync_test, file_consistency_test
     ]).
 
 %%%===================================================================
@@ -41,12 +41,47 @@ db_sync_test(Config) ->
     multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 150, 3, 10).
 %%multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 120, 3, 10).
 
+file_consistency_test(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    {Worker1, Worker2, Worker3} = lists:foldl(fun(W, {Acc1, Acc2, Acc3}) ->
+        NAcc1 = case is_atom(Acc1) of
+                    true ->
+                        Acc1;
+                    _ ->
+                        case string:str(atom_to_list(W), "p1") of
+                            0 -> Acc1;
+                            _ -> W
+                        end
+                end,
+        NAcc2 = case is_atom(Acc2) of
+                    true ->
+                        Acc2;
+                    _ ->
+                        case string:str(atom_to_list(W), "p2") of
+                            0 -> Acc2;
+                            _ -> W
+                        end
+                end,
+        NAcc3 = case is_atom(Acc3) of
+                    true ->
+                        Acc3;
+                    _ ->
+                        case string:str(atom_to_list(W), "p6") of
+                            0 -> Acc3;
+                            _ -> W
+                        end
+                end,
+        {NAcc1, NAcc2, NAcc3}
+    end, {[], [], []}, Workers),
+
+    multi_provider_file_ops_test_SUITE:file_consistency_test_base(Config, Worker1, Worker2, Worker3).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_SUITE]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

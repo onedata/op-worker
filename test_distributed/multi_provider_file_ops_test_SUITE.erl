@@ -25,7 +25,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, proxy_test1/1, proxy_test2/1, file_consistency_test/1
+    db_sync_test/1, proxy_test1/1, proxy_test2/1, file_consistency_test/1, file_consistency_test_base/4
 ]).
 -export([synchronization_test_base/6]).
 
@@ -448,7 +448,8 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
 
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
-            Doc = #document{key = datastore_utils:gen_uuid(), value =
+            Uuid = datastore_utils:gen_uuid(),
+            Doc = #document{key = Uuid, value =
             #file_meta{
                 name = Name,
                 type = Type,
@@ -457,6 +458,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
                 scope = SpaceKey
                 }
             },
+%%            ct:print("Doc ~p ~p", [Uuid, Name]),
             {Doc, Name}
         end,
 
@@ -478,6 +480,18 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         Doc4Args = [Doc4, Doc2, Loc4ID, D4Path],
 
         DocsList = [{1, Doc1Args}, {2, Doc2Args}, {3, Doc3Args}, {4, Doc4Args}],
+        DocsKeys = [Doc1#document.key, Doc2#document.key, Doc3#document.key, Doc4#document.key],
+
+        % to allow adding location and link before document
+        test_utils:mock_expect([Worker1], file_meta, get_scope,
+            fun(Arg) ->
+                case lists:member(Arg, DocsKeys) of
+                    true ->
+                        {ok, SpaceDoc};
+                    _ ->
+                        erlang:apply(meck_util:original_name(file_meta), get_scope, [Arg])
+                end
+            end),
 
         lists:foreach(fun(
             {sleep, Sek}) ->
@@ -523,7 +537,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {sleep, SleepTime},
         {set_link_to_location, 3}
     ],
-%%    DoTest(T1),
+    DoTest(T1),
 
     T2 = [
         {create_doc, 1},
@@ -538,7 +552,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {create_location, 3},
         {set_link_to_location, 3}
     ],
-%%    DoTest(T2),
+    DoTest(T2),
 
     T3 = [
         {create_doc, 1},
@@ -554,7 +568,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {set_parent_link, 2},
         {set_link_to_parent, 2}
     ],
-%%    DoTest(T3),
+    DoTest(T3),
 
     T4 = [
         {create_doc, 3},
@@ -571,7 +585,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {set_parent_link, 1},
         {set_link_to_parent, 1}
     ],
-%%    DoTest(T4),
+    DoTest(T4),
 
     T5 = [
         {create_doc, 1},
@@ -588,7 +602,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {create_location, 3},
         {set_link_to_location, 3}
     ],
-%%    DoTest(T5),
+    DoTest(T5),
 
     T6 = [
         {create_doc, 1},
@@ -724,11 +738,11 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {sleep, SleepTime},
         {create_doc, 2},
         {sleep, SleepTime},
+        {set_parent_link, 1},
+        {sleep, SleepTime},
         {set_link_to_parent, 1},
         {sleep, SleepTime},
-        {create_doc, 1},
-        {sleep, SleepTime},
-        {set_parent_link, 1}
+        {create_doc, 1}
     ],
     DoTest(T13),
 

@@ -415,7 +415,7 @@ get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
     ?ROOT_DIR_UUID;
 get_parent_uuid(FileUuid, SpaceId) ->
     ?run(begin
-        set_link_context(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+        set_link_context_for_space(SpaceId),
         {ok, {ParentKey, ?MODEL_NAME}} =
             datastore:fetch_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, parent),
         {ok, ParentKey}
