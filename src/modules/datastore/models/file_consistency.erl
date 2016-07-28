@@ -204,8 +204,7 @@ check_missing_components(FileUuid, SpaceId, [parent_links | RestMissing], Found)
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [links | RestMissing], Found) ->
-    ProviderId = oneprovider:get_provider_id(),
-    case catch file_meta:exists({uuid, links_utils:links_doc_key(FileUuid, ProviderId)}) of
+    case catch file_meta:exists_local_link_doc(FileUuid) of
         true ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [links | Found]);
         _ ->
