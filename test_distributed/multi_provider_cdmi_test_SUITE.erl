@@ -180,7 +180,7 @@ init_per_testcase(choose_adequate_handler_test, Config) ->
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
@@ -196,7 +196,7 @@ end_per_testcase(_, Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
-    application:stop(ssl2).
+    application:stop(etls).
 
 %%%===================================================================
 %%% Internal functions

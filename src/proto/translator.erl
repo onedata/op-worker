@@ -152,8 +152,8 @@ translate_from_protobuf(#'MessageAcknowledgement'{} = Record) ->
         sequence_number = Record#'MessageAcknowledgement'.sequence_number
     };
 translate_from_protobuf(#'Token'{value = Val, secondary_values = SecValues}) ->
-    {ok, Macaroon} = macaroon:deserialize(Val),
-    DischargeMacaroons = [R || {ok, R} <- [macaroon:deserialize(SecValue) || SecValue <- SecValues]],
+    {ok, Macaroon} = token_utils:deserialize(Val),
+    DischargeMacaroons = [R || {ok, R} <- [token_utils:deserialize(SecValue) || SecValue <- SecValues]],
     #token_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 translate_from_protobuf(#'Ping'{data = Data}) ->
     #ping{data = Data};
@@ -591,8 +591,8 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
 translate_to_protobuf(#token_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
-    {ok, Token} = macaroon:serialize(Macaroon),
-    SecValues = [R || {ok, R} <- [macaroon:serialize(DMacaroon) || DMacaroon <- DMacaroons]],
+    {ok, Token} = token_utils:serialize62(Macaroon),
+    SecValues = [R || {ok, R} <- [token_utils:serialize62(DMacaroon) || DMacaroon <- DMacaroons]],
     #'Token'{value = Token, secondary_values = SecValues};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
