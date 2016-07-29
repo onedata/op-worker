@@ -872,10 +872,18 @@ external_file_location_notification_should_wait_for_links(Config) ->
     ?RPC(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
     {ok, [Id1]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
 
-    % temporarily remove links
     ModelConfig = ?RPC(file_meta, model_init, []),
-    {ok, #document{key = LinkId, value = LinkValue}} = ?RPC(couchdb_datastore_driver, get, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
-    ?assertEqual(ok, ?RPC(couchdb_datastore_driver, delete, [ModelConfig, LinkId, fun() -> true end])),
+    {ok, #document{key = LinkId, value = LinkValue}} = ?RPC(mnesia_cache_driver, get_link_doc, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
+    test_utils:mock_expect([W1], file_meta, exists_local_link_doc,
+        fun(Key) ->
+            case Key of
+                FileUuid ->
+                    false;
+                _ ->
+                    erlang:apply(meck_util:original_name(file_meta), exists_local_link_doc, [Key])
+            end
+        end),
+
     {ok, ConsDoc = #document{value = ConsValue = #file_consistency{components_present = Comp}}} =
         ?RPC(file_consistency, get, [FileUuid]),
     ?RPC(file_consistency, save, [ConsDoc#document{value = ConsValue#file_consistency{components_present = Comp -- [links]}}]),
@@ -889,7 +897,12 @@ external_file_location_notification_should_wait_for_links(Config) ->
     timer:sleep(timer:seconds(5)),
     ?assertMatch({ok, #document{value = #file_location{version_vector = #{}}}}, ?RPC(file_location, get, [Id1])),
     LinkDoc = #document{key = LinkId, value = LinkValue},
-    ?assertMatch({ok, _}, ?RPC(couchdb_datastore_driver, save, [ModelConfig, LinkDoc])),
+
+    test_utils:mock_expect([W1], file_meta, exists_local_link_doc,
+        fun(Key) ->
+            erlang:apply(meck_util:original_name(file_meta), exists_local_link_doc, [Key])
+        end),
+
     ?RPC(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = LinkDoc}]),
     timer:sleep(timer:seconds(2)),
 
@@ -1037,8 +1050,11 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, Dir2Uuid}, FileMeta])),
 
     % delete grandparent file_meta
-    {ok, #document{value = Dir1Meta}} = ?RPC(datastore, get, [disk_only, file_meta, Dir1Uuid]),
-    ok = ?RPC(datastore, delete, [disk_only, file_meta, Dir1Uuid]),
+    ModelConfig = ?RPC(file_meta, model_init, []),
+    FM_SL = ModelConfig#model_config.store_level,
+    {ok, #document{value = Dir1Meta}} = ?RPC(datastore, get, [FM_SL, file_meta, Dir1Uuid]),
+    ok = ?RPC(datastore, delete, [FM_SL, file_meta, Dir1Uuid]),
+    timer:sleep(1000), % wait for posthook that deletes file_consistency record
 
     %when
     spawn(fun() ->
@@ -1049,7 +1065,7 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
     ?assertMatch({ok, []}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, _} = ?RPC(datastore, save, [disk_only, #document{key = Dir1Uuid, value = Dir1Meta}]),
+    {ok, _} = ?RPC(datastore, save, [FM_SL, #document{key = Dir1Uuid, value = Dir1Meta}]),
     ?RPC(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = Dir1Uuid, value = Dir1Meta}}]),
     timer:sleep(timer:seconds(2)),
