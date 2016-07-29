@@ -509,7 +509,10 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
 -spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()]) -> {ok, #{}}.
 get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names) ->
     {ok, Meta} = custom_metadata:get_json_metadata(FileUuid, Names),
-    #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}}.
+    #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}};
+get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _) ->
+    {ok, Meta} = custom_metadata:get_rdf_metadata(FileUuid),
+    #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"rdf">>, value = Meta}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -519,6 +522,9 @@ get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names) ->
 -spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), #{}, [binary()]) -> ok.
 set_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Value, Names) ->
     {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
+    #provider_response{status = #status{code = ?OK}};
+set_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, Value, _) ->
+    {ok, _} = custom_metadata:set_rdf_metadata(FileUuid, Value),
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------

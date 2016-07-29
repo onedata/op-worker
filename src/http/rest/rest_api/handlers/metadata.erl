@@ -24,7 +24,7 @@
     content_types_provided/2, content_types_accepted/2]).
 
 %% resource functions
--export([get_metadata/2, set_metadata/2]).
+-export([get_json/2, set_json/2, get_rdf/2, set_rdf/2]).
 
 %%%===================================================================
 %%% API
@@ -64,7 +64,9 @@ is_authorized(Req, State) ->
 -spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/json">>, get_metadata}
+        {<<"application/json">>, get_json},
+        {<<"application/rdf+xml">>, get_rdf}
+
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -74,7 +76,8 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/json">>, set_metadata}
+        {<<"application/json">>, set_json},
+        {<<"application/rdf+xml">>, set_rdf}
     ], Req, State}.
 
 
@@ -86,8 +89,8 @@ content_types_accepted(Req, State) ->
 %% '/api/v3/oneprovider/metadata/{path}'
 %% @doc Gets file's metadata
 %%--------------------------------------------------------------------
--spec get_metadata(req(), #{}) -> {term(), req(), #{}}.
-get_metadata(Req, State) ->
+-spec get_json(req(), #{}) -> {term(), req(), #{}}.
+get_json(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_metadata_type(Req2, State2),
 
@@ -99,10 +102,24 @@ get_metadata(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/metadata/{path}'
+%% @doc Gets file's metadata
+%%--------------------------------------------------------------------
+-spec get_rdf(req(), #{}) -> {term(), req(), #{}}.
+get_rdf(Req, State) ->
+    {State2, Req2} = validator:parse_path(Req, State),
+    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
+
+    #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+
+    {ok, Meta} = onedata_file_api:get_metadata(Auth, {path, Path}, MetadataType, []),
+    {Meta, Req3, State3}.
+
+%%--------------------------------------------------------------------
+%% '/api/v3/oneprovider/metadata/{path}'
 %% @doc Sets file's metadata
 %%--------------------------------------------------------------------
--spec set_metadata(req(), #{}) -> {term(), req(), #{}}.
-set_metadata(Req, State) ->
+-spec set_json(req(), #{}) -> {term(), req(), #{}}.
+set_json(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_metadata_type(Req2, State2),
     {ok, Body, Req4} = cowboy_req:body(Req3),
@@ -111,6 +128,22 @@ set_metadata(Req, State) ->
     #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
 
     ok = onedata_file_api:set_metadata(Auth, {path, Path}, MetadataType, Json, []),
+
+    {true, Req4, State3}.
+
+%%--------------------------------------------------------------------
+%% '/api/v3/oneprovider/metadata/{path}'
+%% @doc Sets file's metadata
+%%--------------------------------------------------------------------
+-spec set_rdf(req(), #{}) -> {term(), req(), #{}}.
+set_rdf(Req, State) ->
+    {State2, Req2} = validator:parse_path(Req, State),
+    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
+    {ok, Rdf, Req4} = cowboy_req:body(Req3),
+
+    #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+
+    ok = onedata_file_api:set_metadata(Auth, {path, Path}, MetadataType, Rdf, []),
 
     {true, Req4, State3}.
 

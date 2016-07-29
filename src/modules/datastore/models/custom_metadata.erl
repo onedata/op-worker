@@ -20,7 +20,7 @@
 
 %% API
 -export([get_json_metadata/1, get_json_metadata/2, set_json_metadata/2, set_json_metadata/3,
-    get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3, exists_xattr_metadata/2]).
+    get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3, exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -30,8 +30,12 @@
 -type name() :: binary().
 -type names() :: [name()].
 -type metadata() :: #metadata{}.
+-type rdf() :: binary().
 
--export_type([type/0, name/0, names/0, metadata/0]).
+-export_type([type/0, name/0, names/0, metadata/0, rdf/0]).
+
+-define(JSON_PREFIX, <<"onedata_json">>).
+-define(RDF_PREFIX, <<"onedata_rdf">>).
 
 %%%===================================================================
 %%% API
@@ -53,7 +57,7 @@ get_json_metadata(FileUuid) ->
 get_json_metadata(FileUuid, Names) ->
     case custom_metadata:get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
-            Json = maps:get(<<"onedata_json">>, Meta, #{}),
+            Json = maps:get(?JSON_PREFIX, Meta, #{}),
             {ok, custom_meta_manipulation:find(Json, Names)};
         Error ->
             Error
@@ -75,16 +79,33 @@ set_json_metadata(FileUuid, Json) ->
 set_json_metadata(FileUuid, JsonToInsert, Names) ->
     case custom_metadata:get(FileUuid) of %todo use create or update
         {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
-            Json = maps:get(<<"onedata_json">>, MetaValue, #{}),
+            Json = maps:get(?JSON_PREFIX, MetaValue, #{}),
             NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
-            save(Doc#document{value = Meta#custom_metadata{value = MetaValue#{<<"onedata_json">> => NewJson}}});
+            save(Doc#document{value = Meta#custom_metadata{value = MetaValue#{?JSON_PREFIX => NewJson}}});
         {error, {not_found, custom_metadata}} ->
             create(#document{key = FileUuid, value = #custom_metadata{
-                value = #{<<"onedata_json">> => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
+                value = #{?JSON_PREFIX => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
             }});
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Gets file's rdf metadata
+%% @equiv get_xattr_metadata(FileUuid, ?RDF_PREFIX).
+%%--------------------------------------------------------------------
+-spec get_rdf_metadata(file_meta:uuid()) -> {ok, rdf()} | datastore:get_error().
+get_rdf_metadata(FileUuid) ->
+    get_xattr_metadata(FileUuid, ?RDF_PREFIX).
+
+%%--------------------------------------------------------------------
+%% @doc Gets file's rdf metadata
+%% @equiv get_xattr_metadata(FileUuid, ?RDF_PREFIX).
+%%--------------------------------------------------------------------
+-spec set_rdf_metadata(file_meta:uuid(), rdf()) ->
+    {ok, file_meta:uuid()} | datastore:generic_error().
+set_rdf_metadata(FileUuid, Value) ->
+    set_xattr_metadata(FileUuid, ?RDF_PREFIX, Value).
 
 %%--------------------------------------------------------------------
 %% @doc Get extended attribute metadata
@@ -108,7 +129,7 @@ get_xattr_metadata(FileUuid, Name) ->
 %% @doc List extended attribute metadata names
 %%--------------------------------------------------------------------
 -spec list_xattr_metadata(file_meta:uuid()) ->
-    {ok, [xattr:name()]} | datastore:get_error().
+    {ok, [xattr:name()]} | datastore:generic_error().
 list_xattr_metadata(FileUuid) ->
     case custom_metadata:get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
@@ -124,7 +145,7 @@ list_xattr_metadata(FileUuid) ->
 %% @doc Remove extended attribute metadata
 %%--------------------------------------------------------------------
 -spec remove_xattr_metadata(file_meta:uuid(), xattr:name()) ->
-    ok| datastore:get_error().
+    ok| datastore:generic_error().
 remove_xattr_metadata(FileUuid, Name) ->
     case custom_metadata:get(FileUuid) of
         {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
@@ -158,7 +179,7 @@ exists_xattr_metadata(FileUuid, Name) ->
 %% @doc Set extended attribute metadata
 %%--------------------------------------------------------------------
 -spec set_xattr_metadata(file_meta:uuid(), xattr:name(), xattr:value()) ->
-    {ok, [xattr:name()]} | datastore:get_error().
+    {ok, file_meta:uuid()} | datastore:generic_error().
 set_xattr_metadata(FileUuid, Name, Value) ->
     case custom_metadata:get(FileUuid) of
         {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
