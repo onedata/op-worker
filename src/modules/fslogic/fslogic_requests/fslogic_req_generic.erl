@@ -180,11 +180,9 @@ delete(CTX, File, Silent) ->
 get_xattr(_CTX, _, <<"cdmi_", _/binary>>) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:get_by_name(FileUuid, XattrName) of
-        {ok, #document{value = Xattr}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = Xattr};
-        {error, {not_found, file_meta}} ->
-            #provider_response{status = #status{code = ?ENOENT}};
-        {error, {not_found, xattr}} ->
+        {ok, XattrValue} ->
+            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = XattrName, value = XattrValue}};
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -197,12 +195,12 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
-set_xattr(CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
-    case xattr:save(FileUuid, Xattr) of
+set_xattr(CTX, {uuid, FileUuid} = FileEntry, #xattr{name = XattrName, value = XattrValue}) ->
+    case xattr:save(FileUuid, XattrName, XattrValue) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, file_meta}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -219,7 +217,7 @@ remove_xattr(CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
         ok ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, file_meta}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -235,7 +233,7 @@ list_xattr(_CTX, {uuid, FileUuid}) ->
     case xattr:list(FileUuid) of
         {ok, List} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = List}};
-        {error, {not_found, file_meta}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -247,11 +245,9 @@ list_xattr(_CTX, {uuid, FileUuid}) ->
 -check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
 get_acl(_CTX, {uuid, FileUuid})  ->
     case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
-        {ok, #document{value = #xattr{value = Val}}} ->
+        {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Val}};
-        {error, {not_found, file_meta}} ->
-            #provider_response{status = #status{code = ?ENOENT}};
-        {error, {not_found, xattr}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -262,7 +258,7 @@ get_acl(_CTX, {uuid, FileUuid})  ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
-    case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
+    case xattr:save(FileUuid, ?ACL_XATTR_NAME, Val) of
         {ok, _} ->
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
@@ -270,7 +266,7 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
             ),
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, file_meta}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -291,7 +287,7 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
             ok = fslogic_event:emit_permission_changed(FileUuid),
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, file_meta}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -303,11 +299,9 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
-        {ok, #document{value = #xattr{value = Val}}} ->
+        {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
-        {error, {not_found, file_meta}} ->
-            #provider_response{status = #status{code = ?ENOENT}};
-        {error, {not_found, xattr}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -318,12 +312,12 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     xattr:transfer_encoding()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
-    case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
+    case xattr:save(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME, Encoding) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, file_meta}} ->
-            #provider_response{status = #status{code = ?ENOENT}}
+        {error, {not_found, custom_metadata}} ->
+            #provider_response{status = #status{code = ?ENOATTR}}
     end.
 %%--------------------------------------------------------------------
 %% @doc
@@ -336,11 +330,9 @@ set_transfer_encoding(CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
-        {ok, #document{value = #xattr{value = Val}}} ->
+        {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Val}};
-        {error, {not_found, file_meta}} ->
-            #provider_response{status = #status{code = ?ENOENT}};
-        {error, {not_found, xattr}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -354,10 +346,10 @@ get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
     xattr:cdmi_completion_status()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
-    case xattr:save(FileUuid, #xattr{name = ?CDMI_COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
+    case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME, CompletionStatus) of
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, file_meta}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 %%--------------------------------------------------------------------
@@ -368,11 +360,9 @@ set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
-        {ok, #document{value = #xattr{value = Val}}} ->
+        {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
-        {error, {not_found, file_meta}} ->
-            #provider_response{status = #status{code = ?ENOENT}};
-        {error, {not_found, xattr}} ->
+        {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
@@ -383,12 +373,12 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
     xattr:mimetype()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
-    case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
+    case xattr:save(FileUuid, ?MIMETYPE_XATTR_NAME, Mimetype) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
-        {error, {not_found, file_meta}} ->
-            #provider_response{status = #status{code = ?ENOENT}}
+        {error, {not_found, custom_metadata}} ->
+            #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 %%--------------------------------------------------------------------

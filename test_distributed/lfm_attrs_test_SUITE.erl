@@ -88,7 +88,7 @@ list_xattr_test(Config) ->
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, GUID}, Xattr1)),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, GUID}, Xattr2)),
-    ?assertEqual({ok, [Name2, Name1]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})),
+    ?assertEqual({ok, [Name1, Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})),
     ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, GUID}, Name1)),
     ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})).
 

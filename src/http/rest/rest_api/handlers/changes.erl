@@ -213,7 +213,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         try
             {ok, XattrNames} = xattr:list(Uuid),
             lists:map(fun(Name) ->
-                {ok, #document{value = #xattr{value = Value}}} = xattr:get_by_name(Uuid, Name),
+                {ok, Value} = xattr:get_by_name(Uuid, Name),
                 {Name, Value}
             end, XattrNames)
         catch

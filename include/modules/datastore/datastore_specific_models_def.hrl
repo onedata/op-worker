@@ -231,7 +231,7 @@
 
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
-    json = #{} :: #{}
+    value = #{} :: #{}
 }).
 
 -endif.
