@@ -640,11 +640,11 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
     DataSize = size(Data),
     {ok, NewToHandle, DataSize} = logical_file_manager:write(ToHandle, Offset, Data),
     case DataSize of
-        Size ->
-            copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset + Size, Size);
+        0 ->
+            logical_file_manager:fsync(NewToHandle),
+            {NewFromHandle, NewToHandle};
         _ ->
-            logical_file_manager:fsync(ToHandle),
-            {NewFromHandle, NewToHandle}
+            copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset + DataSize, Size)
     end.
 
 %%--------------------------------------------------------------------
@@ -666,10 +666,10 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
     DataSize = size(Data),
     {ok, DataSize} = storage_file_manager:write(ToHandle, Offset, Data),
     case DataSize of
-        Size ->
-            copy_file_contents_sfm(FromHandle, ToHandle, Offset + Size, Size);
+        0 ->
+            ok;
         _ ->
-            ok
+            copy_file_contents_sfm(FromHandle, ToHandle, Offset + DataSize, Size)
     end.
 
 %%--------------------------------------------------------------------

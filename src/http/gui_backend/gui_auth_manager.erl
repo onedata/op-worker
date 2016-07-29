@@ -36,7 +36,7 @@ authenticate(Macaroon) ->
         DischMacaroons = lists:map(
             fun({_, CaveatId}) ->
                 {ok, SrlzdDM} = oz_users:authorize(CaveatId),
-                {ok, DM} = macaroon:deserialize(SrlzdDM),
+                {ok, DM} = token_utils:deserialize(SrlzdDM),
                 DM
             end, Caveats),
         {ok, #token_auth{

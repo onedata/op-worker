@@ -529,7 +529,7 @@ state_put(Key, Value) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Puts Value from datastore worker's state
+%% Gets Value from datastore worker's state
 %% @end
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
@@ -767,12 +767,7 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
             case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
                 ok ->
                     timer:sleep(timer:seconds(2)),
-                    Batches = case state_get({stash, ProviderId, SpaceId}) of
-                                  undefined ->
-                                      #{};
-                                  Map ->
-                                      Map
-                              end,
+                    Batches = get_stashed_batches(ProviderId, SpaceId),
                     SortedKeys = lists:sort(maps:keys(Batches)),
                     Stashed = lists:foldl(fun(S, Acc) ->
                         case Acc + 1 >= S of
@@ -825,29 +820,45 @@ do_request_changes(ProviderId, Since, Until) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Gets stashed batches from datastore
+%% @end
+%%--------------------------------------------------------------------
+-spec get_stashed_batches(ProviderId :: oneprovider:id(), SpaceId :: binary()) -> Value :: #{}.
+get_stashed_batches(ProviderId, SpaceId) ->
+    case dbsync_batches:get({ProviderId, SpaceId}) of
+        {ok, #document{value = #dbsync_batches{batches = Value}}} ->
+            Value;
+        {error, {not_found, _}} ->
+            #{}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Stash changes batch in memory for further use.
 %% @end
 %%--------------------------------------------------------------------
 -spec stash_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch(), CurrentUntil :: non_neg_integer()) ->
     ok | no_return().
 stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUntil}, CurrentUntil) ->
-    state_update({stash, ProviderId, SpaceId},
-        fun
-            (undefined) ->
-                maps:put(NewSince, Batch, #{});
-            (Batches) ->
-                case (CurrentUntil + 1 < NewSince) andalso (size(term_to_binary(Batches)) > ?CHANGES_STASH_MAX_SIZE_BYTES) of
-                    true -> Batches;
-                    false ->
-                        #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
-                        case NewUntil > Until of
-                            true ->
-                                maps:put(NewSince, Batch, Batches);
-                            false ->
-                                Batches
-                        end
-                end
-        end).
+    {ok, _} = dbsync_batches:create_or_update(
+        #document{key = {ProviderId, SpaceId}, value = #dbsync_batches{batches = maps:put(NewSince, Batch, #{})}},
+        fun(#dbsync_batches{batches = Batches} = BatchesRecord) ->
+            case (CurrentUntil + 1 < NewSince) andalso (size(term_to_binary(Batches)) > ?CHANGES_STASH_MAX_SIZE_BYTES) of
+                true -> {ok, BatchesRecord};
+                false ->
+                    #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
+                    NewBatches = case NewUntil > Until of
+                                     true ->
+                                         maps:put(NewSince, Batch, Batches);
+                                     false ->
+                                         Batches
+                                 end,
+                    {ok, BatchesRecord#dbsync_batches{batches = NewBatches}}
+            end
+        end),
+    ok.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -857,19 +868,19 @@ stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUnt
 -spec retrieve_stashed_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch()) ->
     ok | no_return().
 retrieve_stashed_batch(ProviderId, SpaceId, #batch{since = NewSince, until = NewUntil}) ->
-    state_update({stash, ProviderId, SpaceId},
-        fun
-            (undefined) ->
-                #{};
-            (Batches) ->
-                #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
-                case NewUntil >= Until of
-                    true ->
-                        maps:remove(NewSince, Batches);
-                    false ->
-                        Batches
-                end
-        end).
+    {ok, _} = dbsync_batches:create_or_update(
+        #document{key = {ProviderId, SpaceId}, value = #dbsync_batches{batches = #{}}},
+        fun(#dbsync_batches{batches = Batches} = BatchesRecord) ->
+            #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
+            NewBatches = case NewUntil >= Until of
+                             true ->
+                                 maps:remove(NewSince, Batches);
+                             false ->
+                                 Batches
+                         end,
+            {ok, BatchesRecord#dbsync_batches{batches = NewBatches}}
+        end),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -883,12 +894,7 @@ retrieve_stashed_batch(ProviderId, SpaceId, #batch{since = NewSince, until = New
 consume_batches(_, _, CurrentUntil, _, NewBranchUntil) when CurrentUntil >= NewBranchUntil ->
     ok;
 consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUntil) ->
-    Batches = case state_get({stash, ProviderId, SpaceId}) of
-                  undefined ->
-                      #{};
-                  Map ->
-                      Map
-              end,
+    Batches = get_stashed_batches(ProviderId, SpaceId),
     SortedKeys = lists:sort(maps:keys(Batches)),
 
     % check if we have all needed changes to start batches application

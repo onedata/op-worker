@@ -36,7 +36,7 @@ authorize_test() ->
     meck:new(oz_users),
     meck:expect(oz_users, authorize, fun(CaveatID) ->
         Macaroon = get_disch_macaroon(M4, CaveatID),
-        {ok, Token} = macaroon:serialize(Macaroon),
+        {ok, Token} = token_utils:serialize62(Macaroon),
         {ok, Token}
     end),
 

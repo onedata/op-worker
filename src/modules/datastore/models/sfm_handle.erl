@@ -1,23 +1,23 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Michał Wrzeszcz
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Persistent state of DBSync worker.
+%%% Stores handles to files at storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dbsync_state).
--author("Rafal Slota").
+-module(sfm_handle).
+-author("Michał Wrzeszcz").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
@@ -30,7 +30,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
-save(#document{} = Document) ->
+save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -49,27 +49,17 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
-create(#document{} = Document) ->
+create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback get/1.
-%% Sets access time to current time for user session and returns old value.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,8 +86,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    % TODO - LOCALLY_CACHED (db_sync is singleton)
-    ?MODEL_CONFIG(dbsync_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(sfm_handle_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,8 +108,4 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 

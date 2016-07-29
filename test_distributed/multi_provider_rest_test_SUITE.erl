@@ -525,7 +525,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
@@ -537,7 +537,7 @@ end_per_testcase(_, Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
     hackney:stop(),
-    application:stop(ssl2).
+    application:stop(etls).
 
 %%%===================================================================
 %%% Internal functions
@@ -560,7 +560,7 @@ rest_endpoint(Node) ->
 
 user_1_token_header(Config) ->
     #token_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
-    {ok, Srlzd} = macaroon:serialize(Macaroon),
+    {ok, Srlzd} = token_utils:serialize62(Macaroon),
     {<<"X-Auth-Token">>, Srlzd}.
 
 domain(Node) ->
