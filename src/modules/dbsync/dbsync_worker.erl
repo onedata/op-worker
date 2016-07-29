@@ -422,6 +422,7 @@ queue_calculate_until(NewUntil, Queue) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{since = Since, until = Until, changes = Changes} = Batch0) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch0]),
+    ?info("Pre-Apply changes from ~p ~p: ~p:~p", [FromProvider, SpaceId, Since, Until]),
 
     %% Both providers have to support this space
     ok = dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId),
@@ -932,7 +933,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
                 true ->
                     consume_batches(ProviderId, SpaceId, NewCurrentUntil, NewBranchSince, NewBranchUntil);
                 _ ->
-                    ?info("Missing changes ~p:~p for provider ~p", [Stashed, NewBranchSince, ProviderId]),
+                    ?info("Missing changes ~p:~p for provider ~p, space ~p", [Stashed, NewBranchSince, ProviderId, SpaceId]),
                     do_request_changes(ProviderId, Stashed, NewBranchSince)
             end;
         _ ->

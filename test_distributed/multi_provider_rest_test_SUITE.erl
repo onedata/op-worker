@@ -101,7 +101,9 @@ replicate_file(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    timer:sleep(timer:seconds(10)),
+    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+        [fslogic_uuid:file_guid_to_uuid(FileGuid), <<"space3">>])), 15),
+    timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),
     [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
@@ -118,13 +120,13 @@ replicate_file(Config) ->
     timer:sleep(timer:seconds(5)),
     {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
-    DecodedBody2 = json_utils:decode(Body),
-    ?assertEqual(
+    DecodedBody2 = json_utils:decode(Body2),
+    assertLists(
         [
             [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
             [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
         ], DecodedBody),
-    ?assertEqual(
+    assertLists(
         [
             [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
             [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
@@ -154,7 +156,13 @@ replicate_dir(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle3),
 
     % when
-    timer:sleep(timer:seconds(10)),
+    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+        [fslogic_uuid:file_guid_to_uuid(File1Guid), <<"space3">>])), 15),
+    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+        [fslogic_uuid:file_guid_to_uuid(File2Guid), <<"space3">>])), 15),
+    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+        [fslogic_uuid:file_guid_to_uuid(File3Guid), <<"space3">>])), 15),
+    timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody),
@@ -167,6 +175,7 @@ replicate_dir(Config) ->
     ]),
     ?assertMatch({ok, 200, _, ExpectedTransferStatus},
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+
     {ok, 200, _, Body1} = do_request(WorkerP2, <<"replicas/space3/dir1/file1">>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body2} = do_request(WorkerP2, <<"replicas/space3/dir1/file2">>, get, [user_1_token_header(Config)], []),
     {ok, 200, _, Body3} = do_request(WorkerP2, <<"replicas/space3/dir1/dir2/file3">>, get, [user_1_token_header(Config)], []),
@@ -177,9 +186,9 @@ replicate_dir(Config) ->
         [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
         [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
     ],
-    ?assertEqual(Distribution, DecodedBody1),
-    ?assertEqual(Distribution, DecodedBody2),
-    ?assertEqual(Distribution, DecodedBody3).
+    assertLists(Distribution, DecodedBody1),
+    assertLists(Distribution, DecodedBody2),
+    assertLists(Distribution, DecodedBody3).
 
 posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -377,7 +386,9 @@ replicate_file_by_id(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    timer:sleep(timer:seconds(10)),
+    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+        [fslogic_uuid:file_guid_to_uuid(FileGuid), <<"space3">>])), 15),
+    timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),
     [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
@@ -392,7 +403,7 @@ replicate_file_by_id(Config) ->
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
+    assertLists(
         [
             [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
             [{<<"providerId">>, domain(WorkerP2)}, {<<"blocks">>, [[0,4]]}]
@@ -545,3 +556,12 @@ user_1_token_header(Config) ->
 
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
+
+assertLists(L1, L2) ->
+    ?assertEqual(length(L1), length(L2)),
+    lists:foreach(fun(E) ->
+        ?assert(lists:member(E, L2))
+    end, L1),
+    lists:foreach(fun(E) ->
+        ?assert(lists:member(E, L1))
+    end, L2).

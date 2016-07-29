@@ -20,7 +20,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([wait/4, add_components_and_notify/2, check_and_add_components/3]).
+-export([wait/4, add_components_and_notify/2, check_and_add_components/3,
+    check_missing_components/2, check_missing_components/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -50,7 +51,7 @@ wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
             case get(FileUuid) of
                 {ok, Doc = #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}}} ->
                     MissingComponents = WaitFor -- ComponentsPresent,
-                    FoundComponents = check_missing_components(FileUuid, SpaceId, MissingComponents, []),
+                    FoundComponents = check_missing_components(FileUuid, SpaceId, MissingComponents),
                     UpdatedMissingComponents = MissingComponents -- FoundComponents,
                     UpdatedPresentComponents = lists:usort(ComponentsPresent ++ FoundComponents),
 
@@ -69,7 +70,7 @@ wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
                             {true, lists:member(parent_links, UpdatedMissingComponents)}
                     end;
                 {error, {not_found, file_consistency}} ->
-                    FoundComponents = check_missing_components(FileUuid, SpaceId, WaitFor, []),
+                    FoundComponents = check_missing_components(FileUuid, SpaceId, WaitFor),
                     UpdatedMissingComponents = WaitFor -- FoundComponents,
                         case UpdatedMissingComponents of
                             [] ->
@@ -171,8 +172,26 @@ notify_waiting(Doc = #document{value = FC = #file_consistency{components_present
 %%--------------------------------------------------------------------
 -spec check_and_add_components(file_meta:uuid(), space_info:id(), [component()]) -> ok.
 check_and_add_components(FileUuid, SpaceId, Components) ->
-    FoundComponents = check_missing_components(FileUuid, SpaceId, Components, []),
+    FoundComponents = check_missing_components(FileUuid, SpaceId, Components),
     add_components_and_notify(FileUuid, FoundComponents).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if components of file are present.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_missing_components(file_meta:uuid(), space_info:id()) -> [component()].
+check_missing_components(FileUuid, SpaceId) ->
+    check_missing_components(FileUuid, SpaceId, [file_meta, links, local_file_location, link_to_parent, parent_links]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if components of file are present.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_missing_components(file_meta:uuid(), space_info:id(), [component()]) -> [component()].
+check_missing_components(FileUuid, SpaceId, Missing) ->
+    check_missing_components(FileUuid, SpaceId, Missing, []).
 
 %%--------------------------------------------------------------------
 %% @doc
