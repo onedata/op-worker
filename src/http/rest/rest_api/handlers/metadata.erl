@@ -17,6 +17,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include("http/rest/http_status.hrl").
 
 %% API
@@ -96,9 +97,14 @@ get_json(Req, State) ->
 
     #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
 
-    {ok, Meta} = onedata_file_api:get_metadata(Auth, {path, Path}, MetadataType, []),
-    Response = jiffy:encode(Meta),
-    {Response, Req3, State3}.
+    case onedata_file_api:get_metadata(Auth, {path, Path}, MetadataType, []) of
+        {ok, Meta} ->
+            Response = jiffy:encode(Meta),
+            {Response, Req3, State3};
+        {error, ?ENOATTR} ->
+            Response = jiffy:encode(#{}),
+            {Response, Req3, State3}
+    end.
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/metadata/{path}'

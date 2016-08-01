@@ -508,11 +508,19 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()]) -> {ok, #{}}.
 get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names) ->
-    {ok, Meta} = custom_metadata:get_json_metadata(FileUuid, Names),
-    #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}};
+    case custom_metadata:get_json_metadata(FileUuid, Names) of
+        {ok, Meta} ->
+            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}};
+        {error, {not_found, custom_metadata}} ->
+            #provider_response{status = #status{code = ?ENOATTR}}
+    end;
 get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _) ->
-    {ok, Meta} = custom_metadata:get_rdf_metadata(FileUuid),
-    #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"rdf">>, value = Meta}}.
+    case custom_metadata:get_rdf_metadata(FileUuid) of
+        {ok, Meta} ->
+            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"rdf">>, value = Meta}};
+        {error, {not_found, custom_metadata}} ->
+            #provider_response{status = #status{code = ?ENOATTR}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
