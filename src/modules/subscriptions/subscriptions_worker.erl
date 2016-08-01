@@ -104,9 +104,7 @@ handle(refresh_subscription) ->
     ok;
 
 handle({process_updates, Updates}) ->
-    % TODO - make parallel after resolving problem of interweaving update and delete
-    lists:foreach(fun(Update) -> handle_update(Update) end, Updates),
-%%    utils:pforeach(fun(Update) -> handle_update(Update) end, Updates),
+    utils:pforeach(fun(Update) -> handle_update(Update) end, Updates),
     Seqs = lists:map(fun(#sub_update{seq = Seq}) -> Seq end, Updates),
     subscriptions:account_updates(ordsets:from_list(Seqs)),
     ok;

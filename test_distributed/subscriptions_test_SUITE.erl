@@ -587,6 +587,9 @@ applies_deletion(Config) ->
     ]),
     expect_message([], 4, []),
 
+    % TODO - race with get_or_fretch (mocked GR doesn't know about delete)
+    timer:sleep(timer:seconds(10)),
+
     %% when
     push_update(Node, [
         update(8, undefined, P1, {<<"provider">>, <<"delete">>}),
