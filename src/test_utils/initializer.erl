@@ -788,13 +788,11 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
 -spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
 file_meta_mock_setup(Workers) ->
     Self = self(),
-    Handler = fun(UUID) ->
-        file_meta:setup_onedata_user(provider, UUID),
+    Handler = fun(A1, A2, A3, A4, A5) ->
+        erlang:apply(meck_util:original_name(file_meta), 'after', [A1, A2, A3, A4, A5]),
         Self ! onedata_user_setup
     end,
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after', fun
-        (onedata_user, create_or_update, _, _, {ok, UUID}) -> Handler(UUID);
-        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID);
-        (onedata_user, save, _, _, {ok, UUID}) -> Handler(UUID)
+        (A1, A2, A3, A4, A5) -> Handler(A1, A2, A3, A4, A5)
     end).
