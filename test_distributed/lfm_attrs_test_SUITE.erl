@@ -143,11 +143,12 @@ create_and_get_view(Config) ->
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID1}, <<"json">>, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID2}, <<"json">>, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID3}, <<"json">>, MetaBlue, [])),
-    {ok, ViewId} = rpc:call(Worker, custom_metadata, add_view, [ViewFunction, <<"space_id1">>]),
-
-    {ok, GuidsBlue} = ?assertMatch({ok, [_ | _]}, rpc:call(Worker, custom_metadata, get_view, [ViewId, <<"blue">>]), 5, timer:seconds(3)),
-    {ok, GuidsRed} = rpc:call(Worker, custom_metadata, get_view, [ViewId, <<"red">>]), 5, timer:seconds(3),
-    {ok, GuidsOrange} = rpc:call(Worker, custom_metadata, get_view, [ViewId, <<"orange">>]), 5, timer:seconds(3),
+    {ok, ViewId} = rpc:call(Worker, index, add_view, [<<"name">>, ViewFunction, <<"space_id1">>]),
+    ?assertMatch({ok, #document{key = ViewId, value = #index{name = <<"name">>, space_id = <<"space_id1">>, function = ViewFunction}}},
+        rpc:call(Worker, index, get, [ViewId])),
+    {ok, GuidsBlue} = ?assertMatch({ok, [_ | _]}, rpc:call(Worker, index, get_view, [ViewId, <<"blue">>]), 5, timer:seconds(3)),
+    {ok, GuidsRed} = rpc:call(Worker, index, get_view, [ViewId, <<"red">>]), 5, timer:seconds(3),
+    {ok, GuidsOrange} = rpc:call(Worker, index, get_view, [ViewId, <<"orange">>]), 5, timer:seconds(3),
 
     ?assert(lists:member(GUID1, GuidsBlue)),
     ?assertNot(lists:member(GUID2, GuidsBlue)),

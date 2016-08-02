@@ -50,5 +50,6 @@ models() -> [
     swift_user,
     sfm_handle,
     dbsync_batches,
-    custom_metadata
+    custom_metadata,
+    index
 ].

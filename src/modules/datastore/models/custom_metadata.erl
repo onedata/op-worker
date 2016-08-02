@@ -21,7 +21,7 @@
 %% API
 -export([get_json_metadata/1, get_json_metadata/2, set_json_metadata/2, set_json_metadata/3,
     get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3,
-    exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2, add_view/2, get_view/2]).
+    exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -196,31 +196,6 @@ set_xattr_metadata(FileUuid, Name, Value) ->
         Error ->
             Error
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Add view defined by given function.
-%% @end
-%%--------------------------------------------------------------------
--spec add_view(binary(), space_info:id()) -> {ok, view_id()}.
-add_view(ViewFunction, SpaceId) ->
-    Id = datastore_utils:gen_uuid(),
-    RecordName = atom_to_binary(?MODEL_NAME, 'utf8'),
-    DbViewFunction = <<"function (doc, meta) { if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { var key = ",
-        ViewFunction/binary,
-        "; var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
-    ok = couchdb_datastore_driver:add_view(Id, DbViewFunction),
-    {ok, Id}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get view result.
-%% @end
-%%--------------------------------------------------------------------
--spec get_view(view_id(), binary()) -> {ok, [file_meta:uuid()]}.
-get_view(Id, Key) ->
-    {ok, FileUuids} = couchdb_datastore_driver:get_view(Id, Key),
-    {ok, lists:map(fun(Uuid) -> fslogic_uuid:to_file_guid(Uuid) end, FileUuids)}.
 
 %%%===================================================================
 %%% model_behaviour callbacks

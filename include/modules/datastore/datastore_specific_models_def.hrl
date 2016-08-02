@@ -254,4 +254,11 @@
     value = #{} :: #{}
 }).
 
+%% Model that holds database views
+-record(index, {
+    name :: index:view_name(),
+    space_id :: space_info:id(),
+    function :: index:view_function()
+}).
+
 -endif.
