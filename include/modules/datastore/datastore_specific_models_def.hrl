@@ -250,6 +250,7 @@
 
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
+    space_id :: space_info:id(),
     value = #{} :: #{}
 }).
 

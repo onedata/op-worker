@@ -21,7 +21,7 @@
 %% API
 -export([get_json_metadata/1, get_json_metadata/2, set_json_metadata/2, set_json_metadata/3,
     get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3,
-    exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2, add_view/1, get_view/2]).
+    exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2, add_view/2, get_view/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -86,6 +86,7 @@ set_json_metadata(FileUuid, JsonToInsert, Names) ->
             save(Doc#document{value = Meta#custom_metadata{value = MetaValue#{?JSON_PREFIX => NewJson}}});
         {error, {not_found, custom_metadata}} ->
             create(#document{key = FileUuid, value = #custom_metadata{
+                space_id = get_space_id(FileUuid),
                 value = #{?JSON_PREFIX => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
             }});
         Error ->
@@ -190,6 +191,7 @@ set_xattr_metadata(FileUuid, Name, Value) ->
         {error, {not_found, custom_metadata}} ->
             Map = maps:put(Name,Value, #{}),
             create(#document{key = FileUuid, value = #custom_metadata{
+                space_id = get_space_id(FileUuid),
                 value = Map}});
         Error ->
             Error
@@ -200,10 +202,14 @@ set_xattr_metadata(FileUuid, Name, Value) ->
 %% Add view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_view(binary()) -> {ok, view_id()}.
-add_view(ViewFunction) ->
+-spec add_view(binary(), space_info:id()) -> {ok, view_id()}.
+add_view(ViewFunction, SpaceId) ->
     Id = datastore_utils:gen_uuid(),
-    ok = couchdb_datastore_driver:add_view(atom_to_binary(?MODEL_NAME, 'utf8'), Id, ViewFunction),
+    RecordName = atom_to_binary(?MODEL_NAME, 'utf8'),
+    DbViewFunction = <<"function (doc, meta) { if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { var key = ",
+        ViewFunction/binary,
+        "; var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
+    ok = couchdb_datastore_driver:add_view(Id, DbViewFunction),
     {ok, Id}.
 
 %%--------------------------------------------------------------------
@@ -312,4 +318,14 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%%===================================================================
 %%% Internal functions
-%%%===================================================================
+%%%==================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get space id of file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_id(file_meta:uuid()) -> space_info:id().
+get_space_id(FileUuid) ->
+    {ok, #document{key = SpaceUUID}} = file_meta:get_scope({uuid, FileUuid}),
+    fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID).
