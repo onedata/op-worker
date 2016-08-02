@@ -140,8 +140,6 @@ create_and_get_view(Config) ->
     {ok, GUID1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
     {ok, GUID2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
     {ok, GUID3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
-    tracer:start(Worker),
-    tracer:trace_calls(custom_metadata, create),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID1}, <<"json">>, MetaBlue, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID2}, <<"json">>, MetaRed, [])),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID3}, <<"json">>, MetaBlue, [])),

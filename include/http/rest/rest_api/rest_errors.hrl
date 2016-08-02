@@ -42,6 +42,8 @@
     {<<"error_description">>, <<"Requested limit exceeds maximal value of ", (integer_to_binary(Max))/binary, ".">>}]}).
 -define(ERROR_INVALID_STATUS, {?BAD_REQUEST, [{<<"error">>, <<"invalid_status">>},
     {<<"error_description">>, <<"Requested transfer status is invalid.">>}]}).
+-define(ERROR_INVALID_METADATA_TYPE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_metadata_type">>},
+    {<<"error_description">>, <<"Given metadatadata type is invalid for selected contentent type.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},

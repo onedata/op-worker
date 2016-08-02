@@ -26,8 +26,6 @@
 
 -define(DEFAULT_OFFSET, <<"0">>).
 
--define(DEFAULT_METADATA_TYPE, <<"json">>).
-
 %% API
 -export([malformed_request/2, parse_path/2,
     parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
@@ -305,7 +303,7 @@ parse_status(Req, State) ->
 -spec parse_metadata_type(cowboy_req:req(), #{}) ->
     {#{metadata_type => binary()}, cowboy_req:req()}.
 parse_metadata_type(Req, State) ->
-    {MetadataType, NewReq} = cowboy_req:qs_val(<<"metadata_type">>, Req, ?DEFAULT_METADATA_TYPE),
+    {MetadataType, NewReq} = cowboy_req:qs_val(<<"metadata_type">>, Req),
     {State#{metadata_type => MetadataType}, NewReq}.
 
 %%%===================================================================

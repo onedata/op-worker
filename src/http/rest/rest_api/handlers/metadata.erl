@@ -19,6 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("http/rest/http_status.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
@@ -93,11 +94,12 @@ content_types_accepted(Req, State) ->
 -spec get_json(req(), #{}) -> {term(), req(), #{}}.
 get_json(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_metadata_type(Req2, State2), %todo metadata should be defaulted depending on content type
+    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
 
     #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+    DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
 
-    case onedata_file_api:get_metadata(Auth, {path, Path}, MetadataType, []) of
+    case onedata_file_api:get_metadata(Auth, {path, Path}, DefinedMetadataType, []) of
         {ok, Meta} ->
             Response = jiffy:encode(Meta),
             {Response, Req3, State3};
@@ -116,8 +118,9 @@ get_rdf(Req, State) ->
     {State3, Req3} = validator:parse_metadata_type(Req2, State2),
 
     #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+    DefinedMetadataType = validate_metadata_type(MetadataType, <<"rdf">>),
 
-    {ok, Meta} = onedata_file_api:get_metadata(Auth, {path, Path}, MetadataType, []),
+    {ok, Meta} = onedata_file_api:get_metadata(Auth, {path, Path}, DefinedMetadataType, []),
     {Meta, Req3, State3}.
 
 %%--------------------------------------------------------------------
@@ -132,8 +135,9 @@ set_json(Req, State) ->
 
     Json = jiffy:decode(Body, [return_maps]),
     #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+    DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
 
-    ok = onedata_file_api:set_metadata(Auth, {path, Path}, MetadataType, Json, []),
+    ok = onedata_file_api:set_metadata(Auth, {path, Path}, DefinedMetadataType, Json, []),
 
     {true, Req4, State3}.
 
@@ -148,11 +152,25 @@ set_rdf(Req, State) ->
     {ok, Rdf, Req4} = cowboy_req:body(Req3),
 
     #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+    DefinedMetadataType = validate_metadata_type(MetadataType, <<"rdf">>),
 
-    ok = onedata_file_api:set_metadata(Auth, {path, Path}, MetadataType, Rdf, []),
+    ok = onedata_file_api:set_metadata(Auth, {path, Path}, DefinedMetadataType, Rdf, []),
 
     {true, Req4, State3}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Validate metadata type according to provided default
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_metadata_type(binary(), binary()) -> term().
+validate_metadata_type(undefined, Default) ->
+    Default;
+validate_metadata_type(MetadataType, MetadataType) ->
+    MetadataType;
+validate_metadata_type(_, _) ->
+    throw(?ERROR_INVALID_METADATA_TYPE).
