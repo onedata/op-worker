@@ -28,7 +28,8 @@
 model_init/0, 'after'/5, before/4]).
 
 -type id() :: file_meta:id().
--type component() :: file_meta | local_file_location | parent_links | links | link_to_parent.
+%%-type component() :: file_meta | local_file_location | parent_links | links | link_to_parent | {link_to_child, file_meta:name()}.
+-type component() :: file_meta | local_file_location | parent_links | link_to_parent | {link_to_child, file_meta:name()}.
 -type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
 
 -export_type([id/0, component/0, waiting/0]).
@@ -46,46 +47,45 @@ model_init/0, 'after'/5, before/4]).
 %%--------------------------------------------------------------------
 -spec wait(file_meta:uuid(), space_info:id(), [file_consistency:component()], list()) -> ok.
 wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
-    {NeedsToWait, NeedsToWaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
+    {NeedsToWait, WaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
-            case get(FileUuid) of
-                {ok, Doc = #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}}} ->
-                    MissingComponents = WaitFor -- ComponentsPresent,
-                    FoundComponents = check_missing_components(FileUuid, SpaceId, MissingComponents),
-                    UpdatedMissingComponents = MissingComponents -- FoundComponents,
-                    UpdatedPresentComponents = lists:usort(ComponentsPresent ++ FoundComponents),
-
-                    case UpdatedMissingComponents of
-                        []->
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents}}),
-                            {ok, _} = save(NewDoc),
-                            {false, false};
-                        [parent_links] ->
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents}}),
-                            {ok, _} = save(NewDoc),
-                            {false, true};
-                        _ ->
-                            NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents, waiting = [{UpdatedMissingComponents -- [parent_links], self(), DbsyncPosthookArguments} | Waiting]}}),
-                            {ok, _} = save(NewDoc),
-                            {true, lists:member(parent_links, UpdatedMissingComponents)}
-                    end;
+            Doc = case get(FileUuid) of
+                {ok, D = #document{value = #file_consistency{}}} ->
+                    D;
                 {error, {not_found, file_consistency}} ->
-                    FoundComponents = check_missing_components(FileUuid, SpaceId, WaitFor),
-                    UpdatedMissingComponents = WaitFor -- FoundComponents,
-                        case UpdatedMissingComponents of
-                            [] ->
-                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents}},
-                                {ok, _} = create(NewDoc),
-                                {false, false};
-                            [parent_links] ->
-                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents}},
-                                {ok, _} = create(NewDoc),
-                                {false, true};
-                            _ ->
-                                NewDoc = #document{key = FileUuid, value = #file_consistency{components_present = FoundComponents, waiting = [{WaitFor -- [parent_links], self(), DbsyncPosthookArguments}]}},
-                                {ok, _} = create(NewDoc),
-                                {true, lists:member(parent_links, UpdatedMissingComponents)}
-                        end
+                    #document{key = FileUuid, value = #file_consistency{}}
+            end,
+            #document{value = FC = #file_consistency{components_present = ComponentsPresent, waiting = Waiting}} = Doc,
+            MissingComponents = WaitFor -- ComponentsPresent,
+            FoundComponents = check_missing_components(FileUuid, SpaceId, MissingComponents),
+            UpdatedMissingComponents = MissingComponents -- FoundComponents,
+            {UpdatedPresentComponents0, ParentLinksPartial} = lists:foldl(fun(FComp, {Acc1, Acc2}) ->
+                case FComp of
+                    {parent_links_partial, Part} ->
+                        {Acc1, [Part | Acc2]};
+                    _ ->
+                        {[FComp | Acc1], Acc2}
+                end
+            end, {ComponentsPresent, []}, FoundComponents),
+            UpdatedPresentComponents = lists:usort(UpdatedPresentComponents0),
+
+            case UpdatedMissingComponents of
+                []->
+                    NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents}}),
+                    {ok, _} = save(NewDoc),
+                    {false, ParentLinksPartial};
+                [parent_links] ->
+                    NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents}}),
+                    {ok, _} = save(NewDoc),
+                    {false, [parent_links | ParentLinksPartial]};
+                _ ->
+                    NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents,
+                        waiting = [{UpdatedMissingComponents -- [parent_links], self(), DbsyncPosthookArguments} | Waiting]}}),
+                    {ok, _} = save(NewDoc),
+                    {true, case lists:member(parent_links, UpdatedMissingComponents) of
+                               true -> [parent_links | ParentLinksPartial];
+                               _ -> ParentLinksPartial
+                           end}
             end
         end),
 
@@ -98,12 +98,16 @@ wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
         false ->
             ok
     end,
-    case NeedsToWaitForParent of
-        true ->
+    case WaitForParent of
+        [] ->
+            ok;
+        [parent_links] ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(FileUuid, SpaceId),
-            file_consistency:wait(ParentUuid, SpaceId, [file_meta, links, link_to_parent, parent_links], DbsyncPosthookArguments);
-        false ->
-            ok
+            file_consistency:wait(ParentUuid, SpaceId, [file_meta, link_to_parent, parent_links],
+                DbsyncPosthookArguments);
+        [parent_links, {NewUuid, WaitName}] ->
+            file_consistency:wait(NewUuid, SpaceId, [file_meta, link_to_parent, parent_links,
+                {link_to_child, WaitName}], DbsyncPosthookArguments)
     end.
 
 %%--------------------------------------------------------------------
@@ -145,7 +149,8 @@ add_components_and_notify(FileUuid, FoundComponents) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_waiting(datastore:document()) -> datastore:document().
-notify_waiting(Doc = #document{value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
+notify_waiting(Doc = #document{key = FileUuid,
+    value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
     NewWaiting = lists:filter(fun({Missing, Pid, DbsyncPosthookArguments}) ->
         case Missing -- Components of
             [] ->
@@ -157,6 +162,20 @@ notify_waiting(Doc = #document{value = FC = #file_consistency{components_present
                         spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
                 end,
                 false;
+            [{link_to_child, WaitName}] ->
+                case catch file_meta:get_child({uuid, FileUuid}, WaitName) of
+                    {ok, _} ->
+                        Pid ! file_is_now_consistent,
+                        case is_process_alive(Pid) of
+                            true ->
+                                ok;
+                            _ ->
+                                spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                        end,
+                        false;
+                    _ ->
+                        true
+                end;
             _ ->
                 true
         end
@@ -180,16 +199,18 @@ check_and_add_components(FileUuid, SpaceId, Components) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id()) -> [component()].
+-spec check_missing_components(file_meta:uuid(), space_info:id()) ->
+    [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name()}}].
 check_missing_components(FileUuid, SpaceId) ->
-    check_missing_components(FileUuid, SpaceId, [file_meta, links, local_file_location, link_to_parent, parent_links]).
+    check_missing_components(FileUuid, SpaceId, [file_meta, local_file_location, link_to_parent, parent_links]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id(), [component()]) -> [component()].
+-spec check_missing_components(file_meta:uuid(), space_info:id(), [component()]) ->
+    [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name()}}].
 check_missing_components(FileUuid, SpaceId, Missing) ->
     check_missing_components(FileUuid, SpaceId, Missing, []).
 
@@ -198,7 +219,8 @@ check_missing_components(FileUuid, SpaceId, Missing) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id(), [component()], [component()]) -> [component()].
+-spec check_missing_components(file_meta:uuid(), space_info:id(), [component()], [component()]) ->
+    [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name()}}].
 check_missing_components(_FileUuid, _SpaceId, [], Found) ->
     Found;
 check_missing_components(FileUuid, SpaceId, [file_meta | RestMissing], Found) ->
@@ -216,19 +238,29 @@ check_missing_components(FileUuid, SpaceId, [local_file_location | RestMissing],
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [parent_links | RestMissing], Found) ->
-    case catch fslogic_path:gen_path({uuid, FileUuid}, ?ROOT_SESS_ID) of
-        {ok, _} ->
+    case catch fslogic_path:check_path(FileUuid) of
+        ok ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [parent_links | Found]);
+        path_beg_error ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, Found);
+        {path_error, NewArgs} ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, [{parent_links_partial, NewArgs} | Found])
+    end;
+check_missing_components(FileUuid, SpaceId, [{link_to_child, WaitName} | RestMissing], Found) ->
+    case catch file_meta:get_child({uuid, FileUuid}, WaitName) of
+        {ok, _} ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, [{link_to_child, WaitName} | Found]);
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
-check_missing_components(FileUuid, SpaceId, [links | RestMissing], Found) ->
-    case catch file_meta:exists_local_link_doc(FileUuid) of
-        true ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, [links | Found]);
-        _ ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
-    end;
+% Checking local links may be useful in future
+%%check_missing_components(FileUuid, SpaceId, [links | RestMissing], Found) ->
+%%    case catch file_meta:exists_local_link_doc(FileUuid) of
+%%        true ->
+%%            check_missing_components(FileUuid, SpaceId, RestMissing, [links | Found]);
+%%        _ ->
+%%            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+%%    end;
 check_missing_components(FileUuid, SpaceId, [link_to_parent | RestMissing], Found) ->
     case catch file_meta:get_parent_uuid(FileUuid, SpaceId) of
         {ok, _} ->

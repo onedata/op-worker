@@ -442,6 +442,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
     SpaceKey = SpaceDoc#document.key,
+    ct:print("Space key ~p", [SpaceKey]),
 
     DoTest = fun(TaskList) ->
         ct:print("Do test"),
