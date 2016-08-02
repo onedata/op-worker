@@ -22,7 +22,7 @@
     get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
-    set_mimetype/4, fsync/2, rm_recursive/3]).
+    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/5, set_metadata/6]).
 
 %%%===================================================================
 %%% API
@@ -397,6 +397,24 @@ rm_recursive(Worker, SessId, FileKey) ->
         fun(Host) ->
             Result =
                 logical_file_manager:rm_recursive(SessId, uuid_to_guid(Worker, FileKey)),
+            Host ! {self(), Result}
+        end).
+
+-spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()]) -> {ok, #{}}.
+get_metadata(Worker, SessionId, FileKey, Type, Names) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:get_metadata(SessionId, FileKey, Type, Names),
+            Host ! {self(), Result}
+        end).
+
+-spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), #{}, [binary()]) -> ok.
+set_metadata(Worker, SessionId, FileKey, Type, Value, Names) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_metadata(SessionId, FileKey, Type, Value, Names),
             Host ! {self(), Result}
         end).
 

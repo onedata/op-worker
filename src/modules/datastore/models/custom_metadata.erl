@@ -20,7 +20,8 @@
 
 %% API
 -export([get_json_metadata/1, get_json_metadata/2, set_json_metadata/2, set_json_metadata/3,
-    get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3, exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2]).
+    get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3,
+    exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2, add_view/1, get_view/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -31,8 +32,9 @@
 -type names() :: [name()].
 -type metadata() :: #metadata{}.
 -type rdf() :: binary().
+-type view_id() :: binary().
 
--export_type([type/0, name/0, names/0, metadata/0, rdf/0]).
+-export_type([type/0, name/0, names/0, metadata/0, rdf/0, view_id/0]).
 
 -define(JSON_PREFIX, <<"onedata_json">>).
 -define(RDF_PREFIX, <<"onedata_rdf">>).
@@ -192,6 +194,27 @@ set_xattr_metadata(FileUuid, Name, Value) ->
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add view defined by given function.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_view(binary()) -> {ok, view_id()}.
+add_view(ViewFunction) ->
+    Id = datastore_utils:gen_uuid(),
+    ok = couchdb_datastore_driver:add_view(atom_to_binary(?MODEL_NAME, 'utf8'), Id, ViewFunction),
+    {ok, Id}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get view result.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_view(view_id(), binary()) -> {ok, [file_meta:uuid()]}.
+get_view(Id, Key) ->
+    {ok, FileUuids} = couchdb_datastore_driver:get_view(Id, Key),
+    {ok, lists:map(fun(Uuid) -> fslogic_uuid:to_file_guid(Uuid) end, FileUuids)}.
 
 %%%===================================================================
 %%% model_behaviour callbacks

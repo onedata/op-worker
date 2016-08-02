@@ -93,7 +93,7 @@ content_types_accepted(Req, State) ->
 -spec get_json(req(), #{}) -> {term(), req(), #{}}.
 get_json(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
+    {State3, Req3} = validator:parse_metadata_type(Req2, State2), %todo metadata should be defaulted depending on content type
 
     #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
 
