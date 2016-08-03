@@ -880,7 +880,7 @@ get_links(W, FileUUID, LinkDocKey, Driver, Ans) ->
                     mnesia_cache_driver ->
                         maps:put(K, V, Acc);
                     _ ->
-                        case rpc:call(W, cache_controller, check_fetch, [{FileUUID, K}, file_meta, ?GLOBAL_ONLY_LEVEL]) of
+                        case rpc:call(W, cache_controller, check_fetch, [{FileUUID, K, cache_controller_link_key}, file_meta, ?GLOBAL_ONLY_LEVEL]) of
                             ok ->
                                 maps:put(K, V, Acc);
                             _ ->
