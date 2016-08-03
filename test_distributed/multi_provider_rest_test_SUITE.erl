@@ -48,7 +48,8 @@
     list_spaces/1,
     get_space/1,
     set_get_json_metadata/1,
-    set_get_rdf_metadata/1
+    set_get_rdf_metadata/1,
+    changes_stream_json_metadata_test/1
 ]).
 
 all() ->
@@ -71,7 +72,8 @@ all() ->
         list_spaces,
         get_space,
         set_get_json_metadata,
-        set_get_rdf_metadata
+        set_get_rdf_metadata,
+        changes_stream_json_metadata_test
     ]).
 
 %%%===================================================================
@@ -424,6 +426,7 @@ changes_stream_file_meta_test(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
         get, [user_1_token_header(Config)], []),
 
+    ct:print("~p", [Body]),
     ?assertNotEqual(<<>>, Body),
     ?assert(length(binary:split(Body, <<"\r\n">>, [global])) >= 2).
 
@@ -450,6 +453,29 @@ changes_stream_xattr_test(Config) ->
     LastChange = json_utils:decode(LastChangeJson),
     Metadata = proplists:get_value(<<"changes">>, LastChange),
     ?assertEqual([{<<"name">>, <<"value">>}], proplists:get_value(<<"xattrs">>, Metadata)).
+
+changes_stream_json_metadata_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4"])),
+    Mode = 8#700,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
+    Json = #{<<"k1">> => <<"v1">>, <<"k2">> => [<<"v2">>, <<"v3">>], <<"k3">> => #{<<"k31">> => <<"v31">>}},
+    % when
+    spawn(fun() ->
+        timer:sleep(500),
+        lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, <<"json">>, Json, [])
+    end),
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
+        get, [user_1_token_header(Config)], []),
+
+    ?assertNotEqual(<<>>, Body),
+    Changes = binary:split(Body, <<"\r\n">>, [global]),
+    ?assert(length(Changes) >= 1),
+    [_, LastChangeJson | _] = lists:reverse(Changes),
+    LastChange = jiffy:decode(LastChangeJson, [return_maps]),
+    ?assertMatch(#{<<"changes">> := #{<<"xattrs">> := #{<<"onedata_json">> := Json}}}, LastChange).
 
 list_spaces(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
