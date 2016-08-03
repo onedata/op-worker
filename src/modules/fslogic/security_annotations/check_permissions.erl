@@ -50,12 +50,12 @@
 %%--------------------------------------------------------------------
 -spec before_advice(#annotation{data :: [access_definition()]}, module(), atom(), [term()]) -> term().
 before_advice(#annotation{data = AccessDefinitions}, _M, _F,
-  Args = [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} | _]) ->
+  Args = [#fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}}} | _]) ->
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
     Args;
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_uuid = FileUUID} = Handle | RestOfArgs] = Args) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} = session:get(SessionId),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
     case (catch has_acl(FileUUID)) of

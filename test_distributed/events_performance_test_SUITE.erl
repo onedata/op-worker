@@ -448,7 +448,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
         initializer:remove_pending_messages(),
         SessIds = lists:map(fun(N) ->
             SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-            Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
+            Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
             session_setup(Worker, SessId, Iden, Self),
             SessId
         end, lists:seq(1, CliNum)),
@@ -529,7 +529,7 @@ init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun

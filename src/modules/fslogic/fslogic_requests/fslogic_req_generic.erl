@@ -135,7 +135,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 _:_ -> {?ROOT_POSIX_CTX, undefined}
             end,
             FinalUID = case  session:get(SessId) of
-                {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
+                {ok, #document{value = #session{identity = #user_identity{user_id = UserID}}}} ->
                     UID;
                 _ ->
                     luma_utils:gen_storage_uid(UserID)

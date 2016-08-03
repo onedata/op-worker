@@ -9,7 +9,7 @@
 %%% Cache that maps credentials to users' identities
 %%% @end
 %%%-------------------------------------------------------------------
--module(identity).
+-module(user_identity).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
@@ -132,12 +132,12 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(identity:credentials()) ->
+-spec fetch(user_identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(OtpCert = #'OTPCertificate'{}) ->
-    case identity:get(OtpCert) of
+    case user_identity:get(OtpCert) of
         {ok, Doc = #document{value = Iden}} ->
-            identity:save(#document{key = OtpCert, value = Iden}),
+            user_identity:save(#document{key = OtpCert, value = Iden}),
             {ok, Doc};
         Error_ -> Error_
     end;
@@ -145,8 +145,8 @@ fetch(Auth) ->
     try
         {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
         {ok, #document{key = Id}} = onedata_user:get_or_fetch(Auth, UserId),
-        NewDoc = #document{key = Auth, value = #identity{user_id = Id}},
-        {ok, _} = identity:save(NewDoc),
+        NewDoc = #document{key = Auth, value = #user_identity{user_id = Id}},
+        {ok, _} = user_identity:save(NewDoc),
         {ok, NewDoc}
     catch
         _:Reason ->
@@ -160,10 +160,10 @@ fetch(Auth) ->
 %% and store its identity
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(identity:credentials()) ->
+-spec get_or_fetch(user_identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Cred) ->
-    case identity:get(Cred) of
+    case user_identity:get(Cred) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Cred);
         Error -> Error

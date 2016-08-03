@@ -62,7 +62,7 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
 -spec new_ceph_user_ctx(SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
@@ -91,7 +91,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
 -spec new_s3_user_ctx(SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_s3_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =

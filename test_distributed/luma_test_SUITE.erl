@@ -241,7 +241,7 @@ init_per_suite(Config) ->
     EnvUpResult = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, EnvUpResult),
     Self = self(),
-    Iden = #identity{user_id = ?USER_ID},
+    Iden = #user_identity{user_id = ?USER_ID},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_fuse_session, [?SESSION_ID, Iden, Self])),
 

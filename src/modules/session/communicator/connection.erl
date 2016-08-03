@@ -116,7 +116,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     {Ok, Closed, Error} = Transport:messages(),
     Certificate = get_cert(Socket),
 
-    session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #identity{
+    session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #user_identity{
         provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
 
     ok = proc_lib:init_ack({ok, self()}),

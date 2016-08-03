@@ -430,7 +430,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
 -spec rename_on_storage(CTX :: fslogic_worker:ctx(), SourceSpaceId :: binary(),
     TargetSpaceId :: binary(), SourceEntry :: file_meta:entry()) -> ok.
 rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, SourceEntry) ->
-    #fslogic_ctx{session_id = SessId, session = #session{identity = #identity{user_id = UserId}}} = CTX,
+    #fslogic_ctx{session_id = SessId, session = #session{identity = #user_identity{user_id = UserId}}} = CTX,
     {ok, #document{key = SourceUUID, value = #file_meta{mode = Mode}}} = file_meta:get(SourceEntry),
     SourceSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SourceSpaceId),
     TargetSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),

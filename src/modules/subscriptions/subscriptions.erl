@@ -163,7 +163,7 @@ get_refreshing_node() ->
 get_users_with_session() ->
     {ok, Docs} = session:all_with_user(),
     lists:filtermap(fun
-        (#document{value = #session{identity = #identity{user_id = UserID}}}) ->
+        (#document{value = #session{identity = #user_identity{user_id = UserID}}}) ->
             {true, UserID};
         (_) -> false
     end, Docs).

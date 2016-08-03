@@ -324,7 +324,7 @@ handle_or_reroute(Msg, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(Msg, ProvMap, false);
 handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage,
     {provider, ProviderId}, SessId, HandleLocallyFun, ProvMap) ->
-    {ok, #document{value = #session{auth = Auth, identity = #identity{}}}} = session:get(SessId),
+    {ok, #document{value = #session{auth = Auth, identity = #user_identity{}}}} = session:get(SessId),
     case oneprovider:get_provider_id() of
         ProviderId ->
             HandleLocallyFun(RequestMessage, ProvMap, false);
@@ -350,7 +350,7 @@ handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = Request
             HandleLocallyFun(RequestMessage, ProvMap, true)
     end;
 handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvMap) ->
-    {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
+    {ok, #document{value = #session{auth = Auth, identity = #user_identity{user_id = UserId}}}} = session:get(SessId),
     UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
     case file_meta:to_uuid(Entry) of
         {ok, UserRootDir} ->

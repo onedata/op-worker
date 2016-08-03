@@ -233,7 +233,7 @@ chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID, 
 
     case StorageType of
         ?DIRECTIO_HELPER_NAME ->
-            #posix_user_ctx{uid = Uid, gid = Gid} = fslogic_storage:get_posix_user_ctx(?DIRECTIO_HELPER_NAME, #identity{user_id = UserId}, SpaceUuid),
+            #posix_user_ctx{uid = Uid, gid = Gid} = fslogic_storage:get_posix_user_ctx(?DIRECTIO_HELPER_NAME, #user_identity{user_id = UserId}, SpaceUuid),
             helpers:chown(HelperHandle, FileId, Uid, Gid);
         _ ->
             ok

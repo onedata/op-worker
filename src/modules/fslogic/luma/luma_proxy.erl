@@ -84,7 +84,7 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
 -spec new_ceph_user_ctx(SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     StorageId = luma_utils:get_storage_id(SpaceUUID),
 
@@ -115,7 +115,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
 -spec new_s3_user_ctx(SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_s3_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     StorageId = luma_utils:get_storage_id(SpaceUUID),
     case luma_utils:get_s3_user(UserId, StorageId) of
@@ -149,7 +149,7 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 -spec new_swift_user_ctx(SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_swift_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     StorageId = luma_utils:get_storage_id(SpaceUUID),
     case luma_utils:get_swift_user(UserId, StorageId) of
@@ -308,7 +308,7 @@ parse_posix_ctx_from_luma(Response, SpaceUUID) ->
 %%--------------------------------------------------------------------
 -spec get_auth(session:id() | session:identity()) ->
     {ok, session:auth() | undefined} | {error, term()}.
-get_auth(#identity{}) ->
+get_auth(#user_identity{}) ->
     {ok, undefined};
 get_auth(SessionId) ->
     session:get_auth(SessionId).

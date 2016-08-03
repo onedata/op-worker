@@ -559,13 +559,13 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 
         case replica_updater:update(FileUUID, UpdatedBlocks, FileSize, true, undefined) of
             {ok, size_changed} ->
-                {ok, #document{value = #session{identity = #identity{
+                {ok, #document{value = #session{identity = #user_identity{
                     user_id = UserId}}}} = session:get(SessId),
                 fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {ok, size_not_changed} ->
-                {ok, #document{value = #session{identity = #identity{
+                {ok, #document{value = #session{identity = #user_identity{
                     user_id = UserId}}}} = session:get(SessId),
                 fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
@@ -592,7 +592,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
     lists:map(fun(#event{object = #read_event{file_uuid = FileGUID}}) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-        {ok, #document{value = #session{identity = #identity{
+        {ok, #document{value = #session{identity = #user_identity{
             user_id = UserId}}}} = session:get(SessId),
         fslogic_times:update_atime({uuid, FileUUID}, UserId)
     end, Evts).

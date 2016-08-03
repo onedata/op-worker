@@ -29,7 +29,7 @@
 handle_write_events_for_monitoring(Evts, #{session_id := SessId}) ->
     lists:foreach(fun(#event{key = FileGUID, counter = Counter, object = #write_event{size = Size}}) ->
         {_, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
-        {ok, #document{value = #session{identity = #identity{
+        {ok, #document{value = #session{identity = #user_identity{
             user_id = UserId}}}} = session:get(SessId),
 
         worker_proxy:cast(monitoring_worker, {update_buffer_state, #monitoring_id{
@@ -71,7 +71,7 @@ handle_write_events_for_monitoring(Evts, #{session_id := SessId}) ->
 handle_read_events_for_monitoring(Evts, #{session_id := SessId}) ->
     lists:foreach(fun(#event{key = FileGUID, counter = Counter, object = #read_event{size = Size}}) ->
         {_, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
-        {ok, #document{value = #session{identity = #identity{
+        {ok, #document{value = #session{identity = #user_identity{
             user_id = UserId}}}} = session:get(SessId),
 
         worker_proxy:cast(monitoring_worker, {update_buffer_state, #monitoring_id{
