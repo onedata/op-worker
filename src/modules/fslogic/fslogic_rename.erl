@@ -495,7 +495,7 @@ update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
         fun(Block) ->
             Block#file_block{file_id = TargetFileId, storage_id = TargetStorageId}
         end, Blocks),
-    {ok, _} = datastore:run_transaction(file_location, FileUUID,
+    {ok, _} = file_location:critical_section(FileUUID,
         fun() ->
             file_location:save(LocationDoc#document{value = Location#file_location{
                 file_id = TargetFileId,
