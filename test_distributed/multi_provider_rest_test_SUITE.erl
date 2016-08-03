@@ -101,7 +101,7 @@ replicate_file(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:file_guid_to_uuid(FileGuid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
@@ -156,11 +156,11 @@ replicate_dir(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle3),
 
     % when
-    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:file_guid_to_uuid(File1Guid), <<"space3">>])), 15),
-    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:file_guid_to_uuid(File2Guid), <<"space3">>])), 15),
-    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:file_guid_to_uuid(File3Guid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
@@ -386,7 +386,7 @@ replicate_file_by_id(Config) ->
     lfm_proxy:fsync(WorkerP1, Handle),
 
     % when
-    ?assertMatch(5, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:file_guid_to_uuid(FileGuid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
@@ -447,7 +447,7 @@ changes_stream_xattr_test(Config) ->
         timer:sleep(500),
         lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"name">>, value = <<"value">>})
     end),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
         get, [user_1_token_header(Config)], []),
 
     ?assertNotEqual(<<>>, Body),
@@ -558,6 +558,7 @@ domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
 
 assertLists(L1, L2) ->
+    ct:print("LL ~p ~p", [L1, L2]),
     ?assertEqual(length(L1), length(L2)),
     lists:foreach(fun(E) ->
         ?assert(lists:member(E, L2))
