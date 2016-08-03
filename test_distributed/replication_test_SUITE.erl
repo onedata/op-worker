@@ -920,7 +920,7 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     CTime = erlang:monotonic_time(micro_seconds),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    FileUuid = <<"test_file_uuid">>,
+    FileUuid = <<"test_file_uuid_eflnswffm">>,
     FileMeta = #document{key = FileUuid, value = #file_meta{
         mode = 8#777,
         name = <<"file">>,
@@ -1037,7 +1037,7 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     {ok, Dir2Guid} = lfm_proxy:mkdir(W1, SessionId, <<"/space_name1/dir1/dir2">>),
     Dir1Uuid = fslogic_uuid:file_guid_to_uuid(Dir1Guid),
     Dir2Uuid = fslogic_uuid:file_guid_to_uuid(Dir2Guid),
-    FileUuid = <<"test_file_uuid">>,
+    FileUuid = <<"test_file_uuid_eflnswfgfm">>,
     FileMeta = #document{key = FileUuid, value = #file_meta{
         mode = 8#777,
         name = <<"file">>,
