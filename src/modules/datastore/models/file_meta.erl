@@ -295,7 +295,7 @@ exists_local_link_doc(Key) ->
 %% Returns document of child.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child(datastore:document(), name()) ->
+-spec get_child(datastore:document() | {uuid, uuid()}, name()) ->
     {ok, datastore:normalized_link_target()} | datastore:link_error() | datastore:generic_error().
 get_child({uuid, Uuid}, Name) ->
     case get({uuid, Uuid}) of
