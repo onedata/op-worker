@@ -51,5 +51,5 @@ models() -> [
     sfm_handle,
     dbsync_batches,
     custom_metadata,
-    index
+    indexes
 ].

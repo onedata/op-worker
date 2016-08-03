@@ -8,25 +8,27 @@
 %%% @doc Model for holding database views.
 %%% @end
 %%%-------------------------------------------------------------------
--module(index).
+-module(indexes).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([add_view/3, get_view/2]).
+-export([add_index/4, get_index/2, query_view/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
 -type view_name() :: binary().
--type view_id() :: binary().
+-type index_id() :: binary().
 -type view_function() :: binary().
+-type index() :: #{name => indexes:view_name(), space_id => space_info:id(), function => indexes:view_function()}.
 
--export_type([view_name/0, view_id/0, view_function/0]).
+-export_type([view_name/0, index_id/0, view_function/0]).
 
 %%%===================================================================
 %%% API
@@ -37,18 +39,46 @@
 %% Add view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_view(binary, binary(), space_info:id()) -> {ok, view_id()}.
-add_view(ViewName, ViewFunction, SpaceId) ->
-    {ok, Id} = create(#document{value = #index{name = ViewName, space_id = SpaceId, function = ViewFunction}}),
+-spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id()) -> {ok, index_id()}.
+add_index(UserId, ViewName, ViewFunction, SpaceId) ->
+    Id = datastore_utils:gen_uuid(),
     RecordName = <<"custom_metadata">>,
     DbViewFunction = <<"function (doc, meta) { if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { var key = ",
         ViewFunction/binary,
         "; var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
-    case catch couchdb_datastore_driver:add_view(Id, DbViewFunction) of
-        ok ->
+    ok = couchdb_datastore_driver:add_view(Id, DbViewFunction),
+    case indexes:get(UserId) of
+        {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
+            NewMap = maps:put(Id, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, Indexes),
+            {ok, _} = save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}),
+            {ok, Id};
+        {error, {not_found, indexes}} ->
+            Map = maps:put(Id, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, #{}),
+            {ok, _} = create(#document{key = UserId, value = #indexes{value = Map}}),
             {ok, Id};
         Error ->
-            delete(Id),
+            ok = couchdb_datastore_driver:delete_view(Id),
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get index from db
+%% @end
+%%--------------------------------------------------------------------
+-spec get_index(onedata_user:id(), index_id()) -> {ok, index()} | {error, ?ENOENT}.
+get_index(UserId, IndexId) ->
+    case indexes:get(UserId) of
+        {ok, #document{value = #indexes{value = Indexes}}} ->
+            case maps:get(IndexId, Indexes, undefined) of
+                undefined ->
+                    {error, ?ENOENT};
+                Val ->
+                    {ok, Val}
+            end;
+        {error, {not_found, indexes}} ->
+            {error, ?ENOENT};
+        Error ->
             Error
     end.
 
@@ -57,8 +87,8 @@ add_view(ViewName, ViewFunction, SpaceId) ->
 %% Get view result.
 %% @end
 %%--------------------------------------------------------------------
--spec get_view(view_id(), binary()) -> {ok, [file_meta:uuid()]}.
-get_view(Id, Key) ->
+-spec query_view(index_id(), binary()) -> {ok, [file_meta:uuid()]}.
+query_view(Id, Key) ->
     {ok, FileUuids} = couchdb_datastore_driver:get_view(Id, Key),
     {ok, lists:map(fun(Uuid) -> fslogic_uuid:to_file_guid(Uuid) end, FileUuids)}.
 
