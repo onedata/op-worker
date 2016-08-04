@@ -88,7 +88,7 @@ content_types_provided(Req, State) ->
 list_files(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_offset(Req2, State2),
-    {State4, Req4} = validator:parse_limit(Req3, State3),
+    {State4, Req4} = validator:parse_dir_limit(Req3, State3),
 
     #{auth := Auth, path := Path, offset := Offset, limit := Limit} = State4,
 

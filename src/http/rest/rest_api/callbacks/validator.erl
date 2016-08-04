@@ -30,9 +30,11 @@
 -export([malformed_request/2, parse_path/2,
     parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
     parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
-    parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_limit/2,
+    parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
     parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
-    parse_function/2]).
+    parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
+    parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
+    parse_startkey/2]).
 
 %%%===================================================================
 %%% API
@@ -263,9 +265,9 @@ parse_offset(Req, State) ->
 %% Retrieves request's limit and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_limit(cowboy_req:req(), #{}) ->
+-spec parse_dir_limit(cowboy_req:req(), #{}) ->
     {#{id => binary()}, cowboy_req:req()}.
-parse_limit(Req, State) ->
+parse_dir_limit(Req, State) ->
     {RawLimit, NewReq} = cowboy_req:qs_val(<<"limit">>, Req),
     case RawLimit of
         undefined ->
@@ -339,6 +341,118 @@ parse_query_space_id(Req, State) ->
 parse_function(Req, State) ->
     {ok, Body, NewReq} = cowboy_req:body(Req),
     {State#{function => Body}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's bbox param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_bbox(cowboy_req:req(), #{}) ->
+    {#{bbox => binary()}, cowboy_req:req()}.
+parse_bbox(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"bbox">>, Req),
+    {State#{bbox => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's descending param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_descending(cowboy_req:req(), #{}) ->
+    {#{descending => binary()}, cowboy_req:req()}.
+parse_descending(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"descending">>, Req),
+    {State#{descending => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's endkey param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_endkey(cowboy_req:req(), #{}) ->
+    {#{endkey => binary()}, cowboy_req:req()}.
+parse_endkey(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"endkey">>, Req),
+    {State#{endkey => Val}, NewReq}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's inclusive_end param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_inclusive_end(cowboy_req:req(), #{}) ->
+    {#{inclusive_end => binary()}, cowboy_req:req()}.
+parse_inclusive_end(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"inclusive_end">>, Req),
+    {State#{inclusive_end => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's key param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_key(cowboy_req:req(), #{}) ->
+    {#{key => binary()}, cowboy_req:req()}.
+parse_key(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"key">>, Req),
+    {State#{key => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's keys param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_keys(cowboy_req:req(), #{}) ->
+    {#{keys => binary()}, cowboy_req:req()}.
+parse_keys(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"keys">>, Req),
+    {State#{keys => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's limit param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_limit(cowboy_req:req(), #{}) ->
+    {#{limit => binary()}, cowboy_req:req()}.
+parse_limit(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"limit">>, Req),
+    {State#{limit => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's skip param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_skip(cowboy_req:req(), #{}) ->
+    {#{skip => binary()}, cowboy_req:req()}.
+parse_skip(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"skip">>, Req),
+    {State#{skip => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's stale param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_stale(cowboy_req:req(), #{}) ->
+    {#{stale => binary()}, cowboy_req:req()}.
+parse_stale(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"stale">>, Req),
+    {State#{stale => Val}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's startkey param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_startkey(cowboy_req:req(), #{}) ->
+    {#{startkey => binary()}, cowboy_req:req()}.
+parse_startkey(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"startkey">>, Req),
+    {State#{startkey => Val}, NewReq}.
+
 
 %%%===================================================================
 %%% Internal functions

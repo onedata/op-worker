@@ -39,6 +39,7 @@ routes() ->
             handler_initial_opts => #{subject_type => space, secondary_subject_type => undefined}}},
         {"/api/v3/oneprovider/metrics/space/:sid/user/:uid", #{handler => metrics,
             handler_initial_opts => #{subject_type => space, secondary_subject_type => user}}},
+        {"/api/v3/oneprovider/query-index/:id", #{handler => query_index}},
         {"/api/v3/oneprovider/replicas/[...]", #{handler => replicas}},
         {"/api/v3/oneprovider/replicas-id/:id", #{handler => replicas,
             handler_initial_opts => #{resource_type => id}}},
