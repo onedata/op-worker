@@ -30,6 +30,7 @@ models() -> [
     session,
     onedata_user,
     onedata_group,
+    identity_cache,
     user_identity,
     file_meta,
     storage,

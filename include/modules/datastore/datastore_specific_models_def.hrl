@@ -16,6 +16,14 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
+% Cached info about identities of OZ & OP
+-record(identity_cache, {
+    id :: identity:id(),
+    type = zone :: zone | provider,
+    public_key :: identity:public_key(),
+    last_update_seconds :: integer()
+}).
+
 %% Message ID containing recipient for remote response.
 -record(message_id, {
     issuer :: client | server,
