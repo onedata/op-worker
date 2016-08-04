@@ -52,6 +52,7 @@ synchronize(Uuid, Block = #file_block{offset = RequestedOffset, size = Requested
             _ ->
                 Block
         end,
+    trigger_prefetching(Uuid, EnlargedBlock, Prefetch),
     {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
     LocationDocs = lists:map(
         fun(LocationId) ->
@@ -82,6 +83,51 @@ synchronize(Uuid, Block = #file_block{offset = RequestedOffset, size = Requested
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Trigger prefetching if block includes trigger bytes.
+%% @end
+%%--------------------------------------------------------------------
+-spec trigger_prefetching(file_meta:uuid(), fslogic_blocks:block(), boolean()) -> ok.
+trigger_prefetching(FileUuid, Block, true) ->
+    case contains_trigger_byte(Block) of
+        true ->
+            spawn(prefetch_data_fun(FileUuid, Block)),
+            ok;
+        false ->
+            ok
+    end;
+trigger_prefetching(_, _, _) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns function that prefetches data starting at given block.
+%% @end
+%%--------------------------------------------------------------------
+-spec prefetch_data_fun(file_meta:uuid(), fslogic_blocks:block()) -> function().
+prefetch_data_fun(FileUuid, #file_block{offset = O, size = S}) ->
+    fun() ->
+        try
+            replica_synchronizer:synchronize(FileUuid, #file_block{offset = O, size = ?PREFETCH_SIZE}, false)
+        catch
+            _:Error ->
+                ?error_stacktrace("Prefetching of ~p at offset ~p with size ~p failed due to: ~p",
+                    [FileUuid, O+S, ?PREFETCH_SIZE, Error])
+        end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns true if given blocks contains trigger byte.
+%% @end
+%%--------------------------------------------------------------------
+-spec contains_trigger_byte(fslogic_blocks:block()) -> boolean().
+contains_trigger_byte(#file_block{offset = O, size = S}) ->
+    ((O rem ?TRIGGER_BYTE) == 0) orelse
+        ((O rem ?TRIGGER_BYTE) + S >= ?TRIGGER_BYTE).
+
 
 %%--------------------------------------------------------------------
 %% @doc
