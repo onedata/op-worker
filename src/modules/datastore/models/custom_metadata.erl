@@ -114,7 +114,7 @@ set_rdf_metadata(FileUuid, Value) ->
 %% @doc Get extended attribute metadata
 %%--------------------------------------------------------------------
 -spec get_xattr_metadata(file_meta:uuid(), xattr:name()) ->
-    {ok, datastore:document()} | datastore:get_error().
+    {ok, xattr:value()} | datastore:get_error().
 get_xattr_metadata(FileUuid, Name) ->
     case custom_metadata:get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
@@ -148,7 +148,7 @@ list_xattr_metadata(FileUuid) ->
 %% @doc Remove extended attribute metadata
 %%--------------------------------------------------------------------
 -spec remove_xattr_metadata(file_meta:uuid(), xattr:name()) ->
-    ok| datastore:generic_error().
+    ok | datastore:generic_error().
 remove_xattr_metadata(FileUuid, Name) ->
     case custom_metadata:get(FileUuid) of
         {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->

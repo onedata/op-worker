@@ -37,7 +37,8 @@
 %%--------------------------------------------------------------------
 %% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
 %%--------------------------------------------------------------------
--spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id()) -> {ok, index_id()}.
+-spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id()) ->
+    {ok, index_id()} | {error, any()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId) ->
     add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
 
@@ -46,7 +47,8 @@ add_index(UserId, ViewName, ViewFunction, SpaceId) ->
 %% Add view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id(), index_id()) -> {ok, index_id()}.
+-spec add_index(onedata_user:id(), view_name() | undefined, view_function(),
+    space_info:id() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
     case indexes:get(UserId) of
         {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
@@ -78,7 +80,7 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
 %% Get index from db.
 %% @end
 %%--------------------------------------------------------------------
--spec get_index(onedata_user:id(), index_id()) -> {ok, index()} | {error, ?ENOENT}.
+-spec get_index(onedata_user:id(), index_id()) -> {ok, index()} | {error, any()}.
 get_index(UserId, IndexId) ->
     case indexes:get(UserId) of
         {ok, #document{value = #indexes{value = Indexes}}} ->
@@ -99,7 +101,7 @@ get_index(UserId, IndexId) ->
 %% Change index js function.
 %% @end
 %%--------------------------------------------------------------------
--spec change_index_function(onedata_user:id(), index_id(), view_function()) -> ok | {error, ?ENOENT}.
+-spec change_index_function(onedata_user:id(), index_id(), view_function()) -> {ok, index_id()} | {error, any()}.
 change_index_function(UserId, IndexId, Function) ->
     add_index(UserId, undefined, Function, undefined, IndexId).
 
@@ -108,7 +110,7 @@ change_index_function(UserId, IndexId, Function) ->
 %% Get all indexes from db, with given space id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_all_indexes(onedata_user:id()) -> {ok, [index()]} | {error, ?ENOENT}.
+-spec get_all_indexes(onedata_user:id()) -> {ok, #{}} | {error, any()}.
 get_all_indexes(UserId) ->
     case indexes:get(UserId) of
         {ok, #document{value = #indexes{value = Indexes}}} ->

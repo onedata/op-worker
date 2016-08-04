@@ -44,7 +44,7 @@ find(Json, [Name | Rest]) ->
 %% Insert sub-json to json tree
 %% @end
 %%--------------------------------------------------------------------
--spec insert(Json :: #{}, JsonToInsert :: #{}, [binary()]) -> #{} | no_return().
+-spec insert(Json :: #{} | undefined, JsonToInsert :: #{}, [binary()]) -> #{} | no_return().
 insert(_Json, JsonToInsert, []) ->
     JsonToInsert;
 insert(undefined, JsonToInsert, [Name | Rest]) ->

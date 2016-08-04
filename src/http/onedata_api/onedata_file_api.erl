@@ -440,7 +440,8 @@ remove_share(ShareID) ->
 %% Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()]) -> {ok, #{}}.
+-spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()]) ->
+    {ok, #{}} | error_reply().
 get_metadata(Auth, FileKey, Type, Names) ->
     logical_file_manager:get_metadata(Auth, FileKey, Type, Names).
 
@@ -449,6 +450,7 @@ get_metadata(Auth, FileKey, Type, Names) ->
 %% Set json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(onedata_auth_api:auth(), file_key(), binary(), #{}, [binary()]) -> ok.
+-spec set_metadata(onedata_auth_api:auth(), file_key(), binary(), term(), [binary()]) ->
+    ok | error_reply().
 set_metadata(Auth, FileKey, Type, Value, Names) ->
     logical_file_manager:set_metadata(Auth, FileKey, Type, Value, Names).

@@ -285,11 +285,11 @@ xattr_list(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, get, [user_1_token_header(Config)], []),
 
     % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
+    DecodedBody = jiffy:decode(Body, [return_maps]),
+    ?assertMatch(
         [
-            [{<<"name">>, <<"k2">>}, {<<"value">>, <<"v2">>}],
-            [{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]
+            #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
+            #{<<"name">> := <<"k2">>, <<"value">> := <<"v2">>}
         ],
         DecodedBody
     ).
@@ -432,7 +432,6 @@ changes_stream_file_meta_test(Config) ->
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
         get, [user_1_token_header(Config)], []),
 
-    ct:print("~p", [Body]),
     ?assertNotEqual(<<>>, Body),
     ?assert(length(binary:split(Body, <<"\r\n">>, [global])) >= 2).
 
@@ -623,7 +622,7 @@ create_list_index(Config) ->
     ?assertMatch({ok, 200, _, <<"[]">>}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
 
     % when
-    {ok, 204, Headers, _} = ?assertMatch({ok, 204, _, _},
+    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
         do_request(WorkerP1, <<"index?space_id=space1&name=name">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"text/javascript">>}], Function)),
     <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
 
@@ -632,16 +631,18 @@ create_list_index(Config) ->
     IndexList = jiffy:decode(ListBody, [return_maps]),
     ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id}], IndexList),
     ?assertMatch({ok, 200, _, Function},
-        do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+        do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"text/javascript">>}], [])),
 
     % when
-    {ok, 204, Headers, _} = ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"index?space_id=space1&name=name2">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"text/javascript">>}], Function)),
+    {ok, 303, _, _} = ?assertMatch({ok, 303, _, _},
+        do_request(WorkerP1, <<"index?space_id=space1&name=name2">>, post,
+            [user_1_token_header(Config), {<<"content-type">>,<<"text/javascript">>}], Function)),
 
     % then
-    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
-    IndexList = jiffy:decode(ListBody, [return_maps]),
-    ?assertMatch([#{}, #{}], IndexList).
+    {ok, _, _, ListBody2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get,
+        [user_1_token_header(Config)], [])),
+    IndexList2 = jiffy:decode(ListBody2, [return_maps]),
+    ?assertMatch([#{}, #{}], IndexList2).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

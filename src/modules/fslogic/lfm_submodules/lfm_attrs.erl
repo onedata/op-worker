@@ -258,7 +258,8 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% Get metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), logical_file_manager:file_key(), binary(), [binary()]) -> {ok, #{}}.
+-spec get_metadata(session:id(), logical_file_manager:file_key(), binary(), [binary()]) ->
+    {ok, #{}} | logical_file_manager:error_reply().
 get_metadata(SessId, FileKey, Type, Names) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
@@ -271,7 +272,8 @@ get_metadata(SessId, FileKey, Type, Names) ->
 %% Set metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), logical_file_manager:file_key(), binary(), #{}, [binary()]) -> ok.
+-spec set_metadata(session:id(), logical_file_manager:file_key(), binary(), term(), [binary()]) ->
+    ok | logical_file_manager:error_reply().
 set_metadata(SessId, FileKey, Type, Value, Names) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),

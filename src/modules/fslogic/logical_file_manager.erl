@@ -599,7 +599,8 @@ remove_share(ShareID) ->
 %% Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), file_key(), binary(), [binary()]) -> {ok, #{}}.
+-spec get_metadata(session:id(), file_key(), binary(), [binary()]) ->
+    {ok, #{}} | error_reply().
 get_metadata(SessId, FileKey, Type, Names) ->
     ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names) end).
 
@@ -609,6 +610,7 @@ get_metadata(SessId, FileKey, Type, Names) ->
 %% Set json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), file_key(), binary(), #{}, [binary()]) -> ok.
+-spec set_metadata(session:id(), file_key(), binary(), term(), [binary()]) ->
+    ok | error_reply().
 set_metadata(SessId, FileKey, Type, Value, Names) ->
     ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Names) end).
