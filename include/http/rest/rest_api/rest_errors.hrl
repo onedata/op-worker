@@ -54,6 +54,8 @@
     {<<"error_description">>, <<"The stale parameter is invalid, it must be one of: 'ok', 'update_after'.">>}]}).
 -define(ERROR_INVALID_SKIP, {?BAD_REQUEST, [{<<"error">>, <<"invalid_skip">>},
     {<<"error_description">>, <<"The skip parameter is invalid, it must be of integer type.">>}]}).
+-define(ERROR_INVALID_FILTER_TYPE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_filter_type">>},
+    {<<"error_description">>, <<"The filter_type parameter is invalid.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},

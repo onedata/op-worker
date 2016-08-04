@@ -93,19 +93,22 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_json(req(), #{}) -> {term(), req(), #{}}.
 get_json(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
+    {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
+    {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(ReqWithPath, StateWithPath),
+    {StateWithFilterType, ReqWithFilterType} = validator:parse_filter_type(ReqWithMetadataType, StateWithMetadataType),
+    {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
 
-    #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+    #{auth := Auth, path := Path, metadata_type := MetadataType, filter_type := FilterType, filter := Filter} = StateWithFilter,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
+    FilterList = get_filter_list(FilterType, Filter),
 
-    case onedata_file_api:get_metadata(Auth, {path, Path}, DefinedMetadataType, []) of
+    case onedata_file_api:get_metadata(Auth, {path, Path}, DefinedMetadataType, FilterList) of
         {ok, Meta} ->
             Response = jiffy:encode(Meta),
-            {Response, Req3, State3};
+            {Response, ReqWithFilter, StateWithFilter};
         {error, ?ENOATTR} ->
             Response = jiffy:encode(#{}),
-            {Response, Req3, State3}
+            {Response, ReqWithFilter, StateWithFilter}
     end.
 
 %%--------------------------------------------------------------------
@@ -174,3 +177,17 @@ validate_metadata_type(MetadataType, MetadataType) ->
     MetadataType;
 validate_metadata_type(_, _) ->
     throw(?ERROR_INVALID_METADATA_TYPE).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get list of metadata names from filter description
+%% @end
+%%--------------------------------------------------------------------
+-spec get_filter_list(binary(), binary()) -> list().
+get_filter_list(<<"keypath">>, Filter) ->
+    binary:split(Filter, <<".">>, [global]);
+get_filter_list(undefined, _) ->
+    [];
+get_filter_list(_, _) ->
+    throw(?ERROR_INVALID_FILTER_TYPE).
+

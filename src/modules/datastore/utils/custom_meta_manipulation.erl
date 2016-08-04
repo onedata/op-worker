@@ -30,11 +30,11 @@
 find(Json, []) ->
     Json;
 find(Json, [_Name | _Rest]) when not is_map(Json) ->
-    throw(?ENOATTR);
+    throw({error, ?ENOATTR});
 find(Json, [Name | Rest]) ->
     case maps:get(Name, Json, undefined) of
         undefined ->
-            throw(?ENOATTR);
+            throw({error, ?ENOATTR});
         SubJson ->
             find(SubJson, Rest)
     end.

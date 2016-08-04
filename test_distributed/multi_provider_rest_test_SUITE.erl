@@ -540,7 +540,13 @@ set_get_json_metadata(Config) ->
             {<<"key">>, <<"value">>}
         ],
         DecodedBody
-    ).
+    ),
+
+    % then
+    ?assertMatch({ok, 200, _, <<"\"value\"">>},
+        do_request(WorkerP1, <<"metadata/space3?filter_type=keypath&filter=key">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])).
+
 
 set_get_rdf_metadata(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
