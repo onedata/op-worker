@@ -36,8 +36,8 @@
 %% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
+rest_init(Req, State) ->
+    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -92,17 +92,27 @@ content_types_accepted(Req, State) ->
 %% @doc Gets file's metadata
 %%--------------------------------------------------------------------
 -spec get_json(req(), #{}) -> {term(), req(), #{}}.
+get_json(Req, State = #{resource_type := id}) ->
+    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    get_json_internal(ReqWithId, StateWithId);
 get_json(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
-    {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(ReqWithPath, StateWithPath),
+    get_json_internal(ReqWithPath, StateWithPath).
+
+%%--------------------------------------------------------------------
+%% @doc Internal version of get_json/2
+%%--------------------------------------------------------------------
+-spec get_json_internal(req(), #{}) -> {term(), req(), #{}}.
+get_json_internal(Req, State) ->
+    {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
     {StateWithFilterType, ReqWithFilterType} = validator:parse_filter_type(ReqWithMetadataType, StateWithMetadataType),
     {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
 
-    #{auth := Auth, path := Path, metadata_type := MetadataType, filter_type := FilterType, filter := Filter} = StateWithFilter,
+    #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType, filter := Filter} = StateWithFilter,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
     FilterList = get_filter_list(FilterType, Filter),
 
-    case onedata_file_api:get_metadata(Auth, {path, Path}, DefinedMetadataType, FilterList) of
+    case onedata_file_api:get_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, FilterList) of
         {ok, Meta} ->
             Response = jiffy:encode(Meta),
             {Response, ReqWithFilter, StateWithFilter};
@@ -116,50 +126,82 @@ get_json(Req, State) ->
 %% @doc Gets file's metadata
 %%--------------------------------------------------------------------
 -spec get_rdf(req(), #{}) -> {term(), req(), #{}}.
+get_rdf(Req, State = #{resource_type := id}) ->
+    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    get_rdf_internal(ReqWithId, StateWithId);
 get_rdf(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
+    {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
+    get_rdf_internal(ReqWithPath, StateWithPath).
 
-    #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+%%--------------------------------------------------------------------
+%% @doc Internal version of get_rdf/2
+%%--------------------------------------------------------------------
+-spec get_rdf_internal(req(), #{}) -> {term(), req(), #{}}.
+get_rdf_internal(Req, State) ->
+    {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
+
+    #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"rdf">>),
 
-    {ok, Meta} = onedata_file_api:get_metadata(Auth, {path, Path}, DefinedMetadataType, []),
-    {Meta, Req3, State3}.
+    {ok, Meta} = onedata_file_api:get_metadata(Auth, get_file(StateWithMetadataType),
+        DefinedMetadataType, []),
+    {Meta, ReqWithMetadataType, StateWithMetadataType}.
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/metadata/{path}'
 %% @doc Sets file's metadata
 %%--------------------------------------------------------------------
 -spec set_json(req(), #{}) -> {term(), req(), #{}}.
+set_json(Req, State = #{resource_type := id}) ->
+    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    set_json_internal(ReqWithId, StateWithId);
 set_json(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
-    {ok, Body, Req4} = cowboy_req:body(Req3),
+    {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
+    set_json_internal(ReqWithPath, StateWithPath).
+
+%%--------------------------------------------------------------------
+%% @doc Internal version of set_json/2
+%%--------------------------------------------------------------------
+-spec set_json_internal(req(), #{}) -> {term(), req(), #{}}.
+set_json_internal(Req, State) ->
+    {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
+    {ok, Body, FinalReq} = cowboy_req:body(ReqWithMetadataType),
 
     Json = jiffy:decode(Body, [return_maps]),
-    #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+    #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
 
-    ok = onedata_file_api:set_metadata(Auth, {path, Path}, DefinedMetadataType, Json, []),
+    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithMetadataType), DefinedMetadataType, Json, []),
 
-    {true, Req4, State3}.
+    {true, FinalReq, StateWithMetadataType}.
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/metadata/{path}'
 %% @doc Sets file's metadata
 %%--------------------------------------------------------------------
 -spec set_rdf(req(), #{}) -> {term(), req(), #{}}.
+set_rdf(Req, State = #{resource_type := id}) ->
+    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    set_rdf_internal(ReqWithId, StateWithId);
 set_rdf(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_metadata_type(Req2, State2),
-    {ok, Rdf, Req4} = cowboy_req:body(Req3),
+    {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
+    set_rdf_internal(ReqWithPath, StateWithPath).
 
-    #{auth := Auth, path := Path, metadata_type := MetadataType} = State3,
+%%--------------------------------------------------------------------
+%% @doc Internal version of set_rdf/2
+%%--------------------------------------------------------------------
+-spec set_rdf_internal(req(), #{}) -> {term(), req(), #{}}.
+set_rdf_internal(Req, State) ->
+    {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
+    {ok, Rdf, FinalReq} = cowboy_req:body(ReqWithMetadataType),
+
+    #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"rdf">>),
 
-    ok = onedata_file_api:set_metadata(Auth, {path, Path}, DefinedMetadataType, Rdf, []),
+    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithMetadataType),
+        DefinedMetadataType, Rdf, []),
 
-    {true, Req4, State3}.
+    {true, FinalReq, StateWithMetadataType}.
 
 %%%===================================================================
 %%% Internal functions
@@ -191,3 +233,13 @@ get_filter_list(undefined, _) ->
 get_filter_list(_, _) ->
     throw(?ERROR_INVALID_FILTER_TYPE).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file entry from state
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file(#{}) -> {guid, binary()} | {path, binary()}.
+get_file(#{id := Id}) ->
+    {guid, Id};
+get_file(#{path := Path}) ->
+    {path, Path}.
