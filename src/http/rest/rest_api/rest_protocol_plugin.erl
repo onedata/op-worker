@@ -32,6 +32,8 @@ routes() ->
         {"/api/v3/oneprovider/attributes/[...]", #{handler => attributes}},
         {"/api/v3/oneprovider/changes/metadata/:sid", #{handler => changes}},
         {"/api/v3/oneprovider/files/[...]", #{handler => files}},
+        {"/api/v3/oneprovider/index", #{handler => index_collection}},
+        {"/api/v3/oneprovider/index/:id", #{handler => index}},
         {"/api/v3/oneprovider/metadata/[...]", #{handler => metadata}},
         {"/api/v3/oneprovider/metrics/space/:sid", #{handler => metrics,
             handler_initial_opts => #{subject_type => space, secondary_subject_type => undefined}}},

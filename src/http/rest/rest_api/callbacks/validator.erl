@@ -31,7 +31,8 @@
     parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
     parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
     parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_limit/2,
-    parse_status/2, parse_metadata_type/2]).
+    parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
+    parse_function/2]).
 
 %%%===================================================================
 %%% API
@@ -297,7 +298,7 @@ parse_status(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves request's offset and adds it to State.
+%% Retrieves request's metadata type and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_metadata_type(cowboy_req:req(), #{}) ->
@@ -305,6 +306,39 @@ parse_status(Req, State) ->
 parse_metadata_type(Req, State) ->
     {MetadataType, NewReq} = cowboy_req:qs_val(<<"metadata_type">>, Req),
     {State#{metadata_type => MetadataType}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's name and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_name(cowboy_req:req(), #{}) ->
+    {#{name => binary()}, cowboy_req:req()}.
+parse_name(Req, State) ->
+    {Name, NewReq} = cowboy_req:qs_val(<<"name">>, Req),
+    {State#{name => Name}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's space_id and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_query_space_id(cowboy_req:req(), #{}) ->
+    {#{space_id => binary()}, cowboy_req:req()}.
+parse_query_space_id(Req, State) ->
+    {SpaceId, NewReq} = cowboy_req:qs_val(<<"space_id">>, Req),
+    {State#{space_id => SpaceId}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's function body and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_function(cowboy_req:req(), #{}) ->
+    {#{function => binary()}, cowboy_req:req()}.
+parse_function(Req, State) ->
+    {ok, Body, NewReq} = cowboy_req:body(Req),
+    {State#{function => Body}, NewReq}.
 
 %%%===================================================================
 %%% Internal functions

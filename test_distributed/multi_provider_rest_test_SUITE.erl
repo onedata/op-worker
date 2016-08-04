@@ -49,7 +49,8 @@
     get_space/1,
     set_get_json_metadata/1,
     set_get_rdf_metadata/1,
-    changes_stream_json_metadata_test/1
+    changes_stream_json_metadata_test/1,
+    create_list_index/1
 ]).
 
 all() ->
@@ -73,7 +74,8 @@ all() ->
         get_space,
         set_get_json_metadata,
         set_get_rdf_metadata,
-        changes_stream_json_metadata_test
+        changes_stream_json_metadata_test,
+        create_list_index
     ]).
 
 %%%===================================================================
@@ -551,6 +553,38 @@ set_get_rdf_metadata(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=rdf">>, get, [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
+
+create_list_index(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Function =
+        <<"function (meta) {
+              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
+                  return meta['onedata_json']['meta']['color'];
+              }
+              return null;
+        }">>,
+    ?assertMatch({ok, 200, _, <<"[]">>}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
+
+    % when
+    {ok, 204, Headers, _} = ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"index?space_id=space1&name=name">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"text/javascript">>}], Function)),
+    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
+
+    % then
+    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
+    IndexList = jiffy:decode(ListBody, [return_maps]),
+    ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id}], IndexList),
+    ?assertMatch({ok, 200, _, Function},
+        do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+
+    % when
+    {ok, 204, Headers, _} = ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"index?space_id=space1&name=name2">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"text/javascript">>}], Function)),
+
+    % then
+    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
+    IndexList = jiffy:decode(ListBody, [return_maps]),
+    ?assertMatch([#{}, #{}], IndexList).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

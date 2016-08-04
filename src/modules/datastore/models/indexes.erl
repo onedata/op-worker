@@ -17,7 +17,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([add_index/4, get_index/2, query_view/2]).
+-export([add_index/4, get_index/2, query_view/2, get_all_indexes/1, change_index_function/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -35,35 +35,47 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
+%%--------------------------------------------------------------------
+-spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id()) -> {ok, index_id()}.
+add_index(UserId, ViewName, ViewFunction, SpaceId) ->
+    add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Add view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id()) -> {ok, index_id()}.
-add_index(UserId, ViewName, ViewFunction, SpaceId) ->
-    Id = datastore_utils:gen_uuid(),
+-spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id(), index_id()) -> {ok, index_id()}.
+add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
     RecordName = <<"custom_metadata">>,
     DbViewFunction = <<"function (doc, meta) { if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { var key = ",
         ViewFunction/binary,
         "; var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
-    ok = couchdb_datastore_driver:add_view(Id, DbViewFunction),
+    ok = couchdb_datastore_driver:add_view(IndexId, DbViewFunction),
     case indexes:get(UserId) of
         {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
-            NewMap = maps:put(Id, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, Indexes),
+            NewMap =
+                case maps:get(IndexId, Indexes, undefined) of
+                    undefined ->
+                        maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, Indexes);
+                    OldMap ->
+                        maps:put(IndexId, OldMap#{function => ViewFunction}, Indexes)
+                end,
             {ok, _} = save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}),
-            {ok, Id};
+            {ok, IndexId};
         {error, {not_found, indexes}} ->
-            Map = maps:put(Id, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, #{}),
+            Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, #{}),
             {ok, _} = create(#document{key = UserId, value = #indexes{value = Map}}),
-            {ok, Id};
+            {ok, IndexId};
         Error ->
-            ok = couchdb_datastore_driver:delete_view(Id),
+            ok = couchdb_datastore_driver:delete_view(IndexId),
             Error
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get index from db
+%% Get index from db.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_index(onedata_user:id(), index_id()) -> {ok, index()} | {error, ?ENOENT}.
@@ -74,10 +86,35 @@ get_index(UserId, IndexId) ->
                 undefined ->
                     {error, ?ENOENT};
                 Val ->
-                    {ok, Val}
+                    {ok, Val#{id => IndexId}}
             end;
         {error, {not_found, indexes}} ->
             {error, ?ENOENT};
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Change index js function.
+%% @end
+%%--------------------------------------------------------------------
+-spec change_index_function(onedata_user:id(), index_id(), view_function()) -> ok | {error, ?ENOENT}.
+change_index_function(UserId, IndexId, Function) ->
+    add_index(UserId, undefined, Function, undefined, IndexId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get all indexes from db, with given space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_indexes(onedata_user:id()) -> {ok, [index()]} | {error, ?ENOENT}.
+get_all_indexes(UserId) ->
+    case indexes:get(UserId) of
+        {ok, #document{value = #indexes{value = Indexes}}} ->
+            {ok, Indexes};
+        {error, {not_found, indexes}} ->
+            {ok, #{}};
         Error ->
             Error
     end.

@@ -44,6 +44,8 @@
     {<<"error_description">>, <<"Requested transfer status is invalid.">>}]}).
 -define(ERROR_INVALID_METADATA_TYPE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_metadata_type">>},
     {<<"error_description">>, <<"Given metadatadata type is invalid for selected contentent type.">>}]}).
+-define(ERROR_SPACE_NOT_PROVIDED, {?BAD_REQUEST, [{<<"error">>, <<"space_not_provided">>},
+    {<<"error_description">>, <<"Required space_id was not provided.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},
