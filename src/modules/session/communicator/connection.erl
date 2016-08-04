@@ -110,7 +110,7 @@ init(Ref, Socket, Transport, _Opts) ->
 init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [{certfile, oz_plugin:get_cert_path()}, {keyfile, oz_plugin:get_key_path()}],
     ?info("Connecting to ~p ~p ~p", [Hostname, Port, TLSSettings]),
-    % TODO - dlaczego wywala sie (pierwsze?) polaczenie bledem {error,'No such file or directory'}
+    % TODO - Often (first?) connection crashes with {error,'No such file or directory'}
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
