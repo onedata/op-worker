@@ -65,11 +65,11 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
             {ok, _} = save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}),
             {ok, IndexId};
         {error, {not_found, indexes}} ->
+            add_db_view(IndexId, SpaceId, ViewFunction),
             Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, #{}),
             {ok, _} = create(#document{key = UserId, value = #indexes{value = Map}}),
             {ok, IndexId};
         Error ->
-            ok = couchdb_datastore_driver:delete_view(IndexId),
             Error
     end.
 
@@ -124,9 +124,9 @@ get_all_indexes(UserId) ->
 %% Get view result.
 %% @end
 %%--------------------------------------------------------------------
--spec query_view(index_id(), binary()) -> {ok, [file_meta:uuid()]}.
-query_view(Id, Key) ->
-    {ok, FileUuids} = couchdb_datastore_driver:get_view(Id, Key),
+-spec query_view(index_id(), list()) -> {ok, [file_meta:uuid()]}.
+query_view(Id, Options) ->
+    {ok, FileUuids} = couchdb_datastore_driver:query_view(Id, Options),
     {ok, lists:map(fun(Uuid) -> fslogic_uuid:to_file_guid(Uuid) end, FileUuids)}.
 
 %%%===================================================================
