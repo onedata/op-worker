@@ -143,7 +143,7 @@ modify_index(Req, State) ->
     {ok, UserId} = session:get_user_id(Auth),
     {ok, Id} = indexes:change_index_function(UserId, Id, Function),
 
-    {{true, <<"/api/v3/oneprovider/index/", Id/binary>>}, Req2, State2}.
+    {true, Req2, State2}.
 
 
 

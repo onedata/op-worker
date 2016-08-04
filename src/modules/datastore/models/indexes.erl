@@ -48,18 +48,18 @@ add_index(UserId, ViewName, ViewFunction, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id(), index_id()) -> {ok, index_id()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
-    RecordName = <<"custom_metadata">>,
-    DbViewFunction = <<"function (doc, meta) { if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { var key = ",
-        ViewFunction/binary,
-        "; var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
-    ok = couchdb_datastore_driver:add_view(IndexId, DbViewFunction),
     case indexes:get(UserId) of
         {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
             NewMap =
                 case maps:get(IndexId, Indexes, undefined) of
                     undefined ->
+                        add_db_view(IndexId, SpaceId, ViewFunction),
                         maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, Indexes);
+                    OldMap = #{space_id := SId} when SpaceId =:= undefined ->
+                        add_db_view(IndexId, SId, ViewFunction),
+                        maps:put(IndexId, OldMap#{function => ViewFunction, space_id => SId}, Indexes);
                     OldMap ->
+                        add_db_view(IndexId, SpaceId, ViewFunction),
                         maps:put(IndexId, OldMap#{function => ViewFunction}, Indexes)
                 end,
             {ok, _} = save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}),
@@ -226,3 +226,16 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% Internal functions
 %%%==================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add view to db
+%% @end
+%%--------------------------------------------------------------------
+-spec add_db_view(index_id(), space_info:id(), view_function()) -> ok.
+add_db_view(IndexId, SpaceId, Function) ->
+    RecordName = <<"custom_metadata">>,
+    DbViewFunction = <<"function (doc, meta) { if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { var key = ",
+        Function/binary,
+        "; var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
+    ok = couchdb_datastore_driver:add_view(IndexId, DbViewFunction).
