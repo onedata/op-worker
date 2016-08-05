@@ -52,7 +52,17 @@ get_json_metadata(FileUuid) ->
     get_json_metadata(FileUuid, []).
 
 %%--------------------------------------------------------------------
-%% @doc Gets json metadata subtree
+%% @doc
+%% Gets json metadata subtree
+%% e. g. for meta:
+%%
+%% {'l1': {'l2': 'value'}}
+%%
+%% get_json_metadata(FileUuid, [<<"l1">>, <<"l2">>]) -> {ok, <<"value">>}
+%% get_json_metadata(FileUuid, [<<"l1">>]) -> {ok, #{<<"l2">> => <<"value">>}}
+%% get_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
+%%
+%% @end
 %%--------------------------------------------------------------------
 -spec get_json_metadata(file_meta:uuid(), [binary()]) ->
     {ok, #{}} | datastore:get_error().
@@ -74,7 +84,17 @@ set_json_metadata(FileUuid, Json) ->
     set_json_metadata(FileUuid, Json, []).
 
 %%--------------------------------------------------------------------
-%% @doc Gets extended attribute with given name
+%% @doc Set json metadata subtree
+%% e. g. for meta:
+%%
+%% {'l1': {'l2': 'value'}}
+%%
+%% set_json_metadata(FileUuid, <<"new_value">> [<<"l1">>, <<"l2">>])
+%%    meta: {'l1': {'l2': 'new_value'}}
+%% set_json_metadata(FileUuid, [<<"l1">>])
+%%    meta: {'l1': 'new_value'}
+%% set_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
+%%    meta: 'new_value'
 %%--------------------------------------------------------------------
 -spec set_json_metadata(file_meta:uuid(), #{}, [binary()]) ->
     {ok, file_meta:uuid()} | datastore:get_error().
