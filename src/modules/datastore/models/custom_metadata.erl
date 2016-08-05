@@ -285,7 +285,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(custom_metadata_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(custom_metadata_bucket, [], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
