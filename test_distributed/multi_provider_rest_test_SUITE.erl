@@ -478,7 +478,7 @@ changes_stream_json_metadata_test(Config) ->
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
     ?assert(length(Changes) >= 1),
-    [_, LastChangeJson | _] = lists:reverse(Changes),
+    [LastChangeJson | _] = Changes,
     LastChange = jiffy:decode(LastChangeJson, [return_maps]),
     ?assertMatch(#{<<"changes">> := #{<<"xattrs">> := #{<<"onedata_json">> := Json}}}, LastChange).
 
