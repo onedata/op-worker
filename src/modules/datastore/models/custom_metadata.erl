@@ -285,7 +285,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(custom_metadata_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(custom_metadata_bucket, [{file_meta, delete}], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -296,8 +296,8 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
-    ok.
+'after'(file_meta, delete, ?GLOBAL_ONLY_LEVEL, [Key, _], ok) ->
+    delete(Key).
 
 %%--------------------------------------------------------------------
 %% @doc
