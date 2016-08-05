@@ -75,15 +75,15 @@ get_level_0_all_meta_test() ->
 
 error_get_level_0_missing_meta_test() ->
     Json = jiffy:decode(?SAMPLE_METADATA_BINARY, [return_maps]),
-    ?assertException(throw, ?ENOATTR, custom_meta_manipulation:find(Json, [<<"missing">>])).
+    ?assertException(throw, {error, ?ENOATTR}, custom_meta_manipulation:find(Json, [<<"missing">>])).
 
 error_get_level_1_missing_meta_test() ->
     Json = jiffy:decode(?SAMPLE_METADATA_BINARY, [return_maps]),
-    ?assertException(throw, ?ENOATTR, custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"missing">>])).
+    ?assertException(throw, {error, ?ENOATTR}, custom_meta_manipulation:find(Json, [<<"operatingsystem_support">>, <<"missing">>])).
 
 error_get_level_1_meta_from_non_container_test() ->
     Json = jiffy:decode(?SAMPLE_METADATA_BINARY, [return_maps]),
-    ?assertException(throw, ?ENOATTR, custom_meta_manipulation:find(Json, [<<"version">>, <<"missing">>])).
+    ?assertException(throw, {error, ?ENOATTR}, custom_meta_manipulation:find(Json, [<<"version">>, <<"missing">>])).
 
 add_level_0_simple_meta_test() ->
     Json = jiffy:decode(?SAMPLE_METADATA_BINARY, [return_maps]),
