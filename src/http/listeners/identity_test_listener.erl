@@ -51,13 +51,12 @@ start() ->
     {ok, CertFile} = application:get_env(?APP_NAME, identity_cert_file),
 
     % Setup certs
-    Domain = oneprovider:get_oz_domain(),
+    Domain = oneprovider:get_provider_domain(),
     identity:ensure_identity_cert_created(KeyFile, CertFile, Domain),
     Cert = identity:read_cert(CertFile),
     ok = identity:publish_to_dht(Cert),
 
     RestDispatch = [
-%%        {'_', rest_router:top_level_routing()}
     ],
 
     % Start the listener for REST handler
@@ -72,19 +71,6 @@ start() ->
         ], cowboy_protocol, [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]}
         ]),
-
-%%    Result = cowboy:start_https(?REST_LISTENER, NbAcceptors,
-%%        [
-%%            {ip, {127, 0, 0, 1}},
-%%            {port, port()},
-%%            {certfile, CertFile},
-%%            {keyfile, KeyFile},
-%%            {verify, verify_peer},
-%%            {verify_fun, {fun identity:ssl_verify_fun_impl/3, []}}
-%%        ],
-%%        [
-%%            {env, [{dispatch, cowboy_router:compile(RestDispatch)}]}
-%%        ]),
 
     case Result of
         {ok, _} -> ok;

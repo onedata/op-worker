@@ -64,7 +64,6 @@ db_nodes() ->
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
 listeners() -> node_manager:cluster_worker_listeners() ++ [
-    identity_test_listener, %% todo: this is only a identity poc listener
     gui_listener,
     protocol_listener,
     rest_listener,
@@ -117,6 +116,8 @@ before_init([]) ->
 %%--------------------------------------------------------------------
 -spec after_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
 after_init([]) ->
+    %% todo: resolve or remove
+    identity_test_listener:start(),
     ok.
 
 %%--------------------------------------------------------------------
