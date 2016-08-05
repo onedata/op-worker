@@ -248,4 +248,15 @@
     credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
+%% Model that holds file's custom metadata
+-record(custom_metadata, {
+    space_id :: space_info:id(),
+    value = #{} :: #{}
+}).
+
+%% Model that holds database views
+-record(indexes, {
+    value = #{} :: #{indexes:index_id() => indexes:index()}
+}).
+
 -endif.

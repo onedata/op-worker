@@ -35,6 +35,8 @@
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
 -export([create_share/2, get_share/1, remove_share/1]).
+%% Functions concerning metadata
+-export([get_metadata/4, set_metadata/5]).
 
 %%--------------------------------------------------------------------
 %% IDs of entities
@@ -432,3 +434,23 @@ get_share(ShareID) ->
 -spec remove_share(ShareID :: share_id()) -> ok | error_reply().
 remove_share(ShareID) ->
     logical_file_manager:remove_share(ShareID).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get json metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()]) ->
+    {ok, #{}} | error_reply().
+get_metadata(Auth, FileKey, Type, Names) ->
+    logical_file_manager:get_metadata(Auth, FileKey, Type, Names).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Set json metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec set_metadata(onedata_auth_api:auth(), file_key(), binary(), term(), [binary()]) ->
+    ok | error_reply().
+set_metadata(Auth, FileKey, Type, Value, Names) ->
+    logical_file_manager:set_metadata(Auth, FileKey, Type, Value, Names).

@@ -23,7 +23,7 @@
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2, content_types_accepted/2]).
+    content_types_provided/2]).
 
 %% resource functions
 -export([get_space_changes/2]).
@@ -36,8 +36,8 @@
 %% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
+rest_init(Req, State) ->
+    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -72,16 +72,6 @@ is_authorized(Req, State) ->
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, get_space_changes}
-    ], Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_accepted/2
-%%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
-content_types_accepted(Req, State) ->
-    {[
-        {<<"application/json">>, set_file_attribute}
     ], Req, State}.
 
 %%%===================================================================
@@ -159,8 +149,7 @@ stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := Spa
 %%--------------------------------------------------------------------
 -spec send_change(function(), #change{}, space_info:id()) -> ok.
 send_change(SendChunk, #change{seq = Seq, doc = #document{
-    key = XattrUuid, value = #xattr{}}}, RequestedSpaceId) ->
-    {ok, FileUuid} = xattr:get_file_uuid(XattrUuid),
+    key = FileUuid, value = #custom_metadata{}}}, RequestedSpaceId) ->
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
     send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
         RequestedSpaceId);
@@ -211,11 +200,12 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Xattrs =
         try
-            {ok, XattrNames} = xattr:list(Uuid),
-            lists:map(fun(Name) ->
-                {ok, #document{value = #xattr{value = Value}}} = xattr:get_by_name(Uuid, Name),
-                {Name, Value}
-            end, XattrNames)
+            case custom_metadata:get(Uuid) of
+                {ok, #document{value = #custom_metadata{value = Metadata}}} ->
+                    Metadata;
+                {error, {not_found, custom_metadata}} ->
+                    #{}
+            end
         catch
             _:Error3 ->
                 ?error("Cannot fetch xattrs for changes, error: ~p", [Error3]),
@@ -231,27 +221,27 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
 
     Response =
-        [
-            {<<"changes">>, [
-                {<<"atime">>, Atime},
-                {<<"ctime">>, Ctime},
-                {<<"is_scope">>, IsScope},
-                {<<"mode">>, Mode},
-                {<<"mtime">>, Mtime},
-                {<<"scope">>, SpaceId},
-                {<<"size">>, Size},
-                {<<"type">>, Type},
-                {<<"uid">>, Uid},
-                {<<"version">>, Version},
-                {<<"xattrs">>, Xattrs}
-            ]},
-            {<<"deleted">>, Deleted},
-            {<<"file_id">>, Guid},
-            {<<"file_path">>, Path},
-            {<<"name">>, Name},
-            {<<"seq">>, Seq}
-        ],
-    json_utils:encode(Response).
+        #{
+            <<"changes">> => #{
+                <<"atime">> => Atime,
+                <<"ctime">> => Ctime,
+                <<"is_scope">> => IsScope,
+                <<"mode">> => Mode,
+                <<"mtime">> => Mtime,
+                <<"scope">> => SpaceId,
+                <<"size">> => Size,
+                <<"type">> => Type,
+                <<"uid">> => Uid,
+                <<"version">> => Version,
+                <<"xattrs">> => Xattrs
+            },
+            <<"deleted">> => Deleted,
+            <<"file_id">> => Guid,
+            <<"file_path">> => Path,
+            <<"name">> => Name,
+            <<"seq">> => Seq
+        },
+    jiffy:encode(Response).
 
 %%--------------------------------------------------------------------
 %% @todo fix types in cowboy_req
