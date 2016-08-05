@@ -478,9 +478,15 @@ changes_stream_json_metadata_test(Config) ->
     ?assertNotEqual(<<>>, Body),
     Changes = binary:split(Body, <<"\r\n">>, [global]),
     ?assert(length(Changes) >= 1),
-    [LastChangeJson | _] = Changes,
-    LastChange = jiffy:decode(LastChangeJson, [return_maps]),
-    ?assertMatch(#{<<"changes">> := #{<<"xattrs">> := #{<<"onedata_json">> := Json}}}, LastChange).
+    [_ | AllChanges] = lists:reverse(Changes),
+    DecodedChanges =
+        lists:map(fun(Change) ->
+            jiffy:decode(Change, [return_maps])
+            end, AllChanges),
+
+    ?assert(lists:any(fun(Change) ->
+        Json == maps:get(<<"onedata_json">>, maps:get(<<"xattrs">>, maps:get(<<"changes">>, Change)))
+    end, DecodedChanges)).
 
 list_spaces(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
