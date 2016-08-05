@@ -21,7 +21,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
+    'after'/5, before/4, create_or_update/2]).
 
 -type view_name() :: binary().
 -type index_id() :: binary().
@@ -50,30 +50,40 @@ add_index(UserId, ViewName, ViewFunction, SpaceId) ->
 -spec add_index(onedata_user:id(), view_name() | undefined, view_function(),
     space_info:id() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
-    case indexes:get(UserId) of
-        {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
-            NewMap =
-                case maps:get(IndexId, Indexes, undefined) of
-                    undefined ->
-                        add_db_view(IndexId, SpaceId, ViewFunction),
-                        maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, Indexes);
-                    OldMap = #{space_id := SId} when SpaceId =:= undefined ->
-                        add_db_view(IndexId, SId, ViewFunction),
-                        maps:put(IndexId, OldMap#{function => ViewFunction, space_id => SId}, Indexes);
-                    OldMap ->
-                        add_db_view(IndexId, SpaceId, ViewFunction),
-                        maps:put(IndexId, OldMap#{function => ViewFunction}, Indexes)
-                end,
-            {ok, _} = save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}),
-            {ok, IndexId};
-        {error, {not_found, indexes}} ->
-            add_db_view(IndexId, SpaceId, ViewFunction),
-            Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, #{}),
-            {ok, _} = create(#document{key = UserId, value = #indexes{value = Map}}),
-            {ok, IndexId};
-        Error ->
-            Error
-    end.
+    critical_section:run([?MODEL_NAME, UserId], fun() ->
+        case indexes:get(UserId) of
+            {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
+                NewMap =
+                    case maps:get(IndexId, Indexes, undefined) of
+                        undefined ->
+                            add_db_view(IndexId, SpaceId, ViewFunction),
+                            maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, Indexes);
+                        OldMap = #{space_id := SId} when SpaceId =:= undefined ->
+                            add_db_view(IndexId, SId, ViewFunction),
+                            maps:put(IndexId, OldMap#{function => ViewFunction, space_id => SId}, Indexes);
+                        OldMap ->
+                            add_db_view(IndexId, SpaceId, ViewFunction),
+                            maps:put(IndexId, OldMap#{function => ViewFunction}, Indexes)
+                    end,
+                case save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}) of
+                    {ok, _} ->
+                        {ok, IndexId};
+                    Error ->
+                        Error
+                end;
+            {error, {not_found, indexes}} ->
+                add_db_view(IndexId, SpaceId, ViewFunction),
+                Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, #{}),
+                case create(#document{key = UserId, value = #indexes{value = Map}}) of
+                    {ok, _} ->
+                        {ok, IndexId};
+                    Error ->
+                        Error
+                end;
+            Error ->
+                Error
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -191,6 +201,17 @@ delete(Key) ->
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc

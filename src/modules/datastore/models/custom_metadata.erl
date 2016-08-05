@@ -25,7 +25,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
+    create_or_update/2, 'after'/5, before/4]).
 
 -type type() :: binary().
 -type name() :: binary().
@@ -99,19 +99,15 @@ set_json_metadata(FileUuid, Json) ->
 -spec set_json_metadata(file_meta:uuid(), #{}, [binary()]) ->
     {ok, file_meta:uuid()} | datastore:get_error().
 set_json_metadata(FileUuid, JsonToInsert, Names) ->
-    case get(FileUuid) of %todo use create or update
-        {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
-            Json = maps:get(?JSON_PREFIX, MetaValue, #{}),
-            NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
-            save(Doc#document{value = Meta#custom_metadata{value = MetaValue#{?JSON_PREFIX => NewJson}}});
-        {error, {not_found, custom_metadata}} ->
-            create(#document{key = FileUuid, value = #custom_metadata{
-                space_id = get_space_id(FileUuid),
-                value = #{?JSON_PREFIX => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
-            }});
-        Error ->
-            Error
-    end.
+    ToCreate = #document{key = FileUuid, value = #custom_metadata{
+        space_id = get_space_id(FileUuid),
+        value = #{?JSON_PREFIX => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
+    }},
+    create_or_update(ToCreate, fun(Meta = #custom_metadata{value = MetaValue}) ->
+        Json = maps:get(?JSON_PREFIX, MetaValue, #{}),
+        NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
+        {ok, Meta#custom_metadata{value = MetaValue#{?JSON_PREFIX => NewJson}}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc Gets file's rdf metadata
@@ -170,15 +166,12 @@ list_xattr_metadata(FileUuid) ->
 -spec remove_xattr_metadata(file_meta:uuid(), xattr:name()) ->
     ok | datastore:generic_error().
 remove_xattr_metadata(FileUuid, Name) ->
-    case get(FileUuid) of
-        {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
+    case update(FileUuid, fun(Meta = #custom_metadata{value = MetaValue}) ->
             NewMetaValue = maps:remove(Name, MetaValue),
-            case save(Doc#document{value = Meta#custom_metadata{value = NewMetaValue}}) of
-                {ok, _} ->
-                    ok;
-                Error ->
-                    Error
-            end;
+            {ok, Meta#custom_metadata{value = NewMetaValue}}
+        end) of
+        {ok, _} ->
+            ok;
         {error, {not_found, custom_metadata}} ->
             ok;
         Error ->
@@ -204,18 +197,14 @@ exists_xattr_metadata(FileUuid, Name) ->
 -spec set_xattr_metadata(file_meta:uuid(), xattr:name(), xattr:value()) ->
     {ok, file_meta:uuid()} | datastore:generic_error().
 set_xattr_metadata(FileUuid, Name, Value) ->
-    case get(FileUuid) of
-        {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
-            NewMetaValue = maps:put(Name, Value, MetaValue),
-            save(Doc#document{value = Meta#custom_metadata{value = NewMetaValue}});
-        {error, {not_found, custom_metadata}} ->
-            Map = maps:put(Name,Value, #{}),
-            create(#document{key = FileUuid, value = #custom_metadata{
-                space_id = get_space_id(FileUuid),
-                value = Map}});
-        Error ->
-            Error
-    end.
+    Map = maps:put(Name,Value, #{}),
+    NewDoc = #document{key = FileUuid, value = #custom_metadata{
+        space_id = get_space_id(FileUuid),
+        value = Map}},
+    create_or_update(NewDoc, fun(Meta = #custom_metadata{value = MetaValue}) ->
+        NewMetaValue = maps:put(Name, Value, MetaValue),
+        {ok, Meta#custom_metadata{value = NewMetaValue}}
+    end).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -277,6 +266,17 @@ delete(Key) ->
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
