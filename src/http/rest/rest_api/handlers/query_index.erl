@@ -78,7 +78,7 @@ query_index(Req, State) ->
     {StateWithEndkey, ReqWithEndkey} = validator:parse_endkey(ReqWithDescending, StateWithDescending),
     {StateWithInclusiveEnd, ReqWithInclusiveEnd} = validator:parse_inclusive_end(ReqWithEndkey, StateWithEndkey),
     {StateWithKey, ReqWithKey} = validator:parse_key(ReqWithInclusiveEnd, StateWithInclusiveEnd),
-%%    {StateWithKeys, ReqWithKeys} = validator:parse_keys(ReqWithKey, StateWithKey), %todo fix couchbeam
+%%    {StateWithKeys, ReqWithKeys} = validator:parse_keys(ReqWithKey, StateWithKey), %todo VFS-2369 support complex keys
     {StateWithLimit, ReqWithLimit} = validator:parse_limit(ReqWithKey, StateWithKey),
     {StateWithSkip, ReqWithSkip} = validator:parse_skip(ReqWithLimit, StateWithLimit),
     {StateWithStale, ReqWithStale} = validator:parse_stale(ReqWithSkip, StateWithSkip),
