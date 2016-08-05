@@ -67,7 +67,7 @@ get_json_metadata(FileUuid) ->
 -spec get_json_metadata(file_meta:uuid(), [binary()]) ->
     {ok, #{}} | datastore:get_error().
 get_json_metadata(FileUuid, Names) ->
-    case custom_metadata:get(FileUuid) of
+    case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
             Json = maps:get(?JSON_PREFIX, Meta, #{}),
             {ok, custom_meta_manipulation:find(Json, Names)};
@@ -99,7 +99,7 @@ set_json_metadata(FileUuid, Json) ->
 -spec set_json_metadata(file_meta:uuid(), #{}, [binary()]) ->
     {ok, file_meta:uuid()} | datastore:get_error().
 set_json_metadata(FileUuid, JsonToInsert, Names) ->
-    case custom_metadata:get(FileUuid) of %todo use create or update
+    case get(FileUuid) of %todo use create or update
         {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
             Json = maps:get(?JSON_PREFIX, MetaValue, #{}),
             NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
@@ -136,7 +136,7 @@ set_rdf_metadata(FileUuid, Value) ->
 -spec get_xattr_metadata(file_meta:uuid(), xattr:name()) ->
     {ok, xattr:value()} | datastore:get_error().
 get_xattr_metadata(FileUuid, Name) ->
-    case custom_metadata:get(FileUuid) of
+    case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
             case maps:get(Name, Meta, undefined) of
                 undefined ->
@@ -154,7 +154,7 @@ get_xattr_metadata(FileUuid, Name) ->
 -spec list_xattr_metadata(file_meta:uuid()) ->
     {ok, [xattr:name()]} | datastore:generic_error().
 list_xattr_metadata(FileUuid) ->
-    case custom_metadata:get(FileUuid) of
+    case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
             Keys = maps:keys(Meta),
             {ok, Keys};
@@ -170,7 +170,7 @@ list_xattr_metadata(FileUuid) ->
 -spec remove_xattr_metadata(file_meta:uuid(), xattr:name()) ->
     ok | datastore:generic_error().
 remove_xattr_metadata(FileUuid, Name) ->
-    case custom_metadata:get(FileUuid) of
+    case get(FileUuid) of
         {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
             NewMetaValue = maps:remove(Name, MetaValue),
             case save(Doc#document{value = Meta#custom_metadata{value = NewMetaValue}}) of
@@ -191,7 +191,7 @@ remove_xattr_metadata(FileUuid, Name) ->
 -spec exists_xattr_metadata(file_meta:uuid(), xattr:name()) ->
     datastore:exists_return().
 exists_xattr_metadata(FileUuid, Name) ->
-    case custom_metadata:get(FileUuid) of
+    case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = MetaValue}}} ->
             maps:is_key(Name, MetaValue);
         {error, {not_found, custom_metadata}} ->
@@ -204,7 +204,7 @@ exists_xattr_metadata(FileUuid, Name) ->
 -spec set_xattr_metadata(file_meta:uuid(), xattr:name(), xattr:value()) ->
     {ok, file_meta:uuid()} | datastore:generic_error().
 set_xattr_metadata(FileUuid, Name, Value) ->
-    case custom_metadata:get(FileUuid) of
+    case get(FileUuid) of
         {ok, Doc = #document{value = Meta = #custom_metadata{value = MetaValue}}} ->
             NewMetaValue = maps:put(Name, Value, MetaValue),
             save(Doc#document{value = Meta#custom_metadata{value = NewMetaValue}});
