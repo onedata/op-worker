@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests protocol handler
+%%% @doc This module tests identity verification.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(identity_verification_test_SUITE).
@@ -74,13 +74,12 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    ok.
-%%    test_node_starter:clean_environment(Config).
+    test_node_starter:clean_environment(Config).
 
-init_per_testcase(Case, Config) ->
+init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(cert_connection_test, Config) ->
+end_per_testcase(_Case, _Config) ->
     ok.
 
 %%%===================================================================

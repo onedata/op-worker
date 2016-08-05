@@ -31,8 +31,7 @@
 -spec publish(identity:id(), identity:public_key()) ->
     ok | {error, Reason :: term()}.
 publish(ID, PublicKey) ->
-    Encoded = base64:encode(term_to_binary(PublicKey)),
-    oz_identities:set_public_key(provider, ID, Encoded).
+    oz_identities:set_public_key(provider, ID, PublicKey).
 
 %%--------------------------------------------------------------------
 %% @doc
