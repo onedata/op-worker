@@ -42,6 +42,20 @@
     {<<"error_description">>, <<"Requested limit exceeds maximal value of ", (integer_to_binary(Max))/binary, ".">>}]}).
 -define(ERROR_INVALID_STATUS, {?BAD_REQUEST, [{<<"error">>, <<"invalid_status">>},
     {<<"error_description">>, <<"Requested transfer status is invalid.">>}]}).
+-define(ERROR_INVALID_METADATA_TYPE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_metadata_type">>},
+    {<<"error_description">>, <<"Given metadatadata type is invalid for selected contentent type.">>}]}).
+-define(ERROR_SPACE_NOT_PROVIDED, {?BAD_REQUEST, [{<<"error">>, <<"space_not_provided">>},
+    {<<"error_description">>, <<"Required space_id was not provided.">>}]}).
+-define(ERROR_INVALID_DESCENDING, {?BAD_REQUEST, [{<<"error">>, <<"invalid_descending">>},
+    {<<"error_description">>, <<"The descending parameter is invalid, it must be of boolean type.">>}]}).
+-define(ERROR_INVALID_INCLUSIVE_END, {?BAD_REQUEST, [{<<"error">>, <<"invalid_inclusive_end">>},
+    {<<"error_description">>, <<"The inclusive_end parameter is invalid, it must be of boolean type.">>}]}).
+-define(ERROR_INVALID_STALE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_stale">>},
+    {<<"error_description">>, <<"The stale parameter is invalid, it must be one of: 'ok', 'update_after'.">>}]}).
+-define(ERROR_INVALID_SKIP, {?BAD_REQUEST, [{<<"error">>, <<"invalid_skip">>},
+    {<<"error_description">>, <<"The skip parameter is invalid, it must be of integer type.">>}]}).
+-define(ERROR_INVALID_FILTER_TYPE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_filter_type">>},
+    {<<"error_description">>, <<"The filter_type parameter is invalid.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},

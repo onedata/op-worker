@@ -140,7 +140,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
     datastore:create_or_update(?STORE_LEVEL, Doc, Diff).

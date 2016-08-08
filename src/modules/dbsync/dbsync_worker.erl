@@ -25,7 +25,7 @@
 -export([apply_batch_changes/3, init_stream/3]).
 -export([bcast_status/0, on_status_received/3]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state]).
+-define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).

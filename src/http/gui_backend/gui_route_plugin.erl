@@ -19,6 +19,7 @@
 -behaviour(gui_route_plugin_behaviour).
 
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("gui/include/gui.hrl").
@@ -27,6 +28,7 @@
 -export([session_details/0]).
 -export([login_page_path/0, default_page_path/0]).
 -export([error_404_html_file/0, error_500_html_file/0]).
+-export([response_headers/0]).
 
 %% Convenience macros for defining routes.
 -define(LOGIN, #gui_route{
@@ -176,3 +178,14 @@ error_404_html_file() ->
 -spec error_500_html_file() -> FileName :: binary().
 error_500_html_file() ->
     <<"page500.html">>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gui_route_plugin_behaviour} callback response_headers/0
+%% @end
+%%--------------------------------------------------------------------
+-spec response_headers() -> [{Key :: binary(), Value :: binary()}].
+response_headers() ->
+    {ok, Headers} = application:get_env(?APP_NAME, gui_response_headers),
+    Headers.
