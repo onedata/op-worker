@@ -116,8 +116,6 @@ before_init([]) ->
 %%--------------------------------------------------------------------
 -spec after_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
 after_init([]) ->
-    %% todo: resolve or remove
-    identity_test_listener:start(),
     ok.
 
 %%--------------------------------------------------------------------

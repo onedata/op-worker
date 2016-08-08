@@ -54,21 +54,33 @@ start() ->
     Domain = oneprovider:get_provider_domain(),
     identity:ensure_identity_cert_created(KeyFile, CertFile, Domain),
     Cert = identity:read_cert(CertFile),
-    ok = identity:publish_to_dht(Cert),
+    ok = identity:publish(Cert),
 
     RestDispatch = [
     ],
 
-    % Start the listener for REST handler
-    Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
-        ranch_etls, [
-            {ip, {127, 0, 0, 1}},
+%%    % Start the listener for REST handler
+%%    Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
+%%        ranch_etls, [
+%%            {ip, {127, 0, 0, 1}},
+%%            {port, port()},
+%%            {certfile, CertFile},
+%%            {keyfile, KeyFile},
+%%            {verify, verify_peer},
+%%            {verify_fun, {fun identity:ssl_verify_fun_impl/3, []}}
+%%        ], cowboy_protocol, [
+%%            {env, [{dispatch, cowboy_router:compile(RestDispatch)}]}
+%%        ]),
+
+    Result = cowboy:start_https(?REST_LISTENER, NbAcceptors,
+        [
             {port, port()},
             {certfile, CertFile},
             {keyfile, KeyFile},
             {verify, verify_peer},
             {verify_fun, {fun identity:ssl_verify_fun_impl/3, []}}
-        ], cowboy_protocol, [
+        ],
+        [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]}
         ]),
 

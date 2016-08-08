@@ -20,10 +20,14 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([cert_connection_test/1]).
+-export([no_connection_on_identity_cert_used_for_nonprotected_endpoint/1,
+    no_connection_on_nonpublished_cert_used/1,
+    connection_on_identity_cert_used/1]).
 
 -define(NORMAL_CASES_NAMES, [
-    cert_connection_test
+    connection_on_identity_cert_used,
+    no_connection_on_nonpublished_cert_used,
+    no_connection_on_identity_cert_used_for_nonprotected_endpoint
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -36,34 +40,48 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 %%% Test functions
 %%%===================================================================
 
-cert_connection_test(Config) ->
+connection_on_identity_cert_used(Config) ->
     %% given
-    [Node1, Node2 | _] = ?config(op_worker_nodes, Config),
-    Host2 = get_hostname(Node2),
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    HostP2 = get_hostname(WorkerP2),
+    TestPort = test_endpoint_port(WorkerP1),
+    {IdentityKeyFile, IdentityCertFile} = get_identity_cert_paths(WorkerP1),
 
-    VerifyFun = {verify_fun, {fun(Cert, Event, State) ->
-        rpc:call(Node1, identity, ssl_verify_fun_impl, [Cert, Event, State])
-    end, []}},
-
-    %% when - request with cert published in DHT
-    {ok, OZCertFile} = rpc:call(Node1, application, get_env, [?APP_NAME, identity_cert_file]),
-    {ok, OZKeyFile} = rpc:call(Node1, application, get_env, [?APP_NAME, identity_key_file]),
-    Options1 = [insecure, {ssl_options, [VerifyFun, {certfile, OZCertFile}, {keyfile, OZKeyFile}]}],
-    Res1 = rpc:call(Node1, hackney, request, [get, <<"https://", Host2/binary, ":6443">>, [], [], Options1]),
-
-    %% when - request with cert not present in DHT
-    {ok, OtherCertFile} = rpc:call(Node1, application, get_env, [?APP_NAME, oz_provider_cert_path]),
-    {ok, OtherKeyFile} = rpc:call(Node1, application, get_env, [?APP_NAME, oz_provider_key_path]),
-    Options2 = [insecure, {ssl_options, [VerifyFun, {certfile, OtherCertFile}, {keyfile, OtherKeyFile}]}],
-    Res2 = rpc:call(Node1, hackney, request, [get, <<"https://", Host2/binary, ":6443">>, [], [], Options2]),
-
-    %% when - server with cert not present in DHT
-    Res3 = rpc:call(Node1, hackney, request, [get, <<"https://", Host2/binary>>, [], [], Options1]),
+    %% when
+    Result = request(WorkerP1, HostP2, TestPort, IdentityKeyFile, IdentityCertFile),
+    ct:print("Result ~p", [Result]),
 
     %% then
-    ?assertMatch({ok, _, _, _}, Res1),
-    ?assertMatch({error, _}, Res2),
-    ?assertMatch({error, _}, Res3),
+    ?assertMatch({ok, _, _, _}, Result),
+    ok.
+
+no_connection_on_nonpublished_cert_used(Config) ->
+    %% given
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    HostP2 = get_hostname(WorkerP2),
+    TestPort = test_endpoint_port(WorkerP1),
+    {OtherKeyFile, OtherCertFile} = get_nonpublished_cert_paths(WorkerP1),
+
+    %% when
+    Result = request(WorkerP1, HostP2, TestPort, OtherKeyFile, OtherCertFile),
+    ct:print("Result ~p", [Result]),
+
+    %% then
+    ?assertMatch({error, _}, Result),
+    ok.
+
+no_connection_on_identity_cert_used_for_nonprotected_endpoint(Config) ->
+    %% given
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    HostP2 = get_hostname(WorkerP2),
+    {IdentityKeyFile, IdentityCertFile} = get_identity_cert_paths(WorkerP1),
+
+    %% when
+    Result = request(WorkerP1, HostP2, <<"80">>, IdentityKeyFile, IdentityCertFile, [insecure]),
+    ct:print("Result ~p", [Result]),
+
+    %% then
+    ?assertMatch({error, _}, Result),
     ok.
 
 %%%===================================================================
@@ -71,10 +89,14 @@ cert_connection_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    UpdatedConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [identity_test_listener]),
+    Nodes = ?config(op_worker_nodes, UpdatedConfig),
+    [ok = rpc:call(Node, identity_test_listener, start, []) || Node <- Nodes],
+    UpdatedConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ok.
+%%    test_node_starter:clean_environment(Config).
 
 init_per_testcase(_Case, Config) ->
     Config.
@@ -86,6 +108,42 @@ end_per_testcase(_Case, _Config) ->
 %%% Internal functions
 %%%===================================================================
 
+get_nonpublished_cert_paths(Worker) ->
+    TmpDir = rpc:call(Worker, utils, mkdtemp, []),
+    KeyFile = TmpDir ++ "/key.pem",
+    CertFile = TmpDir ++ "/cert.pem",
+    PassFile = TmpDir ++ "/pass",
+    CSRFile = TmpDir ++ "/csr",
+    DomainForCN = binary_to_list(get_hostname(Worker)),
+
+    rpc:call(Worker, os, cmd, [["openssl genrsa", " -des3 ", " -passout ", " pass:xx ", " -out ", PassFile, " 2048 "]]),
+    rpc:call(Worker, os, cmd, [["openssl rsa", " -passin ", " pass:xx ", " -in ", PassFile, " -out ", KeyFile]]),
+    rpc:call(Worker, os, cmd, [["openssl req", " -new ", " -key ", KeyFile, " -out ", CSRFile, " -subj ", "\"/CN=" ++ DomainForCN ++ "\""]]),
+    rpc:call(Worker, os, cmd, [["openssl x509", " -req ", " -days ", " 365 ", " -in ", CSRFile, " -signkey ", KeyFile, " -out ", CertFile]]),
+
+    ct:print("get_nonpublished_cert_paths ~p", [{KeyFile, CertFile}]),
+    {KeyFile, CertFile}.
+
+get_identity_cert_paths(WorkerP1) ->
+    {ok, IdentityCertFile} = rpc:call(WorkerP1, application, get_env, [?APP_NAME, identity_cert_file]),
+    {ok, IdentityKeyFile} = rpc:call(WorkerP1, application, get_env, [?APP_NAME, identity_key_file]),
+    ct:print("get_identity_cert_paths ~p", [{IdentityKeyFile, IdentityCertFile}]),
+    {IdentityKeyFile, IdentityCertFile}.
+
+test_endpoint_port(Worker) ->
+    integer_to_binary(rpc:call(Worker, identity_test_listener, port, [])).
+
+request(Node, Host, Port, KeyPath, CertPath) ->
+    request(Node, Host, Port, KeyPath, CertPath, []).
+request(Node, Host, Port, KeyPath, CertPath, Options) ->
+    VerifyFun = {verify_fun, {fun(Cert, Event, State) ->
+
+        ct:print("CALLBACK ~p\n~p\n~p", [Cert, Event, State]),
+        rpc:call(Node, identity, ssl_verify_fun_impl, [Cert, Event, State])
+    end, []}},
+
+    FinalOptions = [{ssl_options, [VerifyFun, {certfile, CertPath}, {keyfile, KeyPath}]} | Options],
+    rpc:call(Node, hackney, request, [get, <<"https://", Host/binary, ":", Port/binary>>, [], [], FinalOptions]).
 
 get_hostname(Node) ->
     Host = rpc:call(Node, oneprovider, get_node_hostname, []),

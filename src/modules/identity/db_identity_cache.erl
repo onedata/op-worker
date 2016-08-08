@@ -9,47 +9,53 @@
 %%% This module manages identity data in DHT.
 %%% @end
 %%%-------------------------------------------------------------------
--module(caching_oz_identity_repository).
+-module(db_identity_cache).
 -author("Michal Zmuda").
 
--behaviour(identity_repository_behaviour).
+-behaviour(identity_cache_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
--export([publish/2, get/1]).
+-export([put/2, get/1, invalidate/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Publishes public key under given ID.
+%% Cached public key under given ID.
 %% @end
 %%--------------------------------------------------------------------
--spec publish(identity:id(), identity:public_key()) ->
-    ok | {error, Reason :: term()}.
-publish(ID, PublicKey) ->
-    case oz_identity_repository:publish(ID, PublicKey) of
-        ok -> cache(ID, PublicKey), ok;
-        _Error -> _Error
-    end.
+-spec put(identity:id(), identity:public_key()) -> ok.
+put(ID, Key) ->
+    cache(ID, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines public key for given ID.
+%% Determines cached public key for given ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(identity:id()) ->
     {ok, identity:public_key()} | {error, Reason :: term()}.
 get(ID) ->
     case identity_cache:get(ID) of
-        {ok, #document{value = #identity_cache{public_key = PublicKey}}} ->
-            {ok, PublicKey};
-        {error, {not_found, _}} ->
-            case oz_identity_repository:get(ID) of
-                {ok, PublicKey} -> cache(ID, PublicKey), {ok, PublicKey};
-                _Error -> _Error
-            end;
-        _Error -> _Error
+        {ok, #document{value = #identity_cache{public_key = Key}}} ->
+            {ok, Key};
+        {error, {not_found, identity_cache}} ->
+            {error, not_found};
+        {error, Reason} ->
+            {error, {db_error, Reason}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Ensures public key for given iD is not cached.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate(identity:id()) -> ok | {error, Reason :: term()}.
+invalidate(ID) ->
+    case identity_cache:delete(ID) of
+        {error, Reason} -> {error, {db_error, Reason}};
+        ok -> ok
     end.
 
 %%%===================================================================
