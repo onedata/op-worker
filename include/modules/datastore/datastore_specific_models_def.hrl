@@ -192,6 +192,11 @@
     entry :: term()
 }).
 
+%% Model that holds state entries for DBSync worker
+-record(dbsync_batches, {
+    batches = #{} :: #{}
+}).
+
 %% Model that holds files created by root, whose owner needs to be changed when
 %% the user will be present in current provider.
 %% The Key of this document is UserId.
@@ -242,6 +247,17 @@
 %% Model that maps onedata user to Openstack Swift user
 -record(swift_user, {
     credentials :: #{storage:id() => swift_user:credentials()}
+}).
+
+%% Model that holds file's custom metadata
+-record(custom_metadata, {
+    space_id :: space_info:id(),
+    value = #{} :: #{}
+}).
+
+%% Model that holds database views
+-record(indexes, {
+    value = #{} :: #{indexes:index_id() => indexes:index()}
 }).
 
 -endif.

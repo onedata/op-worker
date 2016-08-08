@@ -58,7 +58,7 @@ start() ->
 
     % Start the listener for REST handler
     Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
-        ranch_ssl2, [
+        ranch_etls, [
             {ip, {127, 0, 0, 1}},
             {port, RestPort},
             {certfile, Cert},

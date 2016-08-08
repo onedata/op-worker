@@ -57,7 +57,7 @@ start() ->
          end,
 
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_ssl2, [
+        ranch_etls, [
             {ip, Ip},
             {port, Port},
             {certfile, CertFile},
@@ -98,9 +98,9 @@ stop() ->
 healthcheck() ->
     {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
         nagios_healthcheck_timeout),
-    case ssl2:connect("127.0.0.1", port(), [{packet, 4}, {active, false}], Timeout) of
+    case etls:connect("127.0.0.1", port(), [{packet, 4}, {active, false}], Timeout) of
         {ok, Sock} ->
-            ssl2:close(Sock),
+            etls:close(Sock),
             ok;
         _ ->
             {error, server_not_responding}

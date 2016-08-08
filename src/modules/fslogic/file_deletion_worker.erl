@@ -150,7 +150,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
         false ->
             spawn(fun() ->
                 fslogic_event:emit_file_removal(
-                    fslogic_uuid:to_file_guid(FileUUID, SpaceId))
+                    fslogic_uuid:to_file_guid(FileUUID, SpaceId), [SessId])
             end)
     end,
     ok.

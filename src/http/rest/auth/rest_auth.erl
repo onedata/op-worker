@@ -93,7 +93,7 @@ authenticate(Req) ->
 -spec authenticate_using_token(req(), Token :: binary()) ->
     {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
-    case macaroon:deserialize(Token) of
+    case token_utils:deserialize(Token) of
         {ok, Macaroon} ->
             Auth = #token_auth{macaroon = Macaroon},
             case identity:get_or_fetch(Auth) of
@@ -133,7 +133,7 @@ authenticate_using_basic_auth(Req, BasicAuthHeader) ->
     {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_cert(Req) ->
     Socket = cowboy_req:get(socket, Req),
-    case ssl2:peercert(Socket) of
+    case etls:peercert(Socket) of
         {ok, Der} ->
             Certificate = public_key:pkix_decode_cert(Der, otp),
             case identity:get_or_fetch(Certificate) of

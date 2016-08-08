@@ -59,7 +59,7 @@ start() ->
         end, [oz_plugin:get_cacert_path()]),
 
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_ssl2, [
+        ranch_etls, [
             {ip, Ip},
             {port, Port},
             {certfile, CertFile},
