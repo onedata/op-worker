@@ -42,6 +42,8 @@
     {<<"error_description">>, <<"Given metadata is invalid.">>}]}).
 -define(ERROR_MALFORMED_QS, {?BAD_REQUEST, [{<<"error">>, <<"malformed_qs">>},
     {<<"error_description">>, <<"Request's query string is malformed.">>}]}).
+-define(ERROR_INVALID_JSON, {?BAD_REQUEST, [{<<"error">>, <<"invalid_json">>},
+    {<<"error_description">>, <<"Could not parse json.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},
