@@ -788,11 +788,9 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
 -spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
 file_meta_mock_setup(Workers) ->
     Self = self(),
-    Handler = fun(A1, A2, A3, A4, A5) ->
-        erlang:apply(meck_util:original_name(file_meta), 'after', [A1, A2, A3, A4, A5]),
-        Self ! onedata_user_setup
-    end,
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after', fun
-        (A1, A2, A3, A4, A5) -> Handler(A1, A2, A3, A4, A5)
+        (ModelName, Method, Level, Context, ReturnValue) ->
+            meck:passthrough(ModelName, Method, Level, Context, ReturnValue),
+            Self ! onedata_user_setup
     end).

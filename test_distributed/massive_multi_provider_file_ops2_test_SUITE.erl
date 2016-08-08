@@ -44,34 +44,18 @@ db_sync_test(Config) ->
 file_consistency_test(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     {Worker1, Worker2, Worker3} = lists:foldl(fun(W, {Acc1, Acc2, Acc3}) ->
-        NAcc1 = case is_atom(Acc1) of
-                    true ->
-                        Acc1;
-                    _ ->
-                        case string:str(atom_to_list(W), "p1") of
-                            0 -> Acc1;
-                            _ -> W
-                        end
-                end,
-        NAcc2 = case is_atom(Acc2) of
-                    true ->
-                        Acc2;
-                    _ ->
-                        case string:str(atom_to_list(W), "p2") of
-                            0 -> Acc2;
-                            _ -> W
-                        end
-                end,
-        NAcc3 = case is_atom(Acc3) of
-                    true ->
-                        Acc3;
-                    _ ->
-                        case string:str(atom_to_list(W), "p6") of
-                            0 -> Acc3;
-                            _ -> W
-                        end
-                end,
-        {NAcc1, NAcc2, NAcc3}
+        Check = fun(Acc, Prov) ->
+            case is_atom(Acc) of
+                true ->
+                    Acc;
+                _ ->
+                    case string:str(atom_to_list(W), Prov) of
+                        0 -> Acc;
+                        _ -> W
+                    end
+            end
+        end,
+        {Check(Acc1, "p1"), Check(Acc2, "p2"), Check(Acc3, "p3")}
     end, {[], [], []}, Workers),
 
     multi_provider_file_ops_test_SUITE:file_consistency_test_base(Config, Worker1, Worker2, Worker3).

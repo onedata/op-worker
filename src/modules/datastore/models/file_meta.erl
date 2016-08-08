@@ -441,16 +441,16 @@ get_parent(Entry) ->
 -spec get_parent_uuid(Entry :: entry()) -> {ok, datastore:key()} | datastore:get_error().
 get_parent_uuid(Entry) ->
     ?run(begin
-             case get(Entry) of
-                 {ok, #document{key = ?ROOT_DIR_UUID}} = RootResp ->
-                     {ok, ?ROOT_DIR_UUID};
-                 {ok, #document{key = Key} = Doc} ->
-                     set_link_context(Doc),
-                     {ok, {ParentKey, ?MODEL_NAME}} =
-                         datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
-                     {ok, ParentKey}
-             end
-         end).
+        case get(Entry) of
+            {ok, #document{key = ?ROOT_DIR_UUID}} = RootResp ->
+                {ok, ?ROOT_DIR_UUID};
+            {ok, #document{key = Key} = Doc} ->
+                set_link_context(Doc),
+                {ok, {ParentKey, ?MODEL_NAME}} =
+                    datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+                {ok, ParentKey}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -714,6 +714,31 @@ get_guid_from_phantom_file(OldUUID) ->
     {ok, #document{value = #file_meta{link_value = NewGuid, type = ?PHANTOM_TYPE}}} =
         get(fslogic_uuid:uuid_to_phantom_uuid(OldUUID)),
     {ok, NewGuid}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets link's scopes for links connected with given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_link_context_for_space(SpaceId :: datastore:key()) -> ok.
+set_link_context_for_space(SpaceId) ->
+    MyProvID = oneprovider:get_provider_id(),
+    erlang:put(mother_scope, MyProvID),
+    OtherScopes = lists:delete(MyProvID, dbsync_utils:get_providers_for_space(SpaceId)),
+    erlang:put(other_scopes, OtherScopes),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets default link's scopes.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_link_context_default() -> ok.
+set_link_context_default() ->
+    MyProvID = oneprovider:get_provider_id(),
+    erlang:put(mother_scope, MyProvID),
+    erlang:put(other_scopes, []),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -981,7 +1006,12 @@ is_snapshot(FileName) ->
     end.
 
 
--spec location_ref(oneprovider:id()) -> binary().
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates location reference (that is used to name link) using provider ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec location_ref(ProviderID :: oneprovider:id()) -> LocationReference :: binary().
 location_ref(ProviderId) ->
     <<?LOCATION_PREFIX, ProviderId/binary>>.
 
@@ -1016,31 +1046,4 @@ set_link_context(ScopeUUID) ->
             ?error_stacktrace("Cannot set other_scopes for uuid ~p, error: ~p:~p", [ScopeUUID, E1, E2]),
             set_link_context_default()
     end,
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sets link's scopes for links connected with given space.
-%% @end
-%%--------------------------------------------------------------------
--spec set_link_context_for_space(SpaceId :: datastore:key()) -> ok.
-set_link_context_for_space(SpaceId) ->
-    MyProvID = oneprovider:get_provider_id(),
-    erlang:put(mother_scope, MyProvID),
-    OtherScopes = dbsync_utils:get_providers_for_space(SpaceId) -- [MyProvID],
-    erlang:put(other_scopes, OtherScopes),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sets default link's scopes.
-%% @end
-%%--------------------------------------------------------------------
--spec set_link_context_default() -> ok.
-set_link_context_default() ->
-    MyProvID = oneprovider:get_provider_id(),
-    erlang:put(mother_scope, MyProvID),
-    erlang:put(other_scopes, []),
     ok.

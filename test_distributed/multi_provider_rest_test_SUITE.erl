@@ -716,7 +716,6 @@ domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
 
 assertLists(L1, L2) ->
-    ct:print("LL ~p ~p", [L1, L2]),
     ?assertEqual(length(L1), length(L2)),
     lists:foreach(fun(E) ->
         ?assert(lists:member(E, L2))

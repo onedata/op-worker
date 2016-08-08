@@ -46,8 +46,8 @@ all() ->
     end
 ).
 
--define(RPC(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
--define(RPC_TEST(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
+-define(rpc(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
+-define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
 %%%===================================================================
 %%% Test functions
@@ -438,7 +438,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    A1 = ?RPC(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
+    A1 = ?rpc(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
     SpaceKey = SpaceDoc#document.key,
@@ -498,9 +498,9 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
             {sleep, Sek}) ->
                 timer:sleep(timer:seconds(Sek));
             ({Fun, DocNum}) ->
-                ?assertEqual(ok, ?RPC_TEST(Worker1, Fun, proplists:get_value(DocNum, DocsList)));
+                ?assertEqual(ok, ?rpcTest(Worker1, Fun, proplists:get_value(DocNum, DocsList)));
             ({Fun, DocNum, W}) ->
-                ?assertEqual(ok, ?RPC_TEST(W, Fun, proplists:get_value(DocNum, DocsList)))
+                ?assertEqual(ok, ?rpcTest(W, Fun, proplists:get_value(DocNum, DocsList)))
         end, TaskList),
 
         ?match({ok, #file_attr{}},
@@ -771,65 +771,6 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
 
     ok.
 
-create_doc(Doc, _ParentDoc, _LocId, _Path) ->
-    {ok, _} = file_meta:save(Doc),
-    ok.
-
-set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
-    FDoc = Doc#document.value,
-    file_meta:set_link_context(ParentDoc),
-    MC = file_meta:model_init(),
-    LSL = MC#model_config.link_store_level,
-    ok = datastore:add_links(LSL, ParentDoc, {FDoc#file_meta.name, Doc}).
-
-set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
-    file_meta:set_link_context(ParentDoc),
-    MC = file_meta:model_init(),
-    LSL = MC#model_config.link_store_level,
-    ok = datastore:add_links(LSL, Doc, {parent, ParentDoc}).
-
-create_location(Doc, _ParentDoc, LocId, Path) ->
-    FDoc = Doc#document.value,
-    FileUuid = Doc#document.key,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
-
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
-    FileId = file_meta:snapshot_name(Path, FDoc#file_meta.version),
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
-        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
-        space_id = SpaceId},
-
-    MC = file_location:model_init(),
-    LSL = MC#model_config.link_store_level,
-    {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
-
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    LeafLess = fslogic_path:dirname(FileId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok -> ok;
-        {error, eexist} ->
-            ok
-    end,
-
-
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
-    storage_file_manager:unlink(SFMHandle1),
-    ok = storage_file_manager:create(SFMHandle1, 8#775),
-    {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
-    {ok, 3} = storage_file_manager:write(SFMHandle2, 0, <<"abc">>),
-    storage_file_manager:fsync(SFMHandle2),
-    ok.
-
-set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
-    FileUuid = Doc#document.key,
-    file_meta:set_link_context(ParentDoc),
-    MC = file_meta:model_init(),
-    LSL = MC#model_config.link_store_level,
-    ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
-    ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -923,3 +864,62 @@ get_locations_from_map(Map) ->
                 Acc
         end
     end, [], Map).
+
+create_doc(Doc, _ParentDoc, _LocId, _Path) ->
+    {ok, _} = file_meta:save(Doc),
+    ok.
+
+set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
+    FDoc = Doc#document.value,
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, ParentDoc, {FDoc#file_meta.name, Doc}).
+
+set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, Doc, {parent, ParentDoc}).
+
+create_location(Doc, _ParentDoc, LocId, Path) ->
+    FDoc = Doc#document.value,
+    FileUuid = Doc#document.key,
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
+
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    FileId = file_meta:snapshot_name(Path, FDoc#file_meta.version),
+    Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
+        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
+        space_id = SpaceId},
+
+    MC = file_location:model_init(),
+    LSL = MC#model_config.link_store_level,
+    {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
+
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    LeafLess = fslogic_path:dirname(FileId),
+    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
+    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok -> ok;
+        {error, eexist} ->
+            ok
+    end,
+
+
+    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
+    storage_file_manager:unlink(SFMHandle1),
+    ok = storage_file_manager:create(SFMHandle1, 8#775),
+    {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
+    {ok, 3} = storage_file_manager:write(SFMHandle2, 0, <<"abc">>),
+    storage_file_manager:fsync(SFMHandle2),
+    ok.
+
+set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
+    FileUuid = Doc#document.key,
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
+    ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).

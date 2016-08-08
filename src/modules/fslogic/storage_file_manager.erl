@@ -135,7 +135,7 @@ open(#sfm_handle{is_local = false} = SFMHandle, _) ->
 %% when handle goes out of scope (term will be released by Erlang's GC).
 %% Bypasses permissions check to allow to open file at creation.
 %% @end
-% TODO - relese in spec - how?
+% TODO - relese in spec - how (missing release function in sfm)?
 %%--------------------------------------------------------------------
 -spec open_at_creation(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().

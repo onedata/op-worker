@@ -84,7 +84,7 @@ all() ->
     ]).
 
 
--define(RPC(Module, Function, Args), rpc:call(W1, Module, Function, Args)).
+-define(rpc(Module, Function, Args), rpc:call(W1, Module, Function, Args)).
 
 %%%===================================================================
 %%% Test functions
@@ -106,14 +106,14 @@ dbsync_trigger_should_create_local_file_location(Config) ->
         ctime = CTime,
         uid = UserId
     },
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
 
     %when
-    ?RPC(dbsync_events, change_replicated,
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
 
     %then
-    ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
@@ -136,17 +136,17 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         ctime = CTime,
         uid = UserId
     },
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     {ok, _} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
 
     %when
-    ?RPC(dbsync_events, change_replicated,
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
 
     %then
-    Uid = ?RPC(luma_utils, gen_storage_uid, [UserId]),
-    {ok, CorrectFileInfo} = ?RPC(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
-    {ok, FileInfo} = ?RPC(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
+    Uid = ?rpc(luma_utils, gen_storage_uid, [UserId]),
+    {ok, CorrectFileInfo} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
+    {ok, FileInfo} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
     ?assertEqual(Uid, FileInfo#file_info.uid),
     ?assertNotEqual(0, FileInfo#file_info.uid),
     ?assertEqual(CorrectFileInfo#file_info.uid, FileInfo#file_info.uid),
@@ -178,23 +178,23 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         ctime = CTime,
         uid = ExternalUser
     },
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
-    {ok, FileUuid2} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid2} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
     {ok, _} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
 
     %when
-    ?RPC(dbsync_events, change_replicated,
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
-    ?RPC(dbsync_events, change_replicated,
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid2, value = FileMeta2}}]),
-    ?RPC(onedata_user, create, [#document{key = ExternalUser, value = #onedata_user{name = <<"User">>, spaces = [{SpaceId, SpaceName}]}}]),
+    ?rpc(onedata_user, create, [#document{key = ExternalUser, value = #onedata_user{name = <<"User">>, spaces = [{SpaceId, SpaceName}]}}]),
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
 
     %then
-    Uid = ?RPC(luma_utils, gen_storage_uid, [ExternalUser]),
-    {ok, CorrectFileInfo} = ?RPC(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
-    {ok, FileInfo1} = ?RPC(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
-    {ok, FileInfo2} = ?RPC(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file2::1">>])]),
+    Uid = ?rpc(luma_utils, gen_storage_uid, [ExternalUser]),
+    {ok, CorrectFileInfo} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
+    {ok, FileInfo1} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
+    {ok, FileInfo2} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file2::1">>])]),
     ?assertEqual(Uid, FileInfo1#file_info.uid),
     ?assertEqual(Uid, FileInfo2#file_info.uid),
     ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo1#file_info.uid),
@@ -215,9 +215,9 @@ write_should_add_blocks_to_file_location(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     %then
-    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     {ok, LocationDoc = #document{value = Location = #file_location{blocks = Blocks, size = Size, provider_id = ProviderId}}} =
-        ?assertMatch({ok, _}, ?RPC(file_location, get, [LocationId])),
+        ?assertMatch({ok, _}, ?rpc(file_location, get, [LocationId])),
     ?assertEqual(initializer:domain_to_provider_id(?GET_DOMAIN(W1)), ProviderId),
     ?assertEqual(10, Size),
     [Block] = ?assertMatch([#file_block{offset = 0, size = 10}], Blocks),
@@ -226,14 +226,14 @@ write_should_add_blocks_to_file_location(Config) ->
     LocationWithoutBeginning =
         LocationDoc#document{value = Location#file_location{blocks = [Block#file_block{offset = 5, size = 5}]}},
     ?assertMatch({ok, _},
-        ?RPC(file_location, save, [LocationWithoutBeginning])),
+        ?rpc(file_location, save, [LocationWithoutBeginning])),
     ?assertMatch({ok, 5}, lfm_proxy:write(W1, Handle, 0, <<"11111">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % then
-    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     {ok, #document{value = #file_location{blocks = Blocks2, size = Size2}}} =
-        ?assertMatch({ok, _}, ?RPC(file_location, get, [LocationId])),
+        ?assertMatch({ok, _}, ?rpc(file_location, get, [LocationId])),
     ?assertEqual(10, Size2),
     ?assertMatch([Block], Blocks2).
 
@@ -251,9 +251,9 @@ truncate_should_change_size_and_blocks(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     %then
-    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     {ok, #document{value = #file_location{blocks = Blocks, size = Size}}} =
-        ?assertMatch({ok, _}, ?RPC(file_location, get, [LocationId])),
+        ?assertMatch({ok, _}, ?rpc(file_location, get, [LocationId])),
     ?assertEqual(6, Size),
     ?assertMatch([#file_block{offset = 0, size = 6}], Blocks).
 
@@ -274,8 +274,8 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = #{}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % when
@@ -285,7 +285,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
 
     % then
     ?assertMatch({ok, #document{value = RemoteLocation}},
-        ?RPC(file_location, get, [RemoteLocationId])).
+        ?rpc(file_location, get, [RemoteLocationId])).
 
 update_should_bump_replica_version(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -309,10 +309,10 @@ update_should_bump_replica_version(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     %then
-    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     VV1 = maps:put({ProviderId, LocationId}, 5, #{}),
     ?assertMatch({ok, #document{value = #file_location{version_vector = VV1, blocks = [#file_block{offset = 0, size = 10}]}}},
-        ?RPC(file_location, get, [LocationId])),
+        ?rpc(file_location, get, [LocationId])),
 
     %when
     ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGUID}, 2)),
@@ -327,7 +327,7 @@ update_should_bump_replica_version(Config) ->
     %then
     VV2 = maps:put({ProviderId, LocationId}, 9, #{}),
     ?assertMatch({ok, #document{value = #file_location{version_vector = VV2}}},
-        ?RPC(file_location, get, [LocationId])).
+        ?rpc(file_location, get, [LocationId])).
 
 read_should_synchronize_file(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -347,8 +347,8 @@ read_should_synchronize_file(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = #{}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock rtransfer
@@ -371,13 +371,13 @@ read_should_synchronize_file(Config) ->
 
     % then
     ?assertEqual({ok, <<>>}, Ans),
-    ?assertEqual(1, ?RPC(meck, num_calls, [rtransfer, prepare_request, '_'])),
-    ?assert(?RPC(meck, called, [rtransfer, prepare_request, [ExternalProviderId, FileGUID, 1, '_']])),
-    ?assertEqual(1, ?RPC(meck, num_calls, [rtransfer, fetch, '_'])),
-    ?assert(?RPC(meck, called, [rtransfer, fetch, [ref, '_', '_']])),
+    ?assertEqual(1, ?rpc(meck, num_calls, [rtransfer, prepare_request, '_'])),
+    ?assert(?rpc(meck, called, [rtransfer, prepare_request, [ExternalProviderId, FileGUID, 1, '_']])),
+    ?assertEqual(1, ?rpc(meck, num_calls, [rtransfer, fetch, '_'])),
+    ?assert(?rpc(meck, called, [rtransfer, fetch, [ref, '_', '_']])),
     test_utils:mock_validate_and_unload(Workers, rtransfer),
     ?assertMatch(#document{value = #file_location{blocks = [#file_block{offset = 1, size = 3}]}},
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
 external_change_should_invalidate_blocks(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -394,28 +394,28 @@ external_change_should_invalidate_blocks(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % attach external location
-    #document{value = #file_location{version_vector = VVLocal}} = ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    #document{value = #file_location{version_vector = VVLocal}} = ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
     RemoteLocation = #file_location{size = 10, space_id = SpaceId,
         storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
         blocks = ExternalBlocks, recent_changes = {[], [ExternalBlocks]}, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = ?RPC(file_location, get, [RemoteLocationId]),
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = ?rpc(file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = #document{value = #file_location{version_vector = VV}} =
         version_vector:bump_version(RemoteLocationDoc),
-    ?assertMatch({ok, _}, ?RPC(file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+    ?assertMatch({ok, _}, ?rpc(file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % when
-    ?RPC(dbsync_events, change_replicated, [SpaceId,
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
     ?assertMatch(#document{value = #file_location{version_vector = VV, blocks = [#file_block{offset = 0, size = 2}, #file_block{offset = 7, size = 3}]}},
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
 
 update_should_save_recent_changes(Config) ->
@@ -439,9 +439,9 @@ update_should_save_recent_changes(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     %then
-    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     ?assertMatch({ok, #document{value = #file_location{blocks = [#file_block{offset = 0, size = 10}]}}},
-        ?RPC(file_location, get, [LocationId])),
+        ?rpc(file_location, get, [LocationId])),
 
     %when
     ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGUID}, 2)),
@@ -467,7 +467,7 @@ update_should_save_recent_changes(Config) ->
             [#file_block{offset = 0, size = 2}]
         ]}
     }}},
-        ?RPC(file_location, get, [LocationId])).
+        ?rpc(file_location, get, [LocationId])).
 
 remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -485,7 +485,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
 
     % attach external location
     LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
     ExternalChanges = [
         [#file_block{offset = 2, size = 2}],
@@ -498,26 +498,26 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal, recent_changes = {[], ExternalChanges}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = ?RPC(file_location, get, [RemoteLocationId]),
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = ?rpc(file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = #document{value = #file_location{version_vector = VV}} =
         bump_version(RemoteLocationDoc, 4),
 
     % prepare local doc version
     #document{value = #file_location{version_vector = NewLocalVV}} = bump_version(RemoteLocationDoc, 2),
-    ?RPC(file_location, save, [LocalDoc#document{value = LocalLocation#file_location{version_vector = NewLocalVV}}]),
+    ?rpc(file_location, save, [LocalDoc#document{value = LocalLocation#file_location{version_vector = NewLocalVV}}]),
 
-    ?assertMatch({ok, _}, ?RPC(file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+    ?assertMatch({ok, _}, ?rpc(file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % when
-    ?RPC(dbsync_events, change_replicated, [SpaceId,
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
     ?assertMatch(#document{value = #file_location{version_vector = VV, blocks = [#file_block{offset = 0, size = 2}, #file_block{offset = 4, size = 3}]}},
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
 remote_change_without_history_should_invalidate_whole_data(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -536,7 +536,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
 
     % prepare external location
     #document{value = #file_location{version_vector = VVLocal}} =
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 1, size = 1}, #file_block{offset = 5, size = 1}],
     ExternalSize = 8,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -544,18 +544,18 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal, recent_changes = {[], []}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = ?RPC(file_location, get, [RemoteLocationId]),
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = ?rpc(file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = #document{value = #file_location{version_vector = VV}} =
         bump_version(RemoteLocationDoc, 1),
 
     % attach external location
-    ?assertMatch({ok, _}, ?RPC(file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+    ?assertMatch({ok, _}, ?rpc(file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % when
-    ?RPC(dbsync_events, change_replicated, [SpaceId,
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
@@ -565,7 +565,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
             #file_block{offset = 2, size = 3},
             #file_block{offset = 6, size = 2}
         ]}},
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
 remote_change_of_size_should_notify_clients(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -583,7 +583,7 @@ remote_change_of_size_should_notify_clients(Config) ->
 
     % prepare external location
     #document{value = #file_location{version_vector = VVLocal}} =
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
     ExternalBlocks = [],
     ExternalSize = 8,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -591,13 +591,13 @@ remote_change_of_size_should_notify_clients(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal, recent_changes = {[], [{shrink, 8}]}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = ?RPC(file_location, get, [RemoteLocationId]),
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = ?rpc(file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 1),
 
     % attach external location
-    ?assertMatch({ok, _}, ?RPC(file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+    ?assertMatch({ok, _}, ?rpc(file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
@@ -606,11 +606,11 @@ remote_change_of_size_should_notify_clients(Config) ->
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
-    ?RPC(dbsync_events, change_replicated, [SpaceId,
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-    ?assert(?RPC(meck, called, [fslogic_event, emit_file_attr_update, [{uuid, FileUuid}, []]])),
+    ?assert(?rpc(meck, called, [fslogic_event, emit_file_attr_update, [{uuid, FileUuid}, []]])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
 remote_change_of_blocks_should_notify_clients(Config) ->
@@ -629,7 +629,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
 
     % prepare external location
     #document{value = #file_location{version_vector = VVLocal}} =
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 1, size = 1}],
     ExternalSize = 10,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -637,13 +637,13 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal, recent_changes = {[], [[#file_block{offset = 1, size = 1}]]}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = ?RPC(file_location, get, [RemoteLocationId]),
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = ?rpc(file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 1),
 
     % attach external location
-    ?assertMatch({ok, _}, ?RPC(file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+    ?assertMatch({ok, _}, ?rpc(file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
@@ -652,11 +652,11 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
-    ?RPC(dbsync_events, change_replicated, [SpaceId,
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-    ?assert(?RPC(meck, called, [fslogic_event, emit_file_location_update, [{uuid, FileUuid}, []]])),
+    ?assert(?rpc(meck, called, [fslogic_event, emit_file_location_update, [{uuid, FileUuid}, []]])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
 remote_irrelevant_change_should_not_notify_clients(Config) ->
@@ -675,12 +675,12 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
 
     % invalidate half of file
     LocalDoc = #document{value = LocalLoc = #file_location{blocks = [Block]}} =
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
-    ?RPC(file_location, save, [LocalDoc#document{value = LocalLoc#file_location{blocks = [Block#file_block{offset = 0, size = 5}]}}]),
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    ?rpc(file_location, save, [LocalDoc#document{value = LocalLoc#file_location{blocks = [Block#file_block{offset = 0, size = 5}]}}]),
 
     % prepare external location
     #document{value = #file_location{version_vector = VVLocal}} =
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 5, size = 5}],
     ExternalSize = 10,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -688,13 +688,13 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal, recent_changes = {[], [ExternalBlocks, {shrink, 7}]}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = ?RPC(file_location, get, [RemoteLocationId]),
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = ?rpc(file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 2),
 
     % attach external location
-    ?assertMatch({ok, _}, ?RPC(file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+    ?assertMatch({ok, _}, ?rpc(file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
@@ -703,12 +703,12 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
-    ?RPC(dbsync_events, change_replicated, [SpaceId,
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-%%    ?assertEqual(0, ?RPC(meck, num_calls, [fslogic_event, emit_file_location_update, ['_', '_']])), %todo VFS-2132
-    ?assertEqual(0, ?RPC(meck, num_calls, [fslogic_event, emit_file_attr_update, ['_', '_']])),
+%%    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_location_update, ['_', '_']])), %todo VFS-2132
+    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_attr_update, ['_', '_']])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
 
@@ -728,7 +728,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
 
     % attach external location
     LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
     ExternalChanges = [
         [#file_block{offset = 0, size = 2}],
@@ -740,12 +740,12 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal, recent_changes = {[], ExternalChanges}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
-        ?RPC(file_location, create, [#document{value = RemoteLocation}])),
-    {ok, RemoteLocationDoc} = ?RPC(file_location, get, [RemoteLocationId]),
+        ?rpc(file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = ?rpc(file_location, get, [RemoteLocationId]),
     UpdatedRemoteLocationDoc = #document{value = #file_location{version_vector = ExternalVV}} =
         bump_version(RemoteLocationDoc, 3),
-    ?assertMatch({ok, _}, ?RPC(file_location, save, [UpdatedRemoteLocationDoc])),
-    ?assertEqual(ok, ?RPC(file_meta, attach_location,
+    ?assertMatch({ok, _}, ?rpc(file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, ?rpc(file_meta, attach_location,
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % update local location
@@ -755,11 +755,11 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         {shrink, 6},
         [#file_block{offset = 5, size = 1}]
     ],
-    ?RPC(file_location, save, [LocalDoc#document{value =
+    ?rpc(file_location, save, [LocalDoc#document{value =
     LocalLocation#file_location{version_vector = NewLocalVV, recent_changes = {[], LocalChanges}}}]),
 
     % when
-    ?RPC(dbsync_events, change_replicated, [SpaceId,
+    ?rpc(dbsync_events, change_replicated, [SpaceId,
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
@@ -768,7 +768,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     ?assertMatch(#document{value = #file_location{
         version_vector = MergedVV,
         blocks = [#file_block{offset = 4, size = 4}]}},
-        ?RPC(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
 
 rtransfer_config_should_work(Config) ->
@@ -777,7 +777,7 @@ rtransfer_config_should_work(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
 
-    ?assertEqual(ok, ?RPC(erlang, apply, [
+    ?assertEqual(ok, ?rpc(erlang, apply, [
         fun() ->
             Opts = rtransfer_config:rtransfer_opts(),
             Open = proplists:get_value(open_fun, Opts),
@@ -809,7 +809,7 @@ external_file_location_notification_should_wait_for_local_file_location(Config) 
     },
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
 
     % prepare external location
     ExternalLocationId = <<"external_location_id">>,
@@ -821,21 +821,21 @@ external_file_location_notification_should_wait_for_local_file_location(Config) 
 
     %when
     spawn(fun() ->
-        ?RPC(dbsync_events, change_replicated, [SpaceId,
+        ?rpc(dbsync_events, change_replicated, [SpaceId,
             #change{model = file_location, doc = RemoteLocation}])
         end),
 
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
-    ?assertMatch({ok, []}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
-    ?RPC(dbsync_events, change_replicated,
+    ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
     timer:sleep(timer:seconds(2)),
 
     %then
-    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     ?assertMatch({ok, #document{value = #file_location{version_vector = RemoteVersion}}},
-        ?RPC(file_location, get, [Id1])),
+        ?rpc(file_location, get, [Id1])),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
@@ -860,7 +860,7 @@ external_file_location_notification_should_wait_for_links(Config) ->
     ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(W1)),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
 
     % prepare external location
     ExternalLocationId = <<"external_location_id">>,
@@ -869,11 +869,11 @@ external_file_location_notification_should_wait_for_links(Config) ->
         blocks = [], file_id = ExternalFileId, uuid = FileUuid,
         version_vector = #{}, recent_changes = {[], [#file_block{offset = 2, size = 2}]}}}),
     RemoteVersion = RemoteLocation#document.value#file_location.version_vector,
-    ?RPC(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
-    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
 
-    ModelConfig = ?RPC(file_meta, model_init, []),
-    {ok, #document{key = LinkId, value = LinkValue}} = ?RPC(mnesia_cache_driver, get_link_doc, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
+    ModelConfig = ?rpc(file_meta, model_init, []),
+    {ok, #document{key = LinkId, value = LinkValue}} = ?rpc(mnesia_cache_driver, get_link_doc, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
     test_utils:mock_expect([W1], file_meta, exists_local_link_doc,
         fun(Key) ->
             case Key of
@@ -885,17 +885,17 @@ external_file_location_notification_should_wait_for_links(Config) ->
         end),
 
     {ok, ConsDoc = #document{value = ConsValue = #file_consistency{components_present = Comp}}} =
-        ?RPC(file_consistency, get, [FileUuid]),
-    ?RPC(file_consistency, save, [ConsDoc#document{value = ConsValue#file_consistency{components_present = Comp -- [links]}}]),
+        ?rpc(file_consistency, get, [FileUuid]),
+    ?rpc(file_consistency, save, [ConsDoc#document{value = ConsValue#file_consistency{components_present = Comp -- [links]}}]),
 
     %trigger file_location change
     spawn(fun() ->
-        ?RPC(dbsync_events, change_replicated, [SpaceId, #change{model = file_location, doc = RemoteLocation}])
+        ?rpc(dbsync_events, change_replicated, [SpaceId, #change{model = file_location, doc = RemoteLocation}])
     end),
 
     % trigger link change after some time
     timer:sleep(timer:seconds(5)),
-    ?assertMatch({ok, #document{value = #file_location{version_vector = #{}}}}, ?RPC(file_location, get, [Id1])),
+    ?assertMatch({ok, #document{value = #file_location{version_vector = #{}}}}, ?rpc(file_location, get, [Id1])),
     LinkDoc = #document{key = LinkId, value = LinkValue},
 
     test_utils:mock_expect([W1], file_meta, exists_local_link_doc,
@@ -903,12 +903,12 @@ external_file_location_notification_should_wait_for_links(Config) ->
             erlang:apply(meck_util:original_name(file_meta), exists_local_link_doc, [Key])
         end),
 
-    ?RPC(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = LinkDoc}]),
+    ?rpc(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = LinkDoc}]),
     timer:sleep(timer:seconds(2)),
 
     %then
     ?assertMatch({ok, #document{value = #file_location{version_vector = RemoteVersion}}},
-        ?RPC(file_location, get, [Id1])),
+        ?rpc(file_location, get, [Id1])),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
@@ -943,21 +943,21 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
 
     %when
     spawn(fun() ->
-        ?RPC(dbsync_events, change_replicated, [SpaceId,
+        ?rpc(dbsync_events, change_replicated, [SpaceId,
             #change{model = file_location, doc = RemoteLocation}])
     end),
 
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
-    ?RPC(dbsync_events, change_replicated,
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = FileMeta}]),
     timer:sleep(timer:seconds(2)),
 
     %then
-    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     ?assertMatch({ok, #document{value = #file_location{version_vector = RemoteVersion}}},
-        ?RPC(file_location, get, [Id1])),
+        ?rpc(file_location, get, [Id1])),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
@@ -981,7 +981,7 @@ changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
     },
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
 
     % prepare external location
     ExternalLocationId = <<"external_location_id">>,
@@ -993,22 +993,22 @@ changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
 
     %when
     Pid = spawn(fun() ->
-        ?RPC(dbsync_events, change_replicated, [SpaceId,
+        ?rpc(dbsync_events, change_replicated, [SpaceId,
             #change{model = file_location, doc = RemoteLocation}])
     end),
 
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
     exit(Pid, test_kill),
-    ?assertMatch({ok, []}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
-    ?RPC(dbsync_events, change_replicated,
+    ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
     timer:sleep(timer:seconds(2)),
 
     %then
-    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [Id1]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     ?assertMatch({ok, #document{value = #file_location{version_vector = RemoteVersion}}},
-        ?RPC(file_location, get, [Id1])),
+        ?rpc(file_location, get, [Id1])),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
@@ -1017,15 +1017,15 @@ file_consistency_doc_should_be_deleted_on_file_meta_delete(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     {ok, Guid} = lfm_proxy:create(W1, SessionId, <<"space_name1/file">>, 8#777),
-    Uuid = ?RPC(fslogic_uuid, file_guid_to_uuid, [Guid]),
-    ok = ?RPC(file_consistency, wait, [Uuid, undefined, [file_meta], undefined]),
-    ?assertMatch({ok, #document{}}, ?RPC(file_consistency, get, [Uuid])),
+    Uuid = ?rpc(fslogic_uuid, file_guid_to_uuid, [Guid]),
+    ok = ?rpc(file_consistency, wait, [Uuid, undefined, [file_meta], undefined]),
+    ?assertMatch({ok, #document{}}, ?rpc(file_consistency, get, [Uuid])),
 
     % when
     ok = lfm_proxy:unlink(W1, SessionId, {guid, Guid}),
 
     % then
-    ?assertMatch({error, {not_found, file_consistency}}, ?RPC(file_consistency, get, [Uuid])).
+    ?assertMatch({error, {not_found, file_consistency}}, ?rpc(file_consistency, get, [Uuid])).
 
 external_file_location_notification_should_wait_for_grandparent_file_meta(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -1047,31 +1047,31 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
         ctime = CTime,
         uid = UserId
     }},
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?RPC(file_meta, create, [{uuid, Dir2Uuid}, FileMeta])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, Dir2Uuid}, FileMeta])),
 
     % delete grandparent file_meta
-    ModelConfig = ?RPC(file_meta, model_init, []),
+    ModelConfig = ?rpc(file_meta, model_init, []),
     FM_SL = ModelConfig#model_config.store_level,
-    {ok, #document{value = Dir1Meta}} = ?RPC(datastore, get, [FM_SL, file_meta, Dir1Uuid]),
-    ok = ?RPC(datastore, delete, [FM_SL, file_meta, Dir1Uuid]),
+    {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FM_SL, file_meta, Dir1Uuid]),
+    ok = ?rpc(datastore, delete, [FM_SL, file_meta, Dir1Uuid]),
     timer:sleep(1000), % wait for posthook that deletes file_consistency record
 
     %when
     spawn(fun() ->
-        ?RPC(dbsync_events, change_replicated,
+        ?rpc(dbsync_events, change_replicated,
             [SpaceId, #change{model = file_meta, doc = FileMeta}])
     end),
 
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
-    ?assertMatch({ok, []}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, _} = ?RPC(datastore, save, [FM_SL, #document{key = Dir1Uuid, value = Dir1Meta}]),
-    ?RPC(dbsync_events, change_replicated,
+    ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, _} = ?rpc(datastore, save, [FM_SL, #document{key = Dir1Uuid, value = Dir1Meta}]),
+    ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = Dir1Uuid, value = Dir1Meta}}]),
     timer:sleep(timer:seconds(2)),
 
     %then
-    {ok, [_]} = ?assertMatch({ok, [_]}, ?RPC(file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, [_]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).

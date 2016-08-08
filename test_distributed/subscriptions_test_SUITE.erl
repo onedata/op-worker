@@ -587,7 +587,7 @@ applies_deletion(Config) ->
     ]),
     expect_message([], 4, []),
 
-    % TODO - race with get_or_fretch (mocked GR doesn't know about delete)
+    % TODO - race with get_or_fetch (mocked OZ doesn't know about delete)
     timer:sleep(timer:seconds(10)),
 
     %% when
