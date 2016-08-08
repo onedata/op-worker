@@ -44,8 +44,8 @@
 %% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, Map) ->
-    {ok, Req, Map}.
+rest_init(Req, State) ->
+    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3

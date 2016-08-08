@@ -37,20 +37,18 @@
 %% File upload related procedures
 %%--------------------------------------------------------------------
 handle(<<"fileUploadSuccess">>, Props) ->
-    ConnRef = proplists:get_value(<<"connectionRef">>, Props),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     FileId = upload_handler:upload_map_lookup(UploadId),
     upload_handler:upload_map_delete(UploadId),
     % @todo VFS-2051 temporary solution for model pushing during upload
     SessionId = g_session:get_session_id(),
     % This is sent to the client via sessionDetails object
-    ConnPid = list_to_pid(binary_to_list(base64:decode(ConnRef))),
     {ok, FileHandle} =
         logical_file_manager:open(SessionId, {guid, FileId}, read),
     ok = logical_file_manager:fsync(FileHandle),
     ok = logical_file_manager:release(FileHandle),
     {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
-    gui_async:push_created(<<"file">>, FileData, ConnPid),
+    gui_async:push_created(<<"file">>, FileData),
     % @todo end
     ok;
 
