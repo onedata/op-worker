@@ -791,6 +791,6 @@ file_meta_mock_setup(Workers) ->
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after', fun
         (ModelName, Method, Level, Context, ReturnValue) ->
-            meck:passthrough(ModelName, Method, Level, Context, ReturnValue),
+            meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
             Self ! onedata_user_setup
     end).
