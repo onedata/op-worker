@@ -95,8 +95,8 @@ init_per_suite(Config) ->
     UpdatedConfig.
 
 end_per_suite(Config) ->
-    ok.
-%%    test_node_starter:clean_environment(Config).
+%%    ok.
+    test_node_starter:clean_environment(Config).
 
 init_per_testcase(_Case, Config) ->
     Config.
