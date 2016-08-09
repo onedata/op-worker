@@ -152,8 +152,8 @@ translate_from_protobuf(#'MessageAcknowledgement'{} = Record) ->
         sequence_number = Record#'MessageAcknowledgement'.sequence_number
     };
 translate_from_protobuf(#'Token'{value = Val, secondary_values = SecValues}) ->
-    {ok, Macaroon} = macaroon:deserialize(Val),
-    DischargeMacaroons = [R || {ok, R} <- [macaroon:deserialize(SecValue) || SecValue <- SecValues]],
+    {ok, Macaroon} = token_utils:deserialize(Val),
+    DischargeMacaroons = [R || {ok, R} <- [token_utils:deserialize(SecValue) || SecValue <- SecValues]],
     #token_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 translate_from_protobuf(#'Ping'{data = Data}) ->
     #ping{data = Data};
@@ -263,6 +263,7 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
+        handle_id = Record#'FileLocation'.handle_id,
         blocks = lists:map(
             fun(Block) ->
                 translate_from_protobuf(Block)
@@ -391,6 +392,12 @@ translate_from_protobuf(#'FilePath'{value = Value}) ->
     #'file_path'{value = Value};
 translate_from_protobuf(#'FSync'{uuid = UUID}) ->
     #'fsync'{uuid = UUID};
+translate_from_protobuf(#'GetMetadata'{uuid = UUID, type = Type, names = Names}) ->
+    #get_metadata{uuid = UUID, type = Type, names = Names};
+translate_from_protobuf(#'SetMetadata'{uuid = UUID, metadata = Metadata, names = Names}) ->
+    #set_metadata{uuid = UUID, metadata = translate_from_protobuf(Metadata), names = Names};
+translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
+    #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -590,8 +597,8 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
 translate_to_protobuf(#token_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
-    {ok, Token} = macaroon:serialize(Macaroon),
-    SecValues = [R || {ok, R} <- [macaroon:serialize(DMacaroon) || DMacaroon <- DMacaroons]],
+    {ok, Token} = token_utils:serialize62(Macaroon),
+    SecValues = [R || {ok, R} <- [token_utils:serialize62(DMacaroon) || DMacaroon <- DMacaroons]],
     #'Token'{value = Token, secondary_values = SecValues};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
@@ -739,6 +746,13 @@ translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
 translate_to_protobuf(#fsync{uuid = UUID}) ->
     {fsync, #'FSync'{uuid = UUID}};
+
+translate_to_protobuf(#get_metadata{uuid = UUID, type = Type, names = Names}) ->
+    #'GetMetadata'{uuid = UUID, type = Type, names = Names};
+translate_to_protobuf(#set_metadata{uuid = UUID, metadata = Metadata, names = Names}) ->
+    #'SetMetadata'{uuid = UUID, metadata = translate_to_protobuf(Metadata), names = Names};
+translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
+    #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)};
 
 translate_to_protobuf(undefined) ->
     undefined.

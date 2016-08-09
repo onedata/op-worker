@@ -113,7 +113,7 @@ trigger_prefetching(_, _, _, _) ->
 prefetch_data_fun(CTX, FileUuid, #file_block{offset = O, size = S}) ->
     fun() ->
         try
-            replica_synchronizer:synchronize(CTX, FileUuid, #file_block{offset = O + S, size = ?PREFETCH_SIZE - S}, false)
+            replica_synchronizer:synchronize(CTX, FileUuid, #file_block{offset = O, size = ?PREFETCH_SIZE}, false)
         catch
             _:Error ->
                 ?error_stacktrace("Prefetching of ~p at offset ~p with size ~p failed due to: ~p",

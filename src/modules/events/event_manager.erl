@@ -108,20 +108,40 @@ handle_call(Request, _From, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles cast messages.
+%% Wraps cast messages' handlers.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: #state{}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({register_stream, SubId, EvtStm}, #state{event_streams = EvtStms} = State) ->
+handle_cast(Request, State) ->
+    try do_handle_cast(Request, State) of
+        AResult -> AResult
+    catch
+        Error:Reason ->
+            ?error_stacktrace("event_manager handler of ~p (state: ~p) failed "
+                              "with ~p:~p", [Request, State, Error, Reason]),
+            {noreply, State}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles cast messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_handle_cast(Request :: term(), State :: #state{}) ->
+    {noreply, NewState :: #state{}} |
+    {noreply, NewState :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+do_handle_cast({register_stream, SubId, EvtStm}, #state{event_streams = EvtStms} = State) ->
     {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}};
 
-handle_cast({unregister_stream, SubId}, #state{event_streams = EvtStms} = State) ->
+do_handle_cast({unregister_stream, SubId}, #state{event_streams = EvtStms} = State) ->
     {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};
 
-handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
+do_handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
     session_id = SessId} = State) ->
     case maps:find(SubId, Stms) of
         {ok, Stm} ->
@@ -132,7 +152,7 @@ handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
     end,
     {noreply, State};
 
-handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
+do_handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
@@ -148,7 +168,7 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms,
 
     handle_or_reroute(#events{events = [Evt]}, request_to_file_entry_or_provider(Evt), SessId, HandleLocally, ProvMap);
 
-handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, notify = NotifyFun} = Evt,
+do_handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, notify = NotifyFun} = Evt,
     #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
@@ -168,7 +188,7 @@ handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, not
 
     handle_or_reroute(Evt, {provider, ProviderId}, SessId, HandleLocally, ProvMap);
 
-handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
+do_handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
     HandleLocally =
         fun(_, NewProvMap, _) ->
@@ -179,14 +199,17 @@ handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup
 
     handle_or_reroute(Sub, request_to_file_entry_or_provider(Sub), SessId, HandleLocally, ProvMap);
 
-handle_cast(#subscription_cancellation{id = SubId}, #state{
+do_handle_cast(#subscription_cancellation{id = SubId}, #state{
     event_streams = EvtStms, session_id = SessId} = State) ->
     ?debug("Removing subscription ~p from session ~p", [SubId, SessId]),
-    {ok, EvtStm} = maps:find(SubId, EvtStms),
-    erlang:exit(EvtStm, shutdown),
+    case maps:find(SubId, EvtStms) of
+        {ok, EvtStm} -> erlang:exit(EvtStm, shutdown);
+        error -> ?warning("Cannot remove subscription ~p from session ~p: "
+                          "subscription doesn't exist", [SubId, SessId])
+    end,
     {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};
 
-handle_cast(Request, State) ->
+do_handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
 

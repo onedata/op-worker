@@ -17,12 +17,12 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2,
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
     read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
     get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
-    set_mimetype/4, fsync/2, rm_recursive/3]).
+    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/5, set_metadata/6]).
 
 %%%===================================================================
 %%% API
@@ -127,6 +127,18 @@ close(Worker, TestHandle) ->
             logical_file_manager:fsync(Handle),
             logical_file_manager:release(Handle),
             ets:delete(lfm_handles, TestHandle),
+            Host ! {self(), ok}
+        end).
+
+-spec close_all(node()) -> ok.
+close_all(Worker) ->
+    exec(Worker,
+        fun(Host) ->
+            lists:foreach(fun({_, Handle}) ->
+                logical_file_manager:fsync(Handle),
+                logical_file_manager:release(Handle)
+            end, ets:tab2list(lfm_handles)),
+            true = ets:delete_all_objects(lfm_handles),
             Host ! {self(), ok}
         end).
 
@@ -385,6 +397,24 @@ rm_recursive(Worker, SessId, FileKey) ->
         fun(Host) ->
             Result =
                 logical_file_manager:rm_recursive(SessId, uuid_to_guid(Worker, FileKey)),
+            Host ! {self(), Result}
+        end).
+
+-spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()]) -> {ok, #{}}.
+get_metadata(Worker, SessionId, FileKey, Type, Names) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:get_metadata(SessionId, FileKey, Type, Names),
+            Host ! {self(), Result}
+        end).
+
+-spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), #{}, [binary()]) -> ok.
+set_metadata(Worker, SessionId, FileKey, Type, Value, Names) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_metadata(SessionId, FileKey, Type, Value, Names),
             Host ! {self(), Result}
         end).
 

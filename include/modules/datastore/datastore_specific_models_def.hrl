@@ -54,22 +54,36 @@
     response_map = #{} :: #{},
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
-    % Handles for opened files
-    handles = #{} :: #{binary() => storage_file_manager:handle()},
     open_files = sets:new() :: sets:set(file_meta:uuid()),
     transfers = [] :: [transfer:id()]
 }).
 
+%% File handle used by the module
+-record(sfm_handle, {
+    helper_handle :: helpers:handle(),
+    file :: helpers:file(),
+    session_id :: session:id(),
+    file_uuid :: file_meta:uuid(),
+    space_uuid :: file_meta:uuid(),
+    storage :: datastore:document() | undefined,
+    storage_id :: storage:id(),
+    open_mode :: helpers:open_mode(),
+    needs_root_privileges :: boolean(),
+    is_local = false :: boolean(),
+    provider_id :: oneprovider:id(),
+    file_size :: non_neg_integer() %% Available only if file is_local
+}).
+
 %% Local, cached version of OZ user
 -record(onedata_user, {
-    name :: binary(),
+    name = <<"">>:: binary(),
     spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
     group_ids :: [binary()],
     effective_group_ids = [] :: [binary()],
-    connected_accounts :: [onedata_user:connected_account()],
-    alias :: binary(),
-    email_list :: [binary()],
+    connected_accounts = [] :: [onedata_user:connected_account()],
+    alias = <<"">>:: binary(),
+    email_list = [] :: [binary()],
     revision_history = [] :: [subscriptions:rev()],
     % This field means that only public information is available about this
     % user. This is the case when given user hasn't ever logged in to this
@@ -177,6 +191,11 @@
     entry :: term()
 }).
 
+%% Model that holds state entries for DBSync worker
+-record(dbsync_batches, {
+    batches = #{} :: #{}
+}).
+
 %% Model that holds files created by root, whose owner needs to be changed when
 %% the user will be present in current provider.
 %% The Key of this document is UserId.
@@ -221,6 +240,17 @@
 %% Model that maps onedata user to Openstack Swift user
 -record(swift_user, {
     credentials :: #{storage:id() => swift_user:credentials()}
+}).
+
+%% Model that holds file's custom metadata
+-record(custom_metadata, {
+    space_id :: space_info:id(),
+    value = #{} :: #{}
+}).
+
+%% Model that holds database views
+-record(indexes, {
+    value = #{} :: #{indexes:index_id() => indexes:index()}
 }).
 
 -endif.

@@ -130,7 +130,7 @@ options(Req, State) ->
 %% @doc
 %% Cowboy callback function
 %% Returns content types that can be provided. "application/json" is default.
-%% It can be changed later by gui_utils:cowboy_ensure_header/3.
+%% It can be changed later by modifying the header with cowboy_req module.
 %% @end
 %%--------------------------------------------------------------------
 -spec content_types_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.

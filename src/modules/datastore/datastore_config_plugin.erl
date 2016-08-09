@@ -34,7 +34,6 @@ models() -> [
     file_meta,
     storage,
     file_location,
-    xattr,
     provider_info,
     space_info,
     space_storage,
@@ -47,5 +46,9 @@ models() -> [
     space_quota,
     monitoring_state,
     open_file,
-    swift_user
+    swift_user,
+    sfm_handle,
+    dbsync_batches,
+    custom_metadata,
+    indexes
 ].

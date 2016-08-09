@@ -29,7 +29,7 @@
 -export([token_authentication/1]).
 
 -define(MACAROON, macaroon:create("a", "b", "c")).
--define(MACAROON_TOKEN, element(2, macaroon:serialize(?MACAROON))).
+-define(MACAROON_TOKEN, element(2, token_utils:serialize62(?MACAROON))).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
@@ -62,7 +62,7 @@ token_authentication(Config) ->
         rpc:call(Worker1, identity, get, [#token_auth{macaroon = ?MACAROON}])
     ),
     test_utils:mock_validate_and_unload(Workers, oz_endpoint),
-    ok = ssl2:close(Sock).
+    ok = etls:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -74,13 +74,13 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    application:start(etls),
     mock_oz_spaces(Config),
     Config.
 
 end_per_testcase(_, Config) ->
     unmock_oz_spaces(Config),
-    application:stop(ssl2).
+    application:stop(etls).
 
 %%%===================================================================
 %%% Internal functions
@@ -104,8 +104,8 @@ connect_via_token(Node, TokenVal, SessionId) ->
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
 
     % when
-    {ok, Sock} = ssl2:connect(utils:get_host(Node), Port, [{packet, 4}, {active, true}]),
-    ok = ssl2:send(Sock, TokenAuthMessageRaw),
+    {ok, Sock} = etls:connect(utils:get_host(Node), Port, [{packet, 4}, {active, true}]),
+    ok = etls:send(Sock, TokenAuthMessageRaw),
 
     % then
     HandshakeResponse = receive_server_message(),
@@ -175,7 +175,7 @@ mock_oz_certificates(Config) ->
         fun
             % @todo for now, in rest we only use the root macaroon
             (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
+                {ok, SrlzdMacaroon} = token_utils:serialize62(Macaroon),
                 http_client:request(Method, OzRestApiUrl ++ URN, [
                     {<<"content-type">>, <<"application/json">>},
                     {<<"macaroon">>, SrlzdMacaroon} | Headers

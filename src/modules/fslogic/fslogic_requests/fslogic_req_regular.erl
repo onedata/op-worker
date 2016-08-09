@@ -194,9 +194,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 -spec release(#fslogic_ctx{}, HandleId :: binary()) ->
     no_return() | #fuse_response{}.
 release(#fslogic_ctx{session_id = SessId}, HandleId) ->
-    {ok, #document{value = #session{handles = Handles}}} = session:get(SessId),
-    UpdatedHandles = maps:remove(HandleId, Handles),
-    {ok, SessId} = session:update(SessId, #{handles => UpdatedHandles}),
+    ok = session:remove_handle(SessId, HandleId),
     #fuse_response{status = #status{code = ?OK}}.
 
 
@@ -352,7 +350,5 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = C
     {ok, binary()}.
 save_handle(SessionId, Handle) ->
     HandleId = base64:encode(crypto:rand_bytes(20)),
-    {ok, #document{value = #session{handles = Handles}}} = session:get(SessionId),
-    UpdatedHandles = maps:put(HandleId, Handle, Handles),
-    {ok, SessionId} = session:update(SessionId, #{handles => UpdatedHandles}),
+    ok = session:add_handle(SessionId, HandleId, Handle),
     {ok, HandleId}.

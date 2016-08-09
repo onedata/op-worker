@@ -15,7 +15,7 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/sfm_handle.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -178,11 +178,11 @@ get_acl(Uuid, Map) ->
     case maps:get(Uuid, Map, undefined) of
         undefined ->
             case xattr:get_by_name(Uuid, ?ACL_XATTR_NAME) of
-                {ok, #document{value = #xattr{value = Value}}} ->
+                {ok, Value} ->
                     AclProplist = json_utils:decode(Value),
                     Acl = fslogic_acl:from_json_fromat_to_acl(AclProplist),
                     {Acl, maps:put(Uuid, Acl, Map)};
-                {error, {not_found, xattr}} ->
+                {error, {not_found, custom_metadata}} ->
                     {undefined, maps:put(Uuid, undefined, Map)}
             end;
         Acl ->

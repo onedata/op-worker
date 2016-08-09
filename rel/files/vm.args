@@ -22,3 +22,6 @@
 
 ## Configure schedulers
 ## +S 2:2
+
+## Enable Symmetric Multiprocessing
+-smp enable
