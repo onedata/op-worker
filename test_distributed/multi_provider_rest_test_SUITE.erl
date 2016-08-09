@@ -480,7 +480,7 @@ changes_stream_json_metadata_test(Config) ->
     Json = #{<<"k1">> => <<"v1">>, <<"k2">> => [<<"v2">>, <<"v3">>], <<"k3">> => #{<<"k31">> => <<"v31">>}},
     % when
     spawn(fun() ->
-        timer:sleep(500),
+        timer:sleep(5000),
         lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, <<"json">>, Json, [])
     end),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
