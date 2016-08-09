@@ -106,8 +106,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    % TODO migrate to GLOBALLY_CACHED_LEVEL
-    ?MODEL_CONFIG(onedata_group_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(onedata_group_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -140,7 +139,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
     datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
@@ -185,7 +184,7 @@ fetch(Auth, GroupId) ->
             users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
             effective_users = EffectiveUsersWithPrivileges, type = Type,
             parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
-        {ok, _} = onedata_user:save(OnedataGroupDoc),
+        {ok, _} = onedata_group:save(OnedataGroupDoc),
         {ok, OnedataGroupDoc}
     catch
         _:Reason ->

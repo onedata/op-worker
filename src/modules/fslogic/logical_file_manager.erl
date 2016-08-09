@@ -81,6 +81,8 @@
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
 -export([create_share/2, get_share/1, remove_share/1]).
+%% Functions concerning metadata
+-export([get_metadata/4, set_metadata/5]).
 
 %%%===================================================================
 %%% API
@@ -590,3 +592,25 @@ get_share(ShareID) ->
 -spec remove_share(lfm_shares:share_id()) -> ok | error_reply().
 remove_share(ShareID) ->
     ?run(fun() -> lfm_shares:remove_share(ShareID) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get json metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_metadata(session:id(), file_key(), binary(), [binary()]) ->
+    {ok, #{}} | error_reply().
+get_metadata(SessId, FileKey, Type, Names) ->
+    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Set json metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec set_metadata(session:id(), file_key(), binary(), term(), [binary()]) ->
+    ok | error_reply().
+set_metadata(SessId, FileKey, Type, Value, Names) ->
+    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Names) end).

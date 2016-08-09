@@ -111,7 +111,7 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 -spec list_transfers(req(), #{}) -> {term(), req(), #{}}.
 list_transfers(Req, State = #{list_all := true}) ->
-    {State2, Req2} = validator:parse_limit(Req, State),
+    {State2, Req2} = validator:parse_dir_limit(Req, State),
     {State3, Req3} = validator:parse_status(Req2, State2),
 
     #{auth := Auth, status := Status, limit := Limit} = State3,

@@ -37,8 +37,8 @@
 %% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
-rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
+rest_init(Req, State) ->
+    {ok, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
@@ -88,7 +88,7 @@ content_types_provided(Req, State) ->
 list_files(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_offset(Req2, State2),
-    {State4, Req4} = validator:parse_limit(Req3, State3),
+    {State4, Req4} = validator:parse_dir_limit(Req3, State3),
 
     #{auth := Auth, path := Path, offset := Offset, limit := Limit} = State4,
 

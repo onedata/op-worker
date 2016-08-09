@@ -513,6 +513,11 @@ handle_provider_request(Ctx, #provider_request{provider_request = #get_file_dist
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 handle_provider_request(Ctx, #provider_request{provider_request = #replicate_file{uuid = FileGUID, block = Block}}) ->
     fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Block);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_metadata{uuid = FileGUID, type = Type, names = Names}}) ->
+    fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Type, Names);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_metadata{uuid = FileGUID, metadata =
+        #metadata{type = Type, value = Value}, names = Names}}) ->
+    fslogic_req_generic:set_metadata(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)}, Type, Value, Names);
 handle_provider_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -711,6 +716,11 @@ request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #ge
     {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
     {provider, ProviderId};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #set_metadata{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #get_metadata{uuid = UUID}}) ->
+    {file, {guid, UUID}};
+
 request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}}) ->
     {file, {guid, FileGUID}};
 

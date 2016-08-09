@@ -18,7 +18,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([gen_path/2, gen_storage_path/1]).
+-export([gen_path/2, gen_storage_path/1, check_path/1]).
 -export([verify_file_path/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, basename_and_parent/1]).
 -export([dirname/1]).
@@ -109,6 +109,28 @@ gen_path(Entry, SessId) ->
         {ok, UserId} = session:get_user_id(SessId),
         gen_path(Entry, UserId, [])
     end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if path to file is ok.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_path(file_meta:uuid()) -> ok | path_beg_error | {path_error,
+    {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}.
+check_path(Uuid) ->
+    case file_meta:get({uuid, Uuid}) of
+        {ok, #document{value = #file_meta{name = Name}} = Doc} ->
+            case file_meta:get_parent_uuid(Doc) of
+                {ok, ?ROOT_DIR_UUID} ->
+                    ok;
+                {ok, ParentUuid} ->
+                    check_path(ParentUuid, Name, Uuid);
+                _ ->
+                    path_beg_error
+            end;
+        _ ->
+            path_beg_error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -234,4 +256,32 @@ gen_storage_path(Entry, Tokens) ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, #document{key = ParentUUID}} ->
             gen_storage_path({uuid, ParentUUID}, [Name | Tokens])
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if path to file is ok.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_path(file_meta:uuid(), file_meta:name(), file_meta:uuid()) ->
+    ok | {path_error, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}.
+check_path(Uuid, Name, ChildUuid) ->
+    case file_meta:get({uuid, Uuid}) of
+        {ok, #document{value = #file_meta{name = NewName}} = Doc} ->
+            case file_meta:get_child(Doc, Name) of
+                {ok, {ChildUuid, file_meta}} ->
+                    case file_meta:get_parent_uuid(Doc) of
+                        {ok, ?ROOT_DIR_UUID} ->
+                            ok;
+                        {ok, ParentUuid} ->
+                            check_path(ParentUuid, NewName, Uuid);
+                        _ ->
+                            {path_error, {Uuid, Name, ChildUuid}}
+                    end;
+                _ ->
+                    {path_error, {Uuid, Name, ChildUuid}}
+            end;
+        _ ->
+            {path_error, {Uuid, Name, ChildUuid}}
     end.
