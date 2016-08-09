@@ -16,12 +16,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_storage_used_updated/3, spawn_and_emit_storage_used_updated/3,
-    handle_monitoring_events/2, aggregate_monitoring_events/2,
-    emit_space_info_updated/1, spawn_and_emit_space_info_updated/1,
-    emit_file_operations_statistics/6, spawn_and_emit_read_statistics/4,
-    spawn_and_emit_write_statistics/4, emit_rtransfer_statistics/3,
-    spawn_and_emit_rtransfer_statistics/2, spawn_and_emit_rtransfer_statistics/3]).
+-export([emit_storage_used_updated/3, emit_space_info_updated/1,
+    emit_read_statistics/4, emit_write_statistics/4,
+    emit_rtransfer_statistics/2, emit_rtransfer_statistics/3,
+    aggregate_monitoring_events/2, handle_monitoring_events/2]).
 
 
 %%--------------------------------------------------------------------
@@ -39,16 +37,6 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
     event:emit(#event{object = EventBase#storage_used_updated{user_id = undefined}}),
     event:emit(#event{object = EventBase#storage_used_updated{user_id = UserId}}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Send event informing subscribed client about storage usage update
-%% in new thread.
-%% @end
-%%--------------------------------------------------------------------
--spec spawn_and_emit_storage_used_updated(datastore:id(), datastore:id(), integer()) ->
-    pid().
-spawn_and_emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
-    spawn(fun() -> emit_storage_used_updated(SpaceId, UserId, SizeDifference) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,15 +47,6 @@ spawn_and_emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
 emit_space_info_updated(SpaceId) ->
     event:emit(#event{object = #space_info_updated{space_id = SpaceId}}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Send event informing subscribed client about space info update.
-%% in new thread.
-%% @end
-%%--------------------------------------------------------------------
--spec spawn_and_emit_space_info_updated(datastore:id()) -> pid().
-spawn_and_emit_space_info_updated(SpaceId) ->
-    spawn(fun() -> emit_space_info_updated(SpaceId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -92,31 +71,24 @@ emit_file_operations_statistics(SpaceId, UserId, DataAccessRead, DataAccessWrite
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client about file operations statistics
-%% in new thread.
+%% Send event informing subscribed client about read operations statistics.
 %% @end
 %%--------------------------------------------------------------------
--spec spawn_and_emit_read_statistics(datastore:id(), datastore:id(), non_neg_integer(),
-    non_neg_integer()) -> pid().
-spawn_and_emit_read_statistics(SpaceId, UserId, DataAccessRead, BlockAccessRead) ->
-    spawn(fun() ->
-        emit_file_operations_statistics(SpaceId, UserId, DataAccessRead,
-            0, BlockAccessRead, 0)
-    end).
+-spec emit_read_statistics(datastore:id(), datastore:id(), non_neg_integer(),
+    non_neg_integer()) -> ok | {error, Reason :: term()}.
+emit_read_statistics(SpaceId, UserId, DataAccessRead, BlockAccessRead) ->
+    emit_file_operations_statistics(SpaceId, UserId, DataAccessRead, 0, BlockAccessRead, 0).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client about file operations statistics
-%% in new thread.
+%% Send event informing subscribed client about write operations statistics.
 %% @end
 %%--------------------------------------------------------------------
--spec spawn_and_emit_write_statistics(datastore:id(), datastore:id(), non_neg_integer(),
-    non_neg_integer()) -> pid().
-spawn_and_emit_write_statistics(SpaceId, UserId, DataAccessWrite, BlockAccessWrite) ->
-    spawn(fun() ->
-        emit_file_operations_statistics(SpaceId, UserId, 0, DataAccessWrite, 0,
-            BlockAccessWrite)
-    end).
+-spec emit_write_statistics(datastore:id(), datastore:id(), non_neg_integer(),
+    non_neg_integer()) -> ok | {error, Reason :: term()}.
+emit_write_statistics(SpaceId, UserId, DataAccessWrite, BlockAccessWrite) ->
+    emit_file_operations_statistics(SpaceId, UserId, 0, DataAccessWrite, 0,
+        BlockAccessWrite).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -137,28 +109,18 @@ emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
             event:emit(#event{object = EventBase#rtransfer_statistics{user_id = UserId}})
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Send event informing subscribed client about rtransfer statistics
-%% in new thread.
-%% @end
-%%--------------------------------------------------------------------
--spec spawn_and_emit_rtransfer_statistics(datastore:id(), datastore:id(), non_neg_integer()) ->
-    pid().
-spawn_and_emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
-    spawn(fun() -> emit_rtransfer_statistics(SpaceId, UserId, TransferIn) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client about rtransfer statistics
-%% in new thread.
+%% Send event informing subscribed client about rtransfer statistics.
 %% @end
 %%--------------------------------------------------------------------
--spec spawn_and_emit_rtransfer_statistics(fslogic_worker:ctx(), non_neg_integer()) -> pid().
-spawn_and_emit_rtransfer_statistics(CTX, TransferIn) ->
+-spec emit_rtransfer_statistics(fslogic_worker:ctx(), non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
+emit_rtransfer_statistics(CTX, TransferIn) ->
     #fslogic_ctx{session = #session{identity = #identity{user_id = UserId}},
         space_id = SpaceId} = CTX,
-    spawn_and_emit_rtransfer_statistics(SpaceId, UserId, TransferIn).
+    emit_rtransfer_statistics(SpaceId, UserId, TransferIn).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -228,7 +190,7 @@ handle_monitoring_events(Events, Ctx) ->
 -spec handle_monitoring_event(Events :: event:event()) ->
     ok | {error, Reason :: term()}.
 handle_monitoring_event(#event{object = #storage_used_updated{user_id = undefined,
-        space_id = SpaceId}}) ->
+    space_id = SpaceId}}) ->
     monitoring_utils:create_and_update(#monitoring_id{
         main_subject_type = space,
         main_subject_id = SpaceId,

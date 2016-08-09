@@ -559,7 +559,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
         {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
         {ok, #document{value = #session{identity = #identity{
             user_id = UserId}}}} = session:get(SessId),
-        monitoring_event:spawn_and_emit_write_statistics(SpaceId, UserId, Size, Counter),
+        monitoring_event:emit_write_statistics(SpaceId, UserId, Size, Counter),
 
         UpdatedBlocks = lists:map(fun(#file_block{file_id = FileId, storage_id = StorageId} = Block) ->
             {ValidFileId, ValidStorageId} = file_location:validate_block_data(FileUUID, FileId, StorageId),
@@ -605,7 +605,7 @@ handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
         {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
         {ok, #document{value = #session{identity = #identity{
             user_id = UserId}}}} = session:get(SessId),
-        monitoring_event:spawn_and_emit_read_statistics(SpaceId, UserId, Size, Counter),
+        monitoring_event:emit_read_statistics(SpaceId, UserId, Size, Counter),
 
         {ok, #document{value = #session{identity = #identity{
             user_id = UserId}}}} = session:get(SessId),

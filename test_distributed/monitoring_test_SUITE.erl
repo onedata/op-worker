@@ -152,19 +152,19 @@ monitoring_test(Config) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
     ?assertEqual(0, length(Docs)),
 
-    rpc:call(Worker, monitoring_event, spawn_and_emit_space_info_updated, [?SPACE_ID]),
+    rpc:call(Worker, monitoring_event, emit_space_info_updated, [?SPACE_ID]),
 
     rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 950000]),
     rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 50000]),
 
-    rpc:call(Worker, monitoring_event, spawn_and_emit_read_statistics, [?SPACE_ID, ?USER_ID, 0, 300]),
-    rpc:call(Worker, monitoring_event, spawn_and_emit_read_statistics, [?SPACE_ID, ?USER_ID, 300, 0]),
+    rpc:call(Worker, monitoring_event, emit_read_statistics, [?SPACE_ID, ?USER_ID, 0, 300]),
+    rpc:call(Worker, monitoring_event, emit_read_statistics, [?SPACE_ID, ?USER_ID, 300, 0]),
 
-    rpc:call(Worker, monitoring_event, spawn_and_emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 299]),
-    rpc:call(Worker, monitoring_event, spawn_and_emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 1]),
+    rpc:call(Worker, monitoring_event, emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 299]),
+    rpc:call(Worker, monitoring_event, emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 1]),
 
-    rpc:call(Worker, monitoring_event, spawn_and_emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 100]),
-    rpc:call(Worker, monitoring_event, spawn_and_emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 200]),
+    rpc:call(Worker, monitoring_event, emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 100]),
+    rpc:call(Worker, monitoring_event, emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 200]),
 
     {ok, #document{value = #session{event_manager = Pid}}} =
         rpc:call(Worker, session, get, [?MONITORING_SESSION_ID]),

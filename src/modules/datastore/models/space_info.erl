@@ -278,7 +278,7 @@ emit_monitoring_event(SpaceId) ->
         {ok, #document{value = #space_info{providers = Providers}}} ->
             case lists:member(oneprovider:get_provider_id(), Providers) of
                 true ->
-                    monitoring_event:spawn_and_emit_space_info_updated(SpaceId);
+                    monitoring_event:emit_space_info_updated(SpaceId);
                 _ -> ok
             end;
         _ -> ok

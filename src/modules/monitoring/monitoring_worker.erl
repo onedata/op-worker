@@ -61,8 +61,7 @@ init(_Args) ->
                 }
             },
             case event:subscribe(EventsSubscription) of
-                {ok, _} ->
-                    ok;
+                {ok, _} -> ok;
                 {error, already_exists} ->
                     ok
             end;

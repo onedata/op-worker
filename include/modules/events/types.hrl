@@ -105,7 +105,7 @@
 %% definition of event triggered when storage usage is changed
 %% space_id        - ID of space
 %% user_id         - ID of user
-%% size_difference - size deference in bytes of given update
+%% size_difference - size difference of storage usage in bytes since last update
 -record(storage_used_updated, {
     space_id :: datastore:id(),
     user_id :: datastore:id(),
@@ -133,14 +133,14 @@
     block_access_write = 0 :: non_neg_integer()
 }).
 
-%% definition of event with read/write statistics
+%% definition of event with rtransfer statistics
 %% space_id    - ID of space
 %% user_id     - ID of user
-%% transfer_in - number of transferred in bytes
+%% transfer_in - data replicated to provider in bytes
 -record(rtransfer_statistics, {
     space_id :: datastore:id(),
     user_id :: datastore:id(),
-    transfer_in= 0 :: non_neg_integer()
+    transfer_in = 0 :: non_neg_integer()
 }).
 
 -endif.

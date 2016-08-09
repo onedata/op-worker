@@ -72,7 +72,7 @@ synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = Requ
                     NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
                     case receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT) of
                         {ok, Size} ->
-                            monitoring_event:spawn_and_emit_rtransfer_statistics(CTX, Size),
+                            monitoring_event:emit_rtransfer_statistics(CTX, Size),
                             replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false, LocalVersion);
                         {error, Error} ->
                             ?error("Transfer of ~p range (~p, ~p) failed with error: ~p.", [Uuid, RequestedOffset, RequestedSize, Error]),
