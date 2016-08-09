@@ -166,15 +166,17 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 -spec stream_file(Socket :: term(), Transport :: atom(),
     FileHandle :: #lfm_handle{}, Size :: integer(),
     Sent :: integer(), BufSize :: integer()) -> ok.
+stream_file(_, _, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
+    ok = logical_file_manager:release(FileHandle);
 stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
     {ok, NewHandle, BytesRead} = logical_file_manager:read(
         FileHandle, BytesSent, min(Size - BytesSent, BufSize)),
     ok = Transport:send(Socket, BytesRead),
     NewSent = BytesSent + size(BytesRead),
-    case NewSent >= Size of
-        true ->
-            ok = logical_file_manager:release(NewHandle);
-        false ->
+    case size(BytesRead) of
+        0 ->
+            ok = logical_file_manager:release(FileHandle);
+        _ ->
             stream_file(Socket, Transport, NewHandle, Size, NewSent, BufSize)
     end.
 

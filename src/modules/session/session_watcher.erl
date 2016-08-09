@@ -173,7 +173,7 @@ handle_info({overloaded_connection, Pid}, State = #state{overloaded_connections 
         undefined ->
             {noreply, State, hibernate};
         {message_queue_len, QueueLen} ->
-            #state{overloaded_connections = maps:put(Pid, QueueLen, Connections)}
+            {noreply, State#state{overloaded_connections = maps:put(Pid, QueueLen, Connections)}, hibernate}
     end;
 
 
