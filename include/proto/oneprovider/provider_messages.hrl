@@ -124,7 +124,7 @@
     #mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{}.
 
 -record(provider_request, {
-    context_entry :: fslogic_worker:ext_file() | undefined,
+    context_guid :: fslogic_worker:file_guid(),
     provider_request :: provider_request()
 }).
 

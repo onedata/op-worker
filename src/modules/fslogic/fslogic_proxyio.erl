@@ -64,7 +64,7 @@ write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
 read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 
     GUID = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
-    lfm_utils:call_fslogic(SessionId, fuse_request, {guid, GUID},
+    lfm_utils:call_fslogic(SessionId, file_request, GUID,
         #synchronize_block{block = #file_block{offset = Offset, size = Size}},
         fun(_) -> ok end),
 

@@ -52,9 +52,11 @@ all() ->
 
 -define(TIMEOUT, timer:seconds(5)).
 
--define(req(W, SessId, ContextEntry, FuseRequest), rpc:call(W, worker_proxy, call,
-    [fslogic_worker, {fuse_request, SessId, #fuse_request{
-        context_entry = ContextEntry, fuse_request = FuseRequest}}])).
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
+
+-define(file_req(W, SessId, ContextGuid, FileRequest), ?req(W, SessId,
+    #file_request{context_guid = ContextGuid, file_request = FileRequest})).
 
 %%%===================================================================
 %%% Test functions
@@ -72,7 +74,7 @@ fslogic_get_file_attr_test(Config) ->
                 name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
                 uid = UID
             }
-        }, ?req(Worker, SessId, {path, Path}, #get_file_attr{}))
+        }, ?req(Worker, SessId, #resolve_guid{path = Path}))
     end, [
         {SessId1, UserId1, 8#1755, 0, <<"/">>},
         {SessId2, UserId2, 8#1755, 0, <<"/">>},
@@ -82,7 +84,7 @@ fslogic_get_file_attr_test(Config) ->
         {SessId2, <<"space_id4">>, 8#1770, 0, <<"/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
-        SessId1, {path, <<"/space_name1/t1_dir">>}, #get_file_attr{}
+        SessId1, #resolve_guid{path = <<"/space_name1/t1_dir">>}
     )).
 
 fslogic_mkdir_and_rmdir_test(Config) ->
@@ -90,8 +92,8 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    RootFileAttr1 = ?req(Worker, SessId1, {path, <<"/space_name1">>}, #get_file_attr{}),
-    RootFileAttr2 = ?req(Worker, SessId2, {path, <<"/space_name2">>}, #get_file_attr{}),
+    RootFileAttr1 = ?req(Worker, SessId1, #resolve_guid{path = <<"/space_name1">>}),
+    RootFileAttr2 = ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2">>}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
@@ -101,22 +103,22 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
     MakeTree = fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
         NewPath = <<Path/binary, "/", Leaf/binary>>,
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId,
-            {guid, ParentUUID}, #create_dir{name = Leaf, mode = 8#755}
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId,
+            ParentUUID, #create_dir{name = Leaf, mode = 8#755}
         )),
 
-        FileAttr = ?req(Worker, SessId, {path, NewPath}, #get_file_attr{}),
+        FileAttr = ?req(Worker, SessId, #resolve_guid{path = NewPath}),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
         #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
         {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
     end,
 
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId1,
-        {guid, RootUUID1}, #create_dir{name = <<"t2_double">>, mode = 8#755}
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId1,
+        RootUUID1, #create_dir{name = <<"t2_double">>, mode = 8#755}
     )),
-    ?assertMatch(#fuse_response{status = #status{code = ?EEXIST}}, ?req(Worker, SessId1,
-        {guid, RootUUID1}, #create_dir{name = <<"t2_double">>, mode = 8#755}
+    ?assertMatch(#fuse_response{status = #status{code = ?EEXIST}}, ?file_req(Worker, SessId1,
+        RootUUID1, #create_dir{name = <<"t2_double">>, mode = 8#755}
     )),
 
 
@@ -127,18 +129,18 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
     TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name2">>,
         <<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
-    FileAttr = ?req(Worker, SessId1, {path, TestPath1}, #get_file_attr{}),
+    FileAttr = ?req(Worker, SessId1, #resolve_guid{path = TestPath1}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-    ?assertEqual(FileAttr, ?req(Worker, SessId2, {path, TestPath1}, #get_file_attr{})),
+    ?assertEqual(FileAttr, ?req(Worker, SessId2, #resolve_guid{path = TestPath1})),
 
     lists:foreach(fun(GUID) ->
         ?assertMatch(#fuse_response{status = #status{code = ?ENOTEMPTY}},
-            ?req(Worker, SessId1, {guid, GUID}, #delete_file{}))
+            ?file_req(Worker, SessId1, GUID, #delete_file{}))
     end, lists:reverse(tl(UUIDs1))),
 
     lists:foreach(fun(GUID) ->
         ?assertMatch(#fuse_response{status = #status{code = ?ENOTEMPTY}},
-            ?req(Worker, SessId2, {guid, GUID}, #delete_file{}))
+            ?file_req(Worker, SessId2, GUID, #delete_file{}))
     end, lists:reverse(tl(UUIDs2))).
 
 fslogic_read_dir_test(Config) ->
@@ -149,7 +151,7 @@ fslogic_read_dir_test(Config) ->
     {SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     ValidateReadDir = fun({SessId, Path, NameList}) ->
-        FileAttr = ?req(Worker, SessId, {path, Path}, #get_file_attr{}),
+        FileAttr = ?req(Worker, SessId, #resolve_guid{path = Path}),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
         #fuse_response{fuse_response = #file_attr{uuid = FileGUID}} = FileAttr,
 
@@ -161,7 +163,7 @@ fslogic_read_dir_test(Config) ->
                     fun(OffsetStep) ->
                         {_, Names} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
-                                Response = ?req(Worker, SessId, {guid, FileGUID}, #get_file_children{offset = Offset, size = Size}),
+                                Response = ?file_req(Worker, SessId, FileGUID, #get_file_children{offset = Offset, size = Size}),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
@@ -194,8 +196,8 @@ fslogic_read_dir_test(Config) ->
 
     lists:foreach(fun({SessId, RootGUID, Dirs}) ->
         lists:foreach(fun(Name) ->
-            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
-                Worker, SessId, {guid, RootGUID}, #create_dir{name = Name, mode = 8#755}
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(
+                Worker, SessId, RootGUID, #create_dir{name = Name, mode = 8#755}
             ))
         end, Dirs)
     end, [
@@ -223,13 +225,13 @@ chmod_test(Config) ->
             Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name4">>, SessId]),
             ParentGUID = get_guid_privileged(Worker, SessId, <<"/space_name4">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, {guid, ParentGUID}, #create_dir{name = SessId, mode = 8#000})),
+                ?file_req(Worker, SessId, ParentGUID, #create_dir{name = SessId, mode = 8#000})),
             GUID = get_guid(Worker, SessId, Path),
 
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, {guid, GUID}, #change_mode{mode = 8#123})),
+                ?file_req(Worker, SessId, GUID, #change_mode{mode = 8#123})),
 
-            FileAttr = ?req(Worker, SessId, {path, Path}, #get_file_attr{}),
+            FileAttr = ?req(Worker, SessId, #resolve_guid{path = Path}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
             #fuse_response{fuse_response = #file_attr{uuid = GUID, mode = 8#123}} = FileAttr
 
@@ -248,7 +250,7 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, {guid, GUID}, #delete_file{}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?file_req(Worker, SessId, GUID, #delete_file{}))
                 end, SessIds)
 
         end, [
@@ -266,7 +268,7 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Path),
 
-                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker, SessId, {guid, GUID}, #delete_file{}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?file_req(Worker, SessId, GUID, #delete_file{}))
                 end, SessIds)
 
         end, [
@@ -281,7 +283,7 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = ?EACCES}},
-                        ?req(Worker, SessId, {guid, GUID}, #create_dir{mode = 8#777, name = <<"test">>}))
+                        ?file_req(Worker, SessId, GUID, #create_dir{mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
         end, [
@@ -294,7 +296,7 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
-                        ?req(Worker, SessId, {guid, GUID}, #create_dir{mode = 8#777, name = <<"test">>}))
+                        ?file_req(Worker, SessId, GUID, #create_dir{mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
         end, [
@@ -310,34 +312,34 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Parent),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?req(Worker, SessId, {guid, GUID}, #create_dir{mode = Mode, name = Name}))
+                        ?file_req(Worker, SessId, GUID, #create_dir{mode = Mode, name = Name}))
                 end, SessIds);
         ({delete, Path, SessIds, Code}) ->
             lists:foreach(
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?req(Worker, SessId, {guid, GUID}, #delete_file{}))
+                        ?file_req(Worker, SessId, GUID, #delete_file{}))
                 end, SessIds);
         ({get_attr, Path, SessIds, Code}) ->
             lists:foreach(
                 fun(SessId) ->
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?req(Worker, SessId, {path, Path}, #get_file_attr{}))
+                        ?req(Worker, SessId, #resolve_guid{path = Path}))
                 end, SessIds);
         ({readdir, Path, SessIds, Code}) ->
             lists:foreach(
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?req(Worker, SessId, {guid, GUID}, #get_file_children{}))
+                        ?file_req(Worker, SessId, GUID, #get_file_children{}))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->
             lists:foreach(
                 fun(SessId) ->
                     GUID = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?req(Worker, SessId, {guid, GUID}, #change_mode{mode = Mode}))
+                        ?file_req(Worker, SessId, GUID, #change_mode{mode = Mode}))
                 end, SessIds)
     end,
         [
@@ -390,8 +392,8 @@ simple_rename_test(Config) ->
                 meck:passthrough([_Client, _SpaceId])
         end),
 
-    RootFileAttr1 = ?req(Worker, SessId1, {path, <<"/space_name1">>}, #get_file_attr{}),
-    RootFileAttr2 = ?req(Worker, SessId2, {path, <<"/space_name2">>}, #get_file_attr{}),
+    RootFileAttr1 = ?req(Worker, SessId1, #resolve_guid{path = <<"/space_name1">>}),
+    RootFileAttr2 = ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2">>}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
 
@@ -401,11 +403,11 @@ simple_rename_test(Config) ->
     MakeTree =
         fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
             NewPath = <<Path/binary, "/", Leaf/binary>>,
-            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId,
-                {guid, ParentUUID}, #create_dir{name = Leaf, mode = 8#755}
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId,
+                ParentUUID, #create_dir{name = Leaf, mode = 8#755}
             )),
 
-            FileAttr = ?req(Worker, SessId, {path, NewPath}, #get_file_attr{}),
+            FileAttr = ?req(Worker, SessId, #resolve_guid{path = NewPath}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
             #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
@@ -416,13 +418,13 @@ simple_rename_test(Config) ->
         [<<"t6_dir1">>, <<"t6_dir2">>, <<"t6_dir3">>]),
     [_, ToMove | _] = lists:reverse(UUIDs1),
 
-    RenameResp1 = ?req(Worker, SessId1, {guid, ToMove}, #rename{target_path = <<"/space_name2/t6_dir4">>}),
+    RenameResp1 = ?file_req(Worker, SessId1, ToMove, #rename{target_path = <<"/space_name2/t6_dir4">>}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RenameResp1),
 
-    MovedFileAttr1 = ?req(Worker, SessId2, {path, <<"/space_name2/t6_dir4">>}, #get_file_attr{}),
-    MovedFileAttr2 = ?req(Worker, SessId2, {path, <<"/space_name2/t6_dir4/t6_dir3">>}, #get_file_attr{}),
-    MovedFileAttr3 = ?req(Worker, SessId2, {path, <<"/space_name1/t6_dir1/t6_dir2">>}, #get_file_attr{}),
-    MovedFileAttr4 = ?req(Worker, SessId2, {path, <<"/space_name1/t6_dir1/t6_dir2/t6_dir3">>}, #get_file_attr{}),
+    MovedFileAttr1 = ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2/t6_dir4">>}),
+    MovedFileAttr2 = ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2/t6_dir4/t6_dir3">>}),
+    MovedFileAttr3 = ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name1/t6_dir1/t6_dir2">>}),
+    MovedFileAttr4 = ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name1/t6_dir1/t6_dir2/t6_dir3">>}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr2),
@@ -439,8 +441,8 @@ update_times_test(Config) ->
     {SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     GetTimes =
-        fun(Entry, SessId) ->
-            FileAttr = ?req(Worker, SessId, Entry, #get_file_attr{}),
+        fun(GUID, SessId) ->
+            FileAttr = ?file_req(Worker, SessId, GUID, #get_file_attr{}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
             #fuse_response{fuse_response = #file_attr{atime = ATime, mtime = MTime, ctime = CTime}} = FileAttr,
             {ATime, MTime, CTime}
@@ -452,24 +454,24 @@ update_times_test(Config) ->
             Path = <<"/space_name4/", FileName/binary>>,
             ParentGUID = get_guid_privileged(Worker, SessId, <<"/space_name4">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, {guid, ParentGUID}, #create_dir{name = FileName, mode = 8#000})),
+                ?file_req(Worker, SessId, ParentGUID, #create_dir{name = FileName, mode = 8#000})),
             GUID = get_guid(Worker, SessId, Path),
 
-            {_OldATime, OldMTime, OldCTime} = GetTimes({guid, GUID}, SessId),
+            {_OldATime, OldMTime, OldCTime} = GetTimes(GUID, SessId),
 
             NewATime = 1234565,
             NewMTime = 9275629,
             NewCTime = 7837652,
 
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, {guid, GUID}, #update_times{atime = NewATime})),
+                ?file_req(Worker, SessId, GUID, #update_times{atime = NewATime})),
 
-            ?assertMatch({NewATime, OldMTime, OldCTime}, GetTimes({guid, GUID}, SessId)),
+            ?assertMatch({NewATime, OldMTime, OldCTime}, GetTimes(GUID, SessId)),
 
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, {guid, GUID}, #update_times{mtime = NewMTime, ctime = NewCTime})),
+                ?file_req(Worker, SessId, GUID, #update_times{mtime = NewMTime, ctime = NewCTime})),
 
-            ?assertMatch({NewATime, NewMTime, NewCTime}, GetTimes({guid, GUID}, SessId))
+            ?assertMatch({NewATime, NewMTime, NewCTime}, GetTimes(GUID, SessId))
 
         end, [SessId1, SessId2, SessId3, SessId4]).
 
@@ -487,7 +489,7 @@ get_guid_privileged(Worker, SessId, Path) ->
 
 
 get_guid(Worker, SessId, Path) ->
-    RootFileAttr = ?req(Worker, SessId, {path, Path}, #get_file_attr{}),
+    RootFileAttr = ?req(Worker, SessId, #resolve_guid{path = Path}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
     #fuse_response{fuse_response = #file_attr{uuid = GUID}} = RootFileAttr,
     GUID.

@@ -47,10 +47,6 @@ translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, stor
     #file_block{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_from_protobuf(#'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
     #file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
-translate_from_protobuf(#'FileEntry'{type = 'PATH', value = Path}) ->
-    {path, Path};
-translate_from_protobuf(#'FileEntry'{type = 'GUID', value = GUID}) ->
-    {guid, GUID};
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
     #dir{uuid = UUID};
 
@@ -189,9 +185,21 @@ translate_from_protobuf(#'EndOfMessageStream'{}) ->
 
 
 %% FUSE
-translate_from_protobuf(#'FuseRequest'{context_entry = ContextEntry, fuse_request = {_, Record}}) ->
-    #fuse_request{context_entry = translate_from_protobuf(ContextEntry),
-        fuse_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'FuseRequest'{fuse_request = {_, Record}}) ->
+    #fuse_request{fuse_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'ResolveGuid'{path = Path}) ->
+    #resolve_guid{path = Path};
+translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}) ->
+    #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
+translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileUuid}) ->
+    #create_storage_test_file{storage_id = Id, file_uuid = FileUuid};
+translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_uuid = SpaceUuid,
+    file_id = FId, file_content = FContent}) ->
+    #verify_storage_test_file{storage_id = SId, space_uuid = SpaceUuid,
+        file_id = FId, file_content = FContent};
+
+translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid, file_request = {_, Record}}) ->
+    #file_request{context_guid = ContextGuid, file_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'GetFileAttr'{}) ->
     #get_file_attr{};
 translate_from_protobuf(#'GetFileChildren'{offset = Offset, size = Size}) ->
@@ -211,8 +219,6 @@ translate_from_protobuf(#'GetNewFileLocation'{name = Name, mode = Mode, flags = 
     #get_new_file_location{name = Name, mode = Mode, flags = open_flags_translate_from_protobuf(Flags)};
 translate_from_protobuf(#'GetFileLocation'{flags = Flags}) ->
     #get_file_location{flags = open_flags_translate_from_protobuf(Flags)};
-translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}) ->
-    #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
@@ -274,12 +280,6 @@ translate_from_protobuf(#'HelperParams'{helper_name = HelperName, helper_args = 
             end, HelpersArgs)};
 translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
-translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id}) ->
-    #create_storage_test_file{storage_id = Id};
-translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_uuid = SpaceUuid,
-    file_id = FId, file_content = FContent}) ->
-    #verify_storage_test_file{storage_id = SId, space_uuid = SpaceUuid,
-        file_id = FId, file_content = FContent};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
     {Key, Value};
 translate_from_protobuf(#'Checksum'{value = Value}) ->
@@ -318,9 +318,9 @@ translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
 
 
 %% PROVIDER
-translate_from_protobuf(#'ProviderRequest'{context_entry = ContextEntry,
+translate_from_protobuf(#'ProviderRequest'{context_guid = ContextGuid,
     provider_request = {_, Record}}) ->
-    #provider_request{context_entry = translate_from_protobuf(ContextEntry),
+    #provider_request{context_guid = ContextGuid,
         provider_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'GetXattr'{name = Name}) ->
     #get_xattr{name = Name};
@@ -434,10 +434,6 @@ translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_to_protobuf(#file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
     #'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
-translate_to_protobuf({path, Path}) ->
-    #'FileEntry'{type = 'PATH', value = Path};
-translate_to_protobuf({guid, GUID}) ->
-    #'FileEntry'{type = 'GUID', value = GUID};
 translate_to_protobuf(#dir{uuid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 
@@ -575,8 +571,15 @@ translate_to_protobuf(#end_of_message_stream{}) ->
 
 
 %% FUSE
-translate_to_protobuf(#fuse_request{context_entry = ContextEntry, fuse_request = Record}) ->
-    {fuse_request, #'FuseRequest'{context_entry = translate_to_protobuf(ContextEntry), fuse_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#fuse_request{fuse_request = Record}) ->
+    {fuse_request, #'FuseRequest'{fuse_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#resolve_guid{path = Path}) ->
+    {resolve_guid, #'ResolveGuid'{path = Path}};
+translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
+    {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
+
+translate_to_protobuf(#file_request{context_guid = ContextGuid, file_request = Record}) ->
+    {file_request, #'FileRequest'{context_guid = ContextGuid, file_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_file_attr{}) ->
     {get_file_attr, #'GetFileAttr'{}};
 translate_to_protobuf(#get_file_children{offset = Offset, size = Size}) ->
@@ -595,8 +598,6 @@ translate_to_protobuf(#get_new_file_location{name = Name, mode = Mode, flags = F
     {get_new_file_location, #'GetNewFileLocation'{name = Name, mode = Mode, flags = open_flags_translate_to_protobuf(Flags)}};
 translate_to_protobuf(#get_file_location{flags = Flags}) ->
     {get_file_location, #'GetFileLocation'{flags = open_flags_translate_to_protobuf(Flags)}};
-translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
-    {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size}) ->
@@ -693,8 +694,10 @@ translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
 
 
 %% PROVIDER
-translate_to_protobuf(#provider_request{provider_request = Record}) ->
-    {provider_request, #'ProviderRequest'{provider_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#provider_request{context_guid = ContextGuid,
+    provider_request = Record}) ->
+    {provider_request, #'ProviderRequest'{context_guid = ContextGuid,
+        provider_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_xattr{name = Name}) ->
     {get_xattr, #'GetXattr'{name = Name}};
 translate_to_protobuf(#set_xattr{xattr = Xattr}) ->

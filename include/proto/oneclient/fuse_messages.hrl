@@ -64,11 +64,6 @@
     flags :: fslogic_worker:open_flags()
 }).
 
--record(get_helper_params, {
-    storage_id :: storage:id(),
-    force_proxy_io = false :: boolean()
-}).
-
 -record(release, {
     handle_id :: binary()
 }).
@@ -82,8 +77,33 @@
     prefetch = false :: boolean()
 }).
 
+-record(synchronize_block_and_compute_checksum, {
+    block :: #file_block{}
+}).
+
+-type file_request() ::
+    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
+    #update_times{} | #change_mode{} | #rename{} | #get_new_file_location{} |
+    #get_file_location{} | #release{} | #truncate{} | #synchronize_block{} |
+    #synchronize_block_and_compute_checksum{}.
+
+-record(file_request, {
+    context_guid :: fslogic_worker:file_guid(),
+    file_request :: file_request()
+}).
+
+-record(resolve_guid, {
+    path :: file_meta:path()
+}).
+
+-record(get_helper_params, {
+    storage_id :: storage:id(),
+    force_proxy_io = false :: boolean()
+}).
+
 -record(create_storage_test_file, {
-    storage_id :: storage:id()
+    storage_id :: storage:id(),
+    file_uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(verify_storage_test_file, {
@@ -93,17 +113,13 @@
     file_content :: binary()
 }).
 
--record(synchronize_block_and_compute_checksum, {
-    block :: #file_block{}
-}).
-
 -type fuse_request() ::
-    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
-    #update_times{} | #change_mode{} | #rename{} | #get_new_file_location{} |
-    #get_file_location{} | #get_helper_params{} | #release{} | #truncate{} |
-    #synchronize_block{} | #create_storage_test_file{} |
-    #verify_storage_test_file{} | #synchronize_block_and_compute_checksum{}.
+    #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
+    #verify_storage_test_file{} | #file_request{}.
 
+-record(fuse_request, {
+    fuse_request :: fuse_request()
+}).
 
 -record(file_children, {
     child_links :: [#child_link{}]
@@ -138,11 +154,6 @@
 -type fuse_response() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{}.
-
--record(fuse_request, {
-    context_entry :: fslogic_worker:ext_file() | undefined,
-    fuse_request :: fuse_request()
-}).
 
 -record(fuse_response, {
     status :: #status{},

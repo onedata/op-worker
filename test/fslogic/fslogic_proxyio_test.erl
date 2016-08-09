@@ -444,6 +444,7 @@ start() ->
             handles = #{<<"HandleId">> => file_handle_mock}}}}),
 
     meck:expect(fslogic_spaces, get_space, 2, {ok, #document{key = ?SPACE_ID}}),
+    meck:expect(lfm_utils, call_fslogic, 4, ok),
     meck:expect(lfm_utils, call_fslogic, 5, ok),
 
     ok.
