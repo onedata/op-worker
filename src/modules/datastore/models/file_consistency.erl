@@ -347,7 +347,7 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-% TODO - check if it is not done too fast
+% TODO - check if it is not done too fast (VFS-2411)
 'after'(file_meta, delete, ?GLOBAL_ONLY_LEVEL, [Key, _], ok) ->
     file_consistency:delete(Key);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->

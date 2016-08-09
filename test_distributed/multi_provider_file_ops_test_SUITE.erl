@@ -69,6 +69,9 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
 synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider},
     Attempts, DirsNum, FilesNum) ->
+
+%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider}, Attempts, DirsNum, FilesNum}]),
+
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfWriteProvider,
     Workers = ?config(op_worker_nodes, Config),
     Worker1 = lists:foldl(fun(W, Acc) ->
@@ -219,7 +222,9 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     VerifyDel = fun({F,  FileUUID, Locations}) ->
         Verify(fun(W) ->
 %%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
-            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
+%%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
+            % TODO - match to chosen error (check perms may also result in ENOENT)
+            ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
             %,
 %%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
 %%            lists:foreach(fun(ProvID) ->
