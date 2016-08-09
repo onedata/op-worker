@@ -42,7 +42,7 @@
     closed :: atom(),
     error :: atom(),
     % actual connection state
-    socket :: ssl2:socket(),
+    socket :: etls:socket(),
     transport :: module(),
     session_id :: session:id(),
     connection_type :: incoming | outgoing,
@@ -61,7 +61,7 @@
 %% Starts the incoming connection.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: atom(), Socket :: ssl2:socket(), Transport :: atom(),
+-spec start_link(Ref :: atom(), Socket :: etls:socket(), Transport :: atom(),
     Opts :: list()) -> {ok, Pid :: pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
@@ -74,7 +74,7 @@ start_link(SessionId, Hostname, Port, Transport, Timeout) ->
 %% Initializes the connection.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term(), Socket :: ssl2:socket(), Transport :: atom(), Opts :: list()) ->
+-spec init(Args :: term(), Socket :: etls:socket(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts) ->
     ok = proc_lib:init_ack({ok, self()}),
@@ -256,7 +256,7 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: ssl2:socket(),
+-spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: etls:socket(),
     Data :: binary()} | term(), State :: #state{}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
@@ -299,8 +299,8 @@ handle_info(_Info, State) ->
 terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     session:remove_connection(SessId, self()),
-    ssl2:close(Socket),
-    ssl2:close(State#state.socket),
+    etls:close(Socket),
+    etls:close(State#state.socket),
     ok.
 
 %%--------------------------------------------------------------------
@@ -464,7 +464,7 @@ update_message_id(State, Msg) ->
 %% via erlang message
 %% @end
 %%--------------------------------------------------------------------
--spec activate_socket_once(Socket :: ssl2:socket(), Transport :: module()) -> ok.
+-spec activate_socket_once(Socket :: etls:socket(), Transport :: module()) -> ok.
 activate_socket_once(Socket, Transport) ->
     ok = Transport:setopts(Socket, [{active, once}]).
 
@@ -474,7 +474,7 @@ activate_socket_once(Socket, Transport) ->
 %% Sends #server_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_server_message(Socket :: ssl2:socket(), Transport :: module(),
+-spec send_server_message(Socket :: etls:socket(), Transport :: module(),
     ServerMessage :: #server_message{}) -> ok.
 send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
@@ -493,7 +493,7 @@ send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
 %% Sends #client_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_client_message(Socket :: ssl2:socket(), Transport :: module(),
+-spec send_client_message(Socket :: etls:socket(), Transport :: module(),
     ServerMessage :: #client_message{}) -> ok.
 send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
     try serializator:serialize_client_message(ClientMsg) of
@@ -512,10 +512,10 @@ send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
 %% Returns OTP certificate for given socket or 'undefined' if there isn't one.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert(Socket :: ssl2:socket()) ->
+-spec get_cert(Socket :: etls:socket()) ->
     undefined | #'OTPCertificate'{}.
 get_cert(Socket) ->
-    case ssl2:peercert(Socket) of
+    case etls:peercert(Socket) of
         {error, _} -> undefined;
         {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
     end.

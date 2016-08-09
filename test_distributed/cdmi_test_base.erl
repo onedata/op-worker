@@ -54,7 +54,7 @@
 
 user_1_token_header(Config) ->
     #token_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
-    {ok, Srlzd} = macaroon:serialize(Macaroon),
+    {ok, Srlzd} = token_utils:serialize62(Macaroon),
     {<<"X-Auth-Token">>, Srlzd}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
@@ -464,11 +464,17 @@ metadata(Config) ->
 
     %%-- create forbidden by acl ---
     Ace4 = [
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?execute_mask)}
+    ],
+    Ace5 = [
         {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
         {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}],
-    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace4]}]}],
+    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4, Ace5]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
 

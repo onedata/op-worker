@@ -451,8 +451,10 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
             {error, Reason};
         {ok, _, Size} = Ret1 ->
             Ret1;
-        {ok, _, 0} = Ret2 ->
-            Ret2;
+        {ok, _, 0} ->
+            ?warning("File ~p write operation failed (0 bytes written), offset ~p, buffer size ~p",
+                [FileHandle, Offset, Size]),
+            {error, ?EAGAIN};
         {ok, NewHandle, Written} ->
             case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written), GenerateEvents) of
                 {ok, NewHandle1, Written1} ->

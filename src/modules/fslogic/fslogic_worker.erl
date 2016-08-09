@@ -473,6 +473,11 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #replicate_file{block = Block}}) ->
     fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Block);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_metadata{type = Type, names = Names}}) ->
+    fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Type, Names);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_metadata{metadata =
+#metadata{type = Type, value = Value}, names = Names}}) ->
+    fslogic_req_generic:set_metadata(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Type, Value, Names);
 handle_provider_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -576,7 +581,7 @@ handle_file_accessed_events(Evts, #{session_id := SessId}) ->
 %% Map given request to file-scope, provider-scope or space-scope.
 %% @end
 %%--------------------------------------------------------------------
--spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{} 
+-spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{}
     | #file_request{} | #provider_request{} | #proxyio_request{}) ->
     {file, file_meta:entry() | {guid, fslogic_worker:file_guid()}} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->

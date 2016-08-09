@@ -148,8 +148,8 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
 translate_from_protobuf(#'Token'{value = Val, secondary_values = SecValues}) ->
-    {ok, Macaroon} = macaroon:deserialize(Val),
-    DischargeMacaroons = [R || {ok, R} <- [macaroon:deserialize(SecValue) || SecValue <- SecValues]],
+    {ok, Macaroon} = token_utils:deserialize(Val),
+    DischargeMacaroons = [R || {ok, R} <- [token_utils:deserialize(SecValue) || SecValue <- SecValues]],
     #token_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 
 
@@ -358,6 +358,10 @@ translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
     block = Block}) ->
     #replicate_file{provider_id = ProviderId,
         block = translate_from_protobuf(Block)};
+translate_from_protobuf(#'GetMetadata'{type = Type, names = Names}) ->
+    #get_metadata{type = Type, names = Names};
+translate_from_protobuf(#'SetMetadata'{metadata = Metadata, names = Names}) ->
+    #set_metadata{metadata = translate_from_protobuf(Metadata), names = Names};
 
 translate_from_protobuf(#'ProviderResponse'{status = Status, provider_response = {_, ProviderResponse}}) ->
     #provider_response{
@@ -388,6 +392,8 @@ translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, bl
 translate_from_protobuf(#'FileDistribution'{provider_file_distributions = Distributions}) ->
     TranslatedDistributions = lists:map(fun translate_from_protobuf/1, Distributions),
     #file_distribution{provider_file_distributions = TranslatedDistributions};
+translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
+    #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
 
 
 %% DBSYNC
@@ -533,8 +539,8 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
 translate_to_protobuf(#handshake_response{session_id = Id}) ->
     {handshake_response, #'HandshakeResponse'{session_id = Id}};
 translate_to_protobuf(#token_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
-    {ok, Token} = macaroon:serialize(Macaroon),
-    SecValues = [R || {ok, R} <- [macaroon:serialize(DMacaroon) || DMacaroon <- DMacaroons]],
+    {ok, Token} = token_utils:serialize62(Macaroon),
+    SecValues = [R || {ok, R} <- [token_utils:serialize62(DMacaroon) || DMacaroon <- DMacaroons]],
     #'Token'{value = Token, secondary_values = SecValues};
 
 
@@ -736,6 +742,11 @@ translate_to_protobuf(#replicate_file{provider_id = ProviderId,
     block = Block}) ->
     {replicate_file, #'ReplicateFile'{provider_id = ProviderId,
         block = translate_to_protobuf(Block)}};
+translate_to_protobuf(#get_metadata{type = Type, names = Names}) ->
+    {get_metadata, #'GetMetadata'{type = Type, names = Names}};
+translate_to_protobuf(#set_metadata{metadata = Metadata, names = Names}) ->
+    {metadata, MetadataProto} = translate_to_protobuf(Metadata),
+    {set_metadata, #'SetMetadata'{metadata = MetadataProto, names = Names}};
 
 translate_to_protobuf(#provider_response{status = Status, provider_response = ProviderResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),
@@ -763,6 +774,8 @@ translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, bloc
 translate_to_protobuf(#file_distribution{provider_file_distributions = Distributions}) ->
     TranslatedDistributions = lists:map(fun translate_to_protobuf/1, Distributions),
     {file_distribution, #'FileDistribution'{provider_file_distributions = TranslatedDistributions}};
+translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
+    {metadata, #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)}};
 
 
 %% DBSYNC

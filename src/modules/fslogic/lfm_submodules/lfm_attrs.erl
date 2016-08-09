@@ -28,6 +28,8 @@
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
     set_mimetype/3]).
+-export([get_metadata/4, set_metadata/5]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -251,4 +253,32 @@ set_mimetype(SessId, FileKey, Mimetype) ->
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
         #set_mimetype{value = Mimetype},
+        fun(_) -> ok end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_metadata(session:id(), logical_file_manager:file_key(), binary(), [binary()]) ->
+    {ok, #{}} | logical_file_manager:error_reply().
+get_metadata(SessId, FileKey, Type, Names) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
+        #get_metadata{type = Type, names = Names},
+        fun(#metadata{value = Value}) -> {ok, Value} end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Set metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec set_metadata(session:id(), logical_file_manager:file_key(), binary(), term(), [binary()]) ->
+    ok | logical_file_manager:error_reply().
+set_metadata(SessId, FileKey, Type, Value, Names) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
+        #set_metadata{names = Names, metadata = #metadata{type = Type, value = Value}},
         fun(_) -> ok end).

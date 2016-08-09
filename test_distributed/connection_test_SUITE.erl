@@ -58,7 +58,7 @@
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(MACAROON, macaroon:create("a", "b", "c")).
--define(MACAROON_TOKEN, element(2, macaroon:serialize(?MACAROON))).
+-define(MACAROON_TOKEN, element(2, token_utils:serialize62(?MACAROON))).
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
@@ -71,7 +71,7 @@ token_connection_test(Config) ->
 
     % then
     {ok, {Sock, _}} = connect_via_token(Worker1),
-    ok = ssl2:close(Sock).
+    ok = etls:close(Sock).
 
 % todo VFS-1158 Modify & enable the test after veryfing client certificate.
 cert_connection_test(_Config) ->
@@ -96,23 +96,23 @@ cert_connection_test(_Config) ->
 %%         end),
 %%
 %%     % when
-%%     {ok, Sock} = ssl2:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
+%%     {ok, Sock} = etls:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
 %%         {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
 %%
 %%     {ok, Pid} = ?assertReceivedMatch(_, ?TIMEOUT),
 %%     State = sys:get_state(Pid),
 %%     #'OTPCertificate'{} = Cert = erlang:element(2, State),
 %%
-%%     ok = ssl2:send(Sock, HandshakeReqRaw),
+%%     ok = etls:send(Sock, HandshakeReqRaw),
 %%     ?assertReceivedMatch({ssl, _, RawHandshakeResponse}, ?TIMEOUT),
 %%
 %%     % then
-%%     ?assertEqual(CertDer, ssl2:peercert(Sock)),
+%%     ?assertEqual(CertDer, etls:peercert(Sock)),
 %%     HandshakeResponse = messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
 %%     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
 %%     SessionId}}} = HandshakeResponse,
 %%     ?assert(is_binary(SessionId)),
-%%     ok = ssl2:close(Sock),
+%%     ok = etls:close(Sock),
     ok.
 
 protobuf_msg_test(Config) ->
@@ -135,10 +135,10 @@ protobuf_msg_test(Config) ->
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
-    ok = ssl2:send(Sock, RawMsg),
+    ok = etls:send(Sock, RawMsg),
 
 % then
-    ok = ssl2:close(Sock).
+    ok = etls:close(Sock).
 
 multi_message_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -184,7 +184,7 @@ multi_message_test_base(Config) ->
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
-    lists:foreach(fun(E) -> ok = ssl2:send(Sock, E) end, RawEvents),
+    lists:foreach(fun(E) -> ok = etls:send(Sock, E) end, RawEvents),
     T2 = erlang:monotonic_time(milli_seconds),
 
     % then
@@ -192,7 +192,7 @@ multi_message_test_base(Config) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
     T3 = erlang:monotonic_time(milli_seconds),
-    ok = ssl2:close(Sock),
+    ok = etls:close(Sock),
     [
         #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
         #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
@@ -222,7 +222,7 @@ client_send_test(Config) ->
 
     % then
     ?assertEqual(ServerMessageProtobuf, receive_server_message()),
-    ok = ssl2:close(Sock).
+    ok = etls:close(Sock).
 
 client_communicate_test(Config) ->
     % given
@@ -237,7 +237,7 @@ client_communicate_test(Config) ->
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
-    ok = ssl2:close(Sock).
+    ok = etls:close(Sock).
 
 client_communicate_async_test(Config) ->
     % given
@@ -273,7 +273,7 @@ client_communicate_async_test(Config) ->
 
     % then
     ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
-    ok = ssl2:close(Sock).
+    ok = etls:close(Sock).
 
 multi_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -315,7 +315,7 @@ multi_ping_pong_test_base(Config) ->
             % when
             {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
             lists:foreach(fun(E) ->
-                ok = ssl2:send(Sock, E)
+                ok = etls:send(Sock, E)
             end, RawPings),
             Received = lists:map(fun(_) ->
                 Pong = receive_server_message(),
@@ -329,7 +329,7 @@ multi_ping_pong_test_base(Config) ->
             lists:foreach(fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
                 ?assertEqual(Id, MsgId)
             end, IdToMessage),
-            ok = ssl2:close(Sock),
+            ok = etls:close(Sock),
             Self ! success
         end) || _ <- ConnNumbersList
     ],
@@ -371,7 +371,7 @@ sequential_ping_pong_test_base(Config) ->
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foldl(fun(E, N) ->
         % send ping
-        ok = ssl2:send(Sock, E),
+        ok = etls:send(Sock, E),
 
         % receive & validate pong
         BinaryN = integer_to_binary(N),
@@ -383,7 +383,7 @@ sequential_ping_pong_test_base(Config) ->
     T2 = erlang:monotonic_time(milli_seconds),
 
     % then
-    ok = ssl2:close(Sock),
+    ok = etls:close(Sock),
 
     #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
@@ -417,7 +417,7 @@ multi_connection_test_base(Config) ->
         {ok, {_Sock, SessId}} = ConnectionAns,
         ?assert(is_binary(SessId))
     end, Connections),
-    lists:foreach(fun({ok, {Sock, _}}) -> ssl2:close(Sock) end, Connections).
+    lists:foreach(fun({ok, {Sock, _}}) -> etls:close(Sock) end, Connections).
 
 bandwidth_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -457,7 +457,7 @@ bandwidth_test_base(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
     T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(_) ->
-        ok = ssl2:send(Sock, PacketRaw)
+        ok = etls:send(Sock, PacketRaw)
     end, lists:seq(1, PacketNum)),
     T2 = erlang:monotonic_time(milli_seconds),
 
@@ -466,7 +466,7 @@ bandwidth_test_base(Config) ->
         ?assertReceivedMatch(router_message_called, ?TIMEOUT)
     end, lists:seq(1, PacketNum)),
     T3 = erlang:monotonic_time(milli_seconds),
-    ssl2:close(Sock),
+    etls:close(Sock),
     [
         #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
         #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
@@ -553,7 +553,7 @@ proto_version_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
 
     % when
-    ok = ssl2:send(Sock, GetProtoVersionRaw),
+    ok = etls:send(Sock, GetProtoVersionRaw),
 
     %then
     #'ServerMessage'{message_body = {_, #'ProtocolVersion'{
@@ -564,7 +564,7 @@ proto_version_test(Config) ->
     }, receive_server_message()),
     ?assert(is_integer(Major)),
     ?assert(is_integer(Minor)),
-    ok = ssl2:close(Sock).
+    ok = etls:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -579,7 +579,7 @@ end_per_suite(Config) ->
 init_per_testcase(cert_connection_test, Config) ->
     initializer:remove_pending_messages(),
     Workers = ?config(op_worker_nodes, Config),
-    application:ensure_started(ssl2),
+    application:ensure_started(etls),
     test_utils:mock_new(Workers, serializator),
     mock_identity(Workers),
     Config;
@@ -592,7 +592,7 @@ init_per_testcase(Case, Config) when
     Case =:= python_client_test ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
-    application:ensure_started(ssl2),
+    application:ensure_started(etls),
     test_utils:mock_new(Workers, router),
     mock_identity(Workers),
     Config;
@@ -601,7 +601,7 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     mock_identity(Workers),
-    application:ensure_started(ssl2),
+    application:ensure_started(etls),
     Config.
 
 end_per_testcase(cert_connection_test, Config) ->
@@ -637,7 +637,7 @@ end_per_testcase(_, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_via_token(Node :: node()) ->
-    {ok, {Sock :: ssl2:socket(), SessId :: session:id()}} | no_return().
+    {ok, {Sock :: etls:socket(), SessId :: session:id()}} | no_return().
 connect_via_token(Node) ->
     connect_via_token(Node, [{active, true}]).
 
@@ -667,10 +667,10 @@ connect_via_token(Node, SocketOpts, SessId) ->
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
 
     % when
-    {ok, Sock} = (catch ssl2:connect(utils:get_host(Node), Port, [binary,
+    {ok, Sock} = (catch etls:connect(utils:get_host(Node), Port, [binary,
         {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
     ], timer:minutes(1))),
-    ok = ssl2:send(Sock, TokenAuthMessageRaw),
+    ok = etls:send(Sock, TokenAuthMessageRaw),
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
@@ -678,7 +678,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
     }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
         receive_server_message()
     ),
-    ssl2:setopts(Sock, ActiveOpt),
+    etls:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessionId}}.
 
 %%--------------------------------------------------------------------
@@ -687,13 +687,13 @@ connect_via_token(Node, SocketOpts, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
-    {ok, {Sock :: ssl2:socket(), SessId :: session:id()}}.
+    {ok, {Sock :: etls:socket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
     {ok, {Sock, SessionId}} = connect_via_token(NodeToConnect, []),
     SslEchoClient =
         fun Loop() ->
             % receive data from server
-            case ssl2:recv(Sock, 0) of
+            case etls:recv(Sock, 0) of
                 {ok, Data} ->
                     % decode
                     #'ServerMessage'{message_id = Id, message_body = Body} =
@@ -706,7 +706,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
                             ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
-                            ?assertEqual(ok, ssl2:send(Sock, ClientAnsRaw))
+                            ?assertEqual(ok, etls:send(Sock, ClientAnsRaw))
                     end,
 
                     %loop back

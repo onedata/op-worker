@@ -82,13 +82,24 @@
     block :: #file_block{} | undefined
 }).
 
+-record(get_metadata, {
+    type :: custom_metadata:type(),
+    names = [] :: custom_metadata:names()
+}).
+
+-record(set_metadata, {
+    metadata :: custom_metadata:metadata(),
+    names = [] :: custom_metadata:names()
+}).
+
 -type provider_request() ::
     #get_xattr{} | #set_xattr{} | #remove_xattr{} | #list_xattr{} |
     #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
     #get_transfer_encoding{} | #set_transfer_encoding{} |
     #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
     #get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
-    #get_file_distribution{} | #replicate_file{}.
+    #get_file_distribution{} | #replicate_file{} | #get_metadata{} |
+    #set_metadata{}.
 
 -record(xattr_list, {
     names :: [xattr:name()]
@@ -119,9 +130,15 @@
     provider_file_distributions :: [#provider_file_distribution{}]
 }).
 
+-record(metadata, {
+    type :: custom_metadata:type(),
+    value :: term()
+}).
+
 -type provider_response() ::
     #xattr{} | #xattr_list{} | #transfer_encoding{} | #cdmi_completion_status{} |
-    #mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{}.
+    #mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{} |
+    #metadata{}.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),
