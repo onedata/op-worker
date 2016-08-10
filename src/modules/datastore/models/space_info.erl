@@ -106,7 +106,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(space_info_bucket, [{space_info, create}, {space_info, save},
-        {space_info, delete}, {space_info, create_or_update}], ?DISK_ONLY_LEVEL).
+        {space_info, delete}, {space_info, create_or_update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,13 +116,13 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(space_info, create, _, _, {ok, SpaceId}) ->
+'after'(space_info, create, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
     monitoring_action(start, SpaceId);
-'after'(space_info, create_or_update, _, _, {ok, SpaceId}) ->
+'after'(space_info, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
     monitoring_action(start, SpaceId);
-'after'(space_info, save, _, _, {ok, SpaceId}) ->
+'after'(space_info, save, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
     monitoring_action(start, SpaceId);
-'after'(space_info, delete, _, _, SpaceId) ->
+'after'(space_info, delete, ?GLOBAL_ONLY_LEVEL, _, SpaceId) ->
     monitoring_action(stop, SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -262,6 +262,7 @@ fetch(Auth, SpaceId) ->
         name = Name,
         providers = ProviderIds
     }},
+    % TODO - what if new doc appear with subscription in parallel? resolve such conflict
     {ok, _} = save(Doc),
 
     {ok, Doc}.

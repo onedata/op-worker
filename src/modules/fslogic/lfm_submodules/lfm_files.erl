@@ -362,7 +362,7 @@ replicate_file(SessId, FileKey, ProviderId) ->
     {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(OpType, #lfm_handle{file_guid = GUID, file_location = #file_location{blocks = InitBlocks}}, Offset, Size) ->
     Blocks = try
-        [#document{value = LocalLocation}] = fslogic_utils:get_local_file_locations_once({guid, GUID}),
+        [#document{value = LocalLocation}] = fslogic_utils:get_local_file_locations({guid, GUID}),
         #file_location{blocks = Blocks0} = LocalLocation,
         Blocks0
     catch

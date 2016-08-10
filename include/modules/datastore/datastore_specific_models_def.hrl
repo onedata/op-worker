@@ -76,14 +76,14 @@
 
 %% Local, cached version of OZ user
 -record(onedata_user, {
-    name :: binary(),
+    name = <<"">>:: binary(),
     spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
     group_ids :: [binary()],
     effective_group_ids = [] :: [binary()],
-    connected_accounts :: [onedata_user:connected_account()],
-    alias :: binary(),
-    email_list :: [binary()],
+    connected_accounts = [] :: [onedata_user:connected_account()],
+    alias = <<"">>:: binary(),
+    email_list = [] :: [binary()],
     revision_history = [] :: [subscriptions:rev()],
     % This field means that only public information is available about this
     % user. This is the case when given user hasn't ever logged in to this
@@ -150,7 +150,7 @@
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
     },
-    last_rename :: {{helpers:file(), binary()}, non_neg_integer()}
+    last_rename :: fslogic_file_location:last_rename()
 }).
 
 %% Model for caching provider details fetched from OZ
@@ -258,6 +258,12 @@
 %% Model that holds database views
 -record(indexes, {
     value = #{} :: #{indexes:index_id() => indexes:index()}
+}).
+
+%% Model that keeps track of consistency of file metadata
+-record(file_consistency, {
+    components_present = [] :: [file_consistency:component()],
+    waiting = [] :: [file_consistency:waiting()]
 }).
 
 -endif.

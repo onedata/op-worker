@@ -23,8 +23,8 @@
 
 -define(MAX_CHANGES, 20).
 
--type change() :: fslogic_blocks:blocks() | {shrink, non_neg_integer()} |
-    {rename, {{helpers:file(), binary()}, non_neg_integer()}}.
+-type change() :: fslogic_blocks:blocks() | {shrink, non_neg_integer()} | {rename, last_rename()}.
+-type last_rename() :: {{FileId :: helpers:file(), SpaceId :: binary()}, Seq :: non_neg_integer()}.
 
 -export_type([change/0]).
 
@@ -70,8 +70,7 @@ get_changes(#document{value = #file_location{recent_changes = {Backup, New}, las
 %% @end
 %%--------------------------------------------------------------------
 -spec get_merged_changes(file_location:doc(), integer()) ->
-    {fslogic_blocks:blocks(), integer() | undefined,
-        {{helpers:file(), binary()}, non_neg_integer()} | undefined}.
+    {fslogic_blocks:blocks(), integer() | undefined, last_rename() | undefined}.
 get_merged_changes(Doc, N) ->
     Changes = get_changes(Doc, N),
     Shrink = lists:foldl(fun
@@ -120,40 +119,13 @@ set_last_rename(#document{value = #file_location{uuid = UUID} = Loc} = Doc,
 %% Create storage file and file_location if there is no file_location defined
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(space_info:id(), datastore:document()) -> ok.
-create_storage_file_if_not_exists(SpaceId, FileDoc) ->
-    create_storage_file_if_not_exists(SpaceId, FileDoc, 30).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Create storage file and file_location if there is no file_location defined
-%% @end
-%%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(space_info:id(), datastore:document(), integer()) ->
+-spec create_storage_file_if_not_exists(space_info:id(), datastore:document()) ->
     ok | {error, term()}.
-create_storage_file_if_not_exists(SpaceId, FileDoc, 0) ->
-    create_storage_file_if_not_exists_once(SpaceId, FileDoc);
-create_storage_file_if_not_exists(SpaceId, FileDoc, Num) ->
-    try
-        ok = create_storage_file_if_not_exists_once(SpaceId, FileDoc)
-    catch
-        _:_ ->
-            timer:sleep(500),
-            create_storage_file_if_not_exists(SpaceId, FileDoc, Num - 1)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Create storage file and file_location if there is no file_location defined
-%% @end
-%%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists_once(space_info:id(), datastore:document()) ->
-    ok | {error, term()}.
-create_storage_file_if_not_exists_once(SpaceId, FileDoc = #document{key = FileUuid,
+create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
     value = #file_meta{mode = Mode, uid = UserId}}) ->
-    file_location:run_synchronized(FileUuid,
+    file_location:critical_section(FileUuid,
         fun() ->
-            case fslogic_utils:get_local_file_locations_once(FileDoc) of
+            case fslogic_utils:get_local_file_locations(FileDoc) of
                 [] ->
                     create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
                     chown_file(FileUuid, UserId, SpaceId),
