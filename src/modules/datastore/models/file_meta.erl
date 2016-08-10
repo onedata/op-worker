@@ -352,7 +352,7 @@ list_children(Entry, Offset, Count) ->
                     Acc;
                 (LinkName, {_V, [{_Key, ?MODEL_NAME, _} | _] = Targets}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
                     TargetCount = length(Targets),
-                    case is_snapshot(name(LinkName)) of
+                    case is_snapshot(LinkName) of
                         true ->
                             {Skip, Count1, Acc};
                         false when TargetCount > Skip ->
@@ -360,7 +360,7 @@ list_children(Entry, Offset, Count) ->
                             SelectedTargetsTagged = lists:sublist(TargetsTagged, Skip + 1, TargetCount - Skip),
                             ChildLinks = lists:map(
                                 fun({LName, LKey}) ->
-                                    #child_link{name = name(LName), uuid = LKey}
+                                    #child_link{name = LName, uuid = LKey}
                                 end, SelectedTargetsTagged),
                             {0, Count1 + (TargetCount - Skip), ChildLinks ++ Acc};
                         false ->
@@ -370,13 +370,13 @@ list_children(Entry, Offset, Count) ->
                     TargetCount = length(Targets),
                     TargetsTagged = tag_childs(LinkName, Targets),
                     SelectedTargetsTagged = lists:sublist(TargetsTagged, min(Count, TargetCount)),
-                    case is_snapshot(name(LinkName)) of
+                    case is_snapshot(LinkName) of
                         true ->
                             {0, Count1, Acc};
                         false ->
                             ChildLinks = lists:map(
                                 fun({LName, LKey}) ->
-                                    #child_link{name = name(LName), uuid = LKey}
+                                    #child_link{name = LName, uuid = LKey}
                                 end, SelectedTargetsTagged),
                             {0, Count1 - length(ChildLinks), ChildLinks ++ Acc}
                     end;
@@ -391,11 +391,13 @@ list_children(Entry, Offset, Count) ->
         end
     end).
 
-name(<<"/", Rest/binary>>) ->
-    Rest;
-name(Rest) ->
-    Rest.
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Tag each given link with its scope.
+%% @end
+%%--------------------------------------------------------------------
+-spec tag_childs(LinkName :: datastore:link_name(), [datastore:link_final_target()]) ->
+    [{datastore:link_name(), datastore:ext_key()}].
 tag_childs(LinkName, [{Key, _Model, _Scope}]) ->
     [{LinkName, Key}];
 
