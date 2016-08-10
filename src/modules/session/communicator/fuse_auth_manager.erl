@@ -34,18 +34,18 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_handshake(#client_message{}, #'OTPCertificate'{}) ->
-    {ok, #server_message{}} | no_return().
+    {ok, SessId :: session:id()} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = SessId, auth = Auth = #token_auth{}}}, _) when is_binary(SessId) ->
     {ok, Iden} = authenticate_using_token(Auth),
     {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
-    {ok, #server_message{message_body = #handshake_response{session_id = SessId}}};
+    {ok, SessId};
 
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = SessId}}, OtpCert) when is_binary(SessId) ->
     {ok, Iden} = authenticate_using_certificate(OtpCert),
     {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, self()),
-    {ok, #server_message{message_body = #handshake_response{session_id = SessId}}}.
+    {ok, SessId}.
 
 %%%===================================================================
 %%% Internal functions

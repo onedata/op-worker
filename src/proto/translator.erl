@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Translations between protobuff and internal protocol
+%%% Translations between protobuf and internal protocol
 %%% @end
 %%%-------------------------------------------------------------------
 -module(translator).
@@ -27,7 +27,8 @@
 -include_lib("clproto/include/messages.hrl").
 
 %% API
--export([translate_from_protobuf/1, translate_to_protobuf/1]).
+-export([translate_handshake_error/1, translate_from_protobuf/1,
+    translate_to_protobuf/1]).
 
 %%%===================================================================
 %%% API
@@ -35,7 +36,34 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% traslate protobuf record to internal record
+%% Translates handshake error type from REST to protobuf format.
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_handshake_error(Type :: binary()) -> Type :: atom().
+translate_handshake_error(<<"token_expired">>) ->
+    'TOKEN_EXPIRED';
+translate_handshake_error(<<"token_not_found">>) ->
+    'TOKEN_NOT_FOUND';
+translate_handshake_error(<<"invalid_token">>) ->
+    'INVALID_TOKEN';
+translate_handshake_error(<<"invalid_method">>) ->
+    'INVALID_METHOD';
+translate_handshake_error(<<"root_resource_not_found">>) ->
+    'ROOT_RESOURCE_NOT_FOUND';
+translate_handshake_error(<<"invalid_provider">>) ->
+    'INVALID_PROVIDER';
+translate_handshake_error(<<"bad_signature_for_macaroon">>) ->
+    'BAD_SIGNATURE_FOR_MACAROON';
+translate_handshake_error(<<"failed_to_decrypt_caveat">>) ->
+    'FAILED_TO_DESCRYPT_CAVEAT';
+translate_handshake_error(<<"no_discharge_macaroon_for_caveat">>) ->
+    'NO_DISCHARGE_MACAROON_FOR_CAVEAT';
+translate_handshake_error(_) ->
+    'INTERNAL_SERVER_ERROR'.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Traslates protobuf record to internal record.
 %% @end
 %%--------------------------------------------------------------------
 -spec translate_from_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
@@ -392,9 +420,9 @@ translate_from_protobuf(#'FilePath'{value = Value}) ->
     #'file_path'{value = Value};
 translate_from_protobuf(#'FSync'{uuid = UUID}) ->
     #'fsync'{uuid = UUID};
-translate_from_protobuf(#'GetMetadata'{uuid = UUID, type = Type, names = Names}) ->
+translate_from_protobuf(#'ReadMetadata'{uuid = UUID, type = Type, names = Names}) ->
     #get_metadata{uuid = UUID, type = Type, names = Names};
-translate_from_protobuf(#'SetMetadata'{uuid = UUID, metadata = Metadata, names = Names}) ->
+translate_from_protobuf(#'WriteMetadata'{uuid = UUID, metadata = Metadata, names = Names}) ->
     #set_metadata{uuid = UUID, metadata = translate_from_protobuf(Metadata), names = Names};
 translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
     #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
@@ -404,7 +432,7 @@ translate_from_protobuf(undefined) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% translate internal record to protobuf record
+%% Translates internal record to protobuf record.
 %% @end
 %%--------------------------------------------------------------------
 -spec translate_to_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
@@ -493,10 +521,8 @@ translate_to_protobuf(#'file_accessed_subscription'{} = Record) ->
     }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
-translate_to_protobuf(#handshake_response{session_id = Id}) ->
-    {handshake_response, #'HandshakeResponse'{
-        session_id = Id
-    }};
+translate_to_protobuf(#handshake_response{status = Status}) ->
+    {handshake_response, #'HandshakeResponse'{status = Status}};
 translate_to_protobuf(#configuration{subscriptions = Subs, disabled_spaces = Spaces}) ->
     {configuration, #'Configuration'{
         subscriptions = lists:map(
@@ -748,11 +774,16 @@ translate_to_protobuf(#fsync{uuid = UUID}) ->
     {fsync, #'FSync'{uuid = UUID}};
 
 translate_to_protobuf(#get_metadata{uuid = UUID, type = Type, names = Names}) ->
-    #'GetMetadata'{uuid = UUID, type = Type, names = Names};
+    {read_metadata, #'ReadMetadata'{
+        uuid = UUID, type = Type, names = Names
+    }};
 translate_to_protobuf(#set_metadata{uuid = UUID, metadata = Metadata, names = Names}) ->
-    #'SetMetadata'{uuid = UUID, metadata = translate_to_protobuf(Metadata), names = Names};
+    {_, Record} = translate_to_protobuf(Metadata),
+    {write_metadata, #'WriteMetadata'{
+        uuid = UUID, metadata = Record, names = Names
+    }};
 translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
-    #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)};
+    {metadata, #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)}};
 
 translate_to_protobuf(undefined) ->
     undefined.

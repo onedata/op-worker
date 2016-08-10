@@ -111,9 +111,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    % TODO migrate to GLOBALLY_CACHED_LEVEL
     ?MODEL_CONFIG(onedata_user_bucket, [{onedata_user, create}, {onedata_user, save},
-        {onedata_user, create_or_update}, {onedata_user, update}], ?DISK_ONLY_LEVEL).
+        {onedata_user, create_or_update}, {onedata_user, update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,13 +122,13 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, _, _, {ok, UserId}) ->
+'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UserId}) ->
     monitoring_action(start, UserId);
-'after'(onedata_user, create_or_update, _, _, {ok, UserId}) ->
+'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UserId}) ->
     monitoring_action(start, UserId);
-'after'(onedata_user, save, _, _, {ok, UserId}) ->
+'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UserId}) ->
     monitoring_action(start, UserId);
-'after'(onedata_user, update, _, _, {ok, UserId}) ->
+'after'(onedata_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UserId}) ->
     monitoring_action(start, UserId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

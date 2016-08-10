@@ -103,7 +103,7 @@ posix_user_proxy_test(Config) ->
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?DIRECTIO_HELPER_NAME, ?SESSION_ID, PosixSpaceUUID])),
     %% user ctx from LUMA server should be requested only once
-    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 1),
+    test_utils:mock_assert_num_calls(Worker, http_client, post, 3, 1),
 
     %% for non posix storages get_posix_user_ctx should return posix ctx
 
@@ -114,7 +114,7 @@ posix_user_proxy_test(Config) ->
     ?assertEqual(PosixCephCtx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, CephSpaceUUID])),
     %% user ctx from LUMA server should be requested only once
-    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 2),
+    test_utils:mock_assert_num_calls(Worker, http_client, post, 3, 2),
 
     %% get_posix_user_ctx should return same ctx on every invocation
     PosixS3Ctx = ?assertMatch(#posix_user_ctx{uid = ?UID}, rpc:call(Worker,
@@ -124,7 +124,7 @@ posix_user_proxy_test(Config) ->
         [?S3_HELPER_NAME, ?SESSION_ID, S3SpaceUUID])),
 
     %% user ctx from LUMA server should be requested only once
-    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 3),
+    test_utils:mock_assert_num_calls(Worker, http_client, post, 3, 3),
 
     %% get_posix_user_ctx should return same ctx on every invocation
     PosixSwiftCtx = ?assertMatch(#posix_user_ctx{uid = ?UID}, rpc:call(Worker,
@@ -134,7 +134,7 @@ posix_user_proxy_test(Config) ->
         [?SWIFT_HELPER_NAME, ?SESSION_ID, SwiftSpaceUUID])),
 
     %% user ctx from LUMA server should be requested only once
-    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 4),
+    test_utils:mock_assert_num_calls(Worker, http_client, post, 3, 4),
 
     %% posix ctx for each storage type should differ on gid due to
     %% its generation from space name
@@ -171,7 +171,7 @@ ceph_user_proxy_test(Config) ->
         [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
     %% LUMA server should be requested for ctx only once
-    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 1).
+    test_utils:mock_assert_num_calls(Worker, http_client, post, 3, 1).
 
 s3_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -203,7 +203,7 @@ s3_user_proxy_test(Config) ->
         [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
     %% LUMA server should be requested for ctx only once
-    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 1).
+    test_utils:mock_assert_num_calls(Worker, http_client, post, 3, 1).
 
 swift_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -230,7 +230,7 @@ swift_user_proxy_test(Config) ->
         [#helper_init{name = ?SWIFT_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
     %% LUMA server should be requested for ctx only once
-    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 1).
+    test_utils:mock_assert_num_calls(Worker, http_client, post, 3, 1).
 
 
 %%%===================================================================
@@ -275,10 +275,8 @@ init_per_testcase(posix_user_proxy_test, Config) ->
 
     %% mock LUMA server response for posix ctx
     test_utils:mock_new(Worker, http_client),
-    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
-        {ok, 200, [],
-            json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
-                [{<<"uid">>, ?UID}]}])} end),
+    test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
+        {ok, 200, [], json_utils:encode([{<<"uid">>, ?UID}])} end),
     test_utils:mock_new(Worker, file_meta),
     %% return different space name for each space uuid
     test_utils:mock_expect(Worker, file_meta, get,
@@ -305,10 +303,9 @@ init_per_testcase(ceph_user_proxy_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     %% mock LUMA server response for ceph ctx
     test_utils:mock_new(Worker, [file_meta, http_client]),
-    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
-        {ok, 200, [],
-            json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
-                [{<<"user_name">>, ?USER_NAME}, {<<"user_key">>, ?USER_KEY}]}])} end),
+    test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
+        {ok, 200, [], json_utils:encode([{<<"userName">>, ?USER_NAME},
+            {<<"userKey">>, ?USER_KEY}])} end),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?CEPH_SPACE_NAME}}} end),
     Config;
@@ -332,11 +329,9 @@ init_per_testcase(s3_user_provider_test, Config) ->
 init_per_testcase(s3_user_proxy_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [file_meta, http_client]),
-    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
-        {ok, 200, [],
-            json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
-                [{<<"access_key">>, ?ACCESS_KEY},
-                    {<<"secret_key">>, ?SECRET_KEY}]}])} end),
+    test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
+        {ok, 200, [], json_utils:encode([{<<"accessKey">>, ?ACCESS_KEY},
+                    {<<"secretKey">>, ?SECRET_KEY}])} end),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
     Config;
@@ -344,11 +339,9 @@ init_per_testcase(s3_user_proxy_test, Config) ->
 init_per_testcase(swift_user_proxy_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [file_meta, http_client]),
-    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
-        {ok, 200, [],
-            json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
-                [{<<"user_name">>, ?USER_NAME},
-                    {<<"password">>, ?PASSWORD}]}])} end),
+    test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
+        {ok, 200, [], json_utils:encode([{<<"userName">>, ?USER_NAME},
+                    {<<"password">>, ?PASSWORD}])} end),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?SWIFT_SPACE_NAME}}} end),
     Config;

@@ -99,8 +99,8 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
                 StorageId, SessionId, SpaceUUID),
 
-            UserName = proplists:get_value(<<"user_name">>, Response),
-            UserKey = proplists:get_value(<<"user_key">>, Response),
+            UserName = proplists:get_value(<<"userName">>, Response),
+            UserKey = proplists:get_value(<<"userKey">>, Response),
             ceph_user:add(UserId, StorageId, UserName, UserKey),
             #ceph_user_ctx{user_name = UserName, user_key = UserKey}
     end.
@@ -129,8 +129,8 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
                 StorageId, SessionId, SpaceUUID),
 
-            AccessKey = proplists:get_value(<<"access_key">>, Response),
-            SecretKey = proplists:get_value(<<"secret_key">>, Response),
+            AccessKey = proplists:get_value(<<"accessKey">>, Response),
+            SecretKey = proplists:get_value(<<"secretKey">>, Response),
             s3_user:add(UserId, StorageId, AccessKey, SecretKey),
 
             #s3_user_ctx{
@@ -163,7 +163,7 @@ new_swift_user_ctx(SessionId, SpaceUUID) ->
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
                 StorageId, SessionId, SpaceUUID),
 
-            UserName = proplists:get_value(<<"user_name">>, Response),
+            UserName = proplists:get_value(<<"userName">>, Response),
             Password = proplists:get_value(<<"password">>, Response),
             swift_user:add(UserId, StorageId, UserName, Password),
 
@@ -214,70 +214,58 @@ new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
     SpaceUUID :: file_meta:uuid()) ->
     {ok, proplists:proplist()} | {error, binary()}.
 get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, SpaceUUID) ->
-    {ok, LUMAHostname} = application:get_env(?APP_NAME, luma_hostname),
-    {ok, LUMAPort} = application:get_env(?APP_NAME, luma_port),
-    {ok, Hostname} = inet:gethostname(),
-    {ok, {hostent, FullHostname, _, inet, _, IPList}} = inet:gethostbyname(Hostname),
+    {ok, Hostname} = application:get_env(?APP_NAME, luma_hostname),
+    {ok, Port} = application:get_env(?APP_NAME, luma_port),
+    {ok, Scheme} = application:get_env(?APP_NAME, luma_scheme),
+    {ok, APIKey} = application:get_env(?APP_NAME, luma_api_key),
     {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
 
-    IPListParsed = lists:map(fun(IP) ->
-        list_to_binary(inet_parse:ntoa(IP)) end, IPList),
-
-    UserDetailsJSON = case get_auth(SessionIdOrIdentity) of
+    UserDetails = case get_auth(SessionIdOrIdentity) of
         {ok, undefined} ->
-            UserId = luma_utils:get_user_id(SessionIdOrIdentity),
             case onedata_user:get(UserId) of
                 {ok, #document{value = #onedata_user{name = Name, alias = Alias,
                     email_list = EmailList, connected_accounts = ConnectedAccounts}}} ->
 
-                    UserDetailsList = ?record_to_list(user_details, #user_details{
+                    #user_details{
                         name = Name,
                         alias = Alias,
                         connected_accounts = ConnectedAccounts,
                         email_list = EmailList,
                         id = UserId
-                    }),
-                    json_utils:encode(UserDetailsList);
+                    };
                 {error, {not_found, onedata_user}} ->
-                    <<"{}">>
+                    #user_details{
+                        name = <<"">>,
+                        alias = <<"">>,
+                        connected_accounts = [],
+                        email_list = [],
+                        id = UserId
+                    }
             end;
         {ok, Auth} ->
-            {ok, UserDetails} = oz_users:get_details(Auth),
-            UserDetailsList = ?record_to_list(user_details, UserDetails),
-            json_utils:encode(UserDetailsList)
+            {ok, #document{value = #onedata_user{name = Name, alias = Alias,
+                email_list = EmailList, connected_accounts = ConnectedAccounts}}} =
+                onedata_user:get_or_fetch(Auth, UserId),
+            #user_details{
+                name = Name,
+                alias = Alias,
+                connected_accounts = ConnectedAccounts,
+                email_list = EmailList,
+                id = UserId
+            }
     end,
 
-    StorageIdParam = case StorageId of
-        undefined ->
-            <<"">>;
-        _ ->
-            <<"&storage_id=", StorageId/binary>>
-    end,
-
-    case http_client:get(
-        <<(atom_to_binary(LUMAHostname, latin1))/binary, ":",
-            (integer_to_binary(LUMAPort))/binary,
-            "/get_user_credentials?"
-            "global_id=", UserId/binary,
-            "&storage_type=", StorageType/binary,
-            StorageIdParam/binary,
-            "&source_ips=", (json_utils:encode(IPListParsed))/binary,
-            "&source_hostname=", (list_to_binary(FullHostname))/binary,
-            "&space_name=", SpaceName/binary,
-            "&user_details=", (http_utils:url_encode(UserDetailsJSON))/binary>>,
-        [],
-        [],
-        [insecure]
+    case http_client:post(
+        <<(atom_to_binary(Scheme, latin1))/binary, "://",
+            (atom_to_binary(Hostname, latin1))/binary,
+            ":", (integer_to_binary(Port))/binary,
+            "/map_user_credentials">>,
+        [{<<"X-Auth-Token">>, atom_to_binary(APIKey, latin1)},
+            {<<"Content-Type">>, <<"application/json">>}],
+        encode_body(StorageType, StorageId, SpaceName, UserDetails)
     ) of
         {ok, 200, _Headers, Body} ->
-            Json = json_utils:decode(Body),
-            Status = proplists:get_value(<<"status">>, Json),
-            case Status of
-                <<"success">> ->
-                    {ok, proplists:get_value(<<"data">>, Json)};
-                <<"error">> ->
-                    {error, proplists:get_value(<<"message">>, Json)}
-            end;
+            {ok, json_utils:decode(Body)};
         Error ->
             Error
     end.
@@ -312,3 +300,50 @@ get_auth(#user_identity{}) ->
     {ok, undefined};
 get_auth(SessionId) ->
     session:get_auth(SessionId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Encodes StorageType, StorageId, SpaceName and UserDetails to
+%% JSON binary.
+%% @end
+%%--------------------------------------------------------------------
+-spec encode_body(StorageType :: helpers:name(),
+    StorageId :: storage:id() | undefined, SpaceName :: file_meta:name(),
+    UserDetails :: #user_details{}) -> binary().
+encode_body(StorageType, StorageId, SpaceName, UserDetails) ->
+    {ok, NameToTypeMap} = application:get_env(?APP_NAME, helper_name_to_luma_storage_type_mapping),
+    Body = [{<<"storageType">>, maps:get(StorageType, NameToTypeMap)},
+        {<<"spaceName">>, SpaceName}],
+
+    BodyWithStorageId = case StorageId of
+        undefined -> Body;
+        _ -> lists:append(Body, [{<<"storageId">>, StorageId}])
+    end,
+
+    #user_details{
+        id = Id,
+        name = Name,
+        connected_accounts = ConnectedAccounts,
+        alias = Alias,
+        email_list = EmailList
+    } = UserDetails,
+    ParsedConnectedAccounts = lists:map(fun(Account) ->
+        [
+            {<<"providerId">>, proplists:get_value(<<"provider_id">>, Account)},
+            {<<"userId">>, proplists:get_value(<<"user_id">>, Account)},
+            {<<"login">>, proplists:get_value(<<"login">>, Account)},
+            {<<"name">>, proplists:get_value(<<"name">>, Account)},
+            {<<"emailList">>, proplists:get_value(<<"email_list">>, Account)}
+        ]
+    end, ConnectedAccounts),
+
+    BodyWithUserDetails = lists:append(BodyWithStorageId, [{<<"userDetails">>, [
+        {<<"id">>, Id},
+        {<<"name">>, Name},
+        {<<"connectedAccounts">>, ParsedConnectedAccounts},
+        {<<"alias">>, Alias},
+        {<<"emailList">>, EmailList}
+    ]}]),
+
+    json_utils:encode(BodyWithUserDetails).

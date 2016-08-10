@@ -18,7 +18,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, run_synchronized/2]).
+    model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -136,21 +136,6 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Runs given function within locked ResourceId. This function makes sure
-%% that 2 funs with same ResourceId won't run at the same time.
-%% @end
-%%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary() | #monitoring_id{},
-    Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(#monitoring_id{} = MonitoringIdRecord, Fun) ->
-    monitoring_init_state:run_synchronized(
-        monitoring_state:encode_id(MonitoringIdRecord), Fun);
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
-
 
 %%%===================================================================
 %%% Internal functions

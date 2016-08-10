@@ -674,12 +674,12 @@ connect_via_token(Node, SocketOpts, SessId) ->
 
     % then
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
-        session_id = SessionId
+        status = 'OK'
     }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
         receive_server_message()
     ),
     etls:setopts(Sock, ActiveOpt),
-    {ok, {Sock, SessionId}}.
+    {ok, {Sock, SessId}}.
 
 %%--------------------------------------------------------------------
 %% @doc

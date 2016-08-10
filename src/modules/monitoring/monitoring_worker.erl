@@ -286,7 +286,8 @@ update(#monitoring_id{main_subject_type = space, metric_type = block_access} = M
 %%--------------------------------------------------------------------
 -spec update_buffer_state(#monitoring_id{}, term()) -> no_return().
 update_buffer_state(MonitoringId, Value) ->
-    monitoring_state:run_synchronized(MonitoringId, fun() ->
+    monitoring_state:run_transaction(MonitoringId, fun() ->
+        % TODO - update after get - do it in single update and remove monitoring_state:run_transaction
         {ok, #document{value = MonitoringState}} = monitoring_state:get(MonitoringId),
         update_buffer_state(MonitoringId, MonitoringState, Value)
     end).
