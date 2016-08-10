@@ -441,7 +441,7 @@ changes_stream_file_meta_test(Config) ->
         lfm_proxy:fsync(WorkerP1, Handle),
         lfm_proxy:create(WorkerP1, SessionId, File2, Mode)
     end),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
         get, [user_1_token_header(Config)], []),
 
     ?assertNotEqual(<<>>, Body),
@@ -484,7 +484,7 @@ changes_stream_json_metadata_test(Config) ->
         timer:sleep(5000),
         lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, <<"json">>, Json, [])
     end),
-    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=6000">>,
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
         get, [user_1_token_header(Config)], []),
 
     ?assertNotEqual(<<>>, Body),
