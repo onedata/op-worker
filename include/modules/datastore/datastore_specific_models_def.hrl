@@ -259,4 +259,10 @@
     value = #{} :: #{indexes:index_id() => indexes:index()}
 }).
 
+%% Model that keeps track of consistency of file metadata
+-record(file_consistency, {
+    components_present = [] :: [file_consistency:component()],
+    waiting = [] :: [file_consistency:waiting()]
+}).
+
 -endif.

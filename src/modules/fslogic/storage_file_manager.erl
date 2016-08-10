@@ -135,6 +135,7 @@ open(#sfm_handle{is_local = false} = SFMHandle, _) ->
 %% when handle goes out of scope (term will be released by Erlang's GC).
 %% Bypasses permissions check to allow to open file at creation.
 %% @end
+% TODO - relese in spec - how (missing release function in sfm)?
 %%--------------------------------------------------------------------
 -spec open_at_creation(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
@@ -172,7 +173,13 @@ mkdir(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid 
                 [_] -> ok;
                 [_ | _]  ->
                     LeafLess = fslogic_path:dirname(Tokens),
-                    ok = mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true)
+                    case mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+                        ok -> ok;
+                        {error,eexist} -> ok;
+                        ParentError ->
+                            ?error("Cannot create parent for file ~p, error ~p", [FileId, ParentError]),
+                            throw(ParentError)
+                    end
             end,
             R = case mkdir(SFMHandle, Mode, false) of
                 ok ->

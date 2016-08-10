@@ -24,12 +24,12 @@
     end_per_testcase/2]).
 
 -export([
-    db_sync_test/1
+    db_sync_test/1, file_consistency_test/1
 ]).
 
 all() ->
     ?ALL([
-        db_sync_test
+        db_sync_test, file_consistency_test
     ]).
 
 %%%===================================================================
@@ -41,12 +41,31 @@ db_sync_test(Config) ->
     multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 150, 3, 10).
 %%multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 120, 3, 10).
 
+file_consistency_test(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    {Worker1, Worker2, Worker3} = lists:foldl(fun(W, {Acc1, Acc2, Acc3}) ->
+        Check = fun(Acc, Prov) ->
+            case is_atom(Acc) of
+                true ->
+                    Acc;
+                _ ->
+                    case string:str(atom_to_list(W), Prov) of
+                        0 -> Acc;
+                        _ -> W
+                    end
+            end
+        end,
+        {Check(Acc1, "p1"), Check(Acc2, "p2"), Check(Acc3, "p3")}
+    end, {[], [], []}, Workers),
+
+    multi_provider_file_ops_test_SUITE:file_consistency_test_base(Config, Worker1, Worker2, Worker3).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_SUITE]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
