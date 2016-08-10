@@ -122,7 +122,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         uid = UserId
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
-    {ok, _} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    {ok, FileToCompareUUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
 
     %when
     rpc:call(W1, dbsync_events, change_replicated,
@@ -130,8 +130,8 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
 
     %then
     Uid = rpc:call(W1, luma_utils, gen_storage_uid, [UserId]),
-    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
-    {ok, FileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
+    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, fslogic_utils:gen_storage_file_id({uuid, FileToCompareUUID})])]),
+    {ok, FileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, fslogic_utils:gen_storage_file_id({uuid, FileUuid})])]),
     ?assertEqual(Uid, FileInfo#file_info.uid),
     ?assertNotEqual(0, FileInfo#file_info.uid),
     ?assertEqual(CorrectFileInfo#file_info.uid, FileInfo#file_info.uid),
@@ -178,8 +178,8 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     %then
     Uid = rpc:call(W1, luma_utils, gen_storage_uid, [ExternalUser]),
     {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
-    {ok, FileInfo1} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
-    {ok, FileInfo2} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file2::1">>])]),
+    {ok, FileInfo1} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, fslogic_utils:gen_storage_file_id({uuid, FileUuid})])]),
+    {ok, FileInfo2} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, fslogic_utils:gen_storage_file_id({uuid, FileUuid2})])]),
     ?assertEqual(Uid, FileInfo1#file_info.uid),
     ?assertEqual(Uid, FileInfo2#file_info.uid),
     ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo1#file_info.uid),
