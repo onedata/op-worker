@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module manages identity data in DHT.
+%%% This module provides access to identity repository through OZ api.
+%%% The repository logic (like ownership protection) is implemented in OZ.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(oz_identity_repository).
@@ -17,15 +18,14 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
+-export([publish/2, get/1]).
+
 -define(DHT_DATA_KEY, <<"public_key">>).
 -define(TYPE, identity).
 
-
--export([publish/2, get/1]).
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Publishes public key under given ID.
+%% {@link identity_repository_behaviour} callback publish/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec publish(identity:id(), identity:public_key()) ->
@@ -35,7 +35,7 @@ publish(ID, PublicKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines public key for given ID.
+%% {@link identity_repository_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(identity:id()) ->

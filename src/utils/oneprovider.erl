@@ -43,6 +43,11 @@
 % Developer function
 -export([register_in_oz_dev/3]).
 
+%% Function for future use
+%% todo: in order to use identity verification based on public keys
+%% todo: use this function instead of register_in_oz[_dev] functions
+-export([register_provider_in_oz/1]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -216,6 +221,40 @@ register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
             {error, M}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Registers in OZ using config from app.src (cert locations).
+%% @end
+%%--------------------------------------------------------------------
+-spec register_provider_in_oz(NodeList :: [node()]) ->
+    {ok, ProviderID :: binary()} | {error, term()}.
+register_provider_in_oz(NodeList) ->
+    try
+        {ok, KeyFile} = application:get_env(?APP_NAME, identity_key_file),
+        {ok, CertFile} = application:get_env(?APP_NAME, identity_cert_file),
+        Domain = oneprovider:get_provider_domain(),
+        identity:ensure_identity_cert_created(KeyFile, CertFile, Domain),
+        Cert = identity:read_cert(CertFile),
+        PublicKey = identity:get_public_key(Cert),
+        ID = identity:get_id(Cert),
+
+        IPAddresses = get_all_nodes_ips(NodeList),
+        RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
+
+        Parameters = [
+            {<<"ID">>, ID},
+            {<<"publicKey">>, base64:encode(term_to_binary(PublicKey))},
+            {<<"urls">>, IPAddresses},
+            {<<"redirectionPoint">>, RedirectionPoint}
+        ],
+        {ok, ProviderID, OzID, OzPublicKey} = oz_identities:register_provider(provider, Parameters),
+        plugins:apply(identity_cache, put, [OzID, OzPublicKey]),
+        {ok, ProviderID}
+    catch
+        T:M ->
+            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M]),
+            {error, M}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
