@@ -21,7 +21,10 @@
 }).
 
 -record(handshake_response, {
-    session_id :: session:id()
+    status = 'OK' :: 'OK' | 'TOKEN_EXPIRED' | 'TOKEN_NOT_FOUND' |
+    'INVALID_METHOD' | 'ROOT_RESOURCE_NOT_FOUND' | 'INVALID_PROVIDER' |
+    'BAD_SIGNATURE_FOR_MACAROON' | 'FAILED_TO_DESCRYPT_CAVEAT' |
+    'NO_DISCHARGE_MACAROON_FOR_CAVEAT' | 'INVALID_TOKEN' | 'INTERNAL_SERVER_ERROR'
 }).
 
 -endif.

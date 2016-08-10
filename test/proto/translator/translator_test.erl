@@ -40,7 +40,7 @@
 %%--------------------------------------------------------------------
 
 translate_status_from_protobuf_test() ->
-    {Internal, Protobuf} = get_status(?OK, <<1,2,3>>),
+    {Internal, Protobuf} = get_status(?OK, <<1, 2, 3>>),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_file_block_from_protobuf_test() ->
@@ -178,12 +178,16 @@ translate_write_subscription_to_protobuf_test() ->
     })).
 
 translate_handshake_response_to_protobuf_test() ->
-    ?assertEqual({handshake_response, #'HandshakeResponse'{session_id = 81}},
-        translator:translate_to_protobuf(#handshake_response{session_id = 81})
-    ),
-    ?assertEqual({handshake_response, #'HandshakeResponse'{}},
-        translator:translate_to_protobuf(#handshake_response{})
-    ).
+    ?assertEqual({handshake_response, #'HandshakeResponse'{
+        status = 'OK'
+    }}, translator:translate_to_protobuf(#handshake_response{
+        status = 'OK'
+    })),
+    ?assertEqual({handshake_response, #'HandshakeResponse'{
+        status = 'INVALID_TOKEN'
+    }}, translator:translate_to_protobuf(#handshake_response{
+        status = 'INVALID_TOKEN'
+    })).
 
 translate_message_stream_to_protobuf_test() ->
     ?assertEqual(#'MessageStream'{stream_id = 27, sequence_number = 43412},
