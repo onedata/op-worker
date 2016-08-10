@@ -47,6 +47,7 @@ init() ->
     case erlang:load_nif(LibPath, 0) of
         ok -> ok;
         {error, {reload, _}} -> ok;
+        {error, {upgrade, _}} -> ok;
         {error, Reason} -> {error, Reason}
     end.
 

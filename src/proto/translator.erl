@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Translations between protobuff and internal protocol
+%%% Translations between protobuf and internal protocol
 %%% @end
 %%%-------------------------------------------------------------------
 -module(translator).
@@ -27,7 +27,8 @@
 -include_lib("clproto/include/messages.hrl").
 
 %% API
--export([translate_from_protobuf/1, translate_to_protobuf/1]).
+-export([translate_handshake_error/1, translate_from_protobuf/1,
+    translate_to_protobuf/1]).
 
 %%%===================================================================
 %%% API
@@ -35,7 +36,34 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% traslate protobuf record to internal record
+%% Translates handshake error type from REST to protobuf format.
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_handshake_error(Type :: binary()) -> Type :: atom().
+translate_handshake_error(<<"token_expired">>) ->
+    'TOKEN_EXPIRED';
+translate_handshake_error(<<"token_not_found">>) ->
+    'TOKEN_NOT_FOUND';
+translate_handshake_error(<<"invalid_token">>) ->
+    'INVALID_TOKEN';
+translate_handshake_error(<<"invalid_method">>) ->
+    'INVALID_METHOD';
+translate_handshake_error(<<"root_resource_not_found">>) ->
+    'ROOT_RESOURCE_NOT_FOUND';
+translate_handshake_error(<<"invalid_provider">>) ->
+    'INVALID_PROVIDER';
+translate_handshake_error(<<"bad_signature_for_macaroon">>) ->
+    'BAD_SIGNATURE_FOR_MACAROON';
+translate_handshake_error(<<"failed_to_decrypt_caveat">>) ->
+    'FAILED_TO_DESCRYPT_CAVEAT';
+translate_handshake_error(<<"no_discharge_macaroon_for_caveat">>) ->
+    'NO_DISCHARGE_MACAROON_FOR_CAVEAT';
+translate_handshake_error(_) ->
+    'INTERNAL_SERVER_ERROR'.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Traslates protobuf record to internal record.
 %% @end
 %%--------------------------------------------------------------------
 -spec translate_from_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
@@ -358,9 +386,9 @@ translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
     block = Block}) ->
     #replicate_file{provider_id = ProviderId,
         block = translate_from_protobuf(Block)};
-translate_from_protobuf(#'GetMetadata'{type = Type, names = Names}) ->
+translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names}) ->
     #get_metadata{type = Type, names = Names};
-translate_from_protobuf(#'SetMetadata'{metadata = Metadata, names = Names}) ->
+translate_from_protobuf(#'WriteMetadata'{metadata = Metadata, names = Names}) ->
     #set_metadata{metadata = translate_from_protobuf(Metadata), names = Names};
 
 translate_from_protobuf(#'ProviderResponse'{status = Status, provider_response = {_, ProviderResponse}}) ->
@@ -428,7 +456,7 @@ translate_from_protobuf(undefined) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% translate internal record to protobuf record
+%% Translates internal record to protobuf record.
 %% @end
 %%--------------------------------------------------------------------
 -spec translate_to_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
@@ -536,8 +564,8 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
 
 
 %% HANDSHAKE
-translate_to_protobuf(#handshake_response{session_id = Id}) ->
-    {handshake_response, #'HandshakeResponse'{session_id = Id}};
+translate_to_protobuf(#handshake_response{status = Status}) ->
+    {handshake_response, #'HandshakeResponse'{status = Status}};
 translate_to_protobuf(#token_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
     {ok, Token} = token_utils:serialize62(Macaroon),
     SecValues = [R || {ok, R} <- [token_utils:serialize62(DMacaroon) || DMacaroon <- DMacaroons]],
@@ -743,10 +771,10 @@ translate_to_protobuf(#replicate_file{provider_id = ProviderId,
     {replicate_file, #'ReplicateFile'{provider_id = ProviderId,
         block = translate_to_protobuf(Block)}};
 translate_to_protobuf(#get_metadata{type = Type, names = Names}) ->
-    {get_metadata, #'GetMetadata'{type = Type, names = Names}};
+    {read_metadata, #'ReadMetadata'{type = Type, names = Names}};
 translate_to_protobuf(#set_metadata{metadata = Metadata, names = Names}) ->
-    {metadata, MetadataProto} = translate_to_protobuf(Metadata),
-    {set_metadata, #'SetMetadata'{metadata = MetadataProto, names = Names}};
+    {_, MetadataProto} = translate_to_protobuf(Metadata),
+    {write_metadata, #'WriteMetadata'{metadata = MetadataProto, names = Names}};
 
 translate_to_protobuf(#provider_response{status = Status, provider_response = ProviderResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),
