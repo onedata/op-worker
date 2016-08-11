@@ -16,6 +16,7 @@ default_config = {
         "DEBUG": "True",
         "DATABASE": "'luma_database.db'",
         "HOST": "'0.0.0.0'",
+        "API_KEY": "'example_api_key'"
     },
     "generators_config": {
         "ceph": {
@@ -31,20 +32,28 @@ default_config = {
         "posix": {
             "lowest_uid": 1000,
             "highest_uid": 65536
+        },
+        "swift": {
+            "user_name": "swift",
+            "password": "swift"
         }
     },
     "generators_mapping": [
         {
-            "storage_id": "Ceph",
-            "generator_id": "ceph"
+            "storageType": "Ceph",
+            "generatorId": "ceph"
         },
         {
-            "storage_type": "DirectIO",
-            "generator_id": "posix"
+            "storageType": "Posix",
+            "generatorId": "posix"
         },
         {
-            "storage_type": "AmazonS3",
-            "generator_id": "s3"
+            "storageType": "S3",
+            "generatorId": "s3"
+        },
+        {
+            "storageType": "Swift",
+            "generatorId": "swift"
         }
     ],
     "storages_mapping": [],
