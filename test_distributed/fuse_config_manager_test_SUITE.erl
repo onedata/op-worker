@@ -38,7 +38,10 @@ all() ->
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}], ?TIMEOUT)).
+
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
+
 -define(fcm_req(W, Method, Args), rpc:call(W, fuse_config_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
@@ -60,18 +63,21 @@ create_storage_test_file_test(Config) ->
     {ok, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
 
     Response1 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = StorageId, file_uuid = FileGUID
+        storage_id = StorageId,
+        file_uuid = FileGUID
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?OK},
         fuse_response = #storage_test_file{}}, Response1),
 
     Response2 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = StorageId, file_uuid = <<"unknown_id">>
+        storage_id = StorageId,
+        file_uuid = <<"unknown_id">>
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response2),
 
     Response3 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = <<"unknown_id">>, file_uuid = FileGUID
+        storage_id = <<"unknown_id">>,
+        file_uuid = FileGUID
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?EAGAIN}}, Response3).
 

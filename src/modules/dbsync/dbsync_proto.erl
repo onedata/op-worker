@@ -39,17 +39,20 @@
 %%--------------------------------------------------------------------
 -spec send_batch(dbsync_worker:queue(), SpaceId :: binary(), dbsync_worker:batch()) ->
     skip | ok | no_return().
+% TODO - batches sometimes go to providers that do not support space
 send_batch(_, _, #batch{since = X, until = X}) ->
     skip;
 send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("[ DBSync ] Sending batch from space ~p to all providers: ~p", [SpaceId, Batch]),
+    ?info("[ DBSync ] Sending batch from space ~p to all providers: ~p:~p", [SpaceId, Since, Until]),
     ToSend = #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
         changes_encoded = dbsync_utils:encode_term(Changes)},
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
     send_tree_broadcast(SpaceId, lists:usort(Providers), ToSend, 3),
     ok;
 send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?debug("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
+    ?debug("[ DBSync ] Sending batch from space ~p to provider ~p: ~p", [SpaceId, ProviderId, Batch]),
+    ?info("[ DBSync ] Sending batch from space ~p to provider ~p: ~p:~p", [SpaceId, ProviderId, Since, Until]),
     case dbsync_utils:validate_space_access(ProviderId, SpaceId) of
         ok -> send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
             changes_encoded = dbsync_utils:encode_term(Changes)}, 3);

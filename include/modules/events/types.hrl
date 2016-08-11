@@ -49,12 +49,6 @@
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
-%% definition of an event associated with an update operation in the file system
-%% object - wrapped structure that has been modified
--record(update_event, {
-    object :: event:update_object()
-}).
-
 %% definition of an event associated with a write operation in the file system
 %% file_uuid - UUID of a file associated with the write operation
 %% file_size - size of a file after the write operation
@@ -65,6 +59,12 @@
     file_size :: file_meta:size(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
+}).
+
+%% definition of an event associated with an update operation in the file system
+%% object - wrapped structure that has been modified
+-record(update_event, {
+    object :: event:update_object()
 }).
 
 %% definition of an event triggered when file permission gets changed

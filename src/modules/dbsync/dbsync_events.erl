@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -50,22 +51,28 @@ change_replicated(SpaceId, Change) ->
     any().
 change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document{key = FileUUID,
     value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}) ->
-    ok = replica_cleanup:clean_replica_files(FileUUID);
-change_replicated_internal(SpaceId, #change{model = file_meta, doc = FileDoc =
+    ok = replica_cleanup:clean_replica_files(FileUUID),
+    file_consistency:delete(FileUUID);
+change_replicated_internal(SpaceId, Change = #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-%%    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
+    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, link_to_parent, parent_links], [SpaceId, Change]),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
-    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
-change_replicated_internal(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
+    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
+    ok = file_consistency:add_components_and_notify(FileUUID, [local_file_location]),
+    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [parent_links]);
+change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
     ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
-change_replicated_internal(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
+    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
+    ok = file_consistency:add_components_and_notify(FileUUID, [file_meta]),
+    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [parent_links]);
+change_replicated_internal(SpaceId, Change = #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
     ?info("change_replicated_internal: changed file_location ~p", [FileUUID]),
-    ok = fslogic_utils:wait_for_file_meta(FileUUID, 30),
-%%    ok = fslogic_utils:wait_for_links(FileUUID, 5, SpaceId),
-    ok = fslogic_utils:wait_for_local_file_location(FileUUID),
-    ok = replication_dbsync_hook:on_file_location_change(SpaceId, Doc);
+    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, local_file_location], [SpaceId, Change]),
+    ok = replica_dbsync_hook:on_file_location_change(SpaceId, Doc);
+change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{value = #links{model = file_meta, doc_key = FileUUID}}}) ->
+    ?info("change_replicated_internal: changed links ~p", [FileUUID]),
+    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [link_to_parent, parent_links]);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 

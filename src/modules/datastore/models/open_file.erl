@@ -25,7 +25,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, run_synchronized/2]).
+    model_init/0, 'after'/5, before/4]).
 
 
 %%%===================================================================
@@ -132,9 +132,9 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% that 2 funs with same ResourceId won't run at the same time.
 %% @end
 %%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
+-spec run_transaction(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
+run_transaction(ResourceId, Fun) ->
+    datastore:run_transaction(?MODEL_NAME, ResourceId, Fun).
 
 %%%===================================================================
 %%% API
@@ -149,7 +149,7 @@ run_synchronized(ResourceId, Fun) ->
 -spec register_open(file_meta:uuid(), session:id(), non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 register_open(FileUUID, SessionId, Count) ->
-    run_synchronized(FileUUID, fun() ->
+    run_transaction(FileUUID, fun() ->
         case open_file:get(FileUUID) of
             {ok, #document{value = OpenFile} = Doc} ->
                 #open_file{active_descriptors = ActiveDescriptors} = OpenFile,
@@ -190,7 +190,7 @@ register_open(FileUUID, SessionId, Count) ->
 -spec register_release(file_meta:uuid(), session:id(), non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 register_release(FileUUID, SessionId, Count) ->
-    run_synchronized(FileUUID, fun() ->
+    run_transaction(FileUUID, fun() ->
         case open_file:get(FileUUID) of
             {ok, #document{value = #open_file{active_descriptors = ActiveDescriptors} = OpenFile} = Doc} ->
 
@@ -217,7 +217,7 @@ register_release(FileUUID, SessionId, Count) ->
 %%--------------------------------------------------------------------
 -spec mark_to_remove(file_meta:uuid()) -> ok | {error, Reason :: term()}.
 mark_to_remove(FileUUID) ->
-    run_synchronized(FileUUID, fun() ->
+    run_transaction(FileUUID, fun() ->
         case open_file:get(FileUUID) of
             {ok, #document{value = OpenFile} = Doc} ->
                 {ok, _} = open_file:save(Doc#document{value = OpenFile#open_file{
@@ -238,7 +238,7 @@ mark_to_remove(FileUUID) ->
 -spec invalidate_session_entry(file_meta:uuid(), session:id()) ->
     ok | {error, Reason :: term()}.
 invalidate_session_entry(FileUUID, SessionId) ->
-    run_synchronized(FileUUID, fun() ->
+    run_transaction(FileUUID, fun() ->
         case open_file:get(FileUUID) of
             {ok, #document{value = #open_file{active_descriptors = ActiveDescriptors} = OpenFile} = Doc} ->
                 case maps:is_key(SessionId, ActiveDescriptors) of

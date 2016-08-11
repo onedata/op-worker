@@ -20,7 +20,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([run_synchronized/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
+-export([critical_section/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
     validate_block_data/3]).
 
 -type id() :: binary().
@@ -38,9 +38,9 @@
 %% run at the same time.
 %% @end
 %%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
+-spec critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
+critical_section(ResourceId, Fun) ->
+    critical_section:run([?MODEL_NAME, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -193,7 +193,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations_bucket, [], ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
+    ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
