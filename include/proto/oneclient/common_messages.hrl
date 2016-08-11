@@ -27,10 +27,6 @@
     storage_id :: storage:id()
 }).
 
--record(data, {
-    data :: binary()
-}).
-
 -record(file_renamed_entry, {
     old_uuid :: fslogic_worker:file_guid(),
     new_uuid :: fslogic_worker:file_guid(),
