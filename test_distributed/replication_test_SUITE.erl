@@ -122,7 +122,8 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         uid = UserId
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
-    {ok, FileToCompareUUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    FileToCompareUUID = fslogic_uuid:file_guid_to_uuid(FileToCompareGUID),
 
     %when
     rpc:call(W1, dbsync_events, change_replicated,
@@ -165,7 +166,8 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     {ok, FileUuid2} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
-    {ok, _} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    FileToCompareUUID = fslogic_uuid:file_guid_to_uuid(FileToCompareGUID),
 
     %when
     rpc:call(W1, dbsync_events, change_replicated,
@@ -177,7 +179,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
 
     %then
     Uid = rpc:call(W1, luma_utils, gen_storage_uid, [ExternalUser]),
-    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
+    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, fslogic_utils:gen_storage_file_id({uuid, FileToCompareUUID})])]),
     {ok, FileInfo1} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, fslogic_utils:gen_storage_file_id({uuid, FileUuid})])]),
     {ok, FileInfo2} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, SpaceId, fslogic_utils:gen_storage_file_id({uuid, FileUuid2})])]),
     ?assertEqual(Uid, FileInfo1#file_info.uid),
