@@ -163,14 +163,18 @@ list() ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Returns storage ID.
+%% @doc
+%% Returns storage ID.
+%% @end
 %%--------------------------------------------------------------------
 -spec id(Doc :: #document{}) -> StorageId :: id().
 id(#document{key = StorageId, value = #storage{}}) ->
     StorageId.
 
 %%--------------------------------------------------------------------
-%% @doc Returns storage name.
+%% @doc
+%% Returns storage name.
+%% @end
 %%--------------------------------------------------------------------
 -spec name(Storage :: #document{} | #storage{}) -> Name :: name().
 name(#document{value = #storage{} = Storage}) ->
@@ -179,7 +183,9 @@ name(#storage{name = Name}) ->
     Name.
 
 %%--------------------------------------------------------------------
-%% @doc Returns list of storage helpers.
+%% @doc
+%% Returns list of storage helpers.
+%% @end
 %%--------------------------------------------------------------------
 -spec helpers(Storage :: #document{} | #storage{}) -> Helpers :: [helpers:init()].
 helpers(#document{value = #storage{} = Storage}) ->
@@ -188,7 +194,9 @@ helpers(#storage{helpers = Helpers}) ->
     Helpers.
 
 %%--------------------------------------------------------------------
-%% @doc Returns storage document by storage name.
+%% @doc
+%% Returns storage document by storage name.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_by_name(Name :: name()) -> {ok, datastore:document()} | datastore:get_error().
 get_by_name(Name) ->

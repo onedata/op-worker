@@ -27,7 +27,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Create random sequence consisting of lowercase ASCII letters.
+%% @doc
+%% Create random sequence consisting of lowercase ASCII letters.
+%% @end
 %%--------------------------------------------------------------------
 -spec random_ascii_lowercase_sequence(Length :: integer()) -> binary().
 random_ascii_lowercase_sequence(Length) ->
@@ -38,7 +40,9 @@ random_ascii_lowercase_sequence(Length) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Returns parent of given file.
+%% @doc
+%% Returns parent of given file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_parent(fslogic_worker:file()) -> fslogic_worker:file() | no_return().
 get_parent({path, Path}) ->

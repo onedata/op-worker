@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Module with default in-provider user mapping.
+%%% @doc
+%%% Module with default in-provider user mapping.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_provider).
@@ -40,7 +41,8 @@ new_user_ctx(#helper_init{name = ?SWIFT_HELPER_NAME}, SessionId, SpaceUUID) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Returns posix user ctx for file attrs
+%% @doc
+%% Returns posix user ctx for file attrs
 %% @end
 %%--------------------------------------------------------------------
 -spec get_posix_user_ctx(StorageType :: helpers:name(),
@@ -53,6 +55,14 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns user ctx. If user ctx is missing is created.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_create_user(UserModel :: helpers_user:model(),
+    SessionIdOrIdentity :: session:id() | session:identity(),
+    SpaceUUID :: file_meta:uuid()) -> UserCtx :: helpers_user:ctx().
 get_or_create_user(posix_user, SessionIdOrIdentity, SpaceUUID) ->
     UserId = luma_utils:get_user_id(SessionIdOrIdentity),
     {ok, #document{value = #file_meta{name = SpaceName}}} =
@@ -81,7 +91,9 @@ get_or_create_user(UserModel, SessionIdOrIdentity, SpaceUUID) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Creates user.
+%% @doc
+%% Creates user.
+%% @end
 %%--------------------------------------------------------------------
 -spec create_user(UserModel :: helpers_user:model(), UserId :: binary(),
     StorageId :: storage:id()) -> {ok, UserCtx :: helpers_user:ctx()}.

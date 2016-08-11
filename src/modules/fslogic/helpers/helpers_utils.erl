@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module contains helpers utility functions.
+%%% @doc
+%%% This module contains helpers utility functions.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helpers_utils).
@@ -29,7 +30,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Returns helper parameters.
+%% @doc
+%% Returns helper parameters.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_params(HelperInit :: helpers:init(), UserCtx :: helpers_user:ctx()) ->
     #helper_params{}.
@@ -48,7 +51,9 @@ get_params(#helper_init{name = Name, args = Args}, UserCtx) ->
     #helper_params{helper_name = Name, helper_args = HelperArgs}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates test file handle and sets user context.
+%% @doc
+%% Creates test file handle and sets user context.
+%% @end
 %%--------------------------------------------------------------------
 -spec create_test_file_handle(HelperName :: helpers:name(), HelperArgs :: helpers:args(),
     UserCtx :: helpers_user:ctx()) -> Handle :: helpers:handle().
@@ -58,7 +63,9 @@ create_test_file_handle(HelperName, HelperArgs, UserCtx) ->
     Handle.
 
 %%--------------------------------------------------------------------
-%% @doc Creates storage test file.
+%% @doc
+%% Creates storage test file.
+%% @end
 %%--------------------------------------------------------------------
 -spec create_test_file(HelperName :: helpers:name(), HelperArgs :: helpers:args(),
     UserCtx :: helpers_user:ctx()) -> {FileId :: helpers:file(), Content :: binary()}.
@@ -67,7 +74,9 @@ create_test_file(HelperName, HelperArgs, UserCtx) ->
     {FileId, create_test_file(HelperName, HelperArgs, UserCtx, FileId)}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates storage test file with given ID.
+%% @doc
+%% Creates storage test file with given ID.
+%% @end
 %%--------------------------------------------------------------------
 -spec create_test_file(HelperName :: helpers:name(), HelperArgs :: helpers:args(),
     UserCtx :: helpers_user:ctx(), FileId :: helpers:file()) -> Content :: binary().
@@ -76,7 +85,9 @@ create_test_file(HelperName, HelperArgs, UserCtx, FileId) ->
     create_test_file(Handle, FileId).
 
 %%--------------------------------------------------------------------
-%% @doc Creates storage test file with given ID.
+%% @doc
+%% Creates storage test file with given ID.
+%% @end
 %%--------------------------------------------------------------------
 -spec create_test_file(Handle :: helpers:handle(), FileId :: helpers:file()) -> 
     Content :: binary().
@@ -89,7 +100,9 @@ create_test_file(Handle, FileId) ->
     Content.
 
 %%--------------------------------------------------------------------
-%% @doc Returns content of storage test file.
+%% @doc
+%% Returns content of storage test file.
+%% @end
 %%--------------------------------------------------------------------
 -spec read_test_file(HelperName :: helpers:name(), HelperArgs :: helpers:args(),
     UserCtx :: helpers_user:ctx(), FileId :: helpers:file()) -> Content :: binary().
@@ -98,7 +111,9 @@ read_test_file(HelperName, HelperArgs, UserCtx, FileId) ->
     read_test_file(Handle, FileId).
 
 %%--------------------------------------------------------------------
-%% @doc Returns content of storage test file.
+%% @doc
+%% Returns content of storage test file.
+%% @end
 %%--------------------------------------------------------------------
 -spec read_test_file(Handle :: helpers:handle(), FileId :: helpers:file()) ->
     Content :: binary().
@@ -109,7 +124,9 @@ read_test_file(Handle, FileId) ->
     Content.
 
 %%--------------------------------------------------------------------
-%% @doc Updates and returns content of a storage test file.
+%% @doc
+%% Updates and returns content of a storage test file.
+%% @end
 %%--------------------------------------------------------------------
 -spec update_test_file(HelperName :: helpers:name(), HelperArgs :: helpers:args(),
     UserCtx :: helpers_user:ctx(), FileId :: helpers:file()) -> Content :: binary().
@@ -122,7 +139,9 @@ update_test_file(HelperName, HelperArgs, UserCtx, FileId) ->
     Content.
 
 %%--------------------------------------------------------------------
-%% @doc Removes storage test file.
+%% @doc
+%% Removes storage test file.
+%% @end
 %%--------------------------------------------------------------------
 -spec remove_test_file(HelperName :: helpers:name(), HelperArgs :: helpers:args(),
     UserCtx :: helpers_user:ctx(), FileId :: helpers:file()) -> ok.
@@ -131,7 +150,9 @@ remove_test_file(HelperName, HelperArgs, UserCtx, FileId) ->
     remove_test_file(Handle, FileId).
 
 %%--------------------------------------------------------------------
-%% @doc Removes storage test file.
+%% @doc
+%% Removes storage test file.
+%% @end
 %%--------------------------------------------------------------------
 -spec remove_test_file(Handle :: helpers:handle(), FileId :: helpers:file()) -> ok.
 remove_test_file(Handle, FileId) ->

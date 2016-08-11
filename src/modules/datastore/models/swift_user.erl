@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache that maps onedata user to Openstack Swift user.
+%%% @doc
+%%% Cache that maps onedata user to Openstack Swift user.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(swift_user).
 -author("Michal Wrona").
@@ -123,14 +125,18 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Creates Openstack Swift user context.
+%% @doc
+%% Creates Openstack Swift user context.
+%% @end
 %%--------------------------------------------------------------------
 -spec new_ctx(UserName :: user_name(), Password :: password()) -> UserCtx :: ctx().
 new_ctx(UserName, Password) ->
     #swift_user_ctx{user_name = UserName, password = Password}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates Openstack Swift user document.
+%% @doc
+%% Creates Openstack Swift user document.
+%% @end
 %%--------------------------------------------------------------------
 -spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     UserDoc :: datastore:document().
@@ -138,7 +144,9 @@ new(UserId, StorageId, #swift_user_ctx{} = UserCtx) ->
     #document{key = UserId, value = add_ctx(StorageId, UserCtx, #swift_user{})}.
 
 %%--------------------------------------------------------------------
-%% @doc Adds Openstack Swift storage context to onedata user.
+%% @doc
+%% Adds Openstack Swift storage context to onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #swift_user{}) ->
     User :: #swift_user{}.
@@ -146,14 +154,18 @@ add_ctx(StorageId, UserCtx, #swift_user{ctx = Ctx} = User) ->
     User#swift_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @doc Returns all Openstack Swift storage contexts for onedata user.
+%% @doc
+%% Returns all Openstack Swift storage contexts for onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_all_ctx(User :: #swift_user{}) -> Ctx :: #{storage:id() => ctx()}.
 get_all_ctx(#swift_user{ctx = Ctx}) ->
     Ctx.
 
 %%--------------------------------------------------------------------
-%% @doc Returns Openstack Swift storage context for onedata user.
+%% @doc
+%% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
+%% @end
 %%--------------------------------------------------------------------
 -spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
     UserCtx :: ctx() | undefined.
@@ -161,7 +173,9 @@ get_ctx(UserId, StorageId) ->
     helpers_user:get_ctx(?MODULE, UserId, StorageId).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @doc
+%% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @end
 %%--------------------------------------------------------------------
 -spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.

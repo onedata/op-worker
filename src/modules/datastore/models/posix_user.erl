@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache that maps onedata user to POSIX user.
+%%% @doc
+%%% Cache that maps onedata user to POSIX user.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(posix_user).
 -author("Michal Wrona").
@@ -123,14 +125,18 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Creates POSIX user context.
+%% @doc
+%% Creates POSIX user context.
+%% @end
 %%--------------------------------------------------------------------
 -spec new_ctx(Uid :: uid(), Gid :: gid()) -> UserCtx :: ctx().
 new_ctx(Uid, Gid) ->
     #posix_user_ctx{uid = Uid, gid = Gid}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates POSIX user document.
+%% @doc
+%% Creates POSIX user document.
+%% @end
 %%--------------------------------------------------------------------
 -spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     UserDoc :: datastore:document().
@@ -138,7 +144,9 @@ new(UserId, StorageId, #posix_user_ctx{} = UserCtx) ->
     #document{key = UserId, value = add_ctx(StorageId, UserCtx, #posix_user{})}.
 
 %%--------------------------------------------------------------------
-%% @doc Adds POSIX storage context to onedata user.
+%% @doc
+%% Adds POSIX storage context to onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #posix_user{}) ->
     User :: #posix_user{}.
@@ -146,14 +154,18 @@ add_ctx(StorageId, UserCtx, #posix_user{ctx = Ctx} = User) ->
     User#posix_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @doc Returns all POSIX storage contexts for onedata user.
+%% @doc
+%% Returns all POSIX storage contexts for onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_all_ctx(User :: #posix_user{}) -> Ctx :: #{storage:id() => ctx()}.
 get_all_ctx(#posix_user{ctx = Ctx}) ->
     Ctx.
 
 %%--------------------------------------------------------------------
-%% @doc Returns POSIX storage context for onedata user.
+%% @doc
+%% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
+%% @end
 %%--------------------------------------------------------------------
 -spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
     UserCtx :: ctx() | undefined.
@@ -161,7 +173,9 @@ get_ctx(UserId, StorageId) ->
     helpers_user:get_ctx(?MODULE, UserId, StorageId).
 
 %%--------------------------------------------------------------------
-%% @doc @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @doc
+%% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @end
 %%--------------------------------------------------------------------
 -spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.

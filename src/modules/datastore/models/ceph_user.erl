@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache that maps onedata user to Ceph user.
+%%% @doc
+%%% Cache that maps onedata user to Ceph user.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(ceph_user).
 -author("Krzysztof Trzepla").
@@ -123,14 +125,18 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Creates Ceph user context.
+%% @doc
+%% Creates Ceph user context.
+%% @end
 %%--------------------------------------------------------------------
 -spec new_ctx(Name :: name(), Key :: key()) -> UserCtx :: ctx().
 new_ctx(Name, Key) ->
     #ceph_user_ctx{user_name = Name, user_key = Key}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates Ceph user document.
+%% @doc
+%% Creates Ceph user document.
+%% @end
 %%--------------------------------------------------------------------
 -spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     UserDoc :: datastore:document().
@@ -138,7 +144,9 @@ new(UserId, StorageId, #ceph_user_ctx{} = UserCtx) ->
     #document{key = UserId, value = add_ctx(StorageId, UserCtx, #ceph_user{})}.
 
 %%--------------------------------------------------------------------
-%% @doc Adds Ceph storage ctx to onedata user.
+%% @doc
+%% Adds Ceph storage ctx to onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #ceph_user{}) ->
     User :: #ceph_user{}.
@@ -146,14 +154,18 @@ add_ctx(StorageId, UserCtx, #ceph_user{ctx = Ctx} = User) ->
     User#ceph_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @doc Returns all Ceph storage contexts for onedata user. 
+%% @doc
+%% Returns all Ceph storage contexts for onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_all_ctx(User :: #ceph_user{}) -> Ctx :: #{storage:id() => ctx()}.
 get_all_ctx(#ceph_user{ctx = Ctx}) ->
     Ctx.
 
 %%--------------------------------------------------------------------
-%% @doc Returns Ceph storage context for onedata user. 
+%% @doc
+%% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
+%% @end
 %%--------------------------------------------------------------------
 -spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
     UserCtx :: ctx() | undefined.
@@ -161,7 +173,9 @@ get_ctx(UserId, StorageId) ->
     helpers_user:get_ctx(?MODULE, UserId, StorageId).
 
 %%--------------------------------------------------------------------
-%% @doc Saves storage ctx in Ceph user document.
+%% @doc
+%% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @end
 %%--------------------------------------------------------------------
 -spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.

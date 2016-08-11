@@ -25,7 +25,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Get user_id from identity or session_id
+%% @doc
+%% Get user_id from identity or session_id
+%% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(session:id() | session:identity()) -> onedata_user:id().
 get_user_id(#identity{user_id = UserId}) ->
@@ -52,7 +54,9 @@ gen_storage_uid(ID) ->
     LowestUID + UID0 rem HighestUID.
 
 %%--------------------------------------------------------------------
-%% @doc Generates storage GID based on SpaceName or SpaceUUID
+%% @doc
+%% Generates storage GID based on SpaceName or SpaceUUID
+%% @end
 %%--------------------------------------------------------------------
 -spec gen_storage_gid(SpaceName :: file_meta:name(),
     SpaceUUID :: file_meta:uuid()) -> non_neg_integer().
@@ -65,7 +69,9 @@ gen_storage_gid(SpaceName, SpaceUUID) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns StorageType for given StorageId
+%% @doc
+%% Returns StorageType for given StorageId
+%% @end
 %%--------------------------------------------------------------------
 -spec get_storage_type(storage:id()) -> helpers:name().
 get_storage_type(StorageId) ->
@@ -74,7 +80,9 @@ get_storage_type(StorageId) ->
     helpers:name(HelperInit).
 
 %%--------------------------------------------------------------------
-%% @doc Returns helper arguments for given StorageId
+%% @doc
+%% Returns helper arguments for given StorageId
+%% @end
 %%--------------------------------------------------------------------
 -spec get_helper_args(storage:id()) -> helpers:args().
 get_helper_args(StorageId) ->
@@ -83,7 +91,9 @@ get_helper_args(StorageId) ->
     helpers:args(HelperInit).
 
 %%--------------------------------------------------------------------
-%% @doc Returns StorageId for given SpaceUUID
+%% @doc
+%% Returns StorageId for given SpaceUUID
+%% @end
 %%--------------------------------------------------------------------
 -spec get_storage_id(SpaceUUID :: file_meta:uuid()) -> storage:id().
 get_storage_id(SpaceUUID) ->

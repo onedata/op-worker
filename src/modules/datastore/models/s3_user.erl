@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache that maps onedata user to Amazon S3 user.
+%%% @doc
+%%% Cache that maps onedata user to Amazon S3 user.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(s3_user).
 -author("Krzysztof Trzepla").
@@ -123,14 +125,18 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Creates S3 user context.
+%% @doc
+%% Creates S3 user context.
+%% @end
 %%--------------------------------------------------------------------
 -spec new_ctx(AccessKey :: access_key(), SecretKey :: secret_key()) -> UserCtx :: ctx().
 new_ctx(AccessKey, SecretKey) ->
     #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates S3 user document.
+%% @doc
+%% Creates S3 user document.
+%% @end
 %%--------------------------------------------------------------------
 -spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     UserDoc :: datastore:document().
@@ -138,7 +144,9 @@ new(UserId, StorageId, #s3_user_ctx{} = UserCtx) ->
     #document{key = UserId, value = add_ctx(StorageId, UserCtx, #s3_user{})}.
 
 %%--------------------------------------------------------------------
-%% @doc Adds S3 storage ctx to onedata user.
+%% @doc
+%% Adds S3 storage ctx to onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #s3_user{}) ->
     User :: #s3_user{}.
@@ -146,14 +154,18 @@ add_ctx(StorageId, UserCtx, #s3_user{ctx = Ctx} = User) ->
     User#s3_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @doc Returns all S3 storage contexts for onedata user. 
+%% @doc
+%% Returns all S3 storage contexts for onedata user.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_all_ctx(User :: #s3_user{}) -> Ctx :: #{storage:id() => ctx()}.
 get_all_ctx(#s3_user{ctx = Ctx}) ->
     Ctx.
 
 %%--------------------------------------------------------------------
-%% @doc Returns S3 storage context for onedata user. 
+%% @doc
+%% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
+%% @end
 %%--------------------------------------------------------------------
 -spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
     UserCtx :: ctx() | undefined.
@@ -161,7 +173,9 @@ get_ctx(UserId, StorageId) ->
     helpers_user:get_ctx(?MODULE, UserId, StorageId).
 
 %%--------------------------------------------------------------------
-%% @doc Saves storage ctx in S3 user document.
+%% @doc
+%% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @end
 %%--------------------------------------------------------------------
 -spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.

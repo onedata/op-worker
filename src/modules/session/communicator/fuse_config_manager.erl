@@ -55,7 +55,8 @@ get_configuration() ->
     #configuration{subscriptions = Subs, disabled_spaces = space_quota:get_disabled_spaces()}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates test file on a given storage in the directory of a file referenced
+%% @doc
+%% Creates test file on a given storage in the directory of a file referenced
 %% by UUID. File is created on behalf of the user associated with the session.
 %% @end
 %%--------------------------------------------------------------------
@@ -91,7 +92,8 @@ create_storage_test_file(SessId, #create_storage_test_file{storage_id = StorageI
     }.
 
 %%--------------------------------------------------------------------
-%% @doc Creates handle to the test file in ROOT context and tries to verify
+%% @doc
+%% Creates handle to the test file in ROOT context and tries to verify
 %% its content ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS times.
 %% @end
 %%--------------------------------------------------------------------
@@ -108,7 +110,9 @@ verify_storage_test_file(SessId, #verify_storage_test_file{storage_id = StorageI
     verify_storage_test_file_loop(Handle, FileId, FileContent, ?ENOENT, ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
 %%--------------------------------------------------------------------
-%% @doc Removes test file referenced by handle after specified delay.
+%% @doc
+%% Removes test file referenced by handle after specified delay.
+%% @end
 %%--------------------------------------------------------------------
 -spec remove_storage_test_file(Handle :: helpers:handle(), FileId :: helpers:file(),
     Delay :: timeout()) -> ok.

@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Module for requesting user mapping from LUMA server
+%%% @doc
+%%% Module for requesting user mapping from LUMA server
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_proxy).
@@ -42,7 +43,9 @@ new_user_ctx(#helper_init{name = ?SWIFT_HELPER_NAME}, SessionId, SpaceUUID) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves posix user ctx for file attrs from LUMA server.
+%% @doc
+%% Retrieves posix user ctx for file attrs from LUMA server.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_posix_user_ctx(StorageType :: helpers:name(), SessionIdOrIdentity :: session:id() | session:identity(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
@@ -68,7 +71,8 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc Retrieves user context from LUMA server for given storage helper.
+%% @private @doc
+%% Retrieves user context from LUMA server for given storage helper.
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
@@ -90,24 +94,24 @@ get_or_fetch_user_ctx(UserModel, SessionId, SpaceUUID) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc Creates user context from LUMA server response.
+%% @private @doc
+%% Creates user context from LUMA server response.
+%% @end
 %%--------------------------------------------------------------------
 -spec make_user_ctx(UserModel :: helpers_user:model(), Response :: proplists:proplist(),
     SpaceUUID :: file_meta:uuid()) -> UserCtx :: helpers_user:ctx().
 make_user_ctx(ceph_user, Response, _SpaceUUID) ->
-    UserName = proplists:get_value(<<"userName">>, Response),
-    UserKey = proplists:get_value(<<"userKey">>, Response),
+    [UserName, UserKey] = utils:get_values([<<"userName">>, <<"userKey">>], Response),
     ceph_user:new_ctx(UserName, UserKey);
 make_user_ctx(s3_user, Response, _SpaceUUID) ->
-    AccessKey = proplists:get_value(<<"accessKey">>, Response),
-    SecretKey = proplists:get_value(<<"secretKey">>, Response),
+    [AccessKey, SecretKey] = utils:get_values([<<"accessKey">>, <<"secretKey">>], Response),
     s3_user:new_ctx(AccessKey, SecretKey);
 make_user_ctx(swift_user, Response, _SpaceUUID) ->
-    UserName = proplists:get_value(<<"userName">>, Response),
-    Password = proplists:get_value(<<"password">>, Response),
+    [UserName, Password] = utils:get_values([<<"userName">>, <<"password">>], Response),
     swift_user:new_ctx(UserName, Password);
 make_user_ctx(posix_user, Response, SpaceUUID) ->
-    GID = case proplists:get_value(<<"gid">>, Response) of
+    [UID, GID] = utils:get_values([<<"uid">>, <<"gid">>], Response),
+    NewGID = case GID of
         undefined ->
             {ok, #document{value = #file_meta{name = SpaceName}}} =
                 file_meta:get({uuid, SpaceUUID}),
@@ -115,11 +119,13 @@ make_user_ctx(posix_user, Response, SpaceUUID) ->
         Val ->
             Val
     end,
-    #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = GID}.
+    #posix_user_ctx{uid = UID, gid = NewGID}.
 
 
 %%--------------------------------------------------------------------
-%% @private @doc Retrieves user credentials to storage from LUMA server.
+%% @private @doc
+%% Retrieves user credentials to storage from LUMA server.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
     StorageId :: storage:id() | undefined, SessionIdOrIdentity :: session:id() | session:identity(),
@@ -183,7 +189,9 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc Get auth from session ID, returns undefined when identity is given.
+%% @private @doc
+%% Get auth from session ID, returns undefined when identity is given.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_auth(session:id() | session:identity()) ->
     {ok, session:auth() | undefined} | {error, term()}.
@@ -220,13 +228,11 @@ encode_body(StorageType, StorageId, SpaceName, UserDetails) ->
         email_list = EmailList
     } = UserDetails,
     ParsedConnectedAccounts = lists:map(fun(Account) ->
-        [
-            {<<"providerId">>, proplists:get_value(<<"provider_id">>, Account)},
-            {<<"userId">>, proplists:get_value(<<"user_id">>, Account)},
-            {<<"login">>, proplists:get_value(<<"login">>, Account)},
-            {<<"name">>, proplists:get_value(<<"name">>, Account)},
-            {<<"emailList">>, proplists:get_value(<<"email_list">>, Account)}
-        ]
+        lists:zip(
+            [<<"providerId">>, <<"userId">>, <<"login">>, <<"name">>, <<"emailList">>],
+            utils:get_values([<<"provider_id">>, <<"user_id">>, <<"login">>,
+                <<"name">>, <<"email_list">>], Account)
+        )
     end, ConnectedAccounts),
 
     BodyWithUserDetails = lists:append(BodyWithStorageId, [{<<"userDetails">>, [

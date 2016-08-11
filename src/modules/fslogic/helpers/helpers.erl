@@ -45,14 +45,18 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Returns helper name.
+%% @doc
+%% Returns helper name.
+%% @end
 %%--------------------------------------------------------------------
 -spec name(Helper :: init()) -> Name :: name().
 name(#helper_init{name = Name}) ->
     Name.
 
 %%--------------------------------------------------------------------
-%% @doc Returns helper arguments map.
+%% @doc
+%% Returns helper arguments map.
+%% @end
 %%--------------------------------------------------------------------
 -spec args(Helper :: init()) -> Args :: args().
 args(#helper_init{args = Args}) ->

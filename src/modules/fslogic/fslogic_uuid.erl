@@ -29,7 +29,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Returns ROOT user ID.
+%% @doc
+%% Returns ROOT user ID.
+%% @end
 %%--------------------------------------------------------------------
 -spec root_user_id() -> Id :: binary().
 root_user_id() ->
@@ -151,7 +153,7 @@ ensure_guid(_CTX, {guid, FileGUID}) ->
     {guid, FileGUID};
 ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
     lfm_utils:call_fslogic(SessId, fuse_request,
-        #get_file_attr{entry = {path, Path}},
+        #resolve_guid{path = Path},
         fun (#file_attr{uuid = GUID}) ->
             {guid, GUID}
         end).

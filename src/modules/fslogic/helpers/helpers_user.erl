@@ -19,7 +19,7 @@
 -export([add/4, get/2, get_ctx/3]).
 
 -type model() :: posix_user | swift_user | ceph_user | s3_user.
--type ctx() :: posix_user:ctx() | ceph_user:ctx() | s3_user:ctx() | #swift_user_ctx{}.
+-type ctx() :: posix_user:ctx() | ceph_user:ctx() | s3_user:ctx() | swift_user:ctx().
 -type ctx_map() :: #{binary() => binary()}.
 -type type() :: posix_user:type() | ceph_user:type() | s3_user:type().
 
@@ -30,7 +30,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Add storage ctx to user document and saves in datastore.
+%% @doc
+%% Add storage ctx to user document and saves in datastore.
+%% @end
 %%--------------------------------------------------------------------
 -spec add(UserModel :: model(), UserId :: onedata_user:id(), StorageId :: storage:id(),
     UserCtx :: ctx()) -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
@@ -50,7 +52,9 @@ add(UserModel, UserId, StorageId, UserCtx) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns user record from datastore.
+%% @doc
+%% Returns user record from datastore.
+%% @end
 %%--------------------------------------------------------------------
 -spec get(UserModel :: model(), UserId :: onedata_user:id()) ->
     {ok, User :: type()} | {error, Reason :: term()}.
@@ -61,7 +65,9 @@ get(UserModel, UserId) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns user storage context from datastore.
+%% @doc
+%% Returns user storage context from datastore.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_ctx(UserModel :: model(), UserId :: onedata_user:id(), StorageId :: storage:id()) ->
     UserCtx :: ctx() | undefined.
