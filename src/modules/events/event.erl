@@ -29,7 +29,8 @@
 -type key() :: term().
 -type object() :: #read_event{} | #update_event{} | #write_event{}
 | #permission_changed_event{} | #file_removal_event{} | #quota_exeeded_event{}
-| #file_renamed_event{} | #file_accessed_event{}.
+| #file_renamed_event{} | #file_accessed_event{} | #storage_used_updated{}
+| #space_info_updated{} | #file_operations_statistics{} | #rtransfer_statistics{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
@@ -217,7 +218,20 @@ set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_
     Evt#event{key = Uuid};
 
 set_key(#event{object = #file_accessed_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid}.
+    Evt#event{key = Uuid};
+
+set_key(#event{object = #storage_used_updated{space_id = SpaceId, user_id = UserId}} = Evt) ->
+    Evt#event{key = {SpaceId, UserId, <<"storage_used_updated">>}};
+
+set_key(#event{object = #space_info_updated{space_id = SpaceId}} = Evt) ->
+    Evt#event{key = {SpaceId, <<"space_info_updated">>}};
+
+set_key(#event{object = #file_operations_statistics{space_id = SpaceId, user_id = UserId}} = Evt) ->
+    Evt#event{key = {SpaceId, UserId, <<"file_operations_statistics">>}};
+
+set_key(#event{object = #rtransfer_statistics{space_id = SpaceId, user_id = UserId}} = Evt) ->
+    Evt#event{key = {SpaceId, UserId, <<"rtransfer_statistics">>}}.
+
 
 %%--------------------------------------------------------------------
 %% @private

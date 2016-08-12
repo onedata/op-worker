@@ -55,18 +55,25 @@ init([SessId, SessType]) ->
 
     SequencerEnabled = [fuse, provider_outgoing],
 
-    case lists:member(SessType, SequencerEnabled) of
-        true ->
+    case SessType of
+        monitoring ->
             {ok, {SupFlags, [
-                session_watcher_spec(SessId, SessType),
-                sequencer_manager_sup_spec(SessId),
                 event_manager_sup_spec(SessId, SessType)
             ]}};
         _ ->
-            {ok, {SupFlags, [
-                session_watcher_spec(SessId, SessType),
-                event_manager_sup_spec(SessId, SessType)
-            ]}}
+            case lists:member(SessType, SequencerEnabled) of
+                true ->
+                    {ok, {SupFlags, [
+                        session_watcher_spec(SessId, SessType),
+                        sequencer_manager_sup_spec(SessId),
+                        event_manager_sup_spec(SessId, SessType)
+                    ]}};
+                _ ->
+                    {ok, {SupFlags, [
+                        session_watcher_spec(SessId, SessType),
+                        event_manager_sup_spec(SessId, SessType)
+                    ]}}
+            end
     end.
 
 %%%===================================================================

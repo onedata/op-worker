@@ -83,7 +83,6 @@ init(_Args) ->
                 end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
-                monitoring_updates:handle_write_events_for_monitoring(Evts, Ctx),
                 handle_write_events(Evts, Ctx)
             end,
             terminate_handler = event_utils:send_subscription_cancellation_handler()
@@ -106,7 +105,6 @@ init(_Args) ->
 
     ReadSub = event_subscriptions:read_subscription(
         fun(Evts, Ctx) ->
-            monitoring_updates:handle_read_events_for_monitoring(Evts, Ctx),
             handle_read_events(Evts, Ctx)
         end),
 
@@ -471,7 +469,8 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_file_distribution{}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #replicate_file{block = Block}}) ->
-    fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Block);
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, GUID}),
+    fslogic_req_generic:replicate_file(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Block);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_metadata{type = Type, names = Names}}) ->
     fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Type, Names);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_metadata{metadata =
@@ -512,9 +511,14 @@ handle_proxyio_request(_CTX, Req) ->
 -spec handle_write_events(Evts :: [event:event()], Ctx :: #{}) ->
     [ok | {error, Reason :: term()}].
 handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
-    Results = lists:map(fun(#event{object = #write_event{
-        blocks = Blocks, file_uuid = FileGUID, file_size = FileSize}}) ->
-        FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    Results = lists:map(fun(#event{object = #write_event{size = Size, blocks = Blocks,
+        file_uuid = FileGUID, file_size = FileSize}, counter = Counter}) ->
+
+        {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+        {ok, #document{value = #session{identity = #identity{
+            user_id = UserId}}}} = session:get(SessId),
+        monitoring_event:emit_write_statistics(SpaceId, UserId, Size, Counter),
+
         UpdatedBlocks = lists:map(fun(#file_block{file_id = FileId, storage_id = StorageId} = Block) ->
             {ValidFileId, ValidStorageId} = file_location:validate_block_data(FileUUID, FileId, StorageId),
             Block#file_block{file_id = ValidFileId, storage_id = ValidStorageId}
@@ -553,8 +557,14 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 -spec handle_read_events(Evts :: [event:event()], Ctx :: #{}) ->
     [ok | {error, Reason :: term()}].
 handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
-    lists:map(fun(#event{object = #read_event{file_uuid = FileGUID}}) ->
-        FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    lists:map(fun(#event{object = #read_event{file_uuid = FileGUID, size = Size},
+        counter = Counter}) ->
+
+        {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+        {ok, #document{value = #session{identity = #identity{
+            user_id = UserId}}}} = session:get(SessId),
+        monitoring_event:emit_read_statistics(SpaceId, UserId, Size, Counter),
+
         {ok, #document{value = #session{identity = #identity{
             user_id = UserId}}}} = session:get(SessId),
         fslogic_times:update_atime({uuid, FileUUID}, UserId)

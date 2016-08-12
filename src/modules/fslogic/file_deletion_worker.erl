@@ -88,9 +88,7 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
 
             case open_file:mark_to_remove(FileUUID) of
                 ok ->
-                    spawn(fun() ->
-                        fslogic_event:emit_file_renamed(FileUUID, SpaceId, Path, SessId)
-                    end);
+                    fslogic_event:emit_file_renamed(FileUUID, SpaceId, Path, SessId);
                 {error, {not_found, _}} ->
                     remove_file_and_file_meta(FileUUID, SessId, Silent)
             end;
@@ -148,10 +146,8 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
     case Silent of
         true -> ok;
         false ->
-            spawn(fun() ->
-                fslogic_event:emit_file_removal(
-                    fslogic_uuid:to_file_guid(FileUUID, SpaceId), [SessId])
-            end)
+            fslogic_event:emit_file_removal(
+                fslogic_uuid:to_file_guid(FileUUID, SpaceId), [SessId])
     end,
     ok.
 
