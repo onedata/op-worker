@@ -265,4 +265,14 @@
     waiting = [] :: [file_consistency:waiting()]
 }).
 
+%%
+-record(permissions_cache, {
+    value
+}).
+
+%%
+-record(permissions_cache_helper, {
+    value
+}).
+
 -endif.

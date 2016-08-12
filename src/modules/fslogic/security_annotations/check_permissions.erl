@@ -52,7 +52,23 @@
 before_advice(#annotation{data = AccessDefinitions}, _M, _F,
   Args = [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} | _]) ->
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
-    [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
+    % TODO - beter cache "or" in AccessType
+    lists:map(fun({AccessType, Doc, User, _} = Def) ->
+        DocID = case Doc of
+                    #document{key = Key} ->
+                        Key;
+                    _ ->
+                        Doc
+                end,
+        try
+            ok = rules:check(Def),
+            permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ok)
+        catch
+            _:?EACCES ->
+                permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ?EACCES),
+                throw(?EACCES)
+        end
+    end, ExpandedAccessDefinitions),
     Args;
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_uuid = FileUUID} = Handle | RestOfArgs] = Args) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
@@ -84,11 +100,18 @@ expand_access_definitions([], _UserId, _Inputs, _FileMap, _AclMap, _UserMap) ->
 expand_access_definitions(_, ?ROOT_USER_ID, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];
 expand_access_definitions([root | Rest], UserId, Inputs, FileMap, AclMap, UserMap) ->
-    {User, NewUserMap} = get_user(UserId, UserMap),
-    [{root, undefined, User, undefined}  | expand_access_definitions(Rest, UserId, Inputs, FileMap, AclMap, NewUserMap)];
+    case permissions_cache:check_permission({root, UserId, undefined}) of
+        ok ->
+            expand_access_definitions(Rest, UserId, Inputs, FileMap, AclMap, UserMap);
+        ?EACCES ->
+            throw(?EACCES);
+        _ ->
+            {User, NewUserMap} = get_user(UserId, UserMap),
+            [{root, undefined, User, undefined}  | expand_access_definitions(Rest, UserId, Inputs, FileMap, AclMap, NewUserMap)]
+    end;
 expand_access_definitions([{traverse_ancestors, ItemDefinition} | Rest], UserId, Inputs, FileMap, AclMap, UserMap) ->
     {User, NewUserMap} = get_user(UserId, UserMap),
-    {ExpandedTraverseDefs, NewFileMap} = % if file is a scope check scope access also
+    {ExpandedTraverseDefs, NFM} = % if file is a scope check scope access also
         case (catch get_file(ItemDefinition, FileMap, UserId, Inputs)) of
             {#document{value = #file_meta{is_scope = true}} = File, NewFileMap} ->
                 {expand_traverse_ancestors_check(File, User, AclMap), NewFileMap};
@@ -98,12 +121,20 @@ expand_access_definitions([{traverse_ancestors, ItemDefinition} | Rest], UserId,
         end,
 
     ExpandedTraverseDefs
-    ++ expand_access_definitions(Rest, UserId, Inputs, NewFileMap, AclMap, NewUserMap);
+    ++ expand_access_definitions(Rest, UserId, Inputs, NFM, AclMap, NewUserMap);
 expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, Inputs, FileMap, AclMap, UserMap) ->
+    % TODO - do not get document when not needed
     {File = #document{key = Key}, NewFileMap} = get_file(ItemDefinition, FileMap, UserId, Inputs),
-    {Acl, NewAclMap} = get_acl(Key, AclMap),
-    {User, NewUserMap} = get_user(UserId, UserMap),
-    [{CheckType, File, User, Acl} | expand_access_definitions(Rest, UserId, Inputs, NewFileMap, NewAclMap, NewUserMap)].
+    case permissions_cache:check_permission({CheckType, UserId, Key}) of
+        ok ->
+            expand_access_definitions(Rest, UserId, Inputs, FileMap, AclMap, UserMap);
+        ?EACCES ->
+            throw(?EACCES);
+        _ ->
+            {Acl, NewAclMap} = get_acl(Key, AclMap),
+            {User, NewUserMap} = get_user(UserId, UserMap),
+            [{CheckType, File, User, Acl} | expand_access_definitions(Rest, UserId, Inputs, NewFileMap, NewAclMap, NewUserMap)]
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -118,8 +149,8 @@ get_validation_subject(UserId, #sfm_handle{file_uuid = FileGUID}) ->
     get_validation_subject(UserId, {guid, FileGUID});
 get_validation_subject(UserId, {guid, FileGUID}) ->
     get_validation_subject(UserId, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
-get_validation_subject(UserId, FileEntry) ->
-    {ok, #document{key = FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
+get_validation_subject(_UserId, FileEntry) ->
+    {ok, #document{key = _FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
     FileDoc.
 
 %%--------------------------------------------------------------------
@@ -143,23 +174,43 @@ resolve_file_entry({parent, Item}, Inputs) ->
     [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
 expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_meta{type = Type}},
   UserDoc = #document{key = UserId}, AclMap) ->
-    {ok, AncestorsIds} = file_meta:get_ancestors(SubjDoc),
-    {Acl, _} = get_acl(Uuid, AclMap),
     SubjectCheck =
         case Type of
             ?DIRECTORY_TYPE ->
-                [{?traverse_container, SubjDoc, UserDoc, Acl}];
+                case permissions_cache:check_permission({?traverse_container, UserId, Uuid}) of
+                    ok ->
+                        [];
+                    ?EACCES ->
+                        throw(?EACCES);
+                    _ ->
+                        {Acl, _} = get_acl(Uuid, AclMap),
+                        [{?traverse_container, SubjDoc, UserDoc, Acl}]
+                end;
             _ ->
                 []
         end,
-    AncestorsCheck =
-        lists:map(
-            fun(AncestorId) ->
-                #document{value = #file_meta{}} = FileDoc = check_permissions:get_validation_subject(UserId, {uuid, AncestorId}),
-                {AncestorAcl, _} = get_acl(AncestorId, AclMap),
-                {?traverse_container, FileDoc, UserDoc, AncestorAcl}
-            end, AncestorsIds),
+
+    file_meta:set_link_context(SubjDoc),
+    AncestorsCheck = expand_ancestors_check(Uuid, [], UserId, UserDoc, AclMap),
     SubjectCheck ++ AncestorsCheck.
+
+
+expand_ancestors_check(?ROOT_DIR_UUID, Acc, _UserId, _UserDoc, _AclMap) ->
+    Acc;
+expand_ancestors_check(Key, Acc, UserId, UserDoc, AclMap) ->
+    {ok, AncestorId} = file_meta:get_parent_uuid_in_context(Key),
+
+    case permissions_cache:check_permission({?traverse_container, UserId, AncestorId}) of
+        ok ->
+            Acc;
+        ?EACCES ->
+            throw(?EACCES);
+        _ ->
+            #document{value = #file_meta{}} = FileDoc = check_permissions:get_validation_subject(UserId, {uuid, AncestorId}),
+            {AncestorAcl, _} = get_acl(AncestorId, AclMap),
+            expand_ancestors_check(AncestorId, [{?traverse_container, FileDoc, UserDoc, AncestorAcl} | Acc],
+                UserId, UserDoc, AclMap)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
