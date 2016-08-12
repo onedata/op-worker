@@ -14,8 +14,8 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 -include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 
 %% model_behaviour callbacks
@@ -149,18 +149,32 @@ before(_ModelName, _Method, _Level, _Context) ->
 check_permission(Rule) ->
     case get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {clearing, _}}}} ->
+            ?info("aaaa3 ~p", [calculate]),
             calculate;
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             get_rule(Model, Rule);
         {error, {not_found, _}} ->
-            create(#document{key = ?STATUS_UUID, value =
-            #permissions_cache{value = {?MODULE, []}}}),
-            check_permission(Rule)
+            get_rule(?MODULE, Rule)
     end.
 
 cache_permission(Rule, Value) ->
-    save(#document{key = get_uuid(Rule), value =
-    #permissions_cache{value = Value}}).
+    CurrentModel = case get(?STATUS_UUID) of
+                       {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
+                           Model;
+                       {error, {not_found, _}} ->
+                           ?MODULE
+                   end,
+    ?info("aaaa1 ~p", [CurrentModel]),
+    case CurrentModel of
+        clearing ->
+            ok;
+        permissions_cache ->
+            save(#document{key = get_uuid(Rule), value =
+            #permissions_cache{value = Value}});
+        permissions_cache_helper ->
+            permissions_cache_helper:save(#document{key = get_uuid(Rule), value =
+            #permissions_cache_helper{value = Value}})
+    end.
 
 clear_permissions() ->
     CurrentModel = case get(?STATUS_UUID) of
@@ -174,15 +188,18 @@ clear_permissions() ->
         clearing ->
             ok;
         _ ->
-
             case start_clearing(CurrentModel) of
-                {ok, _} ->
+                {ok, X} ->
+                    ?info("bbbb2 ~p", [X]),
                     task_manager:start_task(fun() ->
-                        {ok, Uuids} = erlang:apply(CurrentModel),
-                        lists:foreach(fun(Uuid) ->
-                            delete(Uuid)
+                        {ok, Uuids} = erlang:apply(CurrentModel, list, []),
+                        lists:foreach(fun
+                            (?STATUS_UUID) ->
+                                ok;
+                            (Uuid) ->
+                                ok = erlang:apply(CurrentModel, delete, [Uuid])
                         end, Uuids),
-                        stop_clearing(CurrentModel),
+                        ok = stop_clearing(CurrentModel),
                         ok
                     end, ?CLUSTER_LEVEL);
                 {error, parallel_cleaning} ->
@@ -199,6 +216,7 @@ get_uuid(Rule) ->
     base64:encode(term_to_binary(Rule)).
 
 get_rule(Model, Rule) ->
+    ?info("aaaa2 ~p", [Model]),
     case erlang:apply(Model, get, [get_uuid(Rule)]) of
         {ok, #document{value = #permissions_cache{value = V}}} ->
             {ok, V};
@@ -226,6 +244,7 @@ start_clearing(CurrentModel) ->
                                 {error, parallel_cleaning}
                         end
                 end,
+    ?info("bbbb1 ~p", [NewDoc]),
     create_or_update(NewDoc, UpdateFun).
 
 stop_clearing(CurrentModel) ->

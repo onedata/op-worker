@@ -101,9 +101,9 @@ expand_access_definitions(_, ?ROOT_USER_ID, _Inputs, _FileMap, _AclMap, _UserMap
     [];
 expand_access_definitions([root | Rest], UserId, Inputs, FileMap, AclMap, UserMap) ->
     case permissions_cache:check_permission({root, UserId, undefined}) of
-        ok ->
+        {ok, ok} ->
             expand_access_definitions(Rest, UserId, Inputs, FileMap, AclMap, UserMap);
-        ?EACCES ->
+        {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
             {User, NewUserMap} = get_user(UserId, UserMap),
@@ -126,9 +126,9 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, Inputs, 
     % TODO - do not get document when not needed
     {File = #document{key = Key}, NewFileMap} = get_file(ItemDefinition, FileMap, UserId, Inputs),
     case permissions_cache:check_permission({CheckType, UserId, Key}) of
-        ok ->
+        {ok, ok} ->
             expand_access_definitions(Rest, UserId, Inputs, FileMap, AclMap, UserMap);
-        ?EACCES ->
+        {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
             {Acl, NewAclMap} = get_acl(Key, AclMap),
@@ -178,9 +178,9 @@ expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_me
         case Type of
             ?DIRECTORY_TYPE ->
                 case permissions_cache:check_permission({?traverse_container, UserId, Uuid}) of
-                    ok ->
+                    {ok, ok} ->
                         [];
-                    ?EACCES ->
+                    {ok, ?EACCES} ->
                         throw(?EACCES);
                     _ ->
                         {Acl, _} = get_acl(Uuid, AclMap),
@@ -201,9 +201,9 @@ expand_ancestors_check(Key, Acc, UserId, UserDoc, AclMap) ->
     {ok, AncestorId} = file_meta:get_parent_uuid_in_context(Key),
 
     case permissions_cache:check_permission({?traverse_container, UserId, AncestorId}) of
-        ok ->
+        {ok, ok} ->
             Acc;
-        ?EACCES ->
+        {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
             #document{value = #file_meta{}} = FileDoc = check_permissions:get_validation_subject(UserId, {uuid, AncestorId}),
