@@ -107,6 +107,8 @@ list() ->
     Filter = fun
                 ('$end_of_table', Acc) ->
                     {abort, Acc};
+                (#document{key = ?STATUS_UUID}, Acc) ->
+                     {next, Acc};
                 (#document{key = Uuid}, Acc) ->
                     {next, [Uuid | Acc]}
             end,
@@ -146,10 +148,15 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks permission in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_permission(Rule :: term()) -> {ok, term()} | calculate | no_return().
 check_permission(Rule) ->
     case get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {clearing, _}}}} ->
-            ?info("aaaa3 ~p", [calculate]),
             calculate;
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             get_rule(Model, Rule);
@@ -157,6 +164,13 @@ check_permission(Rule) ->
             get_rule(?MODULE, Rule)
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks permission in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_permission(Rule :: term(), Value :: term()) ->
+    ok | {ok, datastore:ext_key()} | datastore:generic_error().
 cache_permission(Rule, Value) ->
     CurrentModel = case get(?STATUS_UUID) of
                        {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
@@ -164,7 +178,7 @@ cache_permission(Rule, Value) ->
                        {error, {not_found, _}} ->
                            ?MODULE
                    end,
-    ?info("aaaa1 ~p", [CurrentModel]),
+
     case CurrentModel of
         clearing ->
             ok;
@@ -176,6 +190,12 @@ cache_permission(Rule, Value) ->
             #permissions_cache_helper{value = Value}})
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears all permissions.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_permissions() -> ok.
 clear_permissions() ->
     CurrentModel = case get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
@@ -189,15 +209,11 @@ clear_permissions() ->
             ok;
         _ ->
             case start_clearing(CurrentModel) of
-                {ok, X} ->
-                    ?info("bbbb2 ~p", [X]),
+                {ok, _} ->
                     task_manager:start_task(fun() ->
                         {ok, Uuids} = erlang:apply(CurrentModel, list, []),
-                        lists:foreach(fun
-                            (?STATUS_UUID) ->
-                                ok;
-                            (Uuid) ->
-                                ok = erlang:apply(CurrentModel, delete, [Uuid])
+                        lists:foreach(fun(Uuid) ->
+                            ok = erlang:apply(CurrentModel, delete, [Uuid])
                         end, Uuids),
                         ok = stop_clearing(CurrentModel),
                         ok
@@ -212,11 +228,24 @@ clear_permissions() ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets rule's uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_uuid(Rule :: term()) -> binary().
 get_uuid(Rule) ->
     base64:encode(term_to_binary(Rule)).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets rule value from cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_rule(Model :: atom(), Rule :: term()) -> {ok, term()} | calculate | no_return().
 get_rule(Model, Rule) ->
-    ?info("aaaa2 ~p", [Model]),
     case erlang:apply(Model, get, [get_uuid(Rule)]) of
         {ok, #document{value = #permissions_cache{value = V}}} ->
             {ok, V};
@@ -226,6 +255,13 @@ get_rule(Model, Rule) ->
             calculate
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves information about clearing start.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_clearing(CurrentModel :: atom()) -> {ok, datastore:ext_key()} | datastore:update_error().
 start_clearing(CurrentModel) ->
     NewDoc = #document{key = ?STATUS_UUID, value = #permissions_cache{value = {permissions_cache_helper, clearing}}},
     UpdateFun = fun
@@ -244,9 +280,16 @@ start_clearing(CurrentModel) ->
                                 {error, parallel_cleaning}
                         end
                 end,
-    ?info("bbbb1 ~p", [NewDoc]),
+
     create_or_update(NewDoc, UpdateFun).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves information about clearing stop.
+%% @end
+%%--------------------------------------------------------------------
+-spec stop_clearing(CurrentModel :: atom()) -> ok | no_return().
 stop_clearing(CurrentModel) ->
     UpdateFun = fun
                     (#permissions_cache{value = {clearing, clearing}}) ->

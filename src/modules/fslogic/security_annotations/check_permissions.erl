@@ -53,21 +53,32 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
   Args = [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} | _]) ->
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     % TODO - beter cache "or" in AccessType
+    % TODO - better cache EACCES (it will be always traversed to first EACCES)
+    % Check if everything is ok
     lists:map(fun({AccessType, Doc, User, _} = Def) ->
+        try
+            ok = rules:check(Def)
+        catch
+            _:?EACCES ->
+                DocID = case Doc of
+                            #document{key = Key} ->
+                                Key;
+                            _ ->
+                                Doc
+                        end,
+                permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ?EACCES),
+                throw(?EACCES)
+        end
+    end, ExpandedAccessDefinitions),
+    % Cache ok permission
+    lists:map(fun({AccessType, Doc, User, _}) ->
         DocID = case Doc of
                     #document{key = Key} ->
                         Key;
                     _ ->
                         Doc
                 end,
-        try
-            ok = rules:check(Def),
-            permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ok)
-        catch
-            _:?EACCES ->
-                permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ?EACCES),
-                throw(?EACCES)
-        end
+        permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ok)
     end, ExpandedAccessDefinitions),
     Args;
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_uuid = FileUUID} = Handle | RestOfArgs] = Args) ->
@@ -194,7 +205,16 @@ expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_me
     AncestorsCheck = expand_ancestors_check(Uuid, [], UserId, UserDoc, AclMap),
     SubjectCheck ++ AncestorsCheck.
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Expand traverse_ancestors check into list of traverse_container check for
+%% each ancestor and subject document. Starts from doc parent.
+%% @end
+%%--------------------------------------------------------------------
+-spec expand_ancestors_check(datastore:ext_key(),
+    [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}],
+    datastore:ext_key(), datastore:document(), #{}) ->
+    [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
 expand_ancestors_check(?ROOT_DIR_UUID, Acc, _UserId, _UserDoc, _AclMap) ->
     Acc;
 expand_ancestors_check(Key, Acc, UserId, UserDoc, AclMap) ->
