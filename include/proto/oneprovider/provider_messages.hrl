@@ -15,27 +15,22 @@
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
--record(get_parent, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
 -record(get_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     name :: xattr:name()
 }).
 
 -record(set_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     xattr :: #xattr{}
 }).
 
 -record(remove_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     name :: xattr:name()
 }).
 
 -record(list_xattr, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
+}).
+
+-record(get_parent, {
 }).
 
 -record(acl, {
@@ -43,78 +38,63 @@
 }).
 
 -record(get_acl, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_acl, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     acl :: #acl{}
 }).
 
 -record(remove_acl, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(get_transfer_encoding, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_transfer_encoding, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     value :: binary()
 }).
 
 -record(get_cdmi_completion_status, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_cdmi_completion_status, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     value :: binary()
 }).
 
 -record(get_mimetype, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
 }).
 
 -record(set_mimetype, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     value :: binary()
 }).
 
 -record(get_file_path, {
-    uuid :: fslogic_worker:file_guid()
 }).
 
 -record(fsync, {
-    uuid :: fslogic_worker:file_guid()
 }).
 
 -record(get_file_distribution, {
-    uuid :: fslogic_worker:file_guid()
 }).
 
 -record(replicate_file, {
-    uuid :: fslogic_worker:file_guid(),
     provider_id :: oneprovider:id(),
     block :: #file_block{} | undefined
 }).
 
 -record(get_metadata, {
-    uuid :: file_meta:uuid(),
     type :: custom_metadata:type(),
     names = [] :: custom_metadata:names()
 }).
 
 -record(set_metadata, {
-    uuid :: file_meta:uuid(),
     metadata :: custom_metadata:metadata(),
     names = [] :: custom_metadata:names()
 }).
 
 -type provider_request() ::
-    #get_parent{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-    #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
+    #get_xattr{} | #set_xattr{} | #remove_xattr{} | #list_xattr{} |
+    #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
     #get_transfer_encoding{} | #set_transfer_encoding{} |
     #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
     #get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
@@ -161,6 +141,7 @@
     #metadata{}.
 
 -record(provider_request, {
+    context_guid :: fslogic_worker:file_guid(),
     provider_request :: provider_request()
 }).
 

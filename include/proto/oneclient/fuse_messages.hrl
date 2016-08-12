@@ -24,83 +24,81 @@
 }).
 
 -record(get_file_attr, {
-    entry :: fslogic_worker:ext_file()
 }).
 
 -record(get_file_children, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     offset :: file_meta:offset(),
     size :: file_meta:size()
 }).
 
 -record(create_dir, {
     name :: file_meta:name(),
-    parent_uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     mode :: file_meta:mode()
 }).
 
 -record(delete_file, {
-    uuid :: file_meta:uuid(),
     silent = false :: boolean()
 }).
 
 -record(update_times, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     atime :: file_meta:time(),
     mtime :: file_meta:time(),
     ctime :: file_meta:time()
 }).
 
 -record(change_mode, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     mode :: file_meta:mode()
 }).
 
 -record(rename, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     target_path :: file_meta:path()
 }).
 
 -record(get_new_file_location, {
     name :: file_meta:name(),
-    parent_uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     flags :: atom(),
     mode = 8#644 :: file_meta:posix_permissions()
 }).
 
 -record(get_file_location, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     flags :: fslogic_worker:open_flags()
 }).
 
--record(unlink, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
-}).
-
--record(get_helper_params, {
-    storage_id :: storage:id(),
-    force_proxy_io = false :: boolean()
-}).
-
--record(truncate, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    size :: non_neg_integer()
-}).
-
 -record(release, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     handle_id :: binary()
 }).
 
+-record(truncate, {
+    size :: non_neg_integer()
+}).
+
 -record(synchronize_block, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     block :: #file_block{},
     prefetch = false :: boolean()
 }).
 
 -record(synchronize_block_and_compute_checksum, {
-    uuid :: file_meta:uuid(),
     block :: #file_block{}
+}).
+
+-type file_request() ::
+    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
+    #update_times{} | #change_mode{} | #rename{} | #get_new_file_location{} |
+    #get_file_location{} | #release{} | #truncate{} | #synchronize_block{} |
+    #synchronize_block_and_compute_checksum{}.
+
+-record(file_request, {
+    context_guid :: fslogic_worker:file_guid(),
+    file_request :: file_request()
+}).
+
+-record(resolve_guid, {
+    path :: file_meta:path()
+}).
+
+-record(get_helper_params, {
+    storage_id :: storage:id(),
+    force_proxy_io = false :: boolean()
 }).
 
 -record(create_storage_test_file, {
@@ -116,12 +114,12 @@
 }).
 
 -type fuse_request() ::
-    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
-    #update_times{} | #change_mode{} | #rename{} | #release{} | #truncate{} |
-    #get_helper_params{} | #get_new_file_location{} | #get_file_location{} |
-    #synchronize_block{} | #create_storage_test_file{} |
-    #verify_storage_test_file{} | #synchronize_block_and_compute_checksum{}.
+    #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
+    #verify_storage_test_file{} | #file_request{}.
 
+-record(fuse_request, {
+    fuse_request :: fuse_request()
+}).
 
 -record(file_children, {
     child_links :: [#child_link{}]
@@ -154,12 +152,8 @@
 }).
 
 -type fuse_response() ::
-    #file_attr{} | #file_children{} | #helper_params{} | #file_location{} |
+    #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{}.
-
--record(fuse_request, {
-    fuse_request :: fuse_request()
-}).
 
 -record(fuse_response, {
     status :: #status{},

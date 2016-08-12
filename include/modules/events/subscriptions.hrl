@@ -24,10 +24,26 @@
     event_stream :: event_stream:definition()
 }).
 
-%% definition of an subscription cancellation
-%% id - ID of a subscription to be cancelled
--record(subscription_cancellation, {
-    id :: subscription:id()
+%% definition of a subscription for read operations in the file system
+%% counter_threshold - maximal number of aggregated events before emission
+%% time_threshold    - maximal delay in milliseconds between successive events
+%%                     emissions
+%% size_threshold    - maximal number of read bytes before emission
+-record(read_subscription, {
+    counter_threshold :: non_neg_integer(),
+    time_threshold :: non_neg_integer(),
+    size_threshold :: non_neg_integer()
+}).
+
+%% definition of a subscription for write operations in the file system
+%% counter_threshold - maximal number of aggregated events before emission
+%% time_threshold    - maximal delay in milliseconds between successive events
+%%                     emissions
+%% size_threshold    - maximal number of written bytes before emission
+-record(write_subscription, {
+    counter_threshold :: non_neg_integer(),
+    time_threshold :: non_neg_integer(),
+    size_threshold :: non_neg_integer()
 }).
 
 %% definition of a subscription for file attributes changes
@@ -50,28 +66,6 @@
     file_uuid :: file_meta:uuid(),
     counter_threshold :: non_neg_integer(),
     time_threshold :: non_neg_integer()
-}).
-
-%% definition of a subscription for read operations in the file system
-%% counter_threshold - maximal number of aggregated events before emission
-%% time_threshold    - maximal delay in milliseconds between successive events
-%%                     emissions
-%% size_threshold    - maximal number of read bytes before emission
--record(read_subscription, {
-    counter_threshold :: non_neg_integer(),
-    time_threshold :: non_neg_integer(),
-    size_threshold :: non_neg_integer()
-}).
-
-%% definition of a subscription for write operations in the file system
-%% counter_threshold - maximal number of aggregated events before emission
-%% time_threshold    - maximal delay in milliseconds between successive events
-%%                     emissions
-%% size_threshold    - maximal number of written bytes before emission
--record(write_subscription, {
-    counter_threshold :: non_neg_integer(),
-    time_threshold :: non_neg_integer(),
-    size_threshold :: non_neg_integer()
 }).
 
 %% definition of a subscription for permission changes
@@ -103,6 +97,12 @@
 -record(file_accessed_subscription, {
     counter_threshold :: non_neg_integer(),
     time_threshold :: non_neg_integer()
+}).
+
+%% definition of an subscription cancellation
+%% id - ID of a subscription to be cancelled
+-record(subscription_cancellation, {
+    id :: subscription:id()
 }).
 
 -endif.

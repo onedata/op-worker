@@ -67,8 +67,8 @@ event_manager_should_update_session_on_terminate(Config) ->
     ), 10).
 
 event_manager_should_start_event_streams_on_init(_) ->
-    ?assertReceivedMatch({start_event_stream, #subscription{id = 1}}, ?TIMEOUT),
-    ?assertReceivedMatch({start_event_stream, #subscription{id = 2}}, ?TIMEOUT).
+    ?assertReceivedMatch({start_event_stream, #subscription{object = test_subscription, id = 1}}, ?TIMEOUT),
+    ?assertReceivedMatch({start_event_stream, #subscription{object = test_subscription, id = 2}}, ?TIMEOUT).
 
 event_manager_should_register_event_stream(Config) ->
     EvtMan = ?config(event_manager, Config),
@@ -91,8 +91,8 @@ event_manager_should_forward_events_to_event_streams(Config) ->
 
 event_manager_should_start_event_stream_on_subscription(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, #subscription{id = 1}),
-    ?assertReceivedMatch({start_event_stream, #subscription{id = 1}}, ?TIMEOUT).
+    gen_server:cast(EvtMan, #subscription{object = test_subscription, id = 1}),
+    ?assertReceivedMatch({start_event_stream, #subscription{object = test_subscription, id = 1}}, ?TIMEOUT).
 
 event_manager_should_terminate_event_stream_on_subscription_cancellation(Config) ->
     EvtMan = ?config(event_manager, Config),
@@ -249,8 +249,8 @@ mock_event_stream_sup(Worker) ->
 -spec mock_subscription(Worker :: node()) -> ok.
 mock_subscription(Worker) ->
     mock_subscription(Worker, [
-        #document{key = 1, value = #subscription{id = 1}},
-        #document{key = 2, value = #subscription{id = 2}}
+        #document{key = 1, value = #subscription{object = test_subscription, id = 1}},
+        #document{key = 2, value = #subscription{object = test_subscription, id = 2}}
     ]).
 
 %%--------------------------------------------------------------------

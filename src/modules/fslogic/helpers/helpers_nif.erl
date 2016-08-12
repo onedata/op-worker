@@ -66,7 +66,7 @@ new_helper_ctx(_HelperObj) ->
 %% @doc Sets FS UID / FS GID in given helper context.
 %% @end
 %%--------------------------------------------------------------------
--spec set_user_ctx(HelperCTX :: resource_handle(), UserCTX :: helpers:user_ctx_map()) -> ok.
+-spec set_user_ctx(HelperCTX :: resource_handle(), UserCTX :: helpers_user:ctx_map()) -> ok.
 set_user_ctx(_HelperCTX, _UserCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
@@ -75,7 +75,7 @@ set_user_ctx(_HelperCTX, _UserCTX) ->
 %% @doc Gets current FS UID / FS GID from given helper context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_ctx(HelperCTX :: resource_handle()) -> {ok, UserCTX :: helpers:user_ctx_map()}.
+-spec get_user_ctx(HelperCTX :: resource_handle()) -> {ok, UserCTX :: helpers_user:ctx_map()}.
 get_user_ctx(_HelperCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 

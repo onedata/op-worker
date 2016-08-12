@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Module with default in-provider user mapping.
+%%% @doc
+%%% Module with default in-provider user mapping.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_provider).
@@ -27,27 +28,28 @@
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+-spec new_user_ctx(HelperInit :: helpers:init(), SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers_user:ctx().
 new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_ceph_user_ctx(SessionId, SpaceUUID);
+    get_or_create_user(ceph_user, SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_posix_user_ctx(SessionId, SpaceUUID);
+    get_or_create_user(posix_user, SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_s3_user_ctx(SessionId, SpaceUUID);
+    get_or_create_user(s3_user, SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?SWIFT_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_swift_user_ctx(SessionId, SpaceUUID).
+    get_or_create_user(swift_user, SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
-%% @doc Returns posix user ctx for file attrs
+%% @doc
+%% Returns posix user ctx for file attrs
 %% @end
 %%--------------------------------------------------------------------
 -spec get_posix_user_ctx(StorageType :: helpers:name(),
     SessionIdOrIdentity :: session:id() | session:identity(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
 get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
-    new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID).
+    get_or_create_user(posix_user, SessionIdOrIdentity, SpaceUUID).
 
 %%%===================================================================
 %%% Internal functions
@@ -55,117 +57,52 @@ get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new user's storage context for Ceph storage helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
+%% Returns user ctx. If user ctx is missing is created.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_user_ctx(SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_ceph_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
-        space_storage:get(SpaceId),
-
-    case luma_utils:get_ceph_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #ceph_user_ctx{
-                user_name = ceph_user:name(Credentials),
-                user_key = ceph_user:key(Credentials)
-            };
-        undefined ->
-            {ok, #ceph_user_ctx{user_name = UserName, user_key = UserKey} =
-                Credentials} = create_ceph_user(UserId, StorageId),
-            ceph_user:add(UserId, StorageId, UserName, UserKey),
-            Credentials
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for Amazon S3 storage helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_s3_user_ctx(SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_s3_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
-        space_storage:get(SpaceId),
-
-    case luma_utils:get_s3_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #s3_user_ctx{
-                access_key = s3_user:access_key(Credentials),
-                secret_key = s3_user:secret_key(Credentials)
-            };
-        undefined ->
-            {ok, #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey} =
-                Credentials} = create_s3_user(UserId, StorageId),
-            s3_user:add(UserId, StorageId, AccessKey, SecretKey),
-            Credentials
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for Swift storage helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_swift_user_ctx(SessionId :: session:id(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_swift_user_ctx(_SessionId, SpaceUUID) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
-        space_storage:get(SpaceId),
-    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
-        storage:get(StorageId),
+-spec get_or_create_user(UserModel :: helpers_user:model(),
+    SessionIdOrIdentity :: session:id() | session:identity(),
+    SpaceUUID :: file_meta:uuid()) -> UserCtx :: helpers_user:ctx().
+get_or_create_user(posix_user, SessionIdOrIdentity, SpaceUUID) ->
+    UserId = luma_utils:get_user_id(SessionIdOrIdentity),
+    {ok, #document{value = #file_meta{name = SpaceName}}} =
+        file_meta:get({uuid, SpaceUUID}),
+    UID = luma_utils:gen_storage_uid(UserId),
+    GID = luma_utils:gen_storage_gid(SpaceName, SpaceUUID),
+    #posix_user_ctx{uid = UID, gid = GID};
+get_or_create_user(swift_user, _SessionIdOrIdentity, SpaceUUID) ->
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
+    Args = luma_utils:get_helper_args(StorageId),
 
     #swift_user_ctx{
         user_name = maps:get(<<"user_name">>, Args),
         password = maps:get(<<"password">>, Args)
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for all posix-compilant helpers.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_posix_user_ctx(SessionIdOrIdentity :: session:id() | session:identity(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
+    };
+get_or_create_user(UserModel, SessionIdOrIdentity, SpaceUUID) ->
     UserId = luma_utils:get_user_id(SessionIdOrIdentity),
-    {ok, #document{value = #file_meta{name = SpaceName}}} =
-        file_meta:get({uuid, SpaceUUID}),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
 
-    UID = luma_utils:gen_storage_uid(UserId),
-    GID = luma_utils:gen_storage_gid(SpaceName, SpaceUUID),
-
-    #posix_user_ctx{uid = UID, gid = GID}.
-
+    case UserModel:get_ctx(UserId, StorageId) of
+        undefined ->
+            {ok, UserCtx} = create_user(UserModel, UserId, StorageId),
+            UserModel:add(UserId, StorageId, UserCtx),
+            UserCtx;
+        UserCtx -> UserCtx
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates Ceph user credentials.
+%% Creates user.
 %% @end
 %%--------------------------------------------------------------------
--spec create_ceph_user(UserId :: binary(), StorageId :: storage:id()) ->
-    {ok, #ceph_user_ctx{}}.
-create_ceph_user(?ROOT_USER_ID, StorageId) ->
-    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
-        storage:get(StorageId),
+-spec create_user(UserModel :: helpers_user:model(), UserId :: binary(),
+    StorageId :: storage:id()) -> {ok, UserCtx :: helpers_user:ctx()}.
+create_user(ceph_user, ?ROOT_USER_ID, StorageId) ->
+    Args = luma_utils:get_helper_args(StorageId),
     {ok, #ceph_user_ctx{user_name = maps:get(<<"user_name">>, Args),
         user_key = maps:get(<<"user_key">>, Args)}};
-create_ceph_user(UserId, StorageId) ->
-    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
-        storage:get(StorageId),
+create_user(ceph_user, UserId, StorageId) ->
+    Args = luma_utils:get_helper_args(StorageId),
 
     {ok, {UserName, UserKey}} = luma_nif:create_ceph_user(UserId,
         maps:get(<<"mon_host">>, Args),
@@ -175,25 +112,13 @@ create_ceph_user(UserId, StorageId) ->
         maps:get(<<"user_key">>, Args)
     ),
 
-    {ok, #ceph_user_ctx{user_name = UserName, user_key = UserKey}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates S3 user credentials.
-%% @end
-%%--------------------------------------------------------------------
--spec create_s3_user(UserId :: binary(), StorageId :: storage:id()) ->
-    {ok, #s3_user_ctx{}}.
-create_s3_user(?ROOT_USER_ID, StorageId) ->
-    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
-        storage:get(StorageId),
+    {ok, #ceph_user_ctx{user_name = UserName, user_key = UserKey}};
+create_user(s3_user, ?ROOT_USER_ID, StorageId) ->
+    Args = luma_utils:get_helper_args(StorageId),
     {ok, #s3_user_ctx{access_key = maps:get(<<"access_key">>, Args),
         secret_key = maps:get(<<"secret_key">>, Args)}};
-create_s3_user(UserId, StorageId) ->
-    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
-        storage:get(StorageId),
-
+create_user(s3_user, UserId, StorageId) ->
+    Args = luma_utils:get_helper_args(StorageId),
     AdminAccessKey = maps:get(<<"access_key">>, Args),
     AdminSecretKey = maps:get(<<"secret_key">>, Args),
     BucketName = maps:get(<<"bucket_name">>, Args),
