@@ -387,11 +387,10 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}
     fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{storage_id = SID, file_uuid = FileGUID}}) ->
-    fuse_config_manager:create_storage_test_file(Ctx, SID, fslogic_uuid:file_guid_to_uuid(FileGUID));
-handle_fuse_request(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
-    file_id = FileId, file_content = FileContent}}) ->
-    fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
+handle_fuse_request(#fslogic_ctx{session_id = SessId}, #fuse_request{fuse_request = #create_storage_test_file{} = Req}) ->
+    fuse_config_manager:create_storage_test_file(SessId, Req);
+handle_fuse_request(#fslogic_ctx{session_id = SessId}, #fuse_request{fuse_request = #verify_storage_test_file{} = Req}) ->
+    fuse_config_manager:verify_storage_test_file(SessId, Req);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}) ->
     handle_fuse_request(Ctx, FileRequest);
 
