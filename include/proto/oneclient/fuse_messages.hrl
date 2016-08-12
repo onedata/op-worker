@@ -57,11 +57,13 @@
 -record(get_new_file_location, {
     name :: file_meta:name(),
     flags :: atom(),
-    mode = 8#644 :: file_meta:posix_permissions()
+    mode = 8#644 :: file_meta:posix_permissions(),
+    create_handle = true :: boolean()
 }).
 
 -record(get_file_location, {
-    flags :: fslogic_worker:open_flags()
+    flags :: fslogic_worker:open_flags(),
+    create_handle = true :: boolean()
 }).
 
 -record(release, {

@@ -141,8 +141,8 @@ fslogic_new_file_test(Config) ->
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name2">>),
 
-    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #get_new_file_location{name = <<"test">>}),
-    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #get_new_file_location{name = <<"test">>}),
+    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #get_new_file_location{name = <<"test">>, create_handle = false}),
+    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #get_new_file_location{name = <<"test">>, create_handle = false}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp11),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp21),
