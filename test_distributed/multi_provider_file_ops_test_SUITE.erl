@@ -276,8 +276,8 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             CountChilden = fun() ->
                 LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 200),
                 ?assertMatch({ok, _}, LSAns),
-                {ok, ListerDirs} = LSAns,
-                length(ListerDirs)
+                {ok, ListedDirs} = LSAns,
+                length(ListedDirs)
             end,
             ?match(DSize, CountChilden(), Attempts),
 
