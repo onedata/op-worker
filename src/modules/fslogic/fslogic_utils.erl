@@ -27,15 +27,22 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Create random sequence consisting of lowercase ASCII letters.
+%% @doc
+%% Create random sequence consisting of lowercase ASCII letters.
+%% @end
 %%--------------------------------------------------------------------
--spec random_ascii_lowercase_sequence(Length :: integer()) -> list().
+-spec random_ascii_lowercase_sequence(Length :: integer()) -> binary().
 random_ascii_lowercase_sequence(Length) ->
-    lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
+    random:seed(erlang:phash2([node()]), erlang:monotonic_time(), erlang:unique_integer()),
+    lists:foldl(fun(_, Acc) ->
+        <<Acc/binary, (random:uniform(26) + 96)>>
+    end, <<>>, lists:seq(1, Length)).
 
 
 %%--------------------------------------------------------------------
-%% @doc Returns parent of given file.
+%% @doc
+%% Returns parent of given file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_parent(fslogic_worker:file()) -> fslogic_worker:file() | no_return().
 get_parent({path, Path}) ->

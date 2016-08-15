@@ -448,6 +448,7 @@ start() ->
     meck:expect(fslogic_spaces, get_space, 2, {ok, #document{key = ?SPACE_ID}}),
 
     meck:expect(lfm_utils, call_fslogic, 4, ok),
+    meck:expect(lfm_utils, call_fslogic, 5, ok),
 
     meck:expect(fslogic_uuid, to_file_guid, 1, <<"FileGuid">>),
 

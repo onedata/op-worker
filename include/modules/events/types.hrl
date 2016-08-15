@@ -49,12 +49,6 @@
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
-%% definition of an event associated with an update operation in the file system
-%% object - wrapped structure that has been modified
--record(update_event, {
-    object :: event:update_object()
-}).
-
 %% definition of an event associated with a write operation in the file system
 %% file_uuid - UUID of a file associated with the write operation
 %% file_size - size of a file after the write operation
@@ -65,6 +59,12 @@
     file_size :: file_meta:size(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
+}).
+
+%% definition of an event associated with an update operation in the file system
+%% object - wrapped structure that has been modified
+-record(update_event, {
+    object :: event:update_object()
 }).
 
 %% definition of an event triggered when file permission gets changed
@@ -100,6 +100,47 @@
     file_uuid :: file_meta:uuid(),
     open_count :: non_neg_integer(),
     release_count :: non_neg_integer()
+}).
+
+%% definition of event triggered when storage usage is changed
+%% space_id        - ID of space
+%% user_id         - ID of user
+%% size_difference - size difference of storage usage in bytes since last update
+-record(storage_used_updated, {
+    space_id :: datastore:id(),
+    user_id :: datastore:id(),
+    size_difference :: integer()
+}).
+
+%% definition of event triggered when space info is changed
+-record(space_info_updated, {
+    space_id :: datastore:id()
+}).
+
+%% definition of event with read/write statistics
+%% space_id           - ID of space
+%% user_id            - ID of user
+%% data_access_read   - number of read bytes
+%% data_access_write  - number of write bytes
+%% block_access_write - number of read blocks
+%% block_access_read  - number of write blocks
+-record(file_operations_statistics, {
+    space_id :: datastore:id(),
+    user_id :: datastore:id(),
+    data_access_read = 0 :: non_neg_integer() ,
+    data_access_write = 0 :: non_neg_integer(),
+    block_access_read = 0 :: non_neg_integer(),
+    block_access_write = 0 :: non_neg_integer()
+}).
+
+%% definition of event with rtransfer statistics
+%% space_id    - ID of space
+%% user_id     - ID of user
+%% transfer_in - data replicated to provider in bytes
+-record(rtransfer_statistics, {
+    space_id :: datastore:id(),
+    user_id :: datastore:id(),
+    transfer_in = 0 :: non_neg_integer()
 }).
 
 -endif.
