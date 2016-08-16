@@ -199,6 +199,7 @@ ls_with_stats_test_base(Config) ->
         LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
         ?assertMatch({ok, _}, LSAns),
         {ok, ListedDirs} = LSAns,
+        ?assertEqual(DirsNumPerProc*ProcNum, length(ListedDirs)),
         ListedDirs
     end),
 
