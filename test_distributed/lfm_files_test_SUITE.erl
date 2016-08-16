@@ -87,8 +87,8 @@ ls_with_stats_test(Config) ->
         {success_rate, ?SUCCESS_RATE},
         {parameters, [
             [{name, proc_num}, {value, 1}, {description, "Number of threads used during the test."}],
-            [{name, dir_level}, {value, 10}, {description, "Level of test directory."}],
-            [{name, dirs_num_per_proc}, {value, 10}, {description, "Number of dirs tested by single thread."}]
+            [{name, dir_level}, {value, 100}, {description, "Level of test directory."}],
+            [{name, dirs_num_per_proc}, {value, 100}, {description, "Number of dirs tested by single thread."}]
         ]},
         {description, "Tests performance of ls with gettin stats operation"},
         {config, [{name, low_level_single_thread_small_dir},

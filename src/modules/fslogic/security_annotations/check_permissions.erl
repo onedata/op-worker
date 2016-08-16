@@ -66,7 +66,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
                             _ ->
                                 Doc
                         end,
-                permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ?EACCES),
+                permissions_cache:cache_permission({AccessType, User#document.key, DocID}, ?EACCES),
                 throw(?EACCES)
         end
     end, ExpandedAccessDefinitions),
@@ -78,7 +78,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
                     _ ->
                         Doc
                 end,
-        permissions_cache:cache_permission({AccessType, DocID, User#document.key}, ok)
+        permissions_cache:cache_permission({AccessType, User#document.key, DocID}, ok)
     end, ExpandedAccessDefinitions),
     Args;
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_uuid = FileUUID} = Handle | RestOfArgs] = Args) ->
