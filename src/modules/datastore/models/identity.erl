@@ -135,6 +135,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec fetch(identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(OtpCert = #'OTPCertificate'{}) ->
+    % !!!! jaki to ma sens?
     case identity:get(OtpCert) of
         {ok, Doc = #document{value = Iden}} ->
             identity:save(#document{key = OtpCert, value = Iden}),
@@ -146,7 +147,10 @@ fetch(Auth) ->
         {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
         {ok, #document{key = Id}} = onedata_user:get_or_fetch(Auth, UserId),
         NewDoc = #document{key = Auth, value = #identity{user_id = Id}},
-        {ok, _} = identity:save(NewDoc),
+        case identity:create(NewDoc) of
+            {ok, _} -> ok;
+            {error, already_exists} -> ok
+        end,
         {ok, NewDoc}
     catch
         _:Reason ->
