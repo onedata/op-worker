@@ -33,11 +33,11 @@
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
-    helpers:user_ctx().
-new_user_ctx(StorageType, SessionId, SpaceUUID) ->
+-spec new_user_ctx(HelperInit :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+    helpers_user:ctx().
+new_user_ctx(HelperInit, SessionId, SpaceUUID) ->
     LumaType = luma_type(),
-    LumaType:new_user_ctx(StorageType, SessionId, SpaceUUID).
+    LumaType:new_user_ctx(HelperInit, SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
