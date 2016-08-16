@@ -4,6 +4,33 @@
 CHANGELOG
 ---------
 
+### 3.0.0-RC2
+
+* VFS-2336 Update LUMA API to swagger version
+* VFS-2303 Add metadata-id endpoint.
+* VFS-2303 Add filters for getting metadata.
+* VFS-2303 Add query-index rest endpoint.
+* VFS-2303 Adjust query_view function to handle any view option.
+* VFS-2303 Add /index and /index/:id endpoints to rest API.
+* Fix reactive file displaying in GUI during file upload
+* VFS-2269 Enable Symmetric Multiprocessing
+* VFS-2303 Store all user indexes in one file.
+* VFS-2303 Adjust metadata changes stream to the new metadata organization.
+* VFS-2303 Add custom_metadatada model to sync via dbsync.
+* VFS-2303 Add index model.
+* VFS-2303 Add validation of metadata type.
+* VFS-2303 Add filtering by spaceID to views.
+* VFS-2303 Add view tests.
+* VFS-2303 Add better error handling for custom metadata.
+* VFS-2340 Repair bug in storage file manager
+* VFS-2303 Add support for rdf metadata.
+* VFS-2303 Move xattrs to custom_metadata document.
+* VFS-2340 Update file consistency management
+* VFS-2340 Add file consistency test
+* VFS-2329 Include data requested for sync in prefetching range.
+* VFS-2361 Turn off HSTS by default, allow configuration via app.config
+
+
 ### 3.0.0-RC1
 
 * VFS-2316 Update etls.
