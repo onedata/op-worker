@@ -109,7 +109,7 @@ ls_with_stats_test(Config) ->
             {parameters, [
                 [{name, proc_num}, {value, 10}],
                 [{name, dir_level}, {value, 1}],
-                [{name, dirs_num_per_proc}, {value, 100}]
+                [{name, dirs_num_per_proc}, {value, 10}]
             ]},
             {description, ""}
         ]},
@@ -117,7 +117,7 @@ ls_with_stats_test(Config) ->
             {parameters, [
                 [{name, proc_num}, {value, 100}],
                 [{name, dir_level}, {value, 1}],
-                [{name, dirs_num_per_proc}, {value, 100}]
+                [{name, dirs_num_per_proc}, {value, 1}]
             ]},
             {description, ""}
         ]},
@@ -139,7 +139,7 @@ ls_with_stats_test(Config) ->
             {parameters, [
                 [{name, proc_num}, {value, 10}],
                 [{name, dir_level}, {value, 100}],
-                [{name, dirs_num_per_proc}, {value, 100}]
+                [{name, dirs_num_per_proc}, {value, 10}]
             ]},
             {description, ""}
         ]},
@@ -147,7 +147,7 @@ ls_with_stats_test(Config) ->
             {parameters, [
                 [{name, proc_num}, {value, 100}],
                 [{name, dir_level}, {value, 100}],
-                [{name, dirs_num_per_proc}, {value, 100}]
+                [{name, dirs_num_per_proc}, {value, 1}]
             ]},
             {description, ""}
         ]}
