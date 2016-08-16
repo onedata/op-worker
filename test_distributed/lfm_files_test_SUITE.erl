@@ -221,6 +221,7 @@ ls_with_stats_test_base(Config) ->
                             {[[D] | Acc], 1}
                     end
                 end, {[[]], 0}, LSDirs),
+
                 lists:foreach(fun(ProcDirs) ->
                     spawn(fun() ->
                         Fun(ProcDirs),
@@ -718,4 +719,4 @@ check_run_parallel_ans(Num) ->
             timeout
     end,
     ?assertEqual(ok, RStatus),
-    check_run_parallel_ans(Num).
+    check_run_parallel_ans(Num - 1).
