@@ -201,6 +201,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             - ProxyNodesWritten*NodesOfWriteProvider,
             SyncNodes*SyncNodes + ProxyNodesWritten*NodesOfWriteProvider},
         ?match(ToMatch, AssertLocations(), Attempts),
+        ?match(ToMatch, AssertLocations(), Attempts),
 
         LocToAns = Verify(fun(W) ->
             StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
@@ -487,9 +488,10 @@ get_locations(W, #links{link_map = Map, children = Children}) ->
 get_locations_from_map(Map) ->
     maps:fold(fun(_, V, Acc) ->
         case V of
-            {ID, file_location} ->
+            {_Version, [{ID, file_location, _}]} ->
                 [ID | Acc];
-            _ ->
+            _D ->
+                ct:print("dasd ~p", [_D]),
                 Acc
         end
     end, [], Map).
