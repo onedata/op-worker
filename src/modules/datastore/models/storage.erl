@@ -28,9 +28,12 @@
 
 -export_type([id/0, name/0]).
 
+%% API
+-export([id/1, name/1, helpers/1, get_by_name/1]).
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4, list/0, get_by_name/1, id/1]).
+    'after'/5, before/4, list/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -66,7 +69,7 @@ update(Key, Diff) ->
 create(#storage{} = S) ->
     create(#document{value = S});
 create(#document{value = #storage{name = Name}} = Document) ->
-    datastore:run_synchronized(?MODEL_NAME, ?STORAGE_LOCK_ID, fun() ->
+    datastore:run_transaction(?MODEL_NAME, ?STORAGE_LOCK_ID, fun() ->
         case datastore:fetch_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, Name) of
             {ok, _} ->
                 {error, aleady_exists};
@@ -155,15 +158,9 @@ list() ->
             [Doc | AccIn]
         end, []).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns storage document by storage name.
-%% @end
-%%--------------------------------------------------------------------
--spec get_by_name(Name :: name()) -> {ok, datastore:document()} | datastore:get_error().
-get_by_name(Name) ->
-    {ok, Docs} = list(),
-    get_by_name(Name, Docs).
+%%%===================================================================
+%%% API functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -173,6 +170,38 @@ get_by_name(Name) ->
 -spec id(Doc :: #document{}) -> StorageId :: id().
 id(#document{key = StorageId, value = #storage{}}) ->
     StorageId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage name.
+%% @end
+%%--------------------------------------------------------------------
+-spec name(Storage :: #document{} | #storage{}) -> Name :: name().
+name(#document{value = #storage{} = Storage}) ->
+    name(Storage);
+name(#storage{name = Name}) ->
+    Name.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage helpers.
+%% @end
+%%--------------------------------------------------------------------
+-spec helpers(Storage :: #document{} | #storage{}) -> Helpers :: [helpers:init()].
+helpers(#document{value = #storage{} = Storage}) ->
+    helpers(Storage);
+helpers(#storage{helpers = Helpers}) ->
+    Helpers.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage document by storage name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_by_name(Name :: name()) -> {ok, datastore:document()} | datastore:get_error().
+get_by_name(Name) ->
+    {ok, Docs} = list(),
+    get_by_name(Name, Docs).
 
 %%%===================================================================
 %%% Internal functions

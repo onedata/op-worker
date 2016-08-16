@@ -84,7 +84,15 @@ init(Ref, Socket, Transport, _Opts) ->
     Certificate = get_cert(Socket),
 
     PeerType = case provider_auth_manager:is_provider(Certificate) of
-        true -> provider_incoming;
+        true ->
+            MyProviderId = oneprovider:get_provider_id(),
+            case provider_auth_manager:get_provider_id(Certificate) of
+                MyProviderId ->
+                    ?warning("Connection loop detected. Shutting down the connection."),
+                    erlang:error(connection_loop_detected);
+                _ ->
+                    provider_incoming
+            end;
         false -> fuse_client
     end,
 
@@ -110,6 +118,7 @@ init(Ref, Socket, Transport, _Opts) ->
 init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [{certfile, oz_plugin:get_cert_path()}, {keyfile, oz_plugin:get_key_path()}],
     ?info("Connecting to ~p ~p ~p", [Hostname, Port, TLSSettings]),
+    % TODO - Often (first?) connection crashes with {error,'No such file or directory'}
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
@@ -378,15 +387,39 @@ handle_server_message(State = #state{session_id = SessId, certificate = _Cert}, 
 handle_handshake(State = #state{certificate = Cert, socket = Sock,
     transport = Transp}, Msg) ->
     try fuse_auth_manager:handle_handshake(Msg, Cert) of
-        {ok, Response = #server_message{message_body =
-        #handshake_response{session_id = NewSessId}}} ->
-            send_server_message(Sock, Transp, Response),
-            {noreply, State#state{session_id = NewSessId}, ?TIMEOUT}
+        {ok, SessId} ->
+            send_server_message(Sock, Transp, #server_message{
+                message_body = #handshake_response{status = 'OK'}
+            }),
+            {noreply, State#state{session_id = SessId}, ?TIMEOUT}
     catch
         _:Error ->
-            ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),
+            report_handshake_error(Sock, Transp, Error),
             {stop, Error, State}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends a server message with the handshake error details.
+%% @end
+%%--------------------------------------------------------------------
+-spec report_handshake_error(Sock :: etls:socket(), Transp :: module(), Error :: term()) ->
+    ok.
+report_handshake_error(Sock, Transp, {badmatch, {error, Error}}) ->
+    report_handshake_error(Sock, Transp, Error);
+report_handshake_error(Sock, Transp, {Code, Error, _Description}) when is_integer(Code) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = translator:translate_handshake_error(Error)
+        }
+    });
+report_handshake_error(Sock, Transp, _) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = 'INTERNAL_SERVER_ERROR'
+        }
+    }).
 
 %%--------------------------------------------------------------------
 %% @private

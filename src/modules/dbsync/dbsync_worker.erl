@@ -422,6 +422,7 @@ queue_calculate_until(NewUntil, Queue) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{since = Since, until = Until, changes = Changes} = Batch0) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch0]),
+    ?info("Pre-Apply changes from ~p ~p: ~p:~p", [FromProvider, SpaceId, Since, Until]),
 
     %% Both providers have to support this space
     ok = dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId),
@@ -474,13 +475,20 @@ apply_changes(SpaceId,
     try
         ModelConfig = ModelName:model_init(),
 
-        %todo add cache manipulation functions and activate GLOBALLY_CACHED levels of datastore for file_meta and file_location
         MainDocKey = case Value of
             #links{} ->
-                Value#links.doc_key;
-            _ -> Key
+                % TODO - work only on local tree (after refactoring of link_utils)
+                MDK = Value#links.doc_key,
+                file_meta:set_link_context_for_space(SpaceId),
+                lists:foreach(fun(LName) ->
+                    ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
+                end, maps:keys(Value#links.link_map)),
+                MDK;
+             _ ->
+                 ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
+                 Key
         end,
-        datastore:run_synchronized(ModelName, MainDocKey, fun() ->
+        datastore:run_transaction(ModelName, MainDocKey, fun() ->
             case Value of
                 #links{} ->
                     OldLinks = case couchdb_datastore_driver:get(ModelConfig, Key) of
@@ -497,6 +505,16 @@ apply_changes(SpaceId,
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
             end
         end),
+
+        case Value of
+            #links{} ->
+                % TODO - work only on local tree (after refactoring of link_utils)
+                lists:foreach(fun(LName) ->
+                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
+                end, maps:keys(Value#links.link_map));
+            _ ->
+                ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
+        end,
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
@@ -580,7 +598,7 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
         DBSyncPid ->
             DoUpdate();
         _ ->
-            datastore:run_synchronized(dbsync_state, term_to_binary(Key), DoUpdate)
+            datastore:run_transaction(dbsync_state, term_to_binary(Key), DoUpdate)
     end.
 
 
@@ -929,7 +947,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
                 true ->
                     consume_batches(ProviderId, SpaceId, NewCurrentUntil, NewBranchSince, NewBranchUntil);
                 _ ->
-                    ?info("Missing changes ~p:~p for provider ~p", [Stashed, NewBranchSince, ProviderId]),
+                    ?info("Missing changes ~p:~p for provider ~p, space ~p", [Stashed, NewBranchSince, ProviderId, SpaceId]),
                     do_request_changes(ProviderId, Stashed, NewBranchSince)
             end;
         _ ->

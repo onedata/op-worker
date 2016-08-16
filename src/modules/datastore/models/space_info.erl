@@ -106,7 +106,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(space_info_bucket, [{space_info, create}, {space_info, save},
-        {space_info, delete}, {space_info, create_or_update}], ?DISK_ONLY_LEVEL).
+        {space_info, create_or_update}, {space_info, update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,14 +116,14 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(space_info, create, _, _, {ok, SpaceId}) ->
-    monitoring_action(start, SpaceId);
-'after'(space_info, create_or_update, _, _, {ok, SpaceId}) ->
-    monitoring_action(start, SpaceId);
-'after'(space_info, save, _, _, {ok, SpaceId}) ->
-    monitoring_action(start, SpaceId);
-'after'(space_info, delete, _, _, SpaceId) ->
-    monitoring_action(stop, SpaceId);
+'after'(space_info, create, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    emit_monitoring_event(SpaceId);
+'after'(space_info, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    emit_monitoring_event(SpaceId);
+'after'(space_info, save, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    emit_monitoring_event(SpaceId);
+'after'(space_info, update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    emit_monitoring_event(SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -262,6 +262,7 @@ fetch(Auth, SpaceId) ->
         name = Name,
         providers = ProviderIds
     }},
+    % TODO - what if new doc appear with subscription in parallel? resolve such conflict
     {ok, _} = save(Doc),
 
     {ok, Doc}.
@@ -269,12 +270,17 @@ fetch(Auth, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts or stops monitoring for given user id.
+%% Sends event informing about space_info update if provider supports space.
 %% @end
 %%--------------------------------------------------------------------
--spec monitoring_action(start | stop, datastore:id()) -> no_return().
-monitoring_action(Action, SpaceId) ->
-    MonitoringId = #monitoring_id{main_subject_type = space, main_subject_id = SpaceId},
-    lists:foreach(fun(MetricType) ->
-        worker_proxy:cast(monitoring_worker, {Action, MonitoringId#monitoring_id{metric_type = MetricType}})
-    end, [storage_used, storage_quota, connected_users, data_access, block_access]).
+-spec emit_monitoring_event(datastore:id()) -> no_return().
+emit_monitoring_event(SpaceId) ->
+    case space_info:get(SpaceId) of
+        {ok, #document{value = #space_info{providers = Providers}}} ->
+            case lists:member(oneprovider:get_provider_id(), Providers) of
+                true ->
+                    monitoring_event:emit_space_info_updated(SpaceId);
+                _ -> ok
+            end;
+        _ -> ok
+    end.

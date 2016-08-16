@@ -39,10 +39,11 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    rename/2, setup_onedata_user/2]).
--export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
+    get_parent_uuid/1, get_parent_uuid/2, rename/2, setup_onedata_user/2]).
+-export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
--export([fix_parent_links/2, fix_parent_links/1]).
+-export([fix_parent_links/2, fix_parent_links/1, set_link_context/1, set_link_context_for_space/1,
+    exists_local_link_doc/1, get_child/2]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 
 -type uuid() :: datastore:key().
@@ -141,14 +142,14 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                     FileDoc0#document{value = FM1}
             end,
         false = is_snapshot(FileName),
-        datastore:run_synchronized(?MODEL_NAME, ParentUUID,
+        critical_section:run([?MODEL_NAME, ParentUUID],
             fun() ->
                 case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                     {error, {not_found, _}} ->
                         case create(FileDoc) of
                             {ok, UUID} ->
                                 SavedDoc = FileDoc#document{key = UUID},
-                                datastore:run_synchronized(?MODEL_NAME, UUID, fun() ->
+                                datastore:run_transaction(?MODEL_NAME, UUID, fun() ->
                                     set_link_context(Scope),
                                     ok = datastore:set_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
                                     ok = datastore:set_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
@@ -283,22 +284,40 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Checks if local link doc exists for key/
+%% @end
+%%--------------------------------------------------------------------
+-spec exists_local_link_doc(uuid()) -> datastore:exists_return().
+exists_local_link_doc(Key) ->
+    ?RESPONSE(datastore:exists_link_doc(?LINK_STORE_LEVEL, Key, ?MODULE, oneprovider:get_provider_id())).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns document of child.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child(datastore:document() | {uuid, uuid()}, name()) ->
+    {ok, datastore:normalized_link_target()} | datastore:link_error() | datastore:generic_error().
+get_child({uuid, Uuid}, Name) ->
+    case get({uuid, Uuid}) of
+        {ok, #document{} = Doc} ->
+            get_child(Doc, Name);
+        Error ->
+            Error
+    end;
+get_child(Doc, Name) ->
+    file_meta:set_link_context(Doc),
+    datastore:fetch_link(?LINK_STORE_LEVEL, Doc, Name).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback model_init/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ScopeFun1 =
-        fun() ->
-            erlang:get(mother_scope)
-        end,
-    ScopeFun2 =
-        fun() ->
-            erlang:get(other_scopes)
-        end,
-
     ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
-        ?DISK_ONLY_LEVEL, ?DISK_ONLY_LEVEL, true, false, ScopeFun1, ScopeFun2, true). % todo fix links and use GLOBALLY_CACHED
+        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -309,13 +328,13 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, _, _, {ok, UUID}) ->
+'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, save, _, _, {ok, UUID}) ->
+'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, update, _, _, {ok, UUID}) ->
+'after'(onedata_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
+'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -456,6 +475,41 @@ get_parent(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns file's parent uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent_uuid(Entry :: entry()) -> {ok, datastore:key()} | datastore:get_error().
+get_parent_uuid(Entry) ->
+    ?run(begin
+        case get(Entry) of
+            {ok, #document{key = ?ROOT_DIR_UUID}} = RootResp ->
+                {ok, ?ROOT_DIR_UUID};
+            {ok, #document{key = Key} = Doc} ->
+                set_link_context(Doc),
+                {ok, {ParentKey, ?MODEL_NAME}} =
+                    datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+                {ok, ParentKey}
+        end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's parent uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent_uuid(file_meta:uuid(), space_info:id()) -> {ok, datastore:key()} | datastore:get_error().
+get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
+    ?ROOT_DIR_UUID;
+get_parent_uuid(FileUuid, SpaceId) ->
+    ?run(begin
+        set_link_context_for_space(SpaceId),
+        {ok, {ParentKey, ?MODEL_NAME}} =
+            datastore:fetch_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, parent),
+        {ok, ParentKey}
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns all file's ancestors' uuids.
 %% @end
 %%--------------------------------------------------------------------
@@ -574,7 +628,7 @@ get_scope(Entry) ->
 -spec setup_onedata_user(oz_endpoint:auth(), UserId :: onedata_user:id()) -> ok.
 setup_onedata_user(_Client, UserId) ->
     ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
-    datastore:run_synchronized(onedata_user, UserId, fun() ->
+    critical_section:run([onedata_user, UserId], fun() ->
         {ok, #document{value = #onedata_user{spaces = Spaces}}} =
             onedata_user:get(UserId),
 
@@ -702,6 +756,31 @@ get_guid_from_phantom_file(OldUUID) ->
         get(fslogic_uuid:uuid_to_phantom_uuid(OldUUID)),
     {ok, NewGuid}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets link's scopes for links connected with given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_link_context_for_space(SpaceId :: datastore:key()) -> ok.
+set_link_context_for_space(SpaceId) ->
+    MyProvID = oneprovider:get_provider_id(),
+    erlang:put(mother_scope, MyProvID),
+    OtherScopes = lists:delete(MyProvID, dbsync_utils:get_providers_for_space(SpaceId)),
+    erlang:put(other_scopes, OtherScopes),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets default link's scopes.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_link_context_default() -> ok.
+set_link_context_default() ->
+    MyProvID = oneprovider:get_provider_id(),
+    erlang:put(mother_scope, MyProvID),
+    erlang:put(other_scopes, []),
+    ok.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -716,7 +795,7 @@ get_guid_from_phantom_file(OldUUID) ->
     ok | datastore:generic_error().
 rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-        datastore:run_synchronized(?MODEL_NAME, ParentUUID, fun() ->
+        critical_section:run([?MODEL_NAME, ParentUUID], fun() ->
             {ok, FileUUID} = update(Subject, #{name => NewName}),
             ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
         end)
@@ -735,8 +814,8 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
                 %% Sort keys to avoid deadlock with rename from target to source
                 [Key1, Key2] = lists:sort([OldParentUUID, NewParentUUID]),
 
-                datastore:run_synchronized(?MODEL_NAME, Key1, fun() ->
-                    datastore:run_synchronized(?MODEL_NAME, Key2, fun() ->
+                critical_section:run([?MODEL_NAME, Key1], fun() ->
+                    critical_section:run([?MODEL_NAME, Key2], fun() ->
                         {ok, #document{key = NewScopeUUID} = NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName, scope => NewScopeUUID}),
                         set_link_context(NewScope),
@@ -968,7 +1047,12 @@ is_snapshot(FileName0) ->
     end.
 
 
--spec location_ref(oneprovider:id()) -> binary().
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates location reference (that is used to name link) using provider ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec location_ref(ProviderID :: oneprovider:id()) -> LocationReference :: binary().
 location_ref(ProviderId) ->
     <<?LOCATION_PREFIX, ProviderId/binary>>.
 

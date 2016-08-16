@@ -17,19 +17,24 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, proxy_test1/1, proxy_test2/1
+    db_sync_test/1, proxy_test1/1, proxy_test2/1, file_consistency_test/1, file_consistency_test_base/4
 ]).
 -export([synchronization_test_base/6]).
 
+% for file consistency testing
+-export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4]).
+
 all() ->
     ?ALL([
-        proxy_test1, proxy_test2, db_sync_test
+        proxy_test1, proxy_test2, db_sync_test, file_consistency_test
     ]).
 
 -define(match(Expect, Expr, Attempts),
@@ -41,13 +46,16 @@ all() ->
     end
 ).
 
+-define(rpc(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
+-define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
 db_sync_test(Config) ->
     % TODO change timeout after VFS-2197
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 150, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 10, 10, 100).
 %%synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
 
 proxy_test1(Config) ->
@@ -61,6 +69,9 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
 synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider},
     Attempts, DirsNum, FilesNum) ->
+
+%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider}, Attempts, DirsNum, FilesNum}]),
+
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfWriteProvider,
     Workers = ?config(op_worker_nodes, Config),
     Worker1 = lists:foldl(fun(W, Acc) ->
@@ -165,14 +176,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         VerifyLocation = fun() ->
             Verify(fun(W) ->
                 lists:map(fun(ProvID) ->
-                    case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                        {error, {not_found, _}} ->
-                            0;
-                        GetAns ->
-                            ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                            {ok, #document{value = Links}} = GetAns,
-                            verify_locations(W, Links)
-                    end
+                    verify_locations(W, FileUUID, ProvID)
                 end, ProvIDs)
             end)
         end,
@@ -210,14 +214,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
             {W, lists:flatten(lists:foldl(fun(ProvID, Acc) ->
-                case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                    {error, {not_found, _}} ->
-                        Acc;
-                    GetAns ->
-                        ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                        {ok, #document{value = Links}} = GetAns,
-                        [get_locations(W, Links) | Acc]
-                end
+                [get_locations(W, FileUUID, ProvID) | Acc]
             end, [], ProvIDs))}
         end),
         {File, FileUUID, LocToAns}
@@ -226,12 +223,14 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     VerifyDel = fun({F,  FileUUID, Locations}) ->
         Verify(fun(W) ->
 %%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
-            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
+%%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
+            % TODO - match to chosen error (check perms may also result in ENOENT)
+            ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
             %,
 %%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
 %%            lists:foreach(fun(ProvID) ->
-%%                ?match({error, {not_found, _}},
-%%                    rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]), Attempts)
+%%                ?match(#{},
+%%                    get_links(W, FileUUID, ProvID), Attempts)
 %%            end, ProvIDs),
 %%            lists:foreach(fun(Location) ->
 %%                ?match({error, {not_found, _}},
@@ -288,16 +287,10 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             {ok, #file_attr{uuid = FileGUID}} = StatAns,
             FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
 
-            lists:map(fun(ProvID) ->
-                case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                    {error, {not_found, _}} ->
-                        0;
-                    GetAns ->
-                        ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                        {ok, #document{value = Links}} = GetAns,
-                        count_links(W, Links)
-                end
-            end, ProvIDs)
+            TmpAns = lists:map(fun(ProvID) ->
+                count_links(W, FileUUID, ProvID)
+            end, ProvIDs),
+            TmpAns
         end),
         Flattened = lists:flatten(VerAns),
 %%        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
@@ -418,6 +411,372 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     ok.
 
+file_consistency_test(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    {Worker1, Worker2} = lists:foldl(fun(W, {Acc1, Acc2}) ->
+        NAcc1 = case is_atom(Acc1) of
+            true ->
+                Acc1;
+            _ ->
+                case string:str(atom_to_list(W), "p1") of
+                    0 -> Acc1;
+                    _ -> W
+                end
+        end,
+        NAcc2 = case is_atom(Acc2) of
+            true ->
+                Acc2;
+            _ ->
+                case string:str(atom_to_list(W), "p2") of
+                    0 -> Acc2;
+                    _ -> W
+                end
+        end,
+        {NAcc1, NAcc2}
+    end, {[], []}, Workers),
+
+    file_consistency_test_base(Config, Worker1, Worker2, Worker1).
+
+file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
+    timer:sleep(10000), % TODO - connection must appear after mock setup
+    Attempts = 15,
+    User = <<"user1">>,
+
+    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    A1 = ?rpc(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
+    ?assertMatch({ok, _}, A1),
+    {ok, SpaceDoc} = A1,
+    SpaceKey = SpaceDoc#document.key,
+%%    ct:print("Space key ~p", [SpaceKey]),
+
+    DoTest = fun(TaskList) ->
+%%        ct:print("Do test"),
+
+        GenerateDoc = fun(Type) ->
+            Name = generator:gen_name(),
+            Uuid = datastore_utils:gen_uuid(),
+            Doc = #document{key = Uuid, value =
+            #file_meta{
+                name = Name,
+                type = Type,
+                mode = 8#775,
+                uid = User,
+                scope = SpaceKey
+                }
+            },
+%%            ct:print("Doc ~p ~p", [Uuid, Name]),
+            {Doc, Name}
+        end,
+
+        {Doc1, Name1} = GenerateDoc(?DIRECTORY_TYPE),
+        {Doc2, Name2} = GenerateDoc(?DIRECTORY_TYPE),
+        {Doc3, Name3} = GenerateDoc(?REGULAR_FILE_TYPE),
+        Loc3ID = datastore_utils:gen_uuid(),
+        {Doc4, Name4} = GenerateDoc(?REGULAR_FILE_TYPE),
+        Loc4ID = datastore_utils:gen_uuid(),
+
+        D1Path = <<SpaceName/binary, "/",  Name1/binary>>,
+        D2Path = <<D1Path/binary, "/",  Name2/binary>>,
+        D3Path = <<D2Path/binary, "/",  Name3/binary>>,
+        D4Path = <<D2Path/binary, "/",  Name4/binary>>,
+
+        Doc1Args = [Doc1, SpaceDoc, non, D1Path],
+        Doc2Args = [Doc2, Doc1, non, D2Path],
+        Doc3Args = [Doc3, Doc2, Loc3ID, D3Path],
+        Doc4Args = [Doc4, Doc2, Loc4ID, D4Path],
+
+        DocsList = [{1, Doc1Args}, {2, Doc2Args}, {3, Doc3Args}, {4, Doc4Args}],
+        DocsKeys = [Doc1#document.key, Doc2#document.key, Doc3#document.key, Doc4#document.key],
+
+        % to allow adding location and link before document
+        test_utils:mock_expect([Worker1], file_meta, get_scope,
+            fun(Arg) ->
+                case lists:member(Arg, DocsKeys) of
+                    true ->
+                        {ok, SpaceDoc};
+                    _ ->
+                        erlang:apply(meck_util:original_name(file_meta), get_scope, [Arg])
+                end
+            end),
+
+        lists:foreach(fun(
+            {sleep, Sek}) ->
+                timer:sleep(timer:seconds(Sek));
+            ({Fun, DocNum}) ->
+                ?assertEqual(ok, ?rpcTest(Worker1, Fun, proplists:get_value(DocNum, DocsList)));
+            ({Fun, DocNum, W}) ->
+                ?assertEqual(ok, ?rpcTest(W, Fun, proplists:get_value(DocNum, DocsList)))
+        end, TaskList),
+
+        ?match({ok, #file_attr{}},
+            lfm_proxy:stat(Worker2, SessId(Worker2), {path, D3Path}), Attempts),
+        OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, D3Path}, rdwr),
+        ?assertMatch({ok, _}, OpenAns),
+        {ok, Handle} = OpenAns,
+        ?match({ok, <<"abc">>}, lfm_proxy:read(Worker2, Handle, 0, 10), Attempts),
+        ?assertMatch(ok, lfm_proxy:close(Worker2, Handle))
+    end,
+
+    {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
+    SleepTime = round(CacheDelay / 1000 + 5),
+
+    T1 = [
+        {create_doc, 1},
+        {sleep, SleepTime},
+        {set_parent_link, 1},
+        {sleep, SleepTime},
+        {set_link_to_parent, 1},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {sleep, SleepTime},
+        {set_parent_link, 2},
+        {sleep, SleepTime},
+        {set_link_to_parent, 2},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T1),
+
+    T2 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T2),
+
+    T3 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2}
+    ],
+    DoTest(T3),
+
+    T4 = [
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {sleep, SleepTime},
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1}
+    ],
+    DoTest(T4),
+
+    T5 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T5),
+
+    T6 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T6),
+
+    T7 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {create_location, 3}
+    ],
+    DoTest(T7),
+
+    T8 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_doc, 3}
+    ],
+    DoTest(T8),
+
+    T9 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3}
+    ],
+    DoTest(T9),
+
+    T10 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {create_location, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3}
+    ],
+    DoTest(T10),
+
+    T11 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_location, 3}
+    ],
+    DoTest(T11),
+
+    T12 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {sleep, SleepTime},
+        {create_doc, 3}
+    ],
+    DoTest(T12),
+
+    T13 = [
+        {set_link_to_location, 3},
+        {sleep, SleepTime},
+        {create_location, 3},
+        {sleep, SleepTime},
+        {set_link_to_parent, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {sleep, SleepTime},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {set_parent_link, 2},
+        {sleep, SleepTime},
+        {set_link_to_parent, 2},
+        {sleep, SleepTime},
+        {create_doc, 2},
+        {sleep, SleepTime},
+        {set_parent_link, 1},
+        {sleep, SleepTime},
+        {set_link_to_parent, 1},
+        {sleep, SleepTime},
+        {create_doc, 1}
+    ],
+    DoTest(T13),
+
+    T14 = [
+        {create_doc, 1},
+        {set_parent_link, 1},
+        {set_link_to_parent, 1},
+        {create_doc, 2},
+        {set_parent_link, 2},
+        {set_link_to_parent, 2},
+        {create_doc, 3},
+        {sleep, SleepTime},
+        {create_doc, 4, Worker3},
+        {set_parent_link, 4, Worker3},
+        {set_link_to_parent, 4, Worker3},
+        {create_location, 4, Worker3},
+        {set_link_to_location, 4, Worker3},
+        {sleep, SleepTime},
+        {set_parent_link, 3},
+        {set_link_to_parent, 3},
+        {create_location, 3},
+        {set_link_to_location, 3}
+    ],
+    DoTest(T14),
+
+    ok.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -439,7 +798,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
     initializer:unload_quota_mocks(Config),
@@ -450,21 +809,47 @@ end_per_testcase(_, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-count_links(W, #links{link_map = Map, children = Children}) ->
-    case maps:size(Children) of
-        0 ->
-            maps:size(Map);
-        _ ->
-            maps:fold(fun(_, Uuid, Acc) ->
-                GetAns = rpc:call(W, file_meta, get, [Uuid]),
-                ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                {ok, #document{value = Links}} = GetAns,
-                Acc + count_links(W, Links)
-            end, maps:size(Map), Children)
+get_links(W, FileUUID, ProvID) ->
+    LinkDocKey = links_utils:links_doc_key(FileUUID, ProvID),
+    TmpAns = get_links(W, FileUUID, LinkDocKey, couchdb_datastore_driver, #{}),
+    get_links(W, FileUUID, LinkDocKey, mnesia_cache_driver, TmpAns).
+
+get_links(W, FileUUID, LinkDocKey, Driver, Ans) ->
+    ModelConfig = file_meta:model_init(),
+    case rpc:call(W, Driver, get_link_doc, [ModelConfig, LinkDocKey]) of
+        {error, {not_found, _}} ->
+            Ans;
+        GetAns ->
+            ?assertMatch({ok, #document{value = #links{}}}, GetAns),
+            {ok, #document{value = Links}} = GetAns,
+            TmpAns = maps:fold(fun(K, V, Acc) ->
+                case Driver of
+                    mnesia_cache_driver ->
+                        maps:put(K, V, Acc);
+                    _ ->
+                        case rpc:call(W, cache_controller, check_fetch, [{FileUUID, K, cache_controller_link_key}, file_meta, ?GLOBAL_ONLY_LEVEL]) of
+                            ok ->
+                                maps:put(K, V, Acc);
+                            _ ->
+                                Acc
+                        end
+                end
+            end, Ans, Links#links.link_map),
+
+            maps:fold(fun(_, DocKey, Acc) ->
+                case DocKey of
+                    <<"non">> -> Acc;
+                    _ -> get_links(W, FileUUID, DocKey, Driver, Acc)
+                end
+            end, TmpAns, Links#links.children)
     end.
 
-verify_locations(W, Links) ->
-    IDs = get_locations(W, Links),
+count_links(W, FileUUID, ProvID) ->
+    Links = get_links(W, FileUUID, ProvID),
+    maps:size(Links).
+
+verify_locations(W, FileUUID, ProvID) ->
+    IDs = get_locations(W, FileUUID, ProvID),
     lists:foldl(fun(ID, Acc) ->
         case rpc:call(W, file_location, get, [ID]) of
             {ok, _} -> Acc + 1;
@@ -472,18 +857,9 @@ verify_locations(W, Links) ->
         end
     end, 0, IDs).
 
-get_locations(W, #links{link_map = Map, children = Children}) ->
-    case maps:size(Children) of
-        0 ->
-            get_locations_from_map(Map);
-        _ ->
-            maps:fold(fun(_, Uuid, Acc) ->
-                GetAns = rpc:call(W, file_meta, get, [Uuid]),
-                ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                {ok, #document{value = Links}} = GetAns,
-                Acc ++ get_locations(W, Links)
-            end, get_locations_from_map(Map), Children)
-    end.
+get_locations(W, FileUUID, ProvID) ->
+    Links = get_links(W, FileUUID, ProvID),
+    get_locations_from_map(Links).
 
 get_locations_from_map(Map) ->
     maps:fold(fun(_, V, Acc) ->
@@ -495,3 +871,62 @@ get_locations_from_map(Map) ->
                 Acc
         end
     end, [], Map).
+
+create_doc(Doc, _ParentDoc, _LocId, _Path) ->
+    {ok, _} = file_meta:save(Doc),
+    ok.
+
+set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
+    FDoc = Doc#document.value,
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, ParentDoc, {FDoc#file_meta.name, Doc}).
+
+set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, Doc, {parent, ParentDoc}).
+
+create_location(Doc, _ParentDoc, LocId, Path) ->
+    FDoc = Doc#document.value,
+    FileUuid = Doc#document.key,
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
+
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    FileId = file_meta:snapshot_name(Path, FDoc#file_meta.version),
+    Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
+        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
+        space_id = SpaceId},
+
+    MC = file_location:model_init(),
+    LSL = MC#model_config.link_store_level,
+    {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
+
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    LeafLess = fslogic_path:dirname(FileId),
+    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
+    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok -> ok;
+        {error, eexist} ->
+            ok
+    end,
+
+
+    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
+    storage_file_manager:unlink(SFMHandle1),
+    ok = storage_file_manager:create(SFMHandle1, 8#775),
+    {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
+    {ok, 3} = storage_file_manager:write(SFMHandle2, 0, <<"abc">>),
+    storage_file_manager:fsync(SFMHandle2),
+    ok.
+
+set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
+    FileUuid = Doc#document.key,
+    file_meta:set_link_context(ParentDoc),
+    MC = file_meta:model_init(),
+    LSL = MC#model_config.link_store_level,
+    ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
+    ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).
