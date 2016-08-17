@@ -263,7 +263,13 @@ execute_event_handler(#state{subscription_id = SubId, session_id = SessId,
     } = StmDef, ctx = Ctx} = State) ->
     ?debug("Executing event handler on events ~p in event stream for subscription "
     "~p and session ~p", [Evts, SubId, SessId]),
-    Handler(maps:values(Evts), Ctx),
+    try Handler(maps:values(Evts), Ctx)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
+                              [?MODULE, State, Error, Reason]),
+            {noreply, State}
+    end,
     State#state{
         events = #{},
         metadata = get_initial_metadata(StmDef),
