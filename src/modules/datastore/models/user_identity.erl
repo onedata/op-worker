@@ -30,8 +30,8 @@
 -export_type([credentials/0]).
 
 %% todo split this model to:
-%% todo globally cached - #certificate{} -> #identity{},
-%% todo and locally cached - #token{} | #certificate_info{} -> #identity{}
+%% todo globally cached - #certificate{} -> #user_identity{},
+%% todo and locally cached - #token{} | #certificate_info{} -> #user_identity{}
 -type credentials() :: #token_auth{} | #basic_auth{} | #'OTPCertificate'{}.
 
 %%%===================================================================

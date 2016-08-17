@@ -118,7 +118,7 @@ emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
 -spec emit_rtransfer_statistics(fslogic_worker:ctx(), non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 emit_rtransfer_statistics(CTX, TransferIn) ->
-    #fslogic_ctx{session = #session{identity = #identity{user_id = UserId}},
+    #fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}},
         space_id = SpaceId} = CTX,
     emit_rtransfer_statistics(SpaceId, UserId, TransferIn).
 
