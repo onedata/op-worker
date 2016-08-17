@@ -28,7 +28,7 @@
 %% {@link identity_repository_behaviour} callback publish/2.
 %% @end
 %%--------------------------------------------------------------------
--spec publish(identity:id(), identity:public_key()) ->
+-spec publish(identity:id(), identity:encoded_public_key()) ->
     ok | {error, Reason :: term()}.
 publish(ID, PublicKey) ->
     oz_identities:set_public_key(provider, ID, PublicKey).
@@ -39,6 +39,6 @@ publish(ID, PublicKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(identity:id()) ->
-    {ok, identity:public_key()} | {error, Reason :: term()}.
+    {ok, identity:encoded_public_key()} | {error, Reason :: term()}.
 get(ID) ->
     oz_identities:get_public_key(provider, ID).

@@ -187,7 +187,7 @@ read_cert(Worker) ->
     rpc:call(Worker, identity, read_cert, [IdentityCertFile]).
 
 get_id(Worker) ->
-    identity:get_id(read_cert(Worker)).
+    identity_utils:get_id(read_cert(Worker)).
 
 new_self_signed_cert(ID) ->
     TmpDir = utils:mkdtemp(),
@@ -202,6 +202,6 @@ new_self_signed_cert(ID) ->
     os:cmd(["openssl req", " -new ", " -key ", KeyFile, " -out ", CSRFile, " -subj ", "\"/CN=" ++ DomainForCN ++ "\""]),
     os:cmd(["openssl x509", " -req ", " -days ", " 365 ", " -in ", CSRFile, " -signkey ", KeyFile, " -out ", CertFile]),
 
-    Cert = identity:read_cert(CertFile),
+    Cert = identity_utils:read_cert(CertFile),
     utils:rmtempdir(TmpDir),
     Cert.
