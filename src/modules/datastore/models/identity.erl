@@ -134,14 +134,8 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec fetch(identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(OtpCert = #'OTPCertificate'{}) ->
-    % !!!! jaki to ma sens?
-    case identity:get(OtpCert) of
-        {ok, Doc = #document{value = Iden}} ->
-            identity:save(#document{key = OtpCert, value = Iden}),
-            {ok, Doc};
-        Error_ -> Error_
-    end;
+fetch(#'OTPCertificate'{}) ->
+    {error, {not_found, identity}};
 fetch(Auth) ->
     try
         {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
