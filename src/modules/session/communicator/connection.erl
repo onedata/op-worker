@@ -84,7 +84,15 @@ init(Ref, Socket, Transport, _Opts) ->
     Certificate = get_cert(Socket),
 
     PeerType = case provider_auth_manager:is_provider(Certificate) of
-        true -> provider_incoming;
+        true ->
+            MyProviderId = oneprovider:get_provider_id(),
+            case provider_auth_manager:get_provider_id(Certificate) of
+                MyProviderId ->
+                    ?warning("Connection loop detected. Shutting down the connection."),
+                    erlang:error(connection_loop_detected);
+                _ ->
+                    provider_incoming
+            end;
         false -> fuse_client
     end,
 

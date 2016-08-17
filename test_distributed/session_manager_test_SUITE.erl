@@ -19,6 +19,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
+-include_lib("modules/monitoring/rrd_definitions.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -309,6 +310,8 @@ init_per_testcase(Case, Config) when
         reuse_or_create_fuse_session, [SessId1, Iden1, Self])),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_fuse_session, [SessId2, Iden2, Self])),
+    ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
+        remove_session, [?MONITORING_SESSION_ID])),
 
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 

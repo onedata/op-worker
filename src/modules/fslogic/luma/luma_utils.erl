@@ -17,93 +17,12 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
--export([get_user_id/1, get_s3_user/2, get_ceph_user/2, get_posix_user/2,
-    gen_storage_uid/1, gen_storage_gid/2, get_storage_id/1, get_storage_type/1,
-    get_swift_user/2]).
+-export([get_user_id/1, gen_storage_uid/1, gen_storage_gid/2, get_storage_id/1,
+    get_storage_type/1, get_helper_args/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets S3 credentials from datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec get_s3_user(UserId :: binary(), StorageId :: storage:id()) ->
-    {ok, s3_user:credentials()} | undefined.
-get_s3_user(UserId, StorageId) ->
-    case s3_user:get(UserId) of
-        {ok, #document{value = #s3_user{credentials = CredentialsMap}}} ->
-            case maps:find(StorageId, CredentialsMap) of
-                {ok, Credentials} ->
-                    {ok, Credentials};
-                _ ->
-                    undefined
-            end;
-        _ ->
-            undefined
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets Ceph credentials from datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec get_ceph_user(UserId :: binary(), StorageId :: storage:id()) ->
-    {ok, ceph_user:credentials()} | undefined.
-get_ceph_user(UserId, StorageId) ->
-    case ceph_user:get(UserId) of
-        {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} ->
-            case maps:find(StorageId, CredentialsMap) of
-                {ok, Credentials} ->
-                    {ok, Credentials};
-                _ ->
-                    undefined
-            end;
-        _ ->
-            undefined
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets POSIX credentials from datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec get_posix_user(UserId :: binary(), StorageId :: storage:id()) ->
-    {ok, posix_user:credentials()} | undefined.
-get_posix_user(UserId, StorageId) ->
-    case posix_user:get(UserId) of
-        {ok, #document{value = #posix_user{credentials = CredentialsMap}}} ->
-            case maps:find(StorageId, CredentialsMap) of
-                {ok, Credentials} ->
-                    {ok, Credentials};
-                _ ->
-                    undefined
-            end;
-        _ ->
-            undefined
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets Swift credentials from datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec get_swift_user(UserId :: binary(), StorageId :: storage:id()) ->
-    {ok, swift_user:credentials()} | undefined.
-get_swift_user(UserId, StorageId) ->
-    case swift_user:get(UserId) of
-        {ok, #document{value = #swift_user{credentials = CredentialsMap}}} ->
-            case maps:find(StorageId, CredentialsMap) of
-                {ok, Credentials} ->
-                    {ok, Credentials};
-                _ ->
-                    undefined
-            end;
-        _ ->
-            undefined
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,7 +38,8 @@ get_user_id(SessionId) ->
     UserId.
 
 %%--------------------------------------------------------------------
-%% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id, space id, etc)
+%% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id,
+%% space id, etc)
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_storage_uid(ID :: binary()) -> non_neg_integer().
@@ -134,7 +54,8 @@ gen_storage_uid(ID) ->
     LowestUID + UID0 rem HighestUID.
 
 %%--------------------------------------------------------------------
-%% @doc Generates storage GID based on SpaceName or SpaceUUID
+%% @doc
+%% Generates storage GID based on SpaceName or SpaceUUID
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_storage_gid(SpaceName :: file_meta:name(),
@@ -148,17 +69,30 @@ gen_storage_gid(SpaceName, SpaceUUID) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns StorageType for given StorageId
+%% @doc
+%% Returns StorageType for given StorageId
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_type(storage:id()) -> helpers:name().
 get_storage_type(StorageId) ->
     {ok, Doc} = storage:get(StorageId),
-    {ok, #helper_init{name = StorageType}} = fslogic_storage:select_helper(Doc),
-    StorageType.
+    {ok, HelperInit} = fslogic_storage:select_helper(Doc),
+    helpers:name(HelperInit).
 
 %%--------------------------------------------------------------------
-%% @doc Returns StorageId for given SpaceUUID
+%% @doc
+%% Returns helper arguments for given StorageId
+%% @end
+%%--------------------------------------------------------------------
+-spec get_helper_args(storage:id()) -> helpers:args().
+get_helper_args(StorageId) ->
+    {ok, Doc} = storage:get(StorageId),
+    {ok, HelperInit} = fslogic_storage:select_helper(Doc),
+    helpers:args(HelperInit).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns StorageId for given SpaceUUID
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_id(SpaceUUID :: file_meta:uuid()) -> storage:id().
@@ -167,7 +101,3 @@ get_storage_id(SpaceUUID) ->
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
         space_storage:get(SpaceId),
     StorageId.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

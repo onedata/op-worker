@@ -306,6 +306,7 @@ subscribe(Worker) ->
     EmTime :: event_stream:emission_time()) -> {ok, SubId :: subscription:id()}.
 subscribe(Worker, StmDef, Handler, EmRule, EmTime) ->
     ?assertMatch({ok, _}, rpc:call(Worker, event, subscribe, [#subscription{
+        object = test_subscription,
         event_stream = StmDef#event_stream_definition{
             emission_rule = EmRule,
             emission_time = EmTime,
@@ -325,6 +326,7 @@ subscribe(Worker, StmDef, Handler, EmRule, EmTime) ->
     {ok, SubId :: subscription:id()}.
 subscribe(Worker, SessId, StmDef, Handler, EmRule, EmTime) ->
     ?assertMatch({ok, _}, rpc:call(Worker, event, subscribe, [#subscription{
+        object = test_subscription,
         event_stream = StmDef#event_stream_definition{
             emission_rule = EmRule,
             emission_time = EmTime,
