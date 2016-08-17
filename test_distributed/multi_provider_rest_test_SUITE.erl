@@ -317,7 +317,7 @@ metric_get(Config) ->
         provider_id = Prov1ID
     },
 
-    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [MonitoringId, erlang:system_time(seconds)])),
+    ?assertMatch(ok, rpc:call(WorkerP1, monitoring_utils, create, [<<"space3">>, MonitoringId, erlang:system_time(seconds)])),
     {ok, #document{value = State}} = rpc:call(WorkerP1, monitoring_state, get, [MonitoringId]),
     ?assertMatch({ok, _}, rpc:call(WorkerP1, monitoring_state, save,
         [#document{key = MonitoringId#monitoring_id{provider_id = Prov2ID}, value =  State}])),
@@ -674,12 +674,25 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
+init_per_testcase(metric_get, Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(WorkerP1, rrd_utils),
+    test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
+        {ok, <<"{\"test\":\"rrd\"}">>}
+    end),
+    init_per_testcase(all, Config);
+
 init_per_testcase(_, Config) ->
     application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
+
+end_per_testcase(metric_get, Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
+    end_per_testcase(all, Config);
 
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),

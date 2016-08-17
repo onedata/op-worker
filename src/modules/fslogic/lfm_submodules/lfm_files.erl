@@ -216,7 +216,7 @@ open(SessId, FileKey, OpenType) ->
 -spec release(logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
 release(#lfm_handle{file_location = #file_location{handle_id = undefined}}) ->
-    {error, invalid_handle_id};
+    ok;
 release(#lfm_handle{file_guid = FileGUID, fslogic_ctx = CTX,
     file_location = #file_location{handle_id = FSLogicHandle}}) ->
     lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX), file_request,

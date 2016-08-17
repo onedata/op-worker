@@ -15,9 +15,11 @@
 -define(RRDTOOL_POOL_NAME, rrdtool_pool_name).
 -define(RRDTOOL_POOL_TRANSACTION_TIMEOUT, timer:seconds(60)).
 
--define(MONITORING_SESSION_ID, <<"monitoring_session">>).
 -define(MONITORING_SUB_ID, binary:decode_unsigned(
     crypto:hash(md5, <<"monitoring">>)) rem 16#FFFFFFFFFFFF).
+
+-define(RRD_READ_SIZE, 10000000).
+-define(RRD_DIR, <<"rrd">>).
 
 -define(_5_MIN_COUNT_IN_5_MIN, 1).
 -define(_5_MIN_COUNT_IN_1_H, 12).

@@ -302,9 +302,9 @@ metadata(Config) ->
         {<<"value">>, FileContent}, {<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>},
         {<<"metadata">>, [{<<"my_metadata">>, <<"my_value">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}]}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
-    Before = calendar:now_to_datetime(now()),
+    Before = calendar:now_to_datetime(erlang:timestamp()),
     {ok, Code1, _Headers1, Response1} = do_request(Workers, FileName, put, RequestHeaders1, RawRequestBody1),
-    After = calendar:now_to_datetime(now()),
+    After = calendar:now_to_datetime(erlang:timestamp()),
 
     ?assertEqual(201, Code1),
     CdmiResponse1 = json_utils:decode(Response1),

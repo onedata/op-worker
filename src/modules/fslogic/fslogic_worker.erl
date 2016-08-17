@@ -142,6 +142,11 @@ init(_Args) ->
             ok
     end,
 
+    case session_manager:create_root_session() of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
+
     {ok, #{sub_id => WriteSubId}}.
 
 %%--------------------------------------------------------------------
