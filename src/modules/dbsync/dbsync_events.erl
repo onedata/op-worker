@@ -88,7 +88,7 @@ change_replicated_internal(_SpaceId, _Change) ->
     ok.
 links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) ->
     #model_config{link_store_level = LinkStoreLevel} = ModelName:model_init(),
-    datastore:run_synchronized(ModelName, term_to_binary({links, MainDocKey}),
+    datastore:run_transaction(ModelName, term_to_binary({links, MainDocKey}),
         fun() ->
             try
                 MyProvID = oneprovider:get_provider_id(),

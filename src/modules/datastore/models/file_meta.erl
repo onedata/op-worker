@@ -769,18 +769,6 @@ set_link_context_for_space(SpaceId) ->
     erlang:put(other_scopes, OtherScopes),
     ok.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets default link's scopes.
-%% @end
-%%--------------------------------------------------------------------
--spec set_link_context_default() -> ok.
-set_link_context_default() ->
-    MyProvID = oneprovider:get_provider_id(),
-    erlang:put(mother_scope, MyProvID),
-    erlang:put(other_scopes, []),
-    ok.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
