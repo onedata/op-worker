@@ -131,7 +131,7 @@
 %% Model for storing storage information
 -record(storage, {
     name :: storage:name(),
-    helpers :: [#helper_init{}]
+    helpers :: [helpers:init()]
 }).
 
 
@@ -178,12 +178,22 @@
 
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
-    credentials :: #{storage:id() => ceph_user:credentials()}
+    ctx = #{} :: #{storage:id() => ceph_user:ctx()}
+}).
+
+%% Model that maps onedata user to POSIX user
+-record(posix_user, {
+    ctx = #{} :: #{storage:id() => posix_user:ctx()}
 }).
 
 %% Model that maps onedata user to Amazon S3 user
 -record(s3_user, {
-    credentials :: #{storage:id() => s3_user:credentials()}
+    ctx = #{} :: #{storage:id() => s3_user:ctx()}
+}).
+
+%% Model that maps onedata user to Openstack Swift user
+-record(swift_user, {
+    ctx = #{} :: #{storage:id() => swift_user:ctx()}
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -201,11 +211,6 @@
 %% The Key of this document is UserId.
 -record(files_to_chown, {
     file_uuids = [] :: [file_meta:uuid()]
-}).
-
-%% Model that maps onedata user to POSIX user
--record(posix_user, {
-    credentials :: #{storage:id() => posix_user:credentials()}
 }).
 
 %% Model for holding current quota state for spaces
@@ -227,25 +232,14 @@
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
     rrd_file = undefinied :: rrd_utils:rrd_file(),
-    monitoring_interval = 0 :: non_neg_integer(),
-    active = true :: boolean(),
-    state_buffer = #{} :: maps:map()
-}).
-
-%% Model for holding lightweight version of monitoring state
--record(monitoring_init_state, {
-    monitoring_id = #monitoring_id{} :: #monitoring_id{}
+    state_buffer = #{} :: maps:map(),
+    last_update_time :: non_neg_integer()
 }).
 
 %% Model that stores open file
 -record(open_file, {
     is_removed = false :: true | false,
     active_descriptors = #{} :: #{session:id() => non_neg_integer()}
-}).
-
-%% Model that maps onedata user to Openstack Swift user
--record(swift_user, {
-    credentials :: #{storage:id() => swift_user:credentials()}
 }).
 
 %% Model that holds file's custom metadata

@@ -173,7 +173,7 @@ handle_http_upload(Req) ->
         end,
     case InitSession of
         error ->
-            g_ctx:reply(500, [], <<"">>);
+            g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
         ok ->
             try
                 NewReq = multipart(Req, []),
@@ -181,9 +181,9 @@ handle_http_upload(Req) ->
                 g_ctx:reply(200, [], <<"">>)
             catch
                 throw:{missing_param, _} ->
-                    g_ctx:reply(500, [], <<"">>);
+                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
                 throw:stream_file_error ->
-                    g_ctx:reply(500, [], <<"">>);
+                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
                 Type:Message ->
                     ?error_stacktrace("Error while processing file upload "
                     "from user ~p - ~p:~p",
@@ -192,7 +192,7 @@ handle_http_upload(Req) ->
                     % because retries are not stable
 %%                    % Return 204 - resumable will retry the upload
 %%                    g_ctx:reply(204, [], <<"">>)
-                    g_ctx:reply(500, [], <<"">>)
+                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>)
             end
     end,
     g_ctx:finish().

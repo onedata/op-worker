@@ -14,25 +14,22 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/4, name/1, key/1]).
+-export([new_ctx/2, new/3, add_ctx/3, add/3, get_all_ctx/1, get_ctx/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--record(ceph_user_credentials, {
-    user_name :: name(),
-    user_key :: key()
-}).
-
 -type name() :: binary().
 -type key() :: binary().
--type credentials() :: #ceph_user_credentials{}.
+-type ctx() :: #ceph_user_ctx{}.
+-type type() :: #ceph_user{}.
 
--export_type([name/0, key/0, credentials/0]).
+-export_type([name/0, key/0, ctx/0, type/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -129,75 +126,58 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds Ceph storage credentials for onedata user.
+%% Creates Ceph user context.
 %% @end
 %%--------------------------------------------------------------------
--spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserName :: name(),
-    UserKey :: key()) -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
-add(UserId, StorageId, UserName, UserKey) ->
-    case ceph_user:get(UserId) of
-        {ok, #document{value = CephUser} = Doc} ->
-            NewCephUser = add_credentials(CephUser, StorageId, UserName, UserKey),
-            ceph_user:save(Doc#document{value = NewCephUser});
-        {error, {not_found, _}} ->
-            CephUser = new(UserId, StorageId, UserName, UserKey),
-            case create(CephUser) of
-                {ok, CephUserId} -> {ok, CephUserId};
-                {error, already_exists} ->
-                    add(UserId, StorageId, UserName, UserKey);
-                {error, Reason} -> {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns Ceph user name.
-%% @end
-%%--------------------------------------------------------------------
--spec name(Credentials :: #ceph_user_credentials{}) -> UserName :: name().
-name(#ceph_user_credentials{user_name = UserName}) ->
-    UserName.
+-spec new_ctx(Name :: name(), Key :: key()) -> UserCtx :: ctx().
+new_ctx(Name, Key) ->
+    #ceph_user_ctx{user_name = Name, user_key = Key}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns Ceph user key.
+%% Creates Ceph user document.
 %% @end
 %%--------------------------------------------------------------------
--spec key(Credentials :: #ceph_user_credentials{}) -> UserKey :: key().
-key(#ceph_user_credentials{user_key = UserKey}) ->
-    UserKey.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+-spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    UserDoc :: datastore:document().
+new(UserId, StorageId, #ceph_user_ctx{} = UserCtx) ->
+    #document{key = UserId, value = add_ctx(StorageId, UserCtx, #ceph_user{})}.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns Ceph user datastore document.
+%% Adds Ceph storage ctx to onedata user.
 %% @end
 %%--------------------------------------------------------------------
--spec new(UserId :: onedata_user:id(), StorageId :: storage:id(),
-    UserName :: name(), UserKey :: key()) -> Doc :: #document{}.
-new(UserId, StorageId, UserName, UserKey) ->
-    #document{key = UserId, value = #ceph_user{
-        credentials = maps:put(StorageId, #ceph_user_credentials{
-            user_name = UserName,
-            user_key = UserKey
-        }, #{})}
-    }.
+-spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #ceph_user{}) ->
+    User :: #ceph_user{}.
+add_ctx(StorageId, UserCtx, #ceph_user{ctx = Ctx} = User) ->
+    User#ceph_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Adds credentials to existing Ceph user.
+%% Returns all Ceph storage contexts for onedata user.
 %% @end
 %%--------------------------------------------------------------------
--spec add_credentials(CephUser :: #ceph_user{}, StorageId :: storage:id(),
-    UserName :: name(), UserKey :: key()) -> NewCephUser :: #ceph_user{}.
-add_credentials(#ceph_user{credentials = Credentials} = CephUser, StorageId, UserName, UserKey) ->
-    CephUser#ceph_user{credentials = maps:put(StorageId, #ceph_user_credentials{
-        user_name = UserName,
-        user_key = UserKey
-    }, Credentials)}.
+-spec get_all_ctx(User :: #ceph_user{}) -> Ctx :: #{storage:id() => ctx()}.
+get_all_ctx(#ceph_user{ctx = Ctx}) ->
+    Ctx.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
+    UserCtx :: ctx() | undefined.
+get_ctx(UserId, StorageId) ->
+    helpers_user:get_ctx(?MODULE, UserId, StorageId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @end
+%%--------------------------------------------------------------------
+-spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+add(UserId, StorageId, UserCtx) ->
+    helpers_user:add(?MODULE, UserId, StorageId, UserCtx).

@@ -46,7 +46,6 @@ models() -> [
     space_quota,
     monitoring_state,
     open_file,
-    monitoring_init_state,
     swift_user,
     sfm_handle,
     dbsync_batches,

@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([user_root_dir_uuid/1, path_to_uuid/2, uuid_to_path/2,
+-export([root_user_id/0, user_root_dir_uuid/1, path_to_uuid/2, uuid_to_path/2,
     guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2,
     default_space_owner/1]).
 -export([gen_file_uuid/1, gen_file_uuid/0]).
@@ -28,6 +28,14 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns ROOT user ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec root_user_id() -> Id :: binary().
+root_user_id() ->
+    ?ROOT_USER_ID.
 
 %%--------------------------------------------------------------------
 %% @doc
