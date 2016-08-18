@@ -135,7 +135,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec fetch(identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(#'OTPCertificate'{}) ->
-    {error, {not_found, identity}};
+    {error, cannot_fetch};
 fetch(Auth) ->
     try
         {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
