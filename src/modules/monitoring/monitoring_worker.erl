@@ -39,7 +39,7 @@
 init(_Args) ->
     case session_manager:create_monitoring_session(?MONITORING_SESSION_ID) of
         {ok, _} ->
-            EventsSubscription = #subscription{
+            Sub = #subscription{
                 id = ?MONITORING_SUB_ID,
                 object = undefined,
                 event_stream = #event_stream_definition{
@@ -60,10 +60,9 @@ init(_Args) ->
                     emission_time = timer:seconds(?STEP_IN_SECONDS)
                 }
             },
-            case event:subscribe(EventsSubscription) of
+            case event:subscribe(Sub) of
                 {ok, _} -> ok;
-                {error, already_exists} ->
-                    ok
+                {error, already_exists} -> ok
             end;
         {error, already_exists} -> ok
     end,

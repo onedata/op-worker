@@ -31,7 +31,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--type streams() :: #{subscription:id() => pid()}.
+-type streams() :: #{event_stream:id() => pid()}.
+-type subscriptions() :: #{subscription:id() => event_stream:id()}.
 
 %% event manager state:
 %% session_id               - ID of a session associated with this event manager
@@ -44,6 +45,7 @@
     event_manager_sup :: pid(),
     event_stream_sup :: pid(),
     event_streams = #{} :: streams(),
+    subscriptions = #{} :: subscriptions(),
     entry_to_provider_map = #{} :: #{}
 }).
 
@@ -121,7 +123,7 @@ handle_cast(Request, State) ->
     catch
         Error:Reason ->
             ?error_stacktrace("event_manager handler of ~p (state: ~p) failed "
-                              "with ~p:~p", [Request, State, Error, Reason]),
+            "with ~p:~p", [Request, State, Error, Reason]),
             {noreply, State}
     end.
 
@@ -135,15 +137,16 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-do_handle_cast({register_stream, SubId, EvtStm}, #state{event_streams = EvtStms} = State) ->
-    {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}};
+do_handle_cast({register_stream, StmId, EvtStm}, #state{event_streams = EvtStms} = State) ->
+    ?critical("Adding stream ~p -> ~p", [StmId, EvtStm]),
+    {noreply, State#state{event_streams = maps:put(StmId, EvtStm, EvtStms)}};
 
-do_handle_cast({unregister_stream, SubId}, #state{event_streams = EvtStms} = State) ->
-    {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};
+do_handle_cast({unregister_stream, StmId}, #state{event_streams = EvtStms} = State) ->
+    {noreply, State#state{event_streams = maps:remove(StmId, EvtStms)}};
 
-do_handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
-    session_id = SessId} = State) ->
-    case maps:find(SubId, Stms) of
+do_handle_cast({flush_stream, SubId, Notify}, #state{event_streams = EvtStms,
+    session_id = SessId, subscriptions = Subs} = State) ->
+    case get_stream(SubId, Subs, EvtStms) of
         {ok, Stm} ->
             gen_server:cast(Stm, {flush, Notify});
         error ->
@@ -169,12 +172,13 @@ do_handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtSt
     handle_or_reroute(#events{events = [Evt]}, request_to_file_entry_or_provider(Evt), SessId, HandleLocally, ProvMap);
 
 do_handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, notify = NotifyFun} = Evt,
-    #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
+    #state{session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap,
+        subscriptions = Subs} = State) ->
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
             (_, NewProvMap, false) -> %% Request should be handled locally only
-                case maps:find(SubId, EvtStms) of
+                case get_stream(SubId, Subs, EvtStms) of
                     {ok, Stm} ->
                         gen_server:cast(Stm, {flush, NotifyFun});
                     error ->
@@ -188,26 +192,38 @@ do_handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, 
 
     handle_or_reroute(Evt, {provider, ProviderId}, SessId, HandleLocally, ProvMap);
 
-do_handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
-    session_id = SessId, event_streams = EvtStms, entry_to_provider_map = ProvMap} = State) ->
+do_handle_cast(#subscription{id = SubId, event_stream = #event_stream_definition{id = StmId}} = Sub,
+    #state{event_stream_sup = EvtStmSup, session_id = SessId, event_streams = EvtStms,
+        entry_to_provider_map = ProvMap, subscriptions = Subs} = State) ->
     HandleLocally =
         fun(_, NewProvMap, _) ->
             ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
-            {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-            {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:put(SubId, EvtStm, EvtStms)}}
+            NewEvtStms = case maps:find(StmId, EvtStms) of
+                {ok, EvtStm} ->
+                    gen_server:cast(EvtStm, {add_subscription, Sub}),
+                    EvtStms;
+                error ->
+                    {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
+                    ?critical("Adding stream ~p -> ~p", [StmId, EvtStm]),
+                    maps:put(StmId, EvtStm, EvtStms)
+            end,
+            {noreply, State#state{entry_to_provider_map = NewProvMap,
+                event_streams = NewEvtStms, subscriptions = maps:put(SubId, StmId, Subs)}}
         end,
 
     handle_or_reroute(Sub, request_to_file_entry_or_provider(Sub), SessId, HandleLocally, ProvMap);
 
 do_handle_cast(#subscription_cancellation{id = SubId}, #state{
-    event_streams = EvtStms, session_id = SessId} = State) ->
+    event_streams = EvtStms, session_id = SessId, subscriptions = Subs} = State) ->
     ?debug("Removing subscription ~p from session ~p", [SubId, SessId]),
-    case maps:find(SubId, EvtStms) of
-        {ok, EvtStm} -> erlang:exit(EvtStm, shutdown);
-        error -> ?warning("Cannot remove subscription ~p from session ~p: "
-                          "subscription doesn't exist", [SubId, SessId])
+    case get_stream(SubId, Subs, EvtStms) of
+        {ok, EvtStm} ->
+            gen_server:cast(EvtStm, {remove_subscription, SubId});
+        error ->
+            ?warning("Cannot remove subscription ~p from session ~p: "
+            "stream doesn't exist", [SubId, SessId])
     end,
-    {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};
+    {noreply, State#state{subscriptions = maps:remove(SubId, Subs)}};
 
 do_handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -271,6 +287,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Returns event stream for the subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_stream(SubId :: subscription:id(), Subs :: subscriptions(), EvtStms :: streams()) ->
+    {ok, EvtStm :: pid()} | error.
+get_stream(SubId, Subs, EvtStms) ->
+    case maps:find(SubId, Subs) of
+        {ok, StmId} -> maps:find(StmId, EvtStms);
+        error -> error
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------
@@ -282,9 +312,11 @@ start_event_streams(EvtStmSup, SessId) ->
         Object =/= undefined
     end, Docs),
 
-    lists:foldl(fun(#document{key = SubId, value = Sub}, Stms) ->
+    lists:foldl(fun(#document{value = #subscription{event_stream = #event_stream_definition{
+        id = StmId}} = Sub}, Stms) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-        maps:put(SubId, EvtStm, Stms)
+        ?critical("Adding stream ~p -> ~p", [StmId, EvtStm]),
+        maps:put(StmId, EvtStm, Stms)
     end, #{}, FilteredDocs).
 
 %%--------------------------------------------------------------------

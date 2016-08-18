@@ -51,7 +51,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: event() | object()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    emit(Evt, get_event_managers()).
+    emit(Evt, get_event_managers_for_event(Evt)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -62,7 +62,7 @@ emit(Evt) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, Ref}) ->
     ExcludedEvtMans = sets:from_list(get_event_managers(as_list(Ref))),
-    emit(Evt, filter_event_managers(get_event_managers(), ExcludedEvtMans));
+    emit(Evt, filter_event_managers(get_event_managers_for_event(Evt), ExcludedEvtMans));
 
 emit(#event{key = undefined} = Evt, Ref) ->
     emit(set_key(Evt), Ref);
@@ -292,6 +292,24 @@ get_event_managers() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Returns list of event managers that are dedicated for the event.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_managers_for_event(Evt :: event() | object()) -> [EvtMan :: pid()].
+get_event_managers_for_event(#event{key = undefined} = Evt) ->
+    get_event_managers_for_event(set_key(Evt));
+get_event_managers_for_event(#event{} = Evt) ->
+    case file_subscription:get(Evt) of
+        {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
+            get_event_managers(SessIds);
+        _ -> get_event_managers()
+    end;
+get_event_managers_for_event(EvtObject) ->
+    get_event_managers_for_event(#event{object = EvtObject}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Returns event managers that do not appear in excluded set of event managers.
 %% @end
 %%--------------------------------------------------------------------
@@ -326,4 +344,3 @@ as_list(Object) when is_list(Object) ->
     Object;
 as_list(Object) ->
     [Object].
-
