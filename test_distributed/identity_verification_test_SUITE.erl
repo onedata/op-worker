@@ -23,14 +23,14 @@
     verify_fails_on_forged_certs/1,
     verify_succeeds_on_published_certs/1,
     verify_succeeds_on_republished_cert/1,
-    verify_oz_public_key_in_cache_after_registration/1]).
+    certs_should_be_cached_after_successful_publishing/1]).
 
 -define(NORMAL_CASES_NAMES, [
     provider_certs_are_published_on_registration,
     verify_fails_on_forged_certs,
     verify_succeeds_on_published_certs,
     verify_succeeds_on_republished_cert,
-    verify_oz_public_key_in_cache_after_registration
+    certs_should_be_cached_after_successful_publishing
 ]).
 
 -define(PERFORMANCE_CASES_NAMES, [
@@ -70,7 +70,7 @@ verify_fails_on_forged_certs(Config) ->
     register_provider([WorkerP2]),
     ID1 = get_id(WorkerP1),
     ID2 = get_id(WorkerP2),
-    ID3 = <<"some.id">>,
+    ID3 = <<"verify_fails_on_forged_certs">>,
     Cert1 = new_self_signed_cert(ID1),
     Cert2 = new_self_signed_cert(ID2),
     Cert3 = new_self_signed_cert(ID3),
@@ -94,8 +94,8 @@ verify_fails_on_forged_certs(Config) ->
 verify_succeeds_on_published_certs(Config) ->
     %% given
     [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
-    ID1 = <<"some.id">>,
-    ID2 = <<"some.other.id">>,
+    ID1 = <<"1@verify_succeeds_on_published_certs">>,
+    ID2 = <<"2@verify_succeeds_on_published_certs">>,
     PublishedCert = new_self_signed_cert(ID1),
     NonPublishedCert = new_self_signed_cert(ID2),
     ForgedCert = new_self_signed_cert(ID1),
@@ -120,7 +120,7 @@ verify_succeeds_on_published_certs(Config) ->
 verify_succeeds_on_republished_cert(Config) ->
     %% given
     [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
-    ID1 = <<"yet.another.id">>,
+    ID1 = <<"verify_succeeds_on_republished_cert">>,
     Cert = new_self_signed_cert(ID1),
     UpdatedCert = new_self_signed_cert(ID1),
     publish(WorkerP1, Cert),
@@ -136,21 +136,39 @@ verify_succeeds_on_republished_cert(Config) ->
     ?assertMatch(ok, Res1),
     ?assertMatch(ok, Res2).
 
-verify_oz_public_key_in_cache_after_registration(Config) ->
+certs_should_be_cached_after_successful_publishing(Config) ->
     %% given
     [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
-    register_provider([WorkerP1]),
-    register_provider([WorkerP2]),
-    AppmockOzID = <<"onezone.appmock">>,
-    AppmockOzPubKey = <<"appmock-test-pubkey">>,
+    ID1 = <<"1@certs_should_be_cached_after_successful_publishing">>,
+    ID2 = <<"2@certs_should_be_cached_after_successful_publishing">>,
+    ID3 = <<"3@certs_should_be_cached_after_successful_publishing">>,
+    Cert1 = new_self_signed_cert(ID1),
+    Cert2 = new_self_signed_cert(ID2),
+    Cert3 = new_self_signed_cert(ID3),
 
     %% when
-    Res1 = rpc:call(WorkerP1, plugins, apply, [identity_cache, get, [AppmockOzID]]),
-    Res2 = rpc:call(WorkerP1, plugins, apply, [identity_cache, get, [AppmockOzID]]),
+    publish(WorkerP1, Cert1),
+    publish(WorkerP2, Cert2),
+    publish(WorkerP1, Cert3),
 
     %% then
-    ?assertMatch({ok, AppmockOzPubKey}, Res1),
-    ?assertMatch({ok, AppmockOzPubKey}, Res2).
+    Res1 = rpc:call(WorkerP1, plugins, apply, [identity_cache, get, [ID1]]),
+    Res2 = rpc:call(WorkerP1, plugins, apply, [identity_cache, get, [ID2]]),
+    Res3 = rpc:call(WorkerP1, plugins, apply, [identity_cache, get, [ID3]]),
+    Res4 = rpc:call(WorkerP2, plugins, apply, [identity_cache, get, [ID1]]),
+    Res5 = rpc:call(WorkerP2, plugins, apply, [identity_cache, get, [ID2]]),
+    Res6 = rpc:call(WorkerP2, plugins, apply, [identity_cache, get, [ID3]]),
+
+    EncodedPK1 = identity_utils:encode(identity_utils:get_public_key(Cert1)),
+    EncodedPK2 = identity_utils:encode(identity_utils:get_public_key(Cert2)),
+    EncodedPK3 = identity_utils:encode(identity_utils:get_public_key(Cert3)),
+
+    ?assertMatch({ok, EncodedPK1}, Res1),
+    ?assertMatch({error, _}, Res2),
+    ?assertMatch({ok, EncodedPK3}, Res3),
+    ?assertMatch({error, _}, Res4),
+    ?assertMatch({ok, EncodedPK2}, Res5),
+    ?assertMatch({error, _}, Res6).
 
 
 %%%===================================================================
@@ -184,7 +202,7 @@ verify(Worker, Cert) ->
 
 read_cert(Worker) ->
     {ok, IdentityCertFile} = rpc:call(Worker, application, get_env, [?APP_NAME, identity_cert_file]),
-    rpc:call(Worker, identity, read_cert, [IdentityCertFile]).
+    rpc:call(Worker, identity_utils, read_cert, [IdentityCertFile]).
 
 get_id(Worker) ->
     identity_utils:get_id(read_cert(Worker)).
