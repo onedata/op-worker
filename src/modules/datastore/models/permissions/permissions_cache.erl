@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Main model for permissions caching.
+%%% Model used for caching permissions to files (used by check_permissions module).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(permissions_cache).
@@ -23,8 +23,9 @@
     list/0, model_init/0, 'after'/5, before/4]).
 
 %% API
--export([check_permission/1, cache_permission/2, clear_permissions/0]).
+-export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0]).
 
+%% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
 
 %%%===================================================================
@@ -121,7 +122,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(swift_user_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(permissions_cache_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -166,7 +167,7 @@ check_permission(Rule) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks permission in cache.
+%% Saves permission in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_permission(Rule :: term(), Value :: term()) ->
@@ -192,11 +193,11 @@ cache_permission(Rule, Value) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Clears all permissions.
+%% Clears all permissions from cache.
 %% @end
 %%--------------------------------------------------------------------
--spec clear_permissions() -> ok.
-clear_permissions() ->
+-spec invalidate_permissions_cache() -> ok.
+invalidate_permissions_cache() ->
     CurrentModel = case get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;

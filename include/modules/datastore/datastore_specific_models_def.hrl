@@ -267,12 +267,12 @@
 
 %% Model that caches files' permissions
 -record(permissions_cache, {
-    value
+    value = undefined :: term()
 }).
 
 %% Helper model for caching files' permissions
 -record(permissions_cache_helper, {
-    value
+    value = undefined :: term()
 }).
 
 -endif.

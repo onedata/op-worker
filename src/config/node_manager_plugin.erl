@@ -229,12 +229,13 @@ check_node_ip_address() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Clears memory of application.
+%% Clears permissions cache during clearing of memory
+%% (when node_manager sees that usage of memory is too high).
 %% @end
 %%--------------------------------------------------------------------
 -spec clear_memory(HighMemUse :: boolean()) -> ok.
 clear_memory(true) ->
-    permissions_cache:clear_permissions();
+    permissions_cache:invalidate_permissions_cache();
 clear_memory(_) ->
     ok.
 

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper model for permissions caching.
+%%% Helper model used for caching permissions to files (main model is permissions_cache).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(permissions_cache_helper).
@@ -112,7 +112,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(swift_user_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(permissions_cache_helper_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

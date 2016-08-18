@@ -153,6 +153,7 @@ ls_with_stats_test(Config) ->
 %%        ]}
     ]).
 ls_with_stats_test_base(Config) ->
+    % Get test and environment description
     DirLevel = ?config(dir_level, Config),
     ProcNum = ?config(proc_num, Config),
     DirsNumPerProc = ?config(dirs_num_per_proc, Config),
@@ -162,19 +163,24 @@ ls_with_stats_test_base(Config) ->
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Master = self(),
 
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    % Generate names of dirs in test directory tree
     [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
         NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
         [NewDir | Acc]
     end, [<<"/space_name1">>], lists:seq(1,DirLevel)),
     [_ | TreeDirs] = lists:reverse(TreeDirsReversed),
 
-    {CreateTreeTime, _} = check_time(fun() ->
+    % Create dirs tree
+    {CreateTreeTime, _} = measure_execution_time(fun() ->
         lists:foreach(fun(D) ->
             ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D, 8#755))
         end, TreeDirs)
     end),
 
-    {CreateDirsTime, _} = check_time(fun() ->
+    % Create dirs at last level of tree (to be listed)
+    {CreateDirsTime, _} = measure_execution_time(fun() ->
         Fun = fun() ->
             lists:foreach(fun(_) ->
                 D = <<LastTreeDir/binary, "/", (generator:gen_name())/binary>>,
@@ -188,14 +194,15 @@ ls_with_stats_test_base(Config) ->
                 lists:foreach(fun(_) ->
                     spawn(fun() ->
                         Fun(),
-                        Master ! run_parallel_ok
+                        report_success(Master)
                     end)
                 end, lists:seq(1,ProcNum)),
                 check_run_parallel_ans(ProcNum)
         end
     end),
 
-    {LsTime, LSDirs} = check_time(fun() ->
+    % List directory
+    {LsTime, LSDirs} = measure_execution_time(fun() ->
         LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
         ?assertMatch({ok, _}, LSAns),
         {ok, ListedDirs} = LSAns,
@@ -203,7 +210,8 @@ ls_with_stats_test_base(Config) ->
         ListedDirs
     end),
 
-    {StatTime, _} = check_time(fun() ->
+    % Stat listed directories
+    {StatTime, _} = measure_execution_time(fun() ->
         Fun = fun(Dirs) ->
             lists:foreach(fun({D, _}) ->
                 StatAns = lfm_proxy:stat(Worker, SessId1,  {guid, D}),
@@ -235,7 +243,7 @@ ls_with_stats_test_base(Config) ->
 
     LsWithStatTime = LsTime + StatTime,
 
-    Ans = [
+    [
         #parameter{name = create_tree_time, value = CreateTreeTime, unit = "us",
             description = "Time of test tree creation"},
         #parameter{name = create_dirs_time, value = CreateDirsTime, unit = "us",
@@ -246,10 +254,7 @@ ls_with_stats_test_base(Config) ->
             description = "Time of all stat operations"},
         #parameter{name = ls_stat_time, value = LsWithStatTime, unit = "us",
             description = "Total time of ls and all stat operations"}
-    ],
-
-    ct:print("~p", [Ans]),
-    Ans.
+    ].
 
 ls_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -703,7 +708,7 @@ for(From, To, Fun) ->
 for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
 
-check_time(Fun) ->
+measure_execution_time(Fun) ->
     StartTime = os:timestamp(),
     Ans = Fun(),
     Now = os:timestamp(),
@@ -721,3 +726,6 @@ check_run_parallel_ans(Num) ->
     end,
     ?assertEqual(ok, RStatus),
     check_run_parallel_ans(Num - 1).
+
+report_success(Master) ->
+    Master ! run_parallel_ok.
