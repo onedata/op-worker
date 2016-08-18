@@ -113,14 +113,14 @@ ls_with_stats_test(Config) ->
             ]},
             {description, ""}
         ]},
-        {config, [{name, low_level_many_threads_large_dir},
-            {parameters, [
-                [{name, proc_num}, {value, 100}],
-                [{name, dir_level}, {value, 1}],
-                [{name, dirs_num_per_proc}, {value, 1}]
-            ]},
-            {description, ""}
-        ]},
+%%        {config, [{name, low_level_many_threads_large_dir},
+%%            {parameters, [
+%%                [{name, proc_num}, {value, 100}],
+%%                [{name, dir_level}, {value, 1}],
+%%                [{name, dirs_num_per_proc}, {value, 1}]
+%%            ]},
+%%            {description, ""}
+%%        ]},
         {config, [{name, high_level_single_thread_small_dir},
             {parameters, [
                 [{name, dir_level}, {value, 100}],
@@ -142,15 +142,15 @@ ls_with_stats_test(Config) ->
                 [{name, dirs_num_per_proc}, {value, 10}]
             ]},
             {description, ""}
-        ]},
-        {config, [{name, high_level_many_threads_large_dir},
-            {parameters, [
-                [{name, proc_num}, {value, 100}],
-                [{name, dir_level}, {value, 100}],
-                [{name, dirs_num_per_proc}, {value, 1}]
-            ]},
-            {description, ""}
         ]}
+%%        {config, [{name, high_level_many_threads_large_dir},
+%%            {parameters, [
+%%                [{name, proc_num}, {value, 100}],
+%%                [{name, dir_level}, {value, 100}],
+%%                [{name, dirs_num_per_proc}, {value, 1}]
+%%            ]},
+%%            {description, ""}
+%%        ]}
     ]).
 ls_with_stats_test_base(Config) ->
     DirLevel = ?config(dir_level, Config),
