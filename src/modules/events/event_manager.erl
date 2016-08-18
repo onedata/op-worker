@@ -243,9 +243,11 @@ handle_info({'EXIT', EvtManSup, shutdown}, #state{event_manager_sup = EvtManSup}
 
 handle_info(timeout, #state{event_manager_sup = EvtManSup, session_id = SessId} = State) ->
     {ok, EvtStmSup} = event_manager_sup:get_event_stream_sup(EvtManSup),
+    {EvtStms, Subs} = start_event_streams(EvtStmSup, SessId),
     {noreply, State#state{
         event_stream_sup = EvtStmSup,
-        event_streams = start_event_streams(EvtStmSup, SessId)
+        event_streams = EvtStms,
+        subscriptions = Subs
     }};
 
 handle_info(Info, State) ->
@@ -303,18 +305,19 @@ get_stream(SubId, Subs, EvtStms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_event_streams(EvtStmSup :: pid(), SessId :: session:id()) ->
-    Stms :: streams().
+    {Stms :: streams(), Subs :: subscriptions()}.
 start_event_streams(EvtStmSup, SessId) ->
     {ok, Docs} = subscription:list(),
     FilteredDocs = lists:filter(fun(#document{value = #subscription{object = Object}}) ->
         Object =/= undefined
     end, Docs),
 
-    lists:foldl(fun(#document{value = #subscription{event_stream = #event_stream_definition{
-        id = StmId}} = Sub}, Stms) ->
+    lists:foldl(fun(#document{value = #subscription{
+        id = SubId, event_stream = #event_stream_definition{id = StmId}
+    } = Sub}, {EvtStms, Subs}) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-        maps:put(StmId, EvtStm, Stms)
-    end, #{}, FilteredDocs).
+        {maps:put(StmId, EvtStm, EvtStms), maps:put(SubId, StmId, Subs)}
+    end, {#{}, #{}}, FilteredDocs).
 
 %%--------------------------------------------------------------------
 %% @private
