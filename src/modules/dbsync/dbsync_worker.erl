@@ -488,9 +488,13 @@ apply_changes(SpaceId,
                  ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
                  Key
         end,
+        MyProvId = oneprovider:get_provider_id(),
         datastore:run_transaction(ModelName, MainDocKey, fun() ->
             case Value of
-                #links{} ->
+                #links{origin = MyProvId} ->
+                    ok;
+                #links{origin = Origin} = Links ->
+                    ?info("MyId ~p changes from ~p : ~p", [MyProvId, Origin, Links]),
                     OldLinks = case couchdb_datastore_driver:get(ModelConfig, Key) of
                         {ok, #document{value = OldLinks0}} ->
                             OldLinks0;
@@ -499,8 +503,8 @@ apply_changes(SpaceId,
                     end,
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = couchdb_datastore_driver:get(ModelConfig, Key),
-                    {AddedMap, DeletedNames} = links_utils:diff(OldLinks, CurrentLinks),
-                    spawn(fun() -> dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedNames) end);
+                    {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
+                    spawn(fun() -> dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap) end);
                 _ ->
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
             end

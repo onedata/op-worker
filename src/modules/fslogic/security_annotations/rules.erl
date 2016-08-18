@@ -181,17 +181,17 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
     IsAccessable =
         case UserId of
             OwnerId ->
-                ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as owner.", [UserId, ReqBit, FileDoc, Mode]),
+                ?info("Require ~p to have ~.8B mode on file ~p with mode ~.8B as owner.", [UserId, ReqBit, FileDoc, Mode]),
                 ((ReqBit bsl 6) band Mode) =:= (ReqBit bsl 6);
             _ ->
                 {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
                 {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
                 case catch lists:keymember(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), 1, Spaces) of
                     true ->
-                        ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as space member.", [UserId, ReqBit, FileDoc, Mode]),
+                        ?info("Require ~p to have ~.8B mode on file ~p with mode ~.8B as space member.", [UserId, ReqBit, FileDoc, Mode]),
                         ((ReqBit bsl 3) band Mode) =:= (ReqBit bsl 3);
                     _ ->
-                        ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as other (Spaces ~p, scope ~p).", [UserId, ReqBit, FileDoc, Mode, Spaces, ScopeUUID]),
+                        ?info("Require ~p to have ~.8B mode on file ~p with mode ~.8B as other (Spaces ~p, scope ~p).", [UserId, ReqBit, FileDoc, Mode, Spaces, ScopeUUID]),
                         (ReqBit band Mode) =:= ReqBit
                 end
         end,

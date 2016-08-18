@@ -88,21 +88,25 @@ change_replicated_internal(_SpaceId, _Change) ->
     ok.
 links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) ->
     #model_config{link_store_level = LinkStoreLevel} = ModelName:model_init(),
-    datastore:run_transaction(ModelName, term_to_binary({links, MainDocKey}),
+    critical_section:run([?MODULE, term_to_binary({links, MainDocKey})],
         fun() ->
             try
                 MyProvID = oneprovider:get_provider_id(),
                 erlang:put(mother_scope, MyProvID),
                 erlang:put(other_scopes, []),
 
+                ?info("YEY ~p", [{MainDocKey, AddedMap, DeletedMap}]),
+
                 maps:fold(
                     fun(K, V, _AccIn) ->
+                        ?info("Add forigin link ~p", [{MainDocKey, {K, V}}]),
                         ok = datastore:add_links(LinkStoreLevel, MainDocKey, ModelName, [{K, V}])
                     end, [], AddedMap),
 
                 maps:fold(
                     fun(K, V, _AccIn) ->
                         {_, DelTargets} = V,
+                        ?info("Del forigin link ~p", [{MainDocKey, {K, V}}]),
                         lists:foreach(
                             fun({_, _, S}) ->
                                 ok = datastore:delete_links(LinkStoreLevel, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S)])
