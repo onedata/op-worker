@@ -24,6 +24,12 @@
     event_stream :: event_stream:definition()
 }).
 
+%% definition of a subscription concerning file changes
+%% sessions - list of sessions that are interested in notifications about file changes
+-record(file_subscription, {
+    sessions = []
+}).
+
 %% definition of a subscription for read operations in the file system
 %% counter_threshold - maximal number of aggregated events before emission
 %% time_threshold    - maximal delay in milliseconds between successive events
