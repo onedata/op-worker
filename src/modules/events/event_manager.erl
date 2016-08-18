@@ -138,7 +138,6 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 do_handle_cast({register_stream, StmId, EvtStm}, #state{event_streams = EvtStms} = State) ->
-    ?critical("Adding stream ~p -> ~p", [StmId, EvtStm]),
     {noreply, State#state{event_streams = maps:put(StmId, EvtStm, EvtStms)}};
 
 do_handle_cast({unregister_stream, StmId}, #state{event_streams = EvtStms} = State) ->
@@ -197,14 +196,13 @@ do_handle_cast(#subscription{id = SubId, event_stream = #event_stream_definition
         entry_to_provider_map = ProvMap, subscriptions = Subs} = State) ->
     HandleLocally =
         fun(_, NewProvMap, _) ->
-            ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
+            ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
             NewEvtStms = case maps:find(StmId, EvtStms) of
                 {ok, EvtStm} ->
                     gen_server:cast(EvtStm, {add_subscription, Sub}),
                     EvtStms;
                 error ->
                     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-                    ?critical("Adding stream ~p -> ~p", [StmId, EvtStm]),
                     maps:put(StmId, EvtStm, EvtStms)
             end,
             {noreply, State#state{entry_to_provider_map = NewProvMap,
@@ -315,7 +313,6 @@ start_event_streams(EvtStmSup, SessId) ->
     lists:foldl(fun(#document{value = #subscription{event_stream = #event_stream_definition{
         id = StmId}} = Sub}, Stms) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-        ?critical("Adding stream ~p -> ~p", [StmId, EvtStm]),
         maps:put(StmId, EvtStm, Stms)
     end, #{}, FilteredDocs).
 

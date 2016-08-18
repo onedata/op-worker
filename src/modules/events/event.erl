@@ -247,6 +247,8 @@ get_event_manager(Ref) ->
     case session:get_event_manager(Ref) of
         {ok, EvtMan} ->
             {ok, EvtMan};
+        {error, {not_found, missing}} ->
+            {error, {not_found, missing}};
         {error, Reason} ->
             ?warning("Cannot get event manager for session ~p due to: ~p", [Ref, Reason]),
             {error, Reason}
@@ -280,12 +282,11 @@ get_event_managers() ->
             lists:foldl(fun
                 ({ok, EvtMan}, EvtMans) ->
                     [EvtMan | EvtMans];
-                ({error, {not_found, SessId}}, EvtMans) ->
-                    ?warning("Cannot get event manager for session ~p due to: missing", [SessId]),
+                ({error, {not_found, _}}, EvtMans) ->
                     EvtMans
             end, [], Refs);
         {error, Reason} ->
-            ?warning("Cannot get event managers due to: ~p", [Reason]),
+            ?error("Cannot get event managers due to: ~p", [Reason]),
             []
     end.
 

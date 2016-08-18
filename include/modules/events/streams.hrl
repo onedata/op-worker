@@ -102,7 +102,7 @@
         (#event{object = #update_event{object = #file_attr{}}}) -> true;
         (_) -> false
     end,
-    emission_rule = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file location event stream specialization
@@ -112,7 +112,7 @@
         (#event{object = #update_event{object = #file_location{}}}) -> true;
         (_) -> false
     end,
-    emission_rule = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler()
 }).
 
 
@@ -123,7 +123,7 @@
         (#event{object = #permission_changed_event{}}) -> true;
         (_) -> false
     end,
-    emission_rule = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file removal stream specialization
@@ -133,7 +133,7 @@
         (#event{object = #file_removal_event{}}) -> true;
         (_) -> false
     end,
-    emission_rule = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file renamed event stream specialization
@@ -143,7 +143,7 @@
         (#event{object = #file_renamed_event{}}) -> true;
         (_) -> false
     end,
-    emission_rule = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file accessed event stream specialization
@@ -153,7 +153,7 @@
         (#event{object = #file_accessed_event{}}) -> true;
         (_) -> false
     end,
-    emission_rule = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default quota exceeded event stream specialization
@@ -163,7 +163,7 @@
         (#event{object = #quota_exeeded_event{}}) -> true;
         (_) -> false
     end,
-    emission_rule = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler()
 }).
 
 -endif.

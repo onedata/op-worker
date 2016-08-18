@@ -260,7 +260,7 @@ add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_subscription(SessId :: session:id(), SubId :: subscription:id(),
-    Subs :: subscriptions()) -> NewSubs :: subscriptions().
+    Subs :: subscriptions()) -> {LastSub :: boolean(), NewSubs :: subscriptions()}.
 remove_subscription(SessId, SubId, Subs) ->
     NewSubs = case maps:find(SubId, Subs) of
         {ok, Sub} ->

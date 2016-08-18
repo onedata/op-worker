@@ -100,8 +100,6 @@ file_accessed_subscription(Handler) ->
             time_threshold = FileAccessedTimeThreshold
         },
         event_stream = ?FILE_ACCESSED_EVENT_STREAM#event_stream_definition{
-            metadata = 0,
-            emission_rule = fun(_) -> true end,
             event_handler = Handler
         }
     }.

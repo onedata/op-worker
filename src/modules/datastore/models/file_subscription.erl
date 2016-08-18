@@ -20,7 +20,7 @@
 -define(BATCH_SIZE, 100).
 
 %% API
--export([add/2, remove/2]).
+-export([add/2, remove/2, cleanup/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -30,17 +30,60 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% For subscriptions concerning file changes adds session to the list of
+%% sessions that are interested in receiving notifications.
+%% @end
+%%--------------------------------------------------------------------
+-spec add(SessId :: session:id(), Ref :: #subscription{} | subscription:object()) ->
+    ok | {error, Reason :: term()}.
 add(SessId, #subscription{object = SubObject}) ->
+    add(SessId, SubObject);
+add(SessId, SubObject) ->
     case get_key(SubObject) of
         undefined -> ok;
         Key -> do_add(Key, SessId)
     end.
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% For subscriptions concerning file changes removes session from the list of
+%% sessions that are interested in receiving notifications.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove(SessId :: session:id(), Ref :: #subscription{} | subscription:object()) ->
+    ok | {error, Reason :: term()}.
 remove(SessId, #subscription{object = SubObject}) ->
+    remove(SessId, SubObject);
+remove(SessId, SubObject) ->
     case get_key(SubObject) of
         undefined -> ok;
         Key -> do_remove(Key, SessId)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file subscription mapping if there are no sessions interested in
+%% receiving notifications.
+%% @end
+%%--------------------------------------------------------------------
+-spec cleanup(Ref :: #subscription{} | subscription:object() | datastore:key()) ->
+    ok | {error, Reason :: term()}.
+cleanup(#subscription{object = SubObject}) ->
+    cleanup(SubObject);
+cleanup(Key) when is_binary(Key) ->
+    Pred = fun() ->
+        case ?MODULE:get(Key) of
+            {ok, #document{value = #file_subscription{sessions = []}}} -> true;
+            _ -> false
+        end
+    end,
+    datastore:delete(?STORE_LEVEL, ?MODEL_NAME, Key, Pred);
+cleanup(SubObject) ->
+    case get_key(SubObject) of
+        undefined -> ok;
+        Key -> cleanup(Key)
     end.
 
 %%%===================================================================
@@ -82,14 +125,17 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key() | #event{} | event:object()) ->
+    {ok, datastore:document()} | datastore:get_error().
 get(#event{object = EvtObject}) ->
+    ?MODULE:get(EvtObject);
+get(Key) when is_binary(Key) ->
+    datastore:get(?STORE_LEVEL, ?MODEL_NAME, Key);
+get(EvtObject) ->
     case get_key(EvtObject) of
         undefined -> {error, {not_found, ?MODULE}};
         Key -> ?MODULE:get(Key)
-    end;
-get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODEL_NAME, Key).
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -162,7 +208,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% does not concern file changes 'undefined' is returned.
 %% @end
 %%--------------------------------------------------------------------
--spec get_key(Object :: event:object() | subscription:object()) -> 
+-spec get_key(Object :: event:object() | subscription:object()) ->
     Key :: datastore:key() | undefiend.
 get_key(#file_attr_subscription{file_uuid = FileUuid}) ->
     <<"file_attr.", FileUuid/binary>>;
@@ -199,7 +245,7 @@ get_key(_) ->
 -spec do_add(Key :: datastore:key(), SessId :: session:id()) -> ok | {error, Reason :: term()}.
 do_add(Key, SessId) ->
     Diff = fun(#file_subscription{sessions = SessIds} = Sub) ->
-        Sub#file_subscription{sessions = [SessId | lists:delete(SessId, SessIds)]}
+        {ok, Sub#file_subscription{sessions = [SessId | lists:delete(SessId, SessIds)]}}
     end,
     case update(Key, Diff) of
         {ok, _} -> ok;
@@ -214,11 +260,16 @@ do_add(Key, SessId) ->
 %% notifications about file changes.
 %% @end
 %%--------------------------------------------------------------------
--spec do_remove(Key :: datastore:key(), SessId :: session:id()) -> 
+-spec do_remove(Key :: datastore:key(), SessId :: session:id()) ->
     ok | {error, Reason :: term()}.
 do_remove(Key, SessId) ->
     Diff = fun(#file_subscription{sessions = SessIds} = Sub) ->
-        Sub#file_subscription{sessions = lists:delete(SessId, SessIds)}
+        NewSessIds = lists:delete(SessId, SessIds),
+        case NewSessIds of
+            [] -> erlang:spawn(?MODULE, cleanup, [Key]);
+            _ -> ok
+        end,
+        {ok, Sub#file_subscription{sessions = NewSessIds}}
     end,
     case update(Key, Diff) of
         {ok, _} -> ok;
