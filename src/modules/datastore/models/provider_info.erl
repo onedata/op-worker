@@ -182,7 +182,11 @@ fetch(ProviderId) ->
             space_ids = SpaceIDs,
             public_only = PublicOnly
         }},
-        {ok, _} = provider_info:save(Doc),
+
+        case provider_info:create(Doc) of
+            {ok, _} -> ok;
+            {error, already_exists} -> ok
+        end,
         {ok, Doc}
     catch
         _:Reason ->
