@@ -38,7 +38,7 @@
     deletion_of_open_file_test
 ]).
 
-all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
+all() -> ?ALL(?TEST_CASES).
 
 -define(FILE_UUID, <<"file_uuid">>).
 -define(SESSION_ID_1, <<"session_id_1">>).
