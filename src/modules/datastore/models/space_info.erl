@@ -262,8 +262,11 @@ fetch(Auth, SpaceId) ->
         name = Name,
         providers = ProviderIds
     }},
-    % TODO - what if new doc appear with subscription in parallel? resolve such conflict
-    {ok, _} = save(Doc),
+
+    case create(Doc) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
 
     {ok, Doc}.
 

@@ -67,7 +67,7 @@ select_helper(#storage{helpers = [Helper | _]}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns any available storage for given fslogic ctx.
+%% Returns any available storage for given space id.
 %% @end
 %%--------------------------------------------------------------------
 -spec select_storage(SpaceId :: binary()) ->
