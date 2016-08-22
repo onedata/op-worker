@@ -184,7 +184,11 @@ fetch(Auth, GroupId) ->
             users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
             effective_users = EffectiveUsersWithPrivileges, type = Type,
             parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
-        {ok, _} = onedata_group:save(OnedataGroupDoc),
+
+        case onedata_group:create(OnedataGroupDoc) of
+            {ok, _} -> ok;
+            {error, already_exists} -> ok
+        end,
         {ok, OnedataGroupDoc}
     catch
         _:Reason ->

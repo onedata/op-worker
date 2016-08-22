@@ -243,10 +243,12 @@ translate_from_protobuf(#'ChangeMode'{mode = Mode}) ->
     #change_mode{mode = Mode};
 translate_from_protobuf(#'Rename'{target_path = TargetPath}) ->
     #rename{target_path = TargetPath};
-translate_from_protobuf(#'GetNewFileLocation'{name = Name, mode = Mode, flags = Flags}) ->
-    #get_new_file_location{name = Name, mode = Mode, flags = open_flags_translate_from_protobuf(Flags)};
-translate_from_protobuf(#'GetFileLocation'{flags = Flags}) ->
-    #get_file_location{flags = open_flags_translate_from_protobuf(Flags)};
+translate_from_protobuf(#'GetNewFileLocation'{name = Name, mode = Mode,
+    flags = Flags, create_handle = CreateHandle}) ->
+    #get_new_file_location{name = Name, mode = Mode,
+        flags = open_flags_translate_from_protobuf(Flags), create_handle = CreateHandle};
+translate_from_protobuf(#'GetFileLocation'{flags = Flags, create_handle = CreateHandle}) ->
+    #get_file_location{flags = open_flags_translate_from_protobuf(Flags), create_handle = CreateHandle};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
@@ -628,10 +630,13 @@ translate_to_protobuf(#change_mode{mode = Mode}) ->
     {change_mode, #'ChangeMode'{mode = Mode}};
 translate_to_protobuf(#rename{target_path = TargetPath}) ->
     {rename, #'Rename'{target_path = TargetPath}};
-translate_to_protobuf(#get_new_file_location{name = Name, mode = Mode, flags = Flags}) ->
-    {get_new_file_location, #'GetNewFileLocation'{name = Name, mode = Mode, flags = open_flags_translate_to_protobuf(Flags)}};
-translate_to_protobuf(#get_file_location{flags = Flags}) ->
-    {get_file_location, #'GetFileLocation'{flags = open_flags_translate_to_protobuf(Flags)}};
+translate_to_protobuf(#get_new_file_location{name = Name, mode = Mode,
+    flags = Flags, create_handle = CreateHandle}) ->
+    {get_new_file_location, #'GetNewFileLocation'{name = Name, mode = Mode,
+        flags = open_flags_translate_to_protobuf(Flags), create_handle = CreateHandle}};
+translate_to_protobuf(#get_file_location{flags = Flags, create_handle = CreateHandle}) ->
+    {get_file_location, #'GetFileLocation'{flags = open_flags_translate_to_protobuf(Flags),
+        create_handle = CreateHandle}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size}) ->

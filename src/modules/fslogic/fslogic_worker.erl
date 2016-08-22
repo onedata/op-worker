@@ -407,12 +407,12 @@ handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #rena
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #get_new_file_location{name = Name,
-    flags = Flags, mode = Mode}}) ->
+    flags = Flags, mode = Mode, create_handle = CreateHandle}}) ->
     NewCtx = fslogic_context:set_space_id(Ctx, {guid, ParentGUID}),
-    fslogic_req_regular:get_new_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentGUID)}, Name, Mode, Flags);
-handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_file_location{flags = Flags}}) ->
+    fslogic_req_regular:get_new_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentGUID)}, Name, Mode, Flags, CreateHandle);
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_file_location{flags = Flags, create_handle = CreateHandle}}) ->
     NewCtx = fslogic_context:set_space_id(Ctx, {guid, GUID}),
-    fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Flags);
+    fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Flags, CreateHandle);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #truncate{size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Size);
 handle_fuse_request(Ctx, #file_request{file_request = #release{handle_id = HandleId}}) ->

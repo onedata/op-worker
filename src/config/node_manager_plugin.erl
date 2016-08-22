@@ -23,7 +23,7 @@
 %% node_manager_plugin_behaviour callbacks
 -export([before_init/1, after_init/1, on_terminate/2, on_code_change/3,
     handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
-    modules_with_args/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0, app_name/0]).
+    modules_with_args/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0, app_name/0, clear_memory/1]).
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -226,6 +226,18 @@ check_node_ip_address() ->
         ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
         {127, 0, 0, 1}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears permissions cache during clearing of memory
+%% (when node_manager sees that usage of memory is too high).
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_memory(HighMemUse :: boolean()) -> ok.
+clear_memory(true) ->
+    permissions_cache:invalidate_permissions_cache();
+clear_memory(_) ->
+    ok.
 
 %%%===================================================================
 %%% Internal functions
