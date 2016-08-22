@@ -77,9 +77,13 @@ update_outdated_local_location_replica(LocalDoc = #document{value = #file_locati
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = fslogic_file_location:get_changes(ExternalDoc, Diff),
-    NewDoc = replica_invalidator:invalidate_changes(LocationDocWithNewVersion, Changes, NewSize),
-    notify_block_change_if_necessary(LocationDocWithNewVersion, NewDoc),
-    notify_size_change_if_necessary(LocationDocWithNewVersion, NewDoc).
+    case replica_invalidator:invalidate_changes(LocationDocWithNewVersion, Changes, NewSize) of
+        deleted ->
+            ok;
+        NewDoc ->
+            notify_block_change_if_necessary(LocationDocWithNewVersion, NewDoc),
+            notify_size_change_if_necessary(LocationDocWithNewVersion, NewDoc)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -92,8 +96,10 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
     ?info("Conflicting changes detected on file ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
-    {ExternalChanges, ExternalShrink} = fslogic_file_location:get_merged_changes(ExternalDoc, ExternalChangesNum),
-    {LocalChanges, LocalShrink} = fslogic_file_location:get_merged_changes(LocalDoc, LocalChangesNum),
+    {ExternalChanges, ExternalShrink, ExternalRename} =
+        fslogic_file_location:get_merged_changes(ExternalDoc, ExternalChangesNum),
+    {LocalChanges, LocalShrink, LocalRename} =
+        fslogic_file_location:get_merged_changes(LocalDoc, LocalChangesNum),
 
     NewSize =
         case {LocalShrink, ExternalShrink} of
@@ -138,11 +144,50 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
                 fslogic_blocks:consolidate(NewBlocks)
         end,
 
+    Rename = case {LocalRename, ExternalRename} of
+        {undefined, undefined} ->
+            skip;
+        {_, undefined} ->
+            skip;
+        {undefined, _} ->
+            ExternalRename;
+        {{_, LocalNum}, {_, ExternalNum}} when LocalNum > ExternalNum ->
+            skip;
+        {{_, LocalNum}, {_, ExternalNum}} when LocalNum < ExternalNum ->
+            ExternalRename;
+        {{_, LocalNum}, {_, ExternalNum}} when LocalNum =:= ExternalNum ->
+            %% TODO: resolve conflicts in the same way as in file_meta and links
+            case version_vector:replica_id_is_greater(LocalDoc, ExternalDoc) of
+                true ->
+                    skip;
+                false ->
+                    ExternalRename
+            end
+    end,
+
     NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     NewDoc2 = NewDoc#document{value = NewDoc#document.value#file_location{blocks = TruncatedNewBlocks, size = NewSize}},
-    {ok, _} = file_location:save(NewDoc2),
-    notify_block_change_if_necessary(LocalDoc, NewDoc2),
-    notify_size_change_if_necessary(LocalDoc, NewDoc2).
+
+    RenameResult = case Rename of
+        skip ->
+            skipped;
+        Rename ->
+            fslogic_file_location:rename_or_delete(NewDoc2, Rename)
+    end,
+
+    case RenameResult of
+        deleted ->
+            ok;
+        skipped ->
+            {ok, _} = file_location:save(NewDoc2),
+            notify_block_change_if_necessary(LocalDoc, NewDoc2),
+            notify_size_change_if_necessary(LocalDoc, NewDoc2);
+        {renamed, RenamedDoc, UUID, UserId, TargetSpaceId} ->
+            {ok, _} = file_location:save(RenamedDoc),
+            fslogic_file_location:chown_file(UUID, UserId, TargetSpaceId),
+            notify_block_change_if_necessary(LocalDoc, RenamedDoc),
+            notify_size_change_if_necessary(LocalDoc, RenamedDoc)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

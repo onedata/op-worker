@@ -182,7 +182,11 @@ fetch(Auth) ->
         email_list = EmailList
     },
     OnedataUserDoc = #document{key = UserId, value = OnedataUser},
-    {ok, _} = onedata_user:save(OnedataUserDoc),
+
+    case onedata_user:create(OnedataUserDoc) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
 
     utils:pforeach(fun(SpaceId) ->
         space_info:get_or_fetch(Auth, SpaceId, UserId)
