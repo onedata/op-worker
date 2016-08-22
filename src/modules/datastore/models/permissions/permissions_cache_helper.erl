@@ -1,38 +1,24 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Michal Wrzeszcz
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Cache that maps credentials to users' identities
+%%% Helper model used for caching permissions to files (main model is permissions_cache).
 %%% @end
 %%%-------------------------------------------------------------------
--module(user_identity).
--author("Tomasz Lichon").
+-module(permissions_cache_helper).
+-author("Michal Wrzeszcz").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
--include("proto/oneclient/handshake_messages.hrl").
-
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
-
-%% API
--export([fetch/1, get_or_fetch/1]).
-
--export_type([credentials/0]).
-
-%% todo split this model to:
-%% todo globally cached - #certificate{} -> #user_identity{},
-%% todo and locally cached - #token{} | #certificate_info{} -> #user_identity{}
--type credentials() :: #token_auth{} | #basic_auth{} | #'OTPCertificate'{}.
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
+    list/0, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -68,6 +54,17 @@ create(Document) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -95,12 +92,27 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:ext_key()]} | datastore:generic_error() | no_return().
+list() ->
+    Filter = fun
+                 ('$end_of_table', Acc) ->
+                     {abort, Acc};
+                 (#document{key = Uuid}, Acc) ->
+                     {next, [Uuid | Acc]}
+             end,
+    datastore:list(?STORE_LEVEL, ?MODULE, Filter, []).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback model_init/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(identity_bucket, [], ?LOCAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(permissions_cache_helper_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -122,47 +134,3 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Fetch user from OZ and save it in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(user_identity:credentials()) ->
-    {ok, datastore:document()} | datastore:get_error().
-fetch(#'OTPCertificate'{}) ->
-    {error, cannot_fetch};
-fetch(Auth) ->
-    try
-        {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
-        {ok, #document{key = Id}} = onedata_user:get_or_fetch(Auth, UserId),
-        NewDoc = #document{key = Auth, value = #user_identity{user_id = Id}},
-        case user_identity:create(NewDoc) of
-            {ok, _} -> ok;
-            {error, already_exists} -> ok
-        end,
-        {ok, NewDoc}
-    catch
-        _:Reason ->
-            ?error_stacktrace("Cannot establish onedata user identity due to: ~p", [Reason]),
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get user's identity from cache, or fetch user from OZ
-%% and store its identity
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(user_identity:credentials()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Cred) ->
-    case user_identity:get(Cred) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Cred);
-        Error -> Error
-    end.

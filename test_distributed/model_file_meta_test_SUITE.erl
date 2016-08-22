@@ -35,7 +35,7 @@
 -export([basic_operations_test_core/1]).
 
 all() ->
-    ?ALL([basic_operations_test, rename_test], [basic_operations_test ]).
+    ?ALL([basic_operations_test, rename_test], [basic_operations_test]).
 
 -define(REPEATS, 100).
 -define(SUCCESS_RATE, 99).
@@ -146,6 +146,21 @@ rename_test(Config) ->
 basic_operations_test_core(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
 
+    % Clear for stress test (if previous run crashed)
+    BigDirDel =
+        fun Loop(File) when File < 99 ->
+            ?call(Worker1, delete, [{path, list_to_binary("/Space 1/dir1/" ++ integer_to_list(1000 + File))}]),
+            Loop(File + 1);
+            Loop(_) ->
+                ok
+        end,
+    BigDirDel(0),
+
+    delete_deep_tree(Worker2),
+    [?call(Worker1, delete, [{path, D}]) || D <- ["/Space 1", "/Space 1/dir1", "/Space 1/dir1/file1",
+        "/Space 1/dir2", "/Space 1/dir2/file1", "/Space 1/dir2/file2", "/Space 1/dir2/file3"]],
+
+    % Test
     {{A2, U2}, CreateLevel1} = ?call_with_time(Worker2, create, [{path, <<"/">>}, #file_meta{name = <<"Space 1">>, is_scope = true}]),
     {{A3, U3}, CreateLevel2} = ?call_with_time(Worker1, create, [{path, <<"/Space 1">>}, #file_meta{name = <<"dir1">>}]),
     {A4, U4} = ?call(Worker1, create, [{path, <<"/Space 1/dir1">>}, #file_meta{name = <<"file1">>}]),
@@ -266,13 +281,6 @@ basic_operations_test_core(Config) ->
 
     ?assertMatch({ok, [#child_link{uuid = U23}]}, ?call(Worker1, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
 
-    BigDirDel =
-        fun Loop(File) when File < 99 ->
-            ?call(Worker1, delete, [{path, list_to_binary("/Space 1/dir1/" ++ integer_to_list(1000 + File))}]),
-            Loop(File + 1);
-            Loop(_) ->
-                ok
-        end,
     BigDirDel(0),
 
     delete_deep_tree(Worker2),
