@@ -142,18 +142,21 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                     FileDoc0#document{value = FM1}
             end,
         false = is_snapshot(FileName),
+        ?info("Create 1 ~p", [{ParentUUID, FileName}]),
         critical_section:run([?MODEL_NAME, ParentUUID],
             fun() ->
+                ?info("Create 2 ~p", [{ParentUUID, FileName}]),
                 case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                     {error, {not_found, _}} ->
                         case create(FileDoc) of
                             {ok, UUID} ->
                                 SavedDoc = FileDoc#document{key = UUID},
                                 datastore:run_transaction(?MODEL_NAME, UUID, fun() ->
+                                    ?info("Create 3 ~p", [{ParentUUID, FileName}]),
                                     set_link_context(Scope),
-                                    ok = datastore:set_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                    ok = datastore:set_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
-                                    ok = datastore:set_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}])
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}])
                                 end),
                                 {ok, UUID};
                             {error, Reason} ->
@@ -307,7 +310,13 @@ get_child({uuid, Uuid}, Name) ->
     end;
 get_child(Doc, Name) ->
     file_meta:set_link_context(Doc),
-    datastore:fetch_link(?LINK_STORE_LEVEL, Doc, Name).
+    case datastore:fetch_full_link(?LINK_STORE_LEVEL, Doc, Name) of
+        {ok, {_, Targets}} ->
+            ?info("get_child ~p", [{Name, Targets}]),
+            {ok, [UUID || {UUID, _, _} <- Targets]};
+        Other ->
+            Other
+    end .
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -317,7 +326,7 @@ get_child(Doc, Name) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true).
+        ?DISK_ONLY_LEVEL, ?DISK_ONLY_LEVEL, true, false, mother_scope, other_scopes, true).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -422,13 +431,18 @@ tag_childs(LinkName, [{Key, _Model, _Scope}]) ->
 
 tag_childs(LinkName, Targets) ->
     MPID = oneprovider:get_provider_id(),
+    Scopes = lists:map(
+        fun({_, _, Scope}) ->
+            Scope
+        end, Targets),
+    LongestPrefix = max(4, binary:longest_common_prefix(Scopes)),
     lists:map(
         fun({Key, _, Scope}) ->
             case MPID of
                 Scope ->
                     {LinkName, Key};
                 _ ->
-                    {links_utils:make_scoped_link_name(LinkName, Scope), Key}
+                    {links_utils:make_scoped_link_name(LinkName, Scope, LongestPrefix + 1), Key}
             end
         end, Targets).
 %%--------------------------------------------------------------------
@@ -765,8 +779,7 @@ get_guid_from_phantom_file(OldUUID) ->
 set_link_context_for_space(SpaceId) ->
     MyProvID = oneprovider:get_provider_id(),
     erlang:put(mother_scope, MyProvID),
-    OtherScopes = lists:delete(MyProvID, dbsync_utils:get_providers_for_space(SpaceId)),
-    erlang:put(other_scopes, OtherScopes),
+    erlang:put(other_scopes, []),
     ok.
 
 %%%===================================================================

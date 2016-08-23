@@ -118,12 +118,12 @@ chown(_, _File, _UserId) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    ?debug("Get attr for file entry: ~p", [File]),
+    ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
             ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
-            Size = fslogic_blocks:get_file_size(FileDoc),
+
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
@@ -135,6 +135,28 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 % TODO (VFS-2024) - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
                 _:_ -> {?ROOT_POSIX_CTX, undefined}
             end,
+            case Type of
+                ?REGULAR_FILE_TYPE ->
+                    FoundComponents = file_consistency:check_missing_components(UUID, SpaceId),
+                    Missing = [file_meta, local_file_location, link_to_parent, parent_links] -- FoundComponents,
+                    case Missing of
+                        [] -> ok;
+                        _ ->
+                            case Missing of
+                                [local_file_location] ->
+                                    fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
+                                    fslogic_event:emit_file_attr_update({uuid, UUID}, []),
+                                    file_consistency:add_components_and_notify(UUID, [local_file_location]),
+                                    file_consistency:check_and_add_components(UUID, SpaceId, [parent_links]);
+                                _ -> ok
+                            end,
+                            ?info("COMPONENTS MISSING ~p", [{UUID, Missing}])
+                    end;
+                _ -> ok
+            end,
+
+
+            Size = fslogic_blocks:get_file_size(FileDoc),
             FinalUID = case  session:get(SessId) of
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
                     UID;
@@ -496,6 +518,7 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
                 Errors ->
                     [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p", [FID, SID, Mode, Reason])
                         || {{SID, FID}, {error, Reason}} <- Errors],
+
                     throw(?EAGAIN)
             end;
         _ -> ok

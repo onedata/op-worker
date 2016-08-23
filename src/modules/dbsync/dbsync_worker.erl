@@ -469,9 +469,9 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
 apply_changes(SpaceId, Changes) ->
-    apply_changes(SpaceId, Changes, []).
+    apply_changes(SpaceId, Changes, [], []).
 apply_changes(SpaceId,
-    [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T], Done) ->
+    [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T], Done, LinksPostFuns) ->
     try
         ModelConfig = ModelName:model_init(),
 
@@ -489,7 +489,7 @@ apply_changes(SpaceId,
                  Key
         end,
         MyProvId = oneprovider:get_provider_id(),
-        datastore:run_transaction(ModelName, MainDocKey, fun() ->
+        LinksPost = datastore:run_transaction(ModelName, MainDocKey, fun() ->
             case Value of
                 #links{origin = MyProvId} ->
                     ok;
@@ -504,7 +504,14 @@ apply_changes(SpaceId,
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = couchdb_datastore_driver:get(ModelConfig, Key),
                     {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
-                    spawn(fun() -> dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap) end);
+%%                    lists:foreach(fun(LName) ->
+%%                        caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
+%%                    end, maps:keys(CurrentLinks#links.link_map) ++ maps:keys(OldLinks#links.link_map)),
+                    dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
+                    lists:foreach(fun(LName) ->
+%%                        caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName),
+                        caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
+                    end, maps:keys(CurrentLinks#links.link_map) ++ maps:keys(OldLinks#links.link_map));
                 _ ->
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
             end
@@ -513,33 +520,39 @@ apply_changes(SpaceId,
         case Value of
             #links{} ->
                 % TODO - work only on local tree (after refactoring of link_utils)
-                lists:foreach(fun(LName) ->
-                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
-                end, maps:keys(Value#links.link_map));
+                ok;
             _ ->
                 ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
         end,
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
-        apply_changes(SpaceId, T, [Change | Done])
+        case LinksPost of
+            Fun when is_function(Fun) ->
+                apply_changes(SpaceId, T, [Change | Done], [LinksPost | LinksPostFuns]);
+            _ ->
+                apply_changes(SpaceId, T, [Change | Done], LinksPostFuns)
+        end
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p", [Change, Reason]),
             {error, Reason}
     end;
-apply_changes(SpaceId, [], Done) ->
-    run_posthooks(SpaceId, lists:reverse(Done)).
+apply_changes(SpaceId, [], Done, LinksPostFuns) ->
+    run_posthooks(SpaceId, lists:reverse(Done), lists:reverse(LinksPostFuns)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Apply posthooks for list of changes from remote provider.
 %% @end
 %%--------------------------------------------------------------------
--spec run_posthooks(SpaceId :: binary(), [change()]) -> ok.
-run_posthooks(_, []) ->
+-spec run_posthooks(SpaceId :: binary(), [change()], [term()]) -> ok.
+run_posthooks(_, [], []) ->
     ok;
-run_posthooks(SpaceId, [Change | Done]) ->
+run_posthooks(SpaceId, Changes, [LinksPostFun | R]) ->
+    LinksPostFun(),
+    run_posthooks(SpaceId, Changes, R);
+run_posthooks(SpaceId, [Change | Done], []) ->
     spawn(
         fun() ->
             try
@@ -551,7 +564,7 @@ run_posthooks(SpaceId, [Change | Done]) ->
             ok
         end),
 
-    run_posthooks(SpaceId, Done).
+    run_posthooks(SpaceId, Done, []).
 
 %%--------------------------------------------------------------------
 %% @doc
