@@ -326,7 +326,7 @@ get_child(Doc, Name) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
-        ?DISK_ONLY_LEVEL, ?DISK_ONLY_LEVEL, true, false, mother_scope, other_scopes, true).
+        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true).
 
 %%--------------------------------------------------------------------
 %% @doc

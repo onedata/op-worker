@@ -451,6 +451,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     VerifyDirSize(Level3Dir, length(Level4Files), 0),
     ct:print("Stage 10"),
     lists:map(fun({_, F}) ->
+        ct:print("DEL ~p", [{Worker1, F}]),
         ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, F}))
     end, Level4Files),
     ct:print("Stage 11"),
