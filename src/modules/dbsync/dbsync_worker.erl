@@ -480,7 +480,6 @@ apply_changes(SpaceId,
                 % TODO - work only on local tree (after refactoring of link_utils)
                 MDK = Value#links.doc_key,
                 file_meta:set_link_context_for_space(SpaceId),
-                ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, all),
                 lists:foreach(fun(LName) ->
                     ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
                 end, maps:keys(Value#links.link_map)),
@@ -509,11 +508,10 @@ apply_changes(SpaceId,
 %%                        caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
 %%                    end, maps:keys(CurrentLinks#links.link_map) ++ maps:keys(OldLinks#links.link_map)),
                     dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
-                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
                     lists:foreach(fun(LName) ->
 %%                        caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName),
                         caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
-                    end, maps:keys(CurrentLinks#links.link_map) ++ maps:keys(OldLinks#links.link_map));
+                    end, maps:keys(CurrentLinks#links.link_map));
                 _ ->
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
             end
