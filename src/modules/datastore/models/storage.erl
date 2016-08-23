@@ -72,7 +72,7 @@ create(#document{value = #storage{name = Name}} = Document) ->
     datastore:run_transaction(?MODEL_NAME, ?STORAGE_LOCK_ID, fun() ->
         case datastore:fetch_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, Name) of
             {ok, _} ->
-                {error, aleady_exists};
+                {error, already_exists};
             {error, link_not_found} ->
                 _ = datastore:create(?STORE_LEVEL, #document{key = ?ROOT_STORAGE, value = #storage{}}),
                 case datastore:create(?STORE_LEVEL, Document) of

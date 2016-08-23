@@ -57,6 +57,27 @@ handle(<<"fileUploadFailure">>, Props) ->
     upload_handler:upload_map_delete(UploadId),
     ok;
 
+% Checks if file can be downloaded (i.e. can be read by the user) and if so,
+% returns download URL.
+handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
+    % TODO VFS-2426 Read permissions should be checked using
+    % logical_file_manager:check_perms, however it is not implemented yet.
+    % For now, just try to open the file for reading.
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:open(SessionId, {guid, FileId}, read) of
+        {ok, FileHandle} ->
+            logical_file_manager:release(FileHandle),
+            Hostname = g_ctx:get_requested_hostname(),
+            URL = str_utils:format_bin("https://~s/download/~s",
+                [Hostname, FileId]),
+            {ok, [{<<"fileUrl">>, URL}]};
+        {error,eacces} ->
+            gui_error:report_error(<<"Permission denied">>);
+        Other ->
+            ?error("Error while downloading file ~s: ~p", [Other]),
+            gui_error:internal_server_error()
+    end;
+
 %%--------------------------------------------------------------------
 %% Space related procedures
 %%--------------------------------------------------------------------

@@ -6,8 +6,8 @@ LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L ../priv/helpers/lib \
 	-lhelpers $(shell pkg-config --libs botan-1.10 tbb fuse) -laws-cpp-sdk-s3 \
 	-laws-cpp-sdk-core -lcurl -lSwift -lPocoUtil -lPocoXML \
 	-lPocoNet -lPocoFoundation -lpthread -lboost_filesystem -lrados -lglog \
-	../helpers/release/erlang-tls/c_src/deps/boringssl/ssl/libssl.a \
-	../helpers/release/erlang-tls/c_src/deps/boringssl/crypto/libcrypto.a
+	../helpers/release/etls/c_src/deps/boringssl/ssl/libssl.a \
+	../helpers/release/etls/c_src/deps/boringssl/crypto/libcrypto.a
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall $(shell pkg-config --cflags botan-1.10 tbb) \
 -isystem ../priv/helpers/include -isystem $(ERTS_INCLUDE_DIR) \

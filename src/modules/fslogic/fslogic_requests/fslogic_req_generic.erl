@@ -87,6 +87,7 @@ chmod(CTX, FileEntry, Mode) ->
     {ok, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
+    ok = permissions_cache:invalidate_permissions_cache(),
 
     fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
     spawn(
@@ -282,6 +283,7 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
     case xattr:save(FileUuid, ?ACL_XATTR_NAME, Val) of
         {ok, _} ->
+            ok = permissions_cache:invalidate_permissions_cache(),
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
                 {uuid, FileUuid}, 8#000
@@ -301,6 +303,7 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
 remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
+            ok = permissions_cache:invalidate_permissions_cache(),
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
