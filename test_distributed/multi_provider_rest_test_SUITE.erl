@@ -648,7 +648,7 @@ create_list_index(Config) ->
     {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
     IndexList = jiffy:decode(ListBody, [return_maps]),
     ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id}], IndexList),
-    ?assertMatch({ok, 200, _, Function},
+    ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"text/javascript">>}], [])),
 
     % when
