@@ -26,11 +26,12 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--export_type([id/0, ctx/0, definition/0, metadata/0, init_handler/0,
+-export_type([id/0, key/0, ctx/0, definition/0, metadata/0, init_handler/0,
     terminate_handler/0, event_handler/0, admission_rule/0, aggregation_rule/0,
     transition_rule/0, emission_rule/0, emission_time/0]).
 
 -type id() :: binary().
+-type key() :: binary().
 -type ctx() :: #{}.
 -type definition() :: #event_stream_definition{}.
 -type metadata() :: term().
