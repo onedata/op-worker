@@ -266,7 +266,7 @@ run_and_catch_exceptions(Function, Context, Request, RequestType) ->
     catch
         Reason ->
             %% Manually thrown error, normal interrupt case.
-            report_error(Request, RequestType, Reason, warning);
+            report_error(Request, RequestType, Reason, debug);
         error:{badmatch, Reason} ->
             %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
             report_error(Request, RequestType, Reason, warning);

@@ -72,8 +72,8 @@ concurrent_create_test(Config) ->
         end, #{}, ProvIDs),
 
     W = fun(N) ->
-        [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
-        Worker
+            [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
+            Worker
         end,
 
     User = <<"user1">>,
@@ -187,6 +187,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
 %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
+    SyncProvidersCount = max(1, round(SyncNodes / NodesOfProvider)),
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
     Workers = ?config(op_worker_nodes, Config),
     ct:print("W: ~p", [Workers]),
@@ -236,7 +237,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyStats = fun(File, IsDir) ->
         VerAns = Verify(fun(W) ->
-            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
+%%            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
 
             case IsDir of
                 true ->
@@ -264,20 +265,9 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     VerifyStats(Dir, true),
     VerifyStats(Level2Dir, true),
 
-    tracer:start([Worker1]),
-%%    tracer:trace_calls(check_permissions),
-%%    tracer:trace_calls(rules),
-%%    tracer:trace_calls(fslogic_req_regular),
-%%    tracer:trace_calls(storage_file_manager),
-    tracer:trace_calls(fslogic_file_location),
-%%    tracer:trace_calls(datastore),
-%%    tracer:trace_calls(file_meta),
-%%    tracer:trace_calls(links_utils),
-%%    tracer:trace_calls(mnesia_cache_driver),
-%%    tracer:trace_calls(couchdb_datastore_driver),
     FileBeg = <<"1234567890abcd">>,
     CreateFileOnWorker = fun(Offset, File, WriteWorker) ->
-        ct:print("CreateFileOnWorker ~p", [{Offset, File, WriteWorker}]),
+%%        ct:print("CreateFileOnWorker ~p", [{Offset, File, WriteWorker}]),
         ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker, SessId(WriteWorker), File, 8#755)),
         OpenAns = lfm_proxy:open(WriteWorker, SessId(WriteWorker), {path, File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
@@ -328,11 +318,11 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             ct:print("Locations1 ~p", [{Offset, File, Flattened, length(ProvIDs)}]),
 
             ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
-            LocationsList = lists:filter(fun(S) -> S == length(lists:usort(ProvIDs)) end, Flattened),
+            LocationsList = lists:filter(fun(S) -> S == SyncProvidersCount end, Flattened),
             {length(ZerosList), length(LocationsList)}
         end,
+        ct:print("ToMatch ~p", [{ToMatch, AssertLocations()}]),
 %%        ?match(ToMatch, AssertLocations(), Attempts),
-        ct:print("ToMatch ~p", [ToMatch]),
 
 
         LocToAns = Verify(fun(W) ->
@@ -348,7 +338,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyDel = fun({F,  FileUUID, Locations}) ->
         Verify(fun(W) ->
-            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
+%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
 %%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
             % TODO - match to chosen error (check perms may also result in ENOENT)
             ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
@@ -369,13 +359,11 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     ct:print("Stage 1"),
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
         VerifyStats(Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
             VerifyStats(Level3TmpDir, true)
         end, Workers)
@@ -975,11 +963,14 @@ count_links(W, FileUUID) ->
 
 verify_locations(W, FileUUID) ->
     IDs = get_locations(W, FileUUID),
+    ct:print("verify_locations ~p", [{W, FileUUID, IDs}]),
     lists:foldl(fun(ID, Acc) ->
         case rpc:call(W, file_location, get, [ID]) of
             {ok, _} ->
                 Acc + 1;
-            _ -> Acc
+            DueTo ->
+                ct:print("No location ~p", [{W, ID, DueTo}]),
+                Acc
         end
     end, 0, IDs).
 
@@ -993,7 +984,6 @@ get_locations_from_map(Map) ->
             {_Version, [{ID, file_location, _}]} ->
                 [ID | Acc];
             _D ->
-                ct:print("dasd ~p", [_D]),
                 Acc
         end
     end, [], Map).
