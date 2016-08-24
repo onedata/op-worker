@@ -105,7 +105,7 @@ get_file_attributes(Req, State) ->
             Response = json_utils:encode([[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]]),
             {Response, Req4, State4};
         {undefined, true} ->
-            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}),
+            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, false),
             RawResponse = lists:map(fun(XattrName) ->
                 {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName),
                 [{<<"name">>, XattrName}, {<<"value">>, Value}]

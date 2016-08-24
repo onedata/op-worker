@@ -591,7 +591,7 @@ copy_file_attributes(SessId, From, To) ->
             ok
     end,
 
-    {ok, XattrNames} = logical_file_manager:list_xattr(SessId, From),
+    {ok, XattrNames} = logical_file_manager:list_xattr(SessId, From, false),
 
     lists:foreach(
         fun

@@ -27,7 +27,7 @@
 -export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
+    remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
@@ -36,7 +36,7 @@
 %% Functions concerning file shares
 -export([create_share/2, get_share/1, remove_share/1]).
 %% Functions concerning metadata
--export([get_metadata/4, set_metadata/5]).
+-export([get_metadata/5, set_metadata/5]).
 
 %%--------------------------------------------------------------------
 %% IDs of entities
@@ -325,12 +325,12 @@ remove_xattr(Auth, FileKey, XattrName) ->
 %%--------------------------------------------------------------------
 %% @doc Returns complete list of extended attribute names of a file.
 %%--------------------------------------------------------------------
--spec list_xattr(file_handle()) -> {ok, [xattr_name()]} | error_reply().
-list_xattr(Handle) ->
-    logical_file_manager:list_xattr(Handle).
--spec list_xattr(onedata_auth_api:auth(), file_key()) -> {ok, [xattr_name()]} | error_reply().
-list_xattr(Auth, FileKey) ->
-    logical_file_manager:list_xattr(Auth, FileKey).
+-spec list_xattr(file_handle(), boolean()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Handle, Inherited) ->
+    logical_file_manager:list_xattr(Handle, Inherited).
+-spec list_xattr(onedata_auth_api:auth(), file_key(), boolean()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Auth, FileKey, Inherited) ->
+    logical_file_manager:list_xattr(Auth, FileKey, Inherited).
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
@@ -440,10 +440,10 @@ remove_share(ShareID) ->
 %% Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()]) ->
+-spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()], boolean()) ->
     {ok, #{}} | error_reply().
-get_metadata(Auth, FileKey, Type, Names) ->
-    logical_file_manager:get_metadata(Auth, FileKey, Type, Names).
+get_metadata(Auth, FileKey, Type, Names, Inherited) ->
+    logical_file_manager:get_metadata(Auth, FileKey, Type, Names, Inherited).
 
 %%--------------------------------------------------------------------
 %% @doc

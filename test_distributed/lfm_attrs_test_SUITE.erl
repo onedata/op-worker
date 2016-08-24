@@ -51,7 +51,7 @@ empty_xattr_test(Config) ->
     {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {guid, GUID}, Name1)),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})).
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID}, false)).
 
 crud_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -89,9 +89,9 @@ list_xattr_test(Config) ->
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, GUID}, Xattr1)),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, GUID}, Xattr2)),
-    ?assertEqual({ok, [Name1, Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})),
+    ?assertEqual({ok, [Name1, Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID}, false)),
     ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, GUID}, Name1)),
-    ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})).
+    ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID}, false)).
 
 remove_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -103,12 +103,12 @@ remove_file_test(Config) ->
     {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, GUID}, Xattr1)),
-    ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})),
+    ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID}, false)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, GUID})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID}, false)),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {guid, GUID}, Name1)),
     {ok, GUID2} = lfm_proxy:create(Worker, SessId, Path, 8#600),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID2})).
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID2}, false)).
 
 modify_cdmi_attrs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -120,7 +120,7 @@ modify_cdmi_attrs(Config) ->
     {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
     ?assertEqual({error, ?EPERM}, lfm_proxy:set_xattr(Worker, SessId, {guid, GUID}, Xattr1)),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID})).
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {guid, GUID}, false)).
 
 create_and_get_view(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

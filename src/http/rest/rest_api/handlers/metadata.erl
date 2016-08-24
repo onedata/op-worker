@@ -112,7 +112,7 @@ get_json_internal(Req, State) ->
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
     FilterList = get_filter_list(FilterType, Filter),
 
-    case onedata_file_api:get_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, FilterList) of
+    case onedata_file_api:get_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, FilterList, false) of
         {ok, Meta} ->
             Response = jiffy:encode(Meta),
             {Response, ReqWithFilter, StateWithFilter};
@@ -144,7 +144,7 @@ get_rdf_internal(Req, State) ->
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"rdf">>),
 
     {ok, Meta} = onedata_file_api:get_metadata(Auth, get_file(StateWithMetadataType),
-        DefinedMetadataType, []),
+        DefinedMetadataType, [], false),
     {Meta, ReqWithMetadataType, StateWithMetadataType}.
 
 %%--------------------------------------------------------------------
