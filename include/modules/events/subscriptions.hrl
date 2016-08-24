@@ -16,18 +16,20 @@
 %% definition of a top level subscription wrapper
 %% id           - ID of a subscription
 %% object       - wrapped subscription
-%% subscriber   - owner of a subscription
+%% stream_key   - if present defines a stream that should handle events
+%%                associated with this subscription
 %% event_stream - definition of an event stream
 -record(subscription, {
     id :: subscription:id(),
     object :: subscription:object(),
+    stream_key :: event_stream:key(),
     event_stream :: event_stream:definition()
 }).
 
 %% definition of a subscription concerning file changes
-%% sessions - list of sessions that are interested in notifications about file changes
+%% sessions - set of sessions that are interested in notifications about file changes
 -record(file_subscription, {
-    sessions = []
+    sessions = gb_sets:new() :: gb_sets:set()
 }).
 
 %% definition of a subscription for read operations in the file system

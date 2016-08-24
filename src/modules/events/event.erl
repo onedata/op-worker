@@ -200,22 +200,22 @@ set_key(#event{object = #write_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
 
 set_key(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_attr.", Uuid/binary>>};
 
 set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_location.", Uuid/binary>>};
 
 set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"permission_changed.", Uuid/binary>>};
 
 set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_removal.", Uuid/binary>>};
 
 set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
     Evt#event{key = <<"quota_exeeded">>};
 
 set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_renamed.", Uuid/binary>>};
 
 set_key(#event{object = #file_accessed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid};
@@ -247,8 +247,6 @@ get_event_manager(Ref) ->
     case session:get_event_manager(Ref) of
         {ok, EvtMan} ->
             {ok, EvtMan};
-        {error, {not_found, missing}} ->
-            {error, {not_found, missing}};
         {error, Reason} ->
             ?warning("Cannot get event manager for session ~p due to: ~p", [Ref, Reason]),
             {error, Reason}
@@ -302,8 +300,9 @@ get_event_managers_for_event(#event{key = undefined} = Evt) ->
 get_event_managers_for_event(#event{} = Evt) ->
     case file_subscription:get(Evt) of
         {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
-            get_event_managers(SessIds);
-        _ -> get_event_managers()
+            get_event_managers(gb_sets:to_list(SessIds));
+        _ ->
+            get_event_managers()
     end;
 get_event_managers_for_event(EvtObject) ->
     get_event_managers_for_event(#event{object = EvtObject}).

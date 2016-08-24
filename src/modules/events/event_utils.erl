@@ -33,32 +33,52 @@
 -spec inject_event_stream_definition(Sub :: event:subscription()) ->
     NewSub :: event:subscription().
 inject_event_stream_definition(#subscription{object = #file_attr_subscription{
-    counter_threshold = CtrThr, time_threshold = TimeThr}} = Sub) ->
-    Sub#subscription{event_stream = ?FILE_ATTR_EVENT_STREAM#event_stream_definition{
-        emission_rule = emission_rule_from_counter_threshold(CtrThr),
-        emission_time = emission_time_from_time_threshold(TimeThr)
-    }};
+    file_uuid = FileUuid, counter_threshold = CtrThr, time_threshold = TimeThr}} = Sub) ->
+    Sub#subscription{
+        stream_key = <<"file_attr.", FileUuid/binary>>,
+        event_stream = ?FILE_ATTR_EVENT_STREAM#event_stream_definition{
+            emission_rule = emission_rule_from_counter_threshold(CtrThr),
+            emission_time = emission_time_from_time_threshold(TimeThr)
+        }
+    };
 
 inject_event_stream_definition(#subscription{object = #file_location_subscription{
-    counter_threshold = CtrThr, time_threshold = TimeThr}} = Sub) ->
-    Sub#subscription{event_stream = ?FILE_LOCATION_EVENT_STREAM#event_stream_definition{
-        emission_rule = emission_rule_from_counter_threshold(CtrThr),
-        emission_time = emission_time_from_time_threshold(TimeThr)
-    }};
+    file_uuid = FileUuid, counter_threshold = CtrThr, time_threshold = TimeThr}} = Sub) ->
+    Sub#subscription{
+        stream_key = <<"file_location.", FileUuid/binary>>,
+        event_stream = ?FILE_LOCATION_EVENT_STREAM#event_stream_definition{
+            emission_rule = emission_rule_from_counter_threshold(CtrThr),
+            emission_time = emission_time_from_time_threshold(TimeThr)
+        }
+    };
 
-inject_event_stream_definition(#subscription{object = #permission_changed_subscription{}} = Sub) ->
-    Sub#subscription{event_stream = ?PERMISSION_CHANGED_EVENT_STREAM};
+inject_event_stream_definition(#subscription{object = #permission_changed_subscription{
+    file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{
+        stream_key = <<"permission_changed.", FileUuid/binary>>,
+        event_stream = ?PERMISSION_CHANGED_EVENT_STREAM
+    };
 
-inject_event_stream_definition(#subscription{object = #file_removal_subscription{}} = Sub) ->
-    Sub#subscription{event_stream = ?FILE_REMOVAL_EVENT_STREAM};
+inject_event_stream_definition(#subscription{object = #file_removal_subscription{
+    file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{
+        stream_key = <<"file_removal.", FileUuid/binary>>,
+        event_stream = ?FILE_REMOVAL_EVENT_STREAM
+    };
 
 inject_event_stream_definition(#subscription{object = #quota_subscription{}} = Sub) ->
-    Sub#subscription{event_stream = ?QUOTA_EXCEEDED_EVENT_STREAM#event_stream_definition{
-        emission_time = 200
-    }};
+    Sub#subscription{
+        event_stream = ?QUOTA_EXCEEDED_EVENT_STREAM#event_stream_definition{
+            emission_time = 200
+        }
+    };
 
-inject_event_stream_definition(#subscription{object = #file_renamed_subscription{}} = Sub) ->
-    Sub#subscription{event_stream = ?FILE_RENAMED_EVENT_STREAM};
+inject_event_stream_definition(#subscription{object = #file_renamed_subscription{
+    file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{
+        stream_key = <<"file_renamed.", FileUuid/binary>>,
+        event_stream = ?FILE_RENAMED_EVENT_STREAM
+    };
 
 inject_event_stream_definition(#subscription{object = #file_accessed_subscription{}} = Sub) ->
     Sub#subscription{event_stream = ?FILE_ACCESSED_EVENT_STREAM}.

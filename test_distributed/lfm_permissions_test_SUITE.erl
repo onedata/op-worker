@@ -56,6 +56,9 @@
         acemask = Mask
     }).
 
+-define(rpc(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
+-define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
+
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -112,7 +115,8 @@
     acl_read_acl_user_test/1,
     acl_read_acl_group_test/1,
     acl_write_acl_user_test/1,
-    acl_write_acl_group_test/1
+    acl_write_acl_group_test/1,
+    permission_cache_test/1
 ]).
 
 all() ->
@@ -157,7 +161,8 @@ all() ->
         acl_read_acl_user_test,
         acl_read_acl_group_test,
         acl_write_acl_user_test,
-        acl_write_acl_group_test
+        acl_write_acl_group_test,
+        permission_cache_test
     ]).
 
 %%%===================================================================
@@ -1013,6 +1018,53 @@ acl_write_acl_group_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, FileGUID}, [?acl_all(UserId2), Ace2])),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, [])).
 
+-define(PERMISSION_CACHE_STATUS_UUID, <<"status">>).
+permission_cache_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
+
+    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p1, ok])),
+    ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p1])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
+
+    ?assertEqual(ok, ?rpcCache(W, invalidate_permissions_cache, [])),
+    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, _}}}},
+        ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID])),
+    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p2, ok])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
+    ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p2])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
+
+    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache}}}},
+        ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 2),
+    ?assertEqual(ok, ?rpcCache(W, invalidate_permissions_cache, [])),
+    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache, _}}}},
+        ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 2),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
+
+    for(50, fun() -> ?assertEqual(ok, ?rpcCache(W, invalidate_permissions_cache, [])) end),
+    CheckFun = fun() ->
+        case ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]) of
+            {ok, #document{value = #permissions_cache{value = {permissions_cache, permissions_cache_helper}}}} ->
+                ok;
+            {ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache}}}} ->
+                ok;
+            Other ->
+                Other
+        end
+    end,
+    ?assertMatch(ok, CheckFun(), 10),
+    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p1, xyz])),
+    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p3, ok])),
+    ?assertEqual({ok, xyz}, ?rpcCache(W, check_permission, [p1])),
+    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
+    ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p3])).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1032,3 +1084,13 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+for(1, F) ->
+    F();
+for(N, F) ->
+    F(),
+    for(N - 1, F).
