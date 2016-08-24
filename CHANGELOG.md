@@ -4,6 +4,57 @@
 CHANGELOG
 ---------
 
+### 3.0.0-RC3
+
+* VFS-2156 Remove GUI files
+* VFS-2311 Add private RPC to retrieve file download URL
+* VFS-2389 Change event stream management
+* VFS-2263 Do not create handles for created file if not needed
+* VFS-2189 Close connection after file upload failure
+* VFS-2319 Remove spawns on event emits
+* VFS-2402 Update cluster_worker
+* Releasing new version 3.0.0-RC2
+* VFS-2273 Handle handshake errors
+* VFS-2233 Changing separate fuse request types to nested types
+* VFS-2336 Update LUMA API to swagger version
+* VFS-2303 Fix eunit tests.
+* VFS-2303 Add metadata-id endpoint.
+* VFS-2303 Add filters for getting metadata.
+* VFS-2303 Add query-index rest endpoint.
+* VFS-2340 Minor comments update
+* VFS-2303 Adjust query_view function to handle any view option.
+* VFS-2303 Fix /index/:id PUT rest internal error.
+* VFS-2303 Add /index and /index/:id endpoints to rest API.
+* VFS-2269 Enable Symmetric Multiprocessing
+* VFS-2303 Store all user indexes in one file.
+* VFS-2303 Adjust metadata changes stream to the new metadata organization.
+* VFS-2303 Add index model.
+* VFS-2303 Add validation of metadata type.
+* VFS-2303 Add filtering by spaceID to views.
+* VFS-2303 Add view tests.
+* VFS-2303 Add better error handling for custom metadata.
+* VFS-2319 Reimplement monitoring using events
+* VFS-2303 Add support for rdf metadata.
+* VFS-2303 Move xattrs to custom_metadata document.
+* VFS-2303 Add basic metadata operations.
+* VFS-2361 Turn off HSTS by default, allow configuration via app.config
+* VFS-2340, Update deps
+* Releasing new version 3.0.0-RC1
+* VFS-2049 Improve file_consistency waiting for parent mechanism.
+* VFS-2049 Add waiting for parent_links in dbsync hook.
+* VFS-2049 Fix file_consistency wrong list ordering.
+* VFS-2303 Add custom_metadata model.
+* VFS-2229 Add reaction to rename of external file_location
+* VFS-2215 Disable blocks prefetching.
+* VFS-2215 Exclude file removal originator from event recipients.
+* VFS-2049 Make file_consistency work after system restart.
+* VFS-1847 Refactor LUMA and helpers modules
+* Squashed 'appmock/' changes from 71733d3..1f49f58
+* VFS-2049 Improve file_consistency model.
+* VFS-2233 Extract file entry to generic fuse request
+* VFS-2049 Basic consistency checking before executing hook.
+
+
 ### 3.0.0-RC2
 
 * VFS-2336 Update LUMA API to swagger version
