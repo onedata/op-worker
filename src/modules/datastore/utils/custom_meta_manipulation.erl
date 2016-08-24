@@ -15,7 +15,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([find/2, insert/3]).
+-export([find/2, insert/3, merge/1]).
 
 %%%===================================================================
 %%% API
@@ -55,6 +55,41 @@ insert(Json, JsonToInsert, [Name | Rest]) ->
             maps:put(Name, insert(undefined, JsonToInsert, Rest), Json);
         SubJson ->
             maps:put(Name, insert(SubJson, JsonToInsert, Rest), Json)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Merge given list of json so that the resulting json would contain inherited
+%% entries.
+%% @end
+%%--------------------------------------------------------------------
+-spec merge(Jsons :: [#{}]) -> #{}.
+merge([]) ->
+    #{};
+merge([Json | _]) when not is_map(Json) ->
+    Json;
+merge([Json | Rest]) ->
+    ParentJson = merge(Rest),
+    case is_map(Json) andalso is_map(ParentJson) of
+        true ->
+            Keys = maps:keys(Json),
+            ParentKeys = maps:keys(ParentJson),
+            ParentOnlyKeys = ParentKeys -- Keys,
+            CommonKeys = ParentKeys -- ParentOnlyKeys,
+            JsonWithInheritedParentKeys = lists:foldl(
+                fun(Key, Acc) ->
+                    maps:put(Key, maps:get(Key, ParentJson), Acc)
+                end, Json, ParentOnlyKeys),
+            JsonWithMergedCommonKeys = lists:foldl(
+                fun(Key, Acc) ->
+                    Value = maps:get(Key, Acc),
+                    ParentValue = maps:get(Key, ParentJson),
+                    NewValue = merge([Value, ParentValue]),
+                    maps:put(Key, NewValue, Acc)
+                end, JsonWithInheritedParentKeys, CommonKeys),
+            JsonWithMergedCommonKeys;
+        false ->
+            Json
     end.
 
 %%%===================================================================
