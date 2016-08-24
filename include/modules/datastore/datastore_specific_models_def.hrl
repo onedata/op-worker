@@ -149,7 +149,8 @@
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
-    }
+    },
+    last_rename :: fslogic_file_location:last_rename()
 }).
 
 %% Model for caching provider details fetched from OZ
@@ -257,6 +258,16 @@
 -record(file_consistency, {
     components_present = [] :: [file_consistency:component()],
     waiting = [] :: [file_consistency:waiting()]
+}).
+
+%% Model that caches files' permissions
+-record(permissions_cache, {
+    value = undefined :: term()
+}).
+
+%% Helper model for caching files' permissions
+-record(permissions_cache_helper, {
+    value = undefined :: term()
 }).
 
 -endif.

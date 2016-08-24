@@ -37,7 +37,7 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    EventsSubscription = #subscription{
+    Sub = #subscription{
         id = ?MONITORING_SUB_ID,
         object = undefined,
         event_stream = #event_stream_definition{
@@ -58,11 +58,9 @@ init(_Args) ->
             emission_time = timer:seconds(?STEP_IN_SECONDS)
         }
     },
-
-    case event:subscribe(EventsSubscription) of
+    case event:subscribe(Sub) of
         {ok, _} -> ok;
-        {error, already_exists} ->
-            ok
+        {error, already_exists} -> ok
     end,
 
     {ok, #{}}.

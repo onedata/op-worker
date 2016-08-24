@@ -16,12 +16,14 @@
 -include("proto/oneclient/common_messages.hrl").
 
 %% definition of a top level event wrapper
-%% key     - arbitrary value that distinguish events, i.e. events with the same
-%%           key can be aggregated
-%% counter - number of events aggregated in this event
-%% object  - wrapped event
+%% key        - arbitrary value that distinguish events, i.e. events with the same
+%%              key can be aggregated
+%% stream_key - if present defines a stream that should handle this event
+%% counter    - number of events aggregated in this event
+%% object     - wrapped event
 -record(event, {
     key :: event:key(),
+    stream_key :: event_stream:key(),
     counter = 1 :: event:counter(),
     object :: event:object()
 }).

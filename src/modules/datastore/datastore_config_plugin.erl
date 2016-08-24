@@ -27,6 +27,7 @@
 models() -> [
     subscriptions_state,
     subscription,
+    file_subscription,
     session,
     onedata_user,
     onedata_group,
@@ -51,5 +52,7 @@ models() -> [
     dbsync_batches,
     custom_metadata,
     indexes,
-    file_consistency
+    file_consistency,
+    permissions_cache,
+    permissions_cache_helper
 ].

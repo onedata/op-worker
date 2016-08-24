@@ -36,7 +36,9 @@
     chmod_test/1,
     simple_rename_test/1,
     update_times_test/1,
-    default_permissions_test/1
+    default_permissions_test/1,
+    creating_handle_in_create_test/1,
+    creating_handle_in_open_test/1
 ]).
 
 all() ->
@@ -47,7 +49,9 @@ all() ->
         chmod_test,
         simple_rename_test,
         update_times_test,
-        default_permissions_test
+        default_permissions_test,
+        creating_handle_in_create_test,
+        creating_handle_in_open_test
     ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -476,23 +480,65 @@ update_times_test(Config) ->
         end, [SessId1, SessId2, SessId3, SessId4]).
 
 
-%% Get uuid of given by path file. Possible as a space member to bypass permissions checks.
-get_guid_privileged(Worker, SessId, Path) ->
-    SessId1 = case Path of
-                  <<"/">> ->
-                      SessId;
-                  _ ->
-                      {ok, [_, SpaceName | _]} = fslogic_path:verify_file_path(Path),
-                      hd(get(SpaceName))
-              end,
-    get_guid(Worker, SessId1, Path).
+creating_handle_in_create_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, <<"/space_name2/handle_test_dir">>),
+
+    BaseReq = #get_new_file_location{mode = 8#777},
+
+    Resp1 = ?file_req(W, SessId, DirGuid, BaseReq#get_new_file_location{
+        name = <<"file1">>, create_handle = true}),
+    Resp2 = ?file_req(W, SessId, DirGuid, BaseReq#get_new_file_location{
+        name = <<"file2">>, create_handle = false}),
+    Resp3 = ?file_req(W, ?ROOT_SESS_ID, DirGuid, BaseReq#get_new_file_location{
+        name = <<"file3">>, create_handle = true}),
+    Resp4 = ?file_req(W, ?ROOT_SESS_ID, DirGuid, BaseReq#get_new_file_location{
+        name = <<"file4">>, create_handle = false}),
+
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId1}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp1),
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId2}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp2),
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId3}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp3),
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId4}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp4),
+
+    ?assert(undefined =/= HandleId1),
+    ?assertEqual(undefined, HandleId2),
+    ?assertEqual(undefined, HandleId3),
+    ?assertEqual(undefined, HandleId4).
 
 
-get_guid(Worker, SessId, Path) ->
-    RootFileAttr = ?req(Worker, SessId, #resolve_guid{path = Path}),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
-    #fuse_response{fuse_response = #file_attr{uuid = GUID}} = RootFileAttr,
-    GUID.
+creating_handle_in_open_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/space_name2/handle_test_file">>, 8#777),
+
+    BaseReq = #get_file_location{flags = rdwr},
+
+    Resp1 = ?file_req(W, SessId, Guid, BaseReq#get_file_location{create_handle = true}),
+    Resp2 = ?file_req(W, SessId, Guid, BaseReq#get_file_location{create_handle = false}),
+    Resp3 = ?file_req(W, ?ROOT_SESS_ID, Guid, BaseReq#get_file_location{create_handle = true}),
+    Resp4 = ?file_req(W, ?ROOT_SESS_ID, Guid, BaseReq#get_file_location{create_handle = false}),
+
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId1}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp1),
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId2}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp2),
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId3}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp3),
+    #fuse_response{fuse_response = #file_location{handle_id = HandleId4}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp4),
+
+    ?assert(undefined =/= HandleId1),
+    ?assertEqual(undefined, HandleId2),
+    ?assertEqual(undefined, HandleId3),
+    ?assertEqual(undefined, HandleId4).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -517,3 +563,25 @@ end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator, luma_utils]).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% Get uuid of given by path file. Possible as a space member to bypass permissions checks.
+get_guid_privileged(Worker, SessId, Path) ->
+    SessId1 = case Path of
+        <<"/">> ->
+            SessId;
+        _ ->
+            {ok, [_, SpaceName | _]} = fslogic_path:verify_file_path(Path),
+            hd(get(SpaceName))
+    end,
+    get_guid(Worker, SessId1, Path).
+
+
+get_guid(Worker, SessId, Path) ->
+    RootFileAttr = ?req(Worker, SessId, #resolve_guid{path = Path}),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
+    #fuse_response{fuse_response = #file_attr{uuid = GUID}} = RootFileAttr,
+    GUID.

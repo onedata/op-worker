@@ -39,25 +39,35 @@
     lfm_acl_test/1,
     rm_recursive_test/1,
     file_gap_test/1,
-    ls_test/1
+    ls_test/1,
+    ls_with_stats_test/1, ls_with_stats_test_base/1
+]).
+
+-define(TEST_CASES, [
+    fslogic_new_file_test,
+    lfm_create_and_unlink_test,
+    lfm_create_and_access_test,
+    lfm_write_test,
+    lfm_stat_test,
+    lfm_synch_stat_test,
+    lfm_truncate_test,
+    lfm_acl_test,
+    rm_recursive_test,
+    file_gap_test,
+    ls_test,
+    ls_with_stats_test
+]).
+
+-define(PERFORMANCE_TEST_CASES, [
+    ls_with_stats_test
 ]).
 
 all() ->
-    ?ALL([
-        fslogic_new_file_test,
-        lfm_create_and_unlink_test,
-        lfm_create_and_access_test,
-        lfm_write_test,
-        lfm_stat_test,
-        lfm_synch_stat_test,
-        lfm_truncate_test,
-        lfm_acl_test,
-        rm_recursive_test,
-        file_gap_test,
-        ls_test
-    ]).
+    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 -define(TIMEOUT, timer:seconds(10)).
+-define(REPEATS, 10).
+-define(SUCCESS_RATE, 100).
 
 -define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
@@ -70,6 +80,181 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+ls_with_stats_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, ?REPEATS},
+        {success_rate, ?SUCCESS_RATE},
+        {parameters, [
+            [{name, proc_num}, {value, 1}, {description, "Number of threads used during the test."}],
+            [{name, dir_level}, {value, 100}, {description, "Level of test directory."}],
+            [{name, dirs_num_per_proc}, {value, 100}, {description, "Number of dirs tested by single thread."}]
+        ]},
+        {description, "Tests performance of ls with gettin stats operation"},
+        {config, [{name, low_level_single_thread_small_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 1}],
+                [{name, dirs_num_per_proc}, {value, 5}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, low_level_single_thread_large_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 1}],
+                [{name, dirs_num_per_proc}, {value, 100}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, low_level_10_threads_large_dir},
+            {parameters, [
+                [{name, proc_num}, {value, 10}],
+                [{name, dir_level}, {value, 1}],
+                [{name, dirs_num_per_proc}, {value, 10}]
+            ]},
+            {description, ""}
+        ]},
+%%        {config, [{name, low_level_many_threads_large_dir},
+%%            {parameters, [
+%%                [{name, proc_num}, {value, 100}],
+%%                [{name, dir_level}, {value, 1}],
+%%                [{name, dirs_num_per_proc}, {value, 1}]
+%%            ]},
+%%            {description, ""}
+%%        ]},
+        {config, [{name, high_level_single_thread_small_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 100}],
+                [{name, dirs_num_per_proc}, {value, 5}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, high_level_single_thread_large_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 100}],
+                [{name, dirs_num_per_proc}, {value, 100}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, high_level_10_threads_large_dir},
+            {parameters, [
+                [{name, proc_num}, {value, 10}],
+                [{name, dir_level}, {value, 100}],
+                [{name, dirs_num_per_proc}, {value, 10}]
+            ]},
+            {description, ""}
+        ]}
+%%        {config, [{name, high_level_many_threads_large_dir},
+%%            {parameters, [
+%%                [{name, proc_num}, {value, 100}],
+%%                [{name, dir_level}, {value, 100}],
+%%                [{name, dirs_num_per_proc}, {value, 1}]
+%%            ]},
+%%            {description, ""}
+%%        ]}
+    ]).
+ls_with_stats_test_base(Config) ->
+    % Get test and environment description
+    DirLevel = ?config(dir_level, Config),
+    ProcNum = ?config(proc_num, Config),
+    DirsNumPerProc = ?config(dirs_num_per_proc, Config),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Master = self(),
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    % Generate names of dirs in test directory tree
+    [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
+        NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
+        [NewDir | Acc]
+    end, [<<"/space_name1">>], lists:seq(1,DirLevel)),
+    [_ | TreeDirs] = lists:reverse(TreeDirsReversed),
+
+    % Create dirs tree
+    {CreateTreeTime, _} = measure_execution_time(fun() ->
+        lists:foreach(fun(D) ->
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D, 8#755))
+        end, TreeDirs)
+    end),
+
+    % Create dirs at last level of tree (to be listed)
+    {CreateDirsTime, _} = measure_execution_time(fun() ->
+        Fun = fun() ->
+            lists:foreach(fun(_) ->
+                D = <<LastTreeDir/binary, "/", (generator:gen_name())/binary>>,
+                ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D, 8#755))
+            end, lists:seq(1,DirsNumPerProc))
+        end,
+        case ProcNum of
+            1 ->
+                [Fun()];
+            _ ->
+                lists:foreach(fun(_) ->
+                    spawn(fun() ->
+                        Fun(),
+                        report_success(Master)
+                    end)
+                end, lists:seq(1,ProcNum)),
+                check_run_parallel_ans(ProcNum)
+        end
+    end),
+
+    % List directory
+    {LsTime, LSDirs} = measure_execution_time(fun() ->
+        LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
+        ?assertMatch({ok, _}, LSAns),
+        {ok, ListedDirs} = LSAns,
+        ?assertEqual(DirsNumPerProc*ProcNum, length(ListedDirs)),
+        ListedDirs
+    end),
+
+    % Stat listed directories
+    {StatTime, _} = measure_execution_time(fun() ->
+        Fun = fun(Dirs) ->
+            lists:foreach(fun({D, _}) ->
+                StatAns = lfm_proxy:stat(Worker, SessId1,  {guid, D}),
+                ?assertMatch({ok, #file_attr{}}, StatAns)
+            end, Dirs)
+        end,
+        case ProcNum of
+            1 ->
+                Fun(LSDirs);
+            _ ->
+                {Dirs, _} = lists:foldl(fun(D, {[H | T] = Acc, Count}) ->
+                    case Count =< DirsNumPerProc of
+                        true ->
+                            {[[D | H] | T], Count + 1};
+                        _ ->
+                            {[[D] | Acc], 1}
+                    end
+                end, {[[]], 0}, LSDirs),
+
+                lists:foreach(fun(ProcDirs) ->
+                    spawn(fun() ->
+                        Fun(ProcDirs),
+                        Master ! run_parallel_ok
+                          end)
+                end, Dirs),
+                check_run_parallel_ans(ProcNum)
+        end
+    end),
+
+    LsWithStatTime = LsTime + StatTime,
+
+    [
+        #parameter{name = create_tree_time, value = CreateTreeTime, unit = "us",
+            description = "Time of test tree creation"},
+        #parameter{name = create_dirs_time, value = CreateDirsTime, unit = "us",
+            description = "Time of test dirs creation"},
+        #parameter{name = ls_time, value = LsTime, unit = "us",
+            description = "Time of ls operation"},
+        #parameter{name = stat_time, value = StatTime, unit = "us",
+            description = "Time of all stat operations"},
+        #parameter{name = ls_stat_time, value = LsWithStatTime, unit = "us",
+            description = "Total time of ls and all stat operations"}
+    ].
 
 ls_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -141,8 +326,8 @@ fslogic_new_file_test(Config) ->
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name2">>),
 
-    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #get_new_file_location{name = <<"test">>}),
-    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #get_new_file_location{name = <<"test">>}),
+    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #get_new_file_location{name = <<"test">>, create_handle = false}),
+    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #get_new_file_location{name = <<"test">>, create_handle = false}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp11),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp21),
@@ -523,3 +708,24 @@ for(From, To, Fun) ->
 for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
 
+measure_execution_time(Fun) ->
+    StartTime = os:timestamp(),
+    Ans = Fun(),
+    Now = os:timestamp(),
+    {timer:now_diff(Now, StartTime), Ans}.
+
+check_run_parallel_ans(0) ->
+    ok;
+check_run_parallel_ans(Num) ->
+    RStatus = receive
+        run_parallel_ok ->
+            ok
+    after
+        100000 ->
+            timeout
+    end,
+    ?assertEqual(ok, RStatus),
+    check_run_parallel_ans(Num - 1).
+
+report_success(Master) ->
+    Master ! run_parallel_ok.

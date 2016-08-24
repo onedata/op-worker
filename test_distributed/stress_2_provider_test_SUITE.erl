@@ -98,7 +98,7 @@ proxy_test2_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_SUITE]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

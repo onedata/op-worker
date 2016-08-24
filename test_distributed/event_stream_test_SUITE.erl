@@ -62,14 +62,18 @@ all() ->
 event_stream_should_register_with_event_manager_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
-    ?assertReceivedMatch({'$gen_cast', {register_stream, 1, EvtStm}}, ?TIMEOUT),
+    ?assertReceivedMatch({'$gen_cast',
+        {register_stream, <<"read_event_stream">>, EvtStm}
+    }, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_unregister_from_event_manager_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
     stop_event_stream(EvtStm),
-    ?assertReceivedMatch({'$gen_cast', {unregister_stream, 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast',
+        {unregister_stream, <<"read_event_stream">>}
+    }, ?TIMEOUT).
 
 event_stream_should_execute_init_handler_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
