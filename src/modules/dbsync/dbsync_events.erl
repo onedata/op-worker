@@ -96,15 +96,7 @@ links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) 
 
                 ?info("YEY ~p", [{MainDocKey, AddedMap, DeletedMap}]),
 
-                maps:fold(
-                    fun(K, V, _AccIn) ->
-                        {_, DelTargets} = V,
-                        ?info("Del forigin link ~p", [{MainDocKey, {K, V}}]),
-                        lists:foreach(
-                            fun({_, _, S}) ->
-                                ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S, size(S))])
-                            end, DelTargets)
-                    end, [], DeletedMap),
+
 
                 maps:fold(
                     fun(K, {Version, Targets} = V, AccIn) ->
@@ -125,6 +117,16 @@ links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) 
 
                         end
                     end, [], AddedMap),
+
+                maps:fold(
+                    fun(K, V, _AccIn) ->
+                        {_, DelTargets} = V,
+                        ?info("Del forigin link ~p", [{MainDocKey, {K, V}}]),
+                        lists:foreach(
+                            fun({_, _, S}) ->
+                                ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S, size(S))])
+                            end, DelTargets)
+                    end, [], DeletedMap),
 
                 ok
 

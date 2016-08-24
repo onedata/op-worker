@@ -205,6 +205,9 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    ProvIDs = lists:map(fun(Worker) ->
+        rpc:call(Worker, oneprovider, get_provider_id, [])
+    end, Workers),
 
     Verify = fun(TestFun) ->
         lists:foldl(fun(W, Acc) ->
@@ -426,7 +429,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             {length(ZerosList), length(SList)}
         end,
         ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
-        ct:print("ToMatch ~p", [{ToMatch, AssertLinks()}]),
+        ct:print("ToMatch ~p", [{ToMatch, AssertLinks()}])
 %%        ?match(ToMatch, AssertLinks(), Attempts)
     end,
     VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
