@@ -296,7 +296,7 @@ exists_local_link_doc(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns document of child.
+%% Returns child UUIDs
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child(datastore:document() | {uuid, uuid()}, name()) ->

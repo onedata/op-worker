@@ -390,14 +390,14 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         VerAns0 = Verify(fun(W) ->
             CountChilden = fun() ->
                 LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 200),
-                ct:print("LSOut ~p", [{DirToCheck, LSAns}]),
+                ct:print("LSOut ~p", [{W, DirToCheck, LSAns}]),
                 ?assertMatch({ok, _}, LSAns),
                 {ok, ListedDirs} = LSAns,
                 length(ListedDirs)
             end,
             CS = CountChilden(),
-            ct:print("DirSize ~p vs ~p", [DSize, CS]),
-            ?match(DSize, CS, Attempts),
+            ct:print("DirSize ~p vs ~p", [{W, DSize}, CS]),
+            ?match(DSize, CountChilden(), Attempts),
 
             StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
             ?assertMatch({ok, #file_attr{}}, StatAns),
@@ -417,8 +417,8 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             {length(ZerosList), length(SList)}
         end,
         ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
-        ct:print("ToMatch ~p", [{ToMatch, AssertLinks()}])
-%%        ?match(ToMatch, AssertLinks(), Attempts)
+        ct:print("ToMatch ~p", [{ToMatch, AssertLinks()}]),
+        ?match(ToMatch, AssertLinks(), Attempts)
     end,
     VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
     ct:print("Stage 7"),
@@ -582,7 +582,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
 %%    ct:print("Space key ~p", [SpaceKey]),
 
     DoTest = fun(TaskList) ->
-%%        ct:print("Do test"),
+        ct:print("Do test ~p", [TaskList]),
 
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
@@ -596,7 +596,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
                 scope = SpaceKey
                 }
             },
-%%            ct:print("Doc ~p ~p", [Uuid, Name]),
+            ct:print("Doc ~p ~p", [Uuid, Name]),
             {Doc, Name}
         end,
 
@@ -1011,7 +1011,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
-    FileId = file_meta:snapshot_name(Path, FDoc#file_meta.version),
+    FileId = fslogic_utils:gen_storage_file_id(FileUuid, Path, FDoc#file_meta.version),
     Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
         space_id = SpaceId},

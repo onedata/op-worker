@@ -139,27 +139,27 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 
 
             Size =
-                try
-                    fslogic_blocks:get_file_size(FileDoc)
-                catch
-                    _:LocReason ->
-                        ?warning_stacktrace("Unable to calculate size of file ~p due to: ~p", [File, LocReason]),
-                        case Type of
-                            ?REGULAR_FILE_TYPE ->
-                                FoundComponents = file_consistency:check_missing_components(UUID, SpaceId),
-                                case lists:member(local_file_location, FoundComponents) of
-                                    true -> ok;
-                                    false ->
-                                        fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
-                                        fslogic_event:emit_file_attr_update({uuid, UUID}, []),
-                                        file_consistency:add_components_and_notify(UUID, [local_file_location]),
-                                        file_consistency:check_and_add_components(UUID, SpaceId, [parent_links])
-                                end,
-                                fslogic_blocks:get_file_size(FileDoc);
-                            _ ->
-                                0
-                        end
-                end,
+%%                try
+                    fslogic_blocks:get_file_size(FileDoc),
+%%                catch
+%%                    _:LocReason ->
+%%                        ?warning_stacktrace("Unable to calculate size of file ~p due to: ~p", [File, LocReason]),
+%%                        case Type of
+%%                            ?REGULAR_FILE_TYPE ->
+%%                                FoundComponents = file_consistency:check_missing_components(UUID, SpaceId),
+%%                                case lists:member(local_file_location, FoundComponents) of
+%%                                    true -> ok;
+%%                                    false ->
+%%                                        fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
+%%                                        fslogic_event:emit_file_attr_update({uuid, UUID}, []),
+%%                                        file_consistency:add_components_and_notify(UUID, [local_file_location]),
+%%                                        file_consistency:check_and_add_components(UUID, SpaceId, [parent_links])
+%%                                end,
+%%                                fslogic_blocks:get_file_size(FileDoc);
+%%                            _ ->
+%%                                0
+%%                        end
+%%                end,
             FinalUID = case  session:get(SessId) of
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
                     UID;

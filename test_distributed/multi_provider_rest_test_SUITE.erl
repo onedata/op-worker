@@ -408,7 +408,7 @@ replicate_file_by_id(Config) ->
 
     % then
     ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"path\":\"/space3/file\",\"status\":\"completed\",\"targetProviderId\":\"">>,
+        <<"{\"path\":\"/space3/replicate_file_by_id\",\"status\":\"completed\",\"targetProviderId\":\"">>,
         domain(WorkerP2),
         <<"\"}">>
     ]),

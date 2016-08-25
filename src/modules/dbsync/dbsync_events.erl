@@ -96,8 +96,6 @@ links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) 
 
                 ?info("YEY ~p", [{MainDocKey, AddedMap, DeletedMap}]),
 
-
-
                 maps:fold(
                     fun(K, {Version, Targets} = V, AccIn) ->
                         ?info("Add forigin link ~p", [{MainDocKey, {K, V}}]),
