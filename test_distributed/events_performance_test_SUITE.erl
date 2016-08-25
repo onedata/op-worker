@@ -380,12 +380,15 @@ multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
         {SubIds, FileUuids} = lists:unzip(lists:map(fun(N) ->
             FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
             {ok, SubId} = subscribe(Worker,
+                FileUuid,
+                infinity,
                 fun
                     (#event{object = #write_event{file_uuid = Uuid}}) ->
                         Uuid =:= FileUuid;
                     (_) -> false
                 end,
                 fun(Meta) -> Meta >= EvtsNum end,
+                fun(Meta, #event{counter = Counter}) -> Meta + Counter end,
                 fun(Evts, _) -> Self ! {event_handler, Evts} end
             ),
             {SubId, FileUuid}
@@ -637,8 +640,23 @@ subscribe(Worker, EmTime, AdmRule, EmRule, Handler) ->
     TrRule :: event_stream:transition_rule(), Handler :: event_stream:event_handler()) ->
     {ok, SubId :: subscription:id()}.
 subscribe(Worker, EmTime, AdmRule, EmRule, TrRule, Handler) ->
+    subscribe(Worker, <<"write_event_stream">>, EmTime, AdmRule, EmRule, TrRule, Handler).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates event subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec subscribe(Worker :: node(), StmId :: event_stream:id(),
+    EmTime :: event_stream:emission_time(), AdmRule :: event_stream:admission_rule(),
+    EmRule :: event_stream:emission_rule(), TrRule :: event_stream:transition_rule(),
+    Handler :: event_stream:event_handler()) ->
+    {ok, SubId :: subscription:id()}.
+subscribe(Worker, StmId, EmTime, AdmRule, EmRule, TrRule, Handler) ->
     Sub = #subscription{
         event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
+            id = StmId,
             metadata = 0,
             admission_rule = AdmRule,
             emission_rule = EmRule,

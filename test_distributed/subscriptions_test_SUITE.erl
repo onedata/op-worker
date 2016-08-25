@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -689,9 +690,13 @@ reset_state(Nodes) ->
 
 clear_sessions(Nodes) ->
     {ok, Docs} = rpc:call(hd(Nodes), session, list, []),
+    FilteredDocs = lists:filter(fun(#document{key = Key}) ->
+        Key =/= ?ROOT_SESS_ID
+    end, Docs),
+
     lists:foreach(fun(#document{key = Key}) ->
         ok = rpc:call(hd(Nodes), session, delete, [Key])
-    end, Docs).
+    end, FilteredDocs).
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),

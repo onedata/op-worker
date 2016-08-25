@@ -673,8 +673,10 @@ redirecting_event_to_renamed_file_test(Config) ->
     Self = self(),
     lists:foreach(fun(W) ->
         ?assertMatch({ok, _}, rpc:call(W, event, subscribe, [#subscription{
+            object = #write_subscription{},
             event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-                emission_time = infinity, event_handler = fun(Events, _) ->
+                id = <<"some_stream_id">>,
+                event_handler = fun(Events, _) ->
                     Self ! {events, Events}
                 end}}]))
         end, [W1, W2]),

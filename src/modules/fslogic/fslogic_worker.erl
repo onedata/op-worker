@@ -59,90 +59,28 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    {ok, WriteCounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
-    {ok, WriteTimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
-    {ok, WriteSizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
-    WriteSubId = ?FSLOGIC_SUB_ID,
-    WriteSub = #subscription{
-        id = WriteSubId,
-        object = #write_subscription{
-            counter_threshold = WriteCounterThreshold,
-            time_threshold = WriteTimeThreshold,
-            size_threshold = WriteSizeThreshold
-        },
-        event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-            metadata = {0, 0}, %% {Counter, Size}
-            emission_time = WriteTimeThreshold,
-            emission_rule =
-                fun({Counter, Size}) ->
-                    Counter > WriteCounterThreshold orelse Size > WriteSizeThreshold
-                end,
-            transition_rule =
-                fun({Counter, Size}, #event{counter = C, object = #write_event{size = S}}) ->
-                    {Counter + C, Size + S}
-                end,
-            init_handler = event_utils:send_subscription_handler(),
-            event_handler = fun(Evts, Ctx) ->
-                handle_write_events(Evts, Ctx)
-            end,
-            terminate_handler = event_utils:send_subscription_cancellation_handler()
-        }
-    },
-
     case application:get_env(?APP_NAME, start_rtransfer_on_init) of
-        {ok, true} ->
-            rtransfer_config:start_rtransfer();
-        _ ->
-            ok
+        {ok, true} -> rtransfer_config:start_rtransfer();
+        _ -> ok
     end,
 
-    case event:subscribe(WriteSub) of
-        {ok, WriteSubId} ->
-            ok;
-        {error, already_exists} ->
-            ok
+    lists:foreach(fun(Sub) ->
+        case event:subscribe(Sub) of
+            {ok, _SubId} -> ok;
+            {error, already_exists} -> ok
+        end
+    end, [
+        event_subscriptions:read_subscription(fun handle_read_events/2),
+        event_subscriptions:write_subscription(fun handle_write_events/2),
+        event_subscriptions:file_accessed_subscription(fun handle_file_accessed_events/2)
+    ]),
+
+    case session_manager:create_root_session() of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
     end,
 
-    ReadSub = event_subscriptions:read_subscription(
-        fun(Evts, Ctx) ->
-            handle_read_events(Evts, Ctx)
-        end),
-
-    case event:subscribe(ReadSub) of
-        {ok, _ReadSubId} ->
-            ok;
-        {error, already_exists} ->
-            ok
-    end,
-
-    {ok, FileAccessedThreshold} = application:get_env(?APP_NAME,
-        default_file_accessed_event_counter_threshold),
-    {ok, FileAccessedTimeThreshold} = application:get_env(?APP_NAME,
-        default_file_accessed_event_time_threshold_miliseconds),
-    FileAccessedSub = #subscription{
-        object = #file_accessed_subscription{
-            counter_threshold = FileAccessedThreshold,
-            time_threshold = FileAccessedTimeThreshold
-        },
-        event_stream = ?FILE_ACCESSED_EVENT_STREAM#event_stream_definition{
-            metadata = 0,
-            emission_rule = fun(_) -> true end,
-            init_handler = event_utils:send_subscription_handler(),
-            event_handler = fun(Evts, Ctx) ->
-                handle_file_accessed_events(Evts, Ctx)
-            end,
-            terminate_handler = event_utils:send_subscription_cancellation_handler()
-        }
-    },
-
-    case event:subscribe(FileAccessedSub) of
-        {ok, _FileAccessedSubId} ->
-            ok;
-        {error, already_exists} ->
-            ok
-    end,
-
-    {ok, #{sub_id => WriteSubId}}.
+    {ok, #{sub_id => ?FSLOGIC_SUB_ID}}.
 
 %%--------------------------------------------------------------------
 %% @doc

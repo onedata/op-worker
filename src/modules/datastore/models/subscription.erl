@@ -16,8 +16,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
--define(BATCH_SIZE, 100).
-
 %% API
 -export([generate_id/0]).
 

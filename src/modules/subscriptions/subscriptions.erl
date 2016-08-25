@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/subscriptions/subscriptions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([account_updates/1, get_missing/0, get_users/0, put_user/1,
@@ -79,6 +80,8 @@ get_users() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec put_user(UserID :: onedata_user:id()) -> ok.
+put_user(?ROOT_USER_ID) ->
+    ok;
 put_user(UserID) ->
     ensure_initialised(),
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
@@ -163,6 +166,8 @@ get_refreshing_node() ->
 get_users_with_session() ->
     {ok, Docs} = session:all_with_user(),
     lists:filtermap(fun
+        (#document{value = #session{identity = #user_identity{user_id = ?ROOT_USER_ID}}}) ->
+            false;
         (#document{value = #session{identity = #user_identity{user_id = UserID}}}) ->
             {true, UserID};
         (_) -> false

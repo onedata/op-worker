@@ -18,7 +18,8 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([get_space/2, get_space/1, get_space_id/1, get_space_id/2]).
+-export([get_space/2, get_space/1, get_space_id/1, get_space_id/2,
+    make_space_exist/1]).
 
 %%%===================================================================
 %%% API
@@ -68,17 +69,27 @@ get_space_id(CTX, Path) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns space document for given file. Note: This function works only with
-%% absolute, user independent paths (cannot be used with paths to default space).
+%% Returns space document for given file or space id. Note: This function
+%% works only with absolute, user independent paths (cannot be used
+%% with paths to default space).
 %% @end
 %%--------------------------------------------------------------------
--spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}) ->
+-spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}|
+    {id, SpaceId :: datastore:id()}) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
+get_space({id, SpaceId}) ->
+    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    case file_meta:get({uuid, SpaceUUID}) of
+        {error, {not_found, _}} ->
+            make_space_exist(SpaceId),
+            file_meta:get({uuid, SpaceUUID});
+        Res -> Res
+    end;
 get_space({guid, FileGUID}) ->
     case fslogic_uuid:unpack_file_guid(FileGUID) of
         {FileUUID, undefined} -> get_space({uuid, FileUUID});
         {_, SpaceId} ->
-            file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId))
+            get_space({id, SpaceId})
     end;
 get_space(FileEntry) ->
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
@@ -132,6 +143,32 @@ get_space(FileEntry, UserId) ->
                 true ->
                     {ok, SpaceDocument};
                 false -> throw({not_a_space, FileEntry})
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file meta entry for space if not exists
+%% @end
+%%--------------------------------------------------------------------
+-spec make_space_exist(SpaceId :: datastore:id()) -> no_return().
+make_space_exist(SpaceId) ->
+    CTime = erlang:system_time(seconds),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    case file_meta:exists({uuid, SpaceDirUuid}) of
+        true ->
+            file_meta:fix_parent_links({uuid, ?ROOT_DIR_UUID},
+                {uuid, SpaceDirUuid});
+        false ->
+            case file_meta:create({uuid, ?ROOT_DIR_UUID},
+                #document{key = SpaceDirUuid,
+                    value = #file_meta{
+                        name = SpaceId, type = ?DIRECTORY_TYPE,
+                        mode = 8#1770, mtime = CTime, atime = CTime,
+                        ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
+                    }}) of
+                {ok, _RootUUID} -> ok;
+                {error, already_exists} -> ok
             end
     end.
 

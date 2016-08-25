@@ -27,6 +27,7 @@
 models() -> [
     subscriptions_state,
     subscription,
+    file_subscription,
     session,
     onedata_user,
     onedata_group,

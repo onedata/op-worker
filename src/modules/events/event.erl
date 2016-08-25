@@ -51,7 +51,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: event() | object()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    emit(Evt, get_event_managers()).
+    emit(Evt, get_event_managers_for_event(Evt)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -62,7 +62,7 @@ emit(Evt) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, Ref}) ->
     ExcludedEvtMans = sets:from_list(get_event_managers(as_list(Ref))),
-    emit(Evt, filter_event_managers(get_event_managers(), ExcludedEvtMans));
+    emit(Evt, filter_event_managers(get_event_managers_for_event(Evt), ExcludedEvtMans));
 
 emit(#event{key = undefined} = Evt, Ref) ->
     emit(set_key(Evt), Ref);
@@ -200,22 +200,22 @@ set_key(#event{object = #write_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
 
 set_key(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_attr.", Uuid/binary>>};
 
 set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_location.", Uuid/binary>>};
 
 set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"permission_changed.", Uuid/binary>>};
 
 set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_removal.", Uuid/binary>>};
 
 set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
     Evt#event{key = <<"quota_exeeded">>};
 
 set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
+    Evt#event{key = Uuid, stream_key = <<"file_renamed.", Uuid/binary>>};
 
 set_key(#event{object = #file_accessed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid};
@@ -280,14 +280,32 @@ get_event_managers() ->
             lists:foldl(fun
                 ({ok, EvtMan}, EvtMans) ->
                     [EvtMan | EvtMans];
-                ({error, {not_found, SessId}}, EvtMans) ->
-                    ?warning("Cannot get event manager for session ~p due to: missing", [SessId]),
+                ({error, {not_found, _}}, EvtMans) ->
                     EvtMans
             end, [], Refs);
         {error, Reason} ->
-            ?warning("Cannot get event managers due to: ~p", [Reason]),
+            ?error("Cannot get event managers due to: ~p", [Reason]),
             []
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list of event managers that are dedicated for the event.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_managers_for_event(Evt :: event() | object()) -> [EvtMan :: pid()].
+get_event_managers_for_event(#event{key = undefined} = Evt) ->
+    get_event_managers_for_event(set_key(Evt));
+get_event_managers_for_event(#event{} = Evt) ->
+    case file_subscription:get(Evt) of
+        {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
+            get_event_managers(gb_sets:to_list(SessIds));
+        _ ->
+            get_event_managers()
+    end;
+get_event_managers_for_event(EvtObject) ->
+    get_event_managers_for_event(#event{object = EvtObject}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -326,4 +344,3 @@ as_list(Object) when is_list(Object) ->
     Object;
 as_list(Object) ->
     [Object].
-

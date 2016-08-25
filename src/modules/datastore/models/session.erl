@@ -34,7 +34,7 @@
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
 -type auth() :: #token_auth{} | #basic_auth{}.
--type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | monitoring.
+-type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root.
 -type status() :: active | inactive.
 -type identity() :: #user_identity{}.
 
@@ -93,10 +93,6 @@ create(#document{value = Sess} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_SESS_ID) ->
-    {ok, #document{key = ?ROOT_SESS_ID, value = #session{
-        identity = #user_identity{user_id = ?ROOT_USER_ID}
-    }}};
 get(Key) ->
     case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
         {ok, Doc} ->
