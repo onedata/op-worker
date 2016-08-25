@@ -231,7 +231,7 @@ remove_xattr(CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 list_xattr(_CTX, {uuid, FileUuid}, Inherited) ->
-    case xattr:list(FileUuid) of
+    case xattr:list(FileUuid, Inherited) of
         {ok, List} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = List}};
         {error, {not_found, custom_metadata}} ->

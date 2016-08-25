@@ -17,6 +17,7 @@
 
 -define(ALLOWED_ATTRIBUTES, [<<"mode">>, undefined]).
 -define(DEFAULT_EXTENDED, <<"false">>).
+-define(DEFAULT_INHERITED, <<"false">>).
 
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
 
@@ -483,8 +484,15 @@ parse_filter_type(Req, State) ->
 -spec parse_inherited(cowboy_req:req(), #{}) ->
     {#{inherited => binary()}, cowboy_req:req()}.
 parse_inherited(Req, State) ->
-    {Val, NewReq} = cowboy_req:qs_val(<<"inherited">>, Req, false),
-    {State#{inherited => Val}, NewReq}.
+    {Inherited, NewReq} = cowboy_req:qs_val(<<"inherited">>, Req, ?DEFAULT_EXTENDED),
+    case Inherited of
+        <<"true">> ->
+            {State#{inherited => true}, NewReq};
+        <<"false">> ->
+            {State#{inherited => false}, NewReq};
+        _ ->
+            throw(?ERROR_INVALID_INHERITED_FLAG)
+    end.
 
 %%%===================================================================
 %%% Internal functions

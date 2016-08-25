@@ -53,7 +53,8 @@
     set_get_rdf_metadata_id/1,
     changes_stream_json_metadata_test/1,
     create_list_index/1,
-    set_get_json_metadata_inherited/1
+    set_get_json_metadata_inherited/1,
+    set_get_xattr_inherited/1
 ]).
 
 all() ->
@@ -81,7 +82,8 @@ all() ->
         set_get_rdf_metadata_id,
         changes_stream_json_metadata_test,
         create_list_index,
-        set_get_json_metadata_inherited
+        set_get_json_metadata_inherited,
+        set_get_xattr_inherited
     ]).
 
 %%%===================================================================
@@ -671,15 +673,15 @@ set_get_json_metadata_inherited(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
-            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}")),
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir">>),
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json">>, put,
-            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}")),
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
-        do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json&inherited">>, get,
+        do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json&inherited=true">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = jiffy:decode(Body, [return_maps]),
     ?assertMatch(
@@ -688,6 +690,46 @@ set_get_json_metadata_inherited(Config) ->
             <<"b">> := <<"d">>,
             <<"e">> := <<"f">>
         },
+        DecodedBody
+    ).
+
+set_get_xattr_inherited(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir">>),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir/child">>),
+
+    % when
+    XattrSpace = json_utils:encode([{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]),
+    XattrDir = json_utils:encode([{<<"name">>, <<"k2">>}, {<<"value">>, <<"v2">>}]),
+    XattrChild = json_utils:encode([{<<"name">>, <<"k2">>}, {<<"value">>, <<"v22">>}]),
+    XattrChild2 = json_utils:encode([{<<"name">>, <<"k3">>}, {<<"value">>, <<"v3">>}]),
+
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpace)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3/dir?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrDir)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3/dir/child?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrChild)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3/dir/child?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrChild2)),
+
+    % then
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"attributes/space3/dir/child?inherited=true&extended=true">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    tracer:stop(),
+    DecodedBody = jiffy:decode(Body, [return_maps]),
+    ?assertMatch(
+        [
+            #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
+            #{<<"name">> := <<"k2">>, <<"value">> := <<"v22">>},
+            #{<<"name">> := <<"k3">>, <<"value">> := <<"v3">>}
+        ],
         DecodedBody
     ).
 

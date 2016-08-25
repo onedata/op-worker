@@ -93,29 +93,30 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_file_attributes(req(), #{}) -> {term(), req(), #{}}.
 get_file_attributes(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_extended(Req2, State2),
-    {State4, Req4} = validator:parse_attribute(Req3, State3),
+    {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
+    {StateWithExtended, ReqWithExtended} = validator:parse_extended(ReqWithPath, StateWithPath),
+    {StateWithInherited, ReqWithInherited} = validator:parse_inherited(ReqWithExtended, StateWithExtended),
+    {StateWithAttribute, ReqWithAttribute} = validator:parse_attribute(ReqWithInherited, StateWithInherited),
 
-    #{auth := Auth, path := Path, attribute := Attribute, extended := Extended} = State4,
+    #{auth := Auth, path := Path, attribute := Attribute, extended := Extended, inherited := Inherited} = StateWithAttribute,
 
     case {Attribute, Extended} of
         {ModeOrUndefined, false} when ModeOrUndefined =:= <<"mode">> ; ModeOrUndefined =:= undefined ->
             {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
             Response = json_utils:encode([[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]]),
-            {Response, Req4, State4};
+            {Response, ReqWithAttribute, StateWithAttribute};
         {undefined, true} ->
-            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, false),
+            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, Inherited),
             RawResponse = lists:map(fun(XattrName) ->
-                {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName),
+                {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
                 [{<<"name">>, XattrName}, {<<"value">>, Value}]
             end, Xattrs),
             Response = json_utils:encode(RawResponse),
-            {Response, Req4, State4};
+            {Response, ReqWithAttribute, StateWithAttribute};
         {XattrName, true} ->
-            {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName),
+            {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
             Response = json_utils:encode([[{<<"name">>, XattrName}, {<<"value">>, Value}]]),
-            {Response, Req4, State4}
+            {Response, ReqWithAttribute, StateWithAttribute}
     end.
 
 %%--------------------------------------------------------------------
