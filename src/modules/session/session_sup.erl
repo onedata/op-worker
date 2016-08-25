@@ -56,7 +56,7 @@ init([SessId, SessType]) ->
     SequencerEnabled = [fuse, provider_outgoing],
 
     case SessType of
-        monitoring ->
+        root ->
             {ok, {SupFlags, [
                 event_manager_sup_spec(SessId, SessType)
             ]}};
