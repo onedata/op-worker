@@ -601,6 +601,8 @@ request_to_file_entry_or_provider(_Ctx, Req) ->
     erlang:error({invalid_request, Req}).
 
 
+-spec try_handle_event(fun(() -> HandleResult)) -> HandleResult
+    when HandleResult :: ok | {error, Reason :: any()}.
 try_handle_event(HandleFun) ->
     try HandleFun()
     catch
