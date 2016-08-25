@@ -107,18 +107,20 @@ get_json_internal(Req, State) ->
     {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
     {StateWithFilterType, ReqWithFilterType} = validator:parse_filter_type(ReqWithMetadataType, StateWithMetadataType),
     {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
+    {StateWithInherited, ReqWithInherited} = validator:parse_inherited(ReqWithFilter, StateWithFilter),
 
-    #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType, filter := Filter} = StateWithFilter,
+    #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType,
+        filter := Filter, inherited := Inherited} = StateWithInherited,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
     FilterList = get_filter_list(FilterType, Filter),
 
-    case onedata_file_api:get_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, FilterList, false) of
+    case onedata_file_api:get_metadata(Auth, get_file(StateWithInherited), DefinedMetadataType, FilterList, Inherited) of
         {ok, Meta} ->
             Response = jiffy:encode(Meta),
-            {Response, ReqWithFilter, StateWithFilter};
+            {Response, ReqWithInherited, StateWithInherited};
         {error, ?ENOATTR} ->
             Response = jiffy:encode(#{}),
-            {Response, ReqWithFilter, StateWithFilter}
+            {Response, ReqWithInherited, StateWithInherited}
     end.
 
 %%--------------------------------------------------------------------

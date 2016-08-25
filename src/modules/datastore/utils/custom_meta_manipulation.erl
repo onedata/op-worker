@@ -59,8 +59,7 @@ insert(Json, JsonToInsert, [Name | Rest]) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Merge given list of json so that the resulting json would contain inherited
-%% entries.
+%% Merge given list of json so that the resulting json would contain inherited entries
 %% @end
 %%--------------------------------------------------------------------
 -spec merge(Jsons :: [#{}]) -> #{}.

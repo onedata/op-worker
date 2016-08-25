@@ -52,7 +52,8 @@
     set_get_rdf_metadata/1,
     set_get_rdf_metadata_id/1,
     changes_stream_json_metadata_test/1,
-    create_list_index/1
+    create_list_index/1,
+    set_get_json_metadata_inherited/1
 ]).
 
 all() ->
@@ -79,7 +80,8 @@ all() ->
         set_get_rdf_metadata,
         set_get_rdf_metadata_id,
         changes_stream_json_metadata_test,
-        create_list_index
+        create_list_index,
+        set_get_json_metadata_inherited
     ]).
 
 %%%===================================================================
@@ -661,6 +663,33 @@ create_list_index(Config) ->
         [user_1_token_header(Config)], [])),
     IndexList2 = jiffy:decode(ListBody2, [return_maps]),
     ?assertMatch([#{}, #{}], IndexList2).
+
+set_get_json_metadata_inherited(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+
+    % when
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}")),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir">>),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}")),
+
+    % then
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json&inherited">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    DecodedBody = jiffy:decode(Body, [return_maps]),
+    ?assertMatch(
+        #{
+            <<"a">> := #{<<"a1">> := <<"b1">>, <<"a2">> := <<"b2">>},
+            <<"b">> := <<"d">>,
+            <<"e">> := <<"f">>
+        },
+        DecodedBody
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

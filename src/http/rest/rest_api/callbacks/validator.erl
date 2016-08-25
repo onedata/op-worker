@@ -34,7 +34,7 @@
     parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
-    parse_startkey/2, parse_filter/2, parse_filter_type/2]).
+    parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2]).
 
 %%%===================================================================
 %%% API
@@ -475,6 +475,16 @@ parse_filter_type(Req, State) ->
     {Val, NewReq} = cowboy_req:qs_val(<<"filter_type">>, Req),
     {State#{filter_type => Val}, NewReq}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's inherited param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_inherited(cowboy_req:req(), #{}) ->
+    {#{inherited => binary()}, cowboy_req:req()}.
+parse_inherited(Req, State) ->
+    {Val, NewReq} = cowboy_req:qs_val(<<"inherited">>, Req, false),
+    {State#{inherited => Val}, NewReq}.
 
 %%%===================================================================
 %%% Internal functions

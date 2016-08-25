@@ -28,12 +28,12 @@
 
 %% API
 -export([chmod/3, get_file_attr/2, delete/3, update_times/5,
-    get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
+    get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/3,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
     get_file_path/2, chmod_storage_files/3, replicate_file/3,
-    get_metadata/4, set_metadata/5]).
+    get_metadata/5, set_metadata/5]).
 
 %%%===================================================================
 %%% API functions
@@ -227,10 +227,10 @@ remove_xattr(CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
 %% Returns complete list of extended attributes' keys of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
+-spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, boolean()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-list_xattr(_CTX, {uuid, FileUuid}) ->
+list_xattr(_CTX, {uuid, FileUuid}, Inherited) ->
     case xattr:list(FileUuid) of
         {ok, List} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = List}};
@@ -509,16 +509,16 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
 %% Get metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()]) -> {ok, #{}}.
+-spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()], boolean()) -> {ok, #{}}.
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
-get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names) ->
-    case custom_metadata:get_json_metadata(FileUuid, Names) of
+get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names, Inherited) ->
+    case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of
         {ok, Meta} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end;
-get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _) ->
+get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _, _) ->
     case custom_metadata:get_rdf_metadata(FileUuid) of
         {ok, Meta} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"rdf">>, value = Meta}};

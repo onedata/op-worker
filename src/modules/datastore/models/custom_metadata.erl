@@ -19,7 +19,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_json_metadata/1, get_json_metadata/2, set_json_metadata/2, set_json_metadata/3,
+-export([get_json_metadata/1, get_json_metadata/3, set_json_metadata/2, set_json_metadata/3,
     get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3,
     exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2]).
 
@@ -49,7 +49,7 @@
 -spec get_json_metadata(file_meta:uuid()) ->
     {ok, #{}} | datastore:get_error().
 get_json_metadata(FileUuid) ->
-    get_json_metadata(FileUuid, []).
+    get_json_metadata(FileUuid, [], false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,13 +64,28 @@ get_json_metadata(FileUuid) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_json_metadata(file_meta:uuid(), [binary()]) ->
+-spec get_json_metadata(file_meta:uuid(), [binary()], boolean()) ->
     {ok, #{}} | datastore:get_error().
-get_json_metadata(FileUuid, Names) ->
+get_json_metadata(FileUuid, Names, false) ->
     case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
             Json = maps:get(?JSON_PREFIX, Meta, #{}),
             {ok, custom_meta_manipulation:find(Json, Names)};
+        Error ->
+            Error
+    end;
+get_json_metadata(FileUuid, Names, true) ->
+    case file_meta:get_ancestors(FileUuid) of
+        {ok, Uuids} ->
+            Jsons = lists:map(fun(Uuid) ->
+                case get_json_metadata(Uuid, Names, false) of
+                    {ok, Json} ->
+                        Json;
+                    {error, {not_found,custom_metadata}} ->
+                        #{}
+                end
+            end, [FileUuid | Uuids]),
+            {ok, custom_meta_manipulation:merge(Jsons)};
         Error ->
             Error
     end.
@@ -167,9 +182,9 @@ list_xattr_metadata(FileUuid) ->
     ok | datastore:generic_error().
 remove_xattr_metadata(FileUuid, Name) ->
     case update(FileUuid, fun(Meta = #custom_metadata{value = MetaValue}) ->
-            NewMetaValue = maps:remove(Name, MetaValue),
-            {ok, Meta#custom_metadata{value = NewMetaValue}}
-        end) of
+        NewMetaValue = maps:remove(Name, MetaValue),
+        {ok, Meta#custom_metadata{value = NewMetaValue}}
+    end) of
         {ok, _} ->
             ok;
         {error, {not_found, custom_metadata}} ->
