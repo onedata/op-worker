@@ -129,7 +129,7 @@ create_gui_session(Iden, Auth) ->
     {error, Reason :: term()}.
 create_root_session() ->
     Sess = #session{status = active, type = root, connections = [],
-        identity = #identity{user_id = ?ROOT_USER_ID}},
+        identity = #user_identity{user_id = ?ROOT_USER_ID}},
     case session:create(#document{key = ?ROOT_SESS_ID, value = Sess}) of
         {ok, ?ROOT_SESS_ID} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [?ROOT_SESS_ID, root]),
