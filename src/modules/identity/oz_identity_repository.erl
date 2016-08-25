@@ -31,7 +31,7 @@
 -spec publish(identity:id(), identity:encoded_public_key()) ->
     ok | {error, Reason :: term()}.
 publish(ID, PublicKey) ->
-    oz_identities:set_public_key(provider, ID, PublicKey).
+    oz_identities:update_own_public_key(provider, ID, PublicKey).
 
 %%--------------------------------------------------------------------
 %% @doc

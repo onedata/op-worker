@@ -242,7 +242,7 @@ register_provider_in_oz(NodeList) ->
         RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
 
         Parameters = [
-            {<<"ID">>, ID},
+            {<<"id">>, ID},
             {<<"publicKey">>, identity_utils:encode(PublicKey)},
             {<<"urls">>, IPAddresses},
             {<<"redirectionPoint">>, RedirectionPoint}

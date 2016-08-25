@@ -175,8 +175,20 @@ certs_should_be_cached_after_successful_publishing(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), []).
+init_per_suite(RunConfig) ->
+    Config = ?TEST_INIT(RunConfig, ?TEST_FILE(RunConfig, "env_desc.json"), []),
+
+    %% ensure some provider certs present as ctool requires them
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        {ok, Key} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_key_path]),
+        {ok, Cert} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_cert_path]),
+        Domain = rpc:call(Worker, oneprovider, get_provider_domain, []),
+        ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, Domain])
+    end, Workers),
+
+    Config.
+
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
