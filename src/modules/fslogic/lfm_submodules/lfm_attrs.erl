@@ -22,7 +22,7 @@
 -export_type([file_attributes/0]).
 
 %% API
--export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
+-export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3, update_times/4,
     update_times/5]).
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
@@ -88,20 +88,20 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: logical_file_manager:handle(), XattrName :: xattr:name()) ->
+-spec get_xattr(Handle :: logical_file_manager:handle(), XattrName :: xattr:name(), boolean()) ->
     {ok, #xattr{}} | logical_file_manager:error_reply().
 get_xattr(#lfm_handle{file_guid = FileGUID,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
-    get_xattr(SessId, {guid, FileGUID}, XattrName).
+    fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName, Inherited) ->
+    get_xattr(SessId, {guid, FileGUID}, XattrName, Inherited).
 
 -spec get_xattr(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
-    XattrName :: xattr:name()) ->
+    XattrName :: xattr:name(), boolean()) ->
     {ok, #xattr{}} | logical_file_manager:error_reply().
-get_xattr(SessId, FileKey, XattrName) ->
+get_xattr(SessId, FileKey, XattrName, Inherited) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
-        #get_xattr{name = XattrName},
+        #get_xattr{name = XattrName, inherited = Inherited},
         fun(#xattr{} = Xattr) ->
             {ok, Xattr}
         end).

@@ -71,7 +71,7 @@
 -export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
+-export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3, update_times/4,
     update_times/5]).
 %% Functions concerning cdmi attributes
@@ -420,15 +420,15 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: handle(), XattrName :: xattr:name()) ->
+-spec get_xattr(Handle :: handle(), XattrName :: xattr:name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(Handle, XattrName) ->
-    ?run(fun() -> lfm_attrs:get_xattr(Handle, XattrName) end).
+get_xattr(Handle, XattrName, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_xattr(Handle, XattrName, Inherited) end).
 
--spec get_xattr(session:id(), file_key(), xattr:name()) ->
+-spec get_xattr(session:id(), file_key(), xattr:name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(SessId, FileKey, XattrName) ->
-    ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName) end).
+get_xattr(SessId, FileKey, XattrName, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited) end).
 
 
 %%--------------------------------------------------------------------

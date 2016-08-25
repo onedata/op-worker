@@ -28,7 +28,7 @@
 
 %% API
 -export([chmod/3, get_file_attr/2, delete/3, update_times/5,
-    get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/3,
+    get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/3,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
@@ -175,12 +175,12 @@ delete(CTX, File, Silent) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
+-spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name(), boolean()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
-get_xattr(_CTX, _, <<"cdmi_", _/binary>>) -> throw(?EPERM);
-get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
-    case xattr:get_by_name(FileUuid, XattrName) of
+get_xattr(_CTX, _, <<"cdmi_", _/binary>>, _) -> throw(?EPERM);
+get_xattr(_CTX, {uuid, FileUuid}, XattrName, Inherited) ->
+    case xattr:get_by_name(FileUuid, XattrName, Inherited) of
         {ok, XattrValue} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = XattrName, value = XattrValue}};
         {error, {not_found, custom_metadata}} ->

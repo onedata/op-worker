@@ -26,7 +26,7 @@
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
+-export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/3, get_xattr/4,
     remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -290,14 +290,14 @@ stat(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Returns file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: file_handle(), XattrName :: xattr_name()) ->
+-spec get_xattr(Handle :: file_handle(), XattrName :: xattr_name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(Handle, XattrName) ->
-    logical_file_manager:get_xattr(Handle, XattrName).
--spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) ->
+get_xattr(Handle, XattrName, Inherited) ->
+    logical_file_manager:get_xattr(Handle, XattrName, Inherited).
+-spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(Auth, FileKey, XattrName) ->
-    logical_file_manager:get_xattr(Auth, FileKey, XattrName).
+get_xattr(Auth, FileKey, XattrName, Inherited) ->
+    logical_file_manager:get_xattr(Auth, FileKey, XattrName, Inherited).
 
 
 %%--------------------------------------------------------------------

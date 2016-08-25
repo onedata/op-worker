@@ -16,7 +16,8 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -record(get_xattr, {
-    name :: xattr:name()
+    name :: xattr:name(),
+    inherited = false :: boolean()
 }).
 
 -record(set_xattr, {

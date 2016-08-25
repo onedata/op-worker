@@ -438,8 +438,8 @@ handle_fuse_request(_Ctx, Req) ->
     ProviderResponse :: #provider_response{}.
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_parent{}}) ->
     fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
-handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_xattr{name = XattrName}}) ->
-    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, XattrName);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_xattr{name = XattrName, inherited = Inherited}}) ->
+    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, XattrName, Inherited);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_xattr{xattr = Xattr}}) ->
     fslogic_req_generic:set_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Xattr);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #remove_xattr{name = XattrName}}) ->

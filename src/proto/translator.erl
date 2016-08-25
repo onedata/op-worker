@@ -352,8 +352,8 @@ translate_from_protobuf(#'ProviderRequest'{context_guid = ContextGuid,
     provider_request = {_, Record}}) ->
     #provider_request{context_guid = ContextGuid,
         provider_request = translate_from_protobuf(Record)};
-translate_from_protobuf(#'GetXattr'{name = Name}) ->
-    #get_xattr{name = Name};
+translate_from_protobuf(#'GetXattr'{name = Name, inherited = Inherited}) ->
+    #get_xattr{name = Name, inherited = Inherited};
 translate_from_protobuf(#'SetXattr'{xattr = Xattr}) ->
     #set_xattr{xattr = translate_from_protobuf(Xattr)};
 translate_from_protobuf(#'RemoveXattr'{name = Name}) ->
@@ -737,8 +737,8 @@ translate_to_protobuf(#provider_request{context_guid = ContextGuid,
     provider_request = Record}) ->
     {provider_request, #'ProviderRequest'{context_guid = ContextGuid,
         provider_request = translate_to_protobuf(Record)}};
-translate_to_protobuf(#get_xattr{name = Name}) ->
-    {get_xattr, #'GetXattr'{name = Name}};
+translate_to_protobuf(#get_xattr{name = Name, inherited = Inherited}) ->
+    {get_xattr, #'GetXattr'{name = Name, inherited = Inherited}};
 translate_to_protobuf(#set_xattr{xattr = Xattr}) ->
     {_, XattrT} = translate_to_protobuf(Xattr),
     {set_xattr, #'SetXattr'{xattr = XattrT}};

@@ -598,7 +598,7 @@ copy_file_attributes(SessId, From, To) ->
             (<<"cdmi_", _/binary>>) ->
                 ok;
             (XattrName) ->
-                {ok, Xattr} = logical_file_manager:get_xattr(SessId, From, XattrName),
+                {ok, Xattr} = logical_file_manager:get_xattr(SessId, From, XattrName, false),
                 ok = logical_file_manager:set_xattr(SessId, To, Xattr)
         end, XattrNames
     ),
