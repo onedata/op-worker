@@ -55,7 +55,7 @@
 all() ->
     ?ALL(?TEST_CASES, ?TEST_CASES).
 
--define(TIMEOUT, timer:seconds(15)).
+-define(TIMEOUT, timer:minutes(5)).
 -define(FILE_UUID(Id), <<"file_id_", (integer_to_binary(Id))/binary>>).
 -define(CTR_THR(Value), [
     {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}
@@ -147,7 +147,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
             end, lists:seq(1, EvtNum div CtrThr))
         end),
 
-        unsubscribe(Worker, SubId, {event_handler, []}),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -223,7 +223,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
             end, lists:seq(1, EvtNum div CtrThr))
         end),
 
-        unsubscribe(Worker, SubId, {event_handler, []}),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
@@ -280,7 +280,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
             end, lists:seq(1, EvtNum div CtrThr))
         end),
 
-        unsubscribe(Worker, SubId, event_handler),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -341,7 +341,7 @@ emit_should_execute_event_handler_when_size_threshold_exceeded_base(Config) ->
             end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
         end),
 
-        unsubscribe(Worker, SubId, event_handler),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -378,7 +378,7 @@ multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
         initializer:remove_pending_messages(),
         % Create subscriptions for events associated with different files.
         {SubIds, FileUuids} = lists:unzip(lists:map(fun(N) ->
-            FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
+            FileUuid = ?FILE_UUID(N),
             {ok, SubId} = subscribe(Worker,
                 FileUuid,
                 infinity,
@@ -415,7 +415,7 @@ multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
         end, FileUuids),
 
         lists:foreach(fun(SubId) ->
-            unsubscribe(Worker, SubId, {event_handler, []})
+            unsubscribe(Worker, SubId)
         end, SubIds),
 
         ok.
@@ -483,7 +483,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
             end, SessIds)
         end),
 
-        unsubscribe(Worker, SubId, event_handler),
+        unsubscribe(Worker, SubId),
         lists:foreach(fun(SessId) ->
             session_teardown(Worker, SessId)
         end, SessIds),
@@ -673,11 +673,9 @@ subscribe(Worker, StmId, EmTime, AdmRule, EmRule, TrRule, Handler) ->
 %% Removes event subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(Worker :: node(), SubId :: subscription:id(), HandlerMsg :: term()) ->
-    ok.
-unsubscribe(Worker, SubId, HandlerMsg) ->
+-spec unsubscribe(Worker :: node(), SubId :: subscription:id()) -> ok.
+unsubscribe(Worker, SubId) ->
     ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])),
-    ?assertReceivedMatch(HandlerMsg, ?TIMEOUT),
     ok.
 
 %%--------------------------------------------------------------------
