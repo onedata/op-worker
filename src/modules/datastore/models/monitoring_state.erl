@@ -158,7 +158,7 @@ run_transaction(ResourceId, Fun) ->
 %%--------------------------------------------------------------------
 -spec encode_id(#monitoring_id{}) -> datastore:id().
 encode_id(MonitoringIdRecord) ->
-    base64:encode(crypto:hash(md5, term_to_binary(MonitoringIdRecord))).
+    http_utils:base64url_encode(crypto:hash(md5, term_to_binary(MonitoringIdRecord))).
 
 
 %%%===================================================================
