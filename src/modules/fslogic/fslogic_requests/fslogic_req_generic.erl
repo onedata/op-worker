@@ -401,6 +401,7 @@ replicate_file(Ctx, {uuid, Uuid}, Block) ->
 -spec replicate_file(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
     fslogic_blocks:block(), non_neg_integer()) ->
     #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_meta:get({uuid, Uuid}) of
@@ -426,6 +427,43 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
             #fuse_response{status = Status} = fslogic_req_regular:synchronize_block(Ctx, {uuid, Uuid}, Block, false),
             #provider_response{status = Status}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()], boolean()) -> {ok, #{}}.
+-check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
+get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names, Inherited) ->
+    case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of
+        {ok, Meta} ->
+            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}};
+        {error, {not_found, custom_metadata}} ->
+            #provider_response{status = #status{code = ?ENOATTR}}
+    end;
+get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _, _) ->
+    case custom_metadata:get_rdf_metadata(FileUuid) of
+        {ok, Meta} ->
+            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"rdf">>, value = Meta}};
+        {error, {not_found, custom_metadata}} ->
+            #provider_response{status = #status{code = ?ENOATTR}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Set metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), #{}, [binary()]) -> ok.
+-check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
+set_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Value, Names) ->
+    {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
+    #provider_response{status = #status{code = ?OK}};
+set_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, Value, _) ->
+    {ok, _} = custom_metadata:set_rdf_metadata(FileUuid, Value),
+    #provider_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -503,44 +541,3 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
             end;
         _ -> ok
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()], boolean()) -> {ok, #{}}.
--check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
-get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names, Inherited) ->
-    case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of
-        {ok, Meta} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}};
-        {error, {not_found, custom_metadata}} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
-    end;
-get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _, _) ->
-    case custom_metadata:get_rdf_metadata(FileUuid) of
-        {ok, Meta} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"rdf">>, value = Meta}};
-        {error, {not_found, custom_metadata}} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Set metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), #{}, [binary()]) -> ok.
--check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
-set_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Value, Names) ->
-    {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
-    #provider_response{status = #status{code = ?OK}};
-set_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, Value, _) ->
-    {ok, _} = custom_metadata:set_rdf_metadata(FileUuid, Value),
-    #provider_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% Internal functions
-%%--------------------------------------------------------------------
-
