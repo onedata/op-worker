@@ -29,7 +29,7 @@
 
 %% API
 -export([malformed_request/2, parse_path/2,
-    parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
+    parse_id/2, parse_objectid/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
     parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
     parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
     parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
@@ -75,6 +75,22 @@ parse_path(Req, State) ->
 parse_id(Req, State) ->
     {Id, NewReq} = cowboy_req:binding(id, Req),
     {State#{id => Id}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's object id, converts it to uuid and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_objectid(cowboy_req:req(), #{}) ->
+    {#{id => binary()}, cowboy_req:req()}.
+parse_objectid(Req, State) ->
+    {Id, NewReq} = cowboy_req:binding(id, Req),
+    case catch cdmi_id:objectid_to_uuid(Id) of
+        {ok, Guid} ->
+            {State#{id => Guid}, NewReq};
+        Error ->
+            throw(?ERROR_INVALID_OBJECTID)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

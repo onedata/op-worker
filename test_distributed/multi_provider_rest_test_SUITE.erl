@@ -354,8 +354,9 @@ list_file(Config) ->
 
     % then
     DecodedBody = json_utils:decode(Body),
+    {ok, FileObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
     ?assertEqual(
-        [[{<<"id">>, FileGuid}, {<<"path">>, File}]],
+        [[{<<"id">>, FileObjectId}, {<<"path">>, File}]],
         DecodedBody
     ).
 
@@ -406,7 +407,8 @@ replicate_file_by_id(Config) ->
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:file_guid_to_uuid(FileGuid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, FileObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileObjectId/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),
     [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
@@ -418,7 +420,7 @@ replicate_file_by_id(Config) ->
     ]),
     ?assertMatch({ok, 200, _, ExpectedTransferStatus},
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     assertLists(
         [
@@ -578,15 +580,16 @@ set_get_json_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file">>, 8#777),
+    {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=json">>, put,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"key\": \"value\"}")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=json">>, get,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
@@ -598,7 +601,7 @@ set_get_json_metadata_id(Config) ->
 
     % then
     ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?filter_type=keypath&filter=key">>, get,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])).
 
 
@@ -620,15 +623,16 @@ set_get_rdf_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file">>, 8#777),
+    {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=rdf">>, put,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/rdf+xml">>}], "some_xml")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=rdf">>, get,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
 

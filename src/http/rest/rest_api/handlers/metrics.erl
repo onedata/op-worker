@@ -89,7 +89,7 @@ content_types_provided(Req, State) ->
 get_metric(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_user_id(Req2, State2),
-    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3),
+    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3), %todo use validator
     {Step, Req5} = cowboy_req:qs_val(<<"step">>, Req4),
 
     #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := SpaceId, user_id := UId} = State3,

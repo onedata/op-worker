@@ -93,7 +93,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_json(req(), #{}) -> {term(), req(), #{}}.
 get_json(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     get_json_internal(ReqWithId, StateWithId);
 get_json(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
@@ -129,7 +129,7 @@ get_json_internal(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_rdf(req(), #{}) -> {term(), req(), #{}}.
 get_rdf(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     get_rdf_internal(ReqWithId, StateWithId);
 get_rdf(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
@@ -155,7 +155,7 @@ get_rdf_internal(Req, State) ->
 %%--------------------------------------------------------------------
 -spec set_json(req(), #{}) -> {term(), req(), #{}}.
 set_json(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     set_json_internal(ReqWithId, StateWithId);
 set_json(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
@@ -183,7 +183,7 @@ set_json_internal(Req, State) ->
 %%--------------------------------------------------------------------
 -spec set_rdf(req(), #{}) -> {term(), req(), #{}}.
 set_rdf(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     set_rdf_internal(ReqWithId, StateWithId);
 set_rdf(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),

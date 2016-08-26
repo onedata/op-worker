@@ -189,7 +189,8 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     Ctx = fslogic_context:new(?ROOT_SESS_ID),
     Guid =
         try
-            fslogic_uuid:to_file_guid(Uuid)
+            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:to_file_guid(Uuid)),
+            Val
         catch
             _:Error ->
                 ?error("Cannot fetch guid for changes, error: ~p", [Error]),

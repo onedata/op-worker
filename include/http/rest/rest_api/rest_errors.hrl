@@ -58,6 +58,8 @@
     {<<"error_description">>, <<"The skip parameter is invalid, it must be of integer type.">>}]}).
 -define(ERROR_INVALID_FILTER_TYPE, {?BAD_REQUEST, [{<<"error">>, <<"invalid_filter_type">>},
     {<<"error_description">>, <<"The filter_type parameter is invalid.">>}]}).
+-define(ERROR_INVALID_OBJECTID, {?BAD_REQUEST, [{<<"error">>, <<"invalid_objectid">>},
+    {<<"error_description">>, <<"Given id is invalid.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, [{<<"error">>, <<"unauthorized">>},

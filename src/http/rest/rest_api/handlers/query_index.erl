@@ -87,9 +87,13 @@ query_index(Req, State) ->
     #{auth := _Auth, id := Id} = StateWithStartkey,
 
     Options = prepare_options(StateWithStartkey),
-    {ok, Results} = indexes:query_view(Id, Options),
+    {ok, Guids} = indexes:query_view(Id, Options),
+    ObjectIds = lists:map(fun(Guid) ->
+        {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+        ObjectId
+    end, Guids),
 
-    {json_utils:encode(Results), ReqWithStartkey, StateWithStartkey}.
+    {json_utils:encode(ObjectIds), ReqWithStartkey, StateWithStartkey}.
 
 %%--------------------------------------------------------------------
 %% @doc

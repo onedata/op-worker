@@ -30,7 +30,7 @@
 -spec check_with_auth(onedata_auth_api:auth(), space_info:id()) -> ok | no_return().
 check_with_auth(Auth, SpaceId) ->
     {ok, UserId} = session:get_user_id(Auth),
-    check_with_auth(UserId, SpaceId).
+    check_with_user(UserId, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -40,7 +40,7 @@ check_with_auth(Auth, SpaceId) ->
 -spec check_with_user(onedata_user:id(), space_info:id()) -> ok | no_return().
 check_with_user(UserId, SpaceId) ->
     {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
-    case lists:member(SpaceId, Spaces) of
+    case lists:any(fun({Id, _}) -> SpaceId =:= Id end, Spaces) of
         true ->
             ok;
         false ->
