@@ -4,6 +4,12 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc4
+
+* VFS-2384 Prevent unrelated events from being lost on crash.
+* VFS-2320 Move RRD databases to file system
+
+
 ### 3.0.0-RC3
 
 * VFS-2156 Remove GUI files
