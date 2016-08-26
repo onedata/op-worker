@@ -167,15 +167,19 @@ set_json(Req, State) ->
 -spec set_json_internal(req(), #{}) -> {term(), req(), #{}}.
 set_json_internal(Req, State) ->
     {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
-    {ok, Body, FinalReq} = cowboy_req:body(ReqWithMetadataType),
+    {StateWithFilterType, ReqWithFilterType} = validator:parse_filter_type(ReqWithMetadataType, StateWithMetadataType),
+    {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
+    {ok, Body, FinalReq} = cowboy_req:body(ReqWithFilter),
 
     Json = jiffy:decode(Body, [return_maps]),
-    #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
+    #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType,
+        filter := Filter} = StateWithFilter,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
+    FilterList = get_filter_list(FilterType, Filter),
 
-    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithMetadataType), DefinedMetadataType, Json, []),
+    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, Json, FilterList),
 
-    {true, FinalReq, StateWithMetadataType}.
+    {true, FinalReq, StateWithFilter}.
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/metadata/{path}'
