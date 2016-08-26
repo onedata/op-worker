@@ -112,11 +112,6 @@ certs_should_be_cached_after_successful_publishing(Config) ->
     [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
     ID1 = get_id(WorkerP1),
     ID2 = get_id(WorkerP2),
-    invalidate_cache(WorkerP1, ID1),
-    invalidate_cache(WorkerP1, ID2),
-    invalidate_cache(WorkerP2, ID1),
-    invalidate_cache(WorkerP2, ID2),
-
     register_provider([WorkerP1]),
     register_provider([WorkerP2]),
     UpdatedCert1 = new_self_signed_cert(ID1),
@@ -164,6 +159,19 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_Case, Config) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
+    %% clear OZ state
+    rpc:call(Worker, oz_identities, get_public_key, [provider, <<"special-clear-state-key">>]),
+
+    %% clear caches
+    lists:foreach(fun(Worker) ->
+        {ok, Docs} = rpc:call(Worker, cached_identity, list, []),
+        lists:foreach(fun(#document{key = ID}) ->
+            rpc:call(Worker, cached_identity, delete, [ID])
+        end, Docs)
+    end, Workers),
+
     Config.
 
 end_per_testcase(_Case, _Config) ->
@@ -178,9 +186,6 @@ register_provider(Workers) ->
 
 update(Worker, Cert) ->
     rpc:call(Worker, identity, publish, [Cert]).
-
-invalidate_cache(Worker, ID) ->
-    rpc:call(Worker, plugins, apply, [identity_cache, invalidate, [ID]]).
 
 verify(Worker, Cert) ->
     rpc:call(Worker, identity, verify, [Cert]).
