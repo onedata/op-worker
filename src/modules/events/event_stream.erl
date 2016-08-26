@@ -158,7 +158,7 @@ handle_cast({remove_subscription, SubId}, #state{session_id = SessId,
 
 handle_cast({flush, NotifyFun}, #state{ctx = Ctx} = State) ->
     #state{ctx = NewCtx} = NewState = execute_event_handler(
-        State#state{ctx = Ctx#{notify => NotifyFun}}
+        true, State#state{ctx = Ctx#{notify => NotifyFun}}
     ),
     {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
 
@@ -180,7 +180,7 @@ handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
 
 handle_info({execute_event_handler, Ref}, #state{emission_ref = Ref} = State) ->
-    {noreply, execute_event_handler(State)};
+    {noreply, execute_event_handler(false, State)};
 
 handle_info({execute_event_handler, _}, State) ->
     {noreply, State};
@@ -203,7 +203,7 @@ handle_info(_Info, State) ->
 terminate(Reason, #state{event_manager = EvtMan, stream_id = StmId,
     definition = StmDef, ctx = Ctx} = State) ->
     ?log_terminate(Reason, State),
-    execute_event_handler(State),
+    execute_event_handler(false, State),
     execute_terminate_handler(StmDef, Ctx),
     unregister_stream(EvtMan, StmId).
 
@@ -303,13 +303,18 @@ execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
 %% Resets periodic emission of events.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_event_handler(State :: #state{}) -> NewState :: #state{}.
-execute_event_handler(#state{stream_id = StmId, session_id = SessId,
+-spec execute_event_handler(Force :: boolean(), State :: #state{}) ->
+    NewState :: #state{}.
+execute_event_handler(Force, #state{stream_id = StmId, session_id = SessId,
     events = Evts, definition = #event_stream_definition{event_handler = Handler
     } = StmDef, ctx = Ctx} = State) ->
     ?debug("Executing event handler on events ~p in event stream ~p and session ~p",
         [Evts, StmId, SessId]),
-    Handler(maps:values(Evts), Ctx),
+    case {Force, maps:values(Evts)} of
+        {true, EvtsList} -> Handler(EvtsList, Ctx);
+        {false, []} -> ok;
+        {_, EvtsList} -> Handler(EvtsList, Ctx)
+    end,
     State#state{
         events = #{},
         metadata = get_initial_metadata(StmDef),
@@ -339,7 +344,7 @@ process_event(Evt, #state{events = Evts, metadata = Meta,
     NewMeta = apply_transition_rule(Evt, Meta, StmDef),
     NewState = State#state{events = NewEvts, metadata = NewMeta},
     case apply_emission_rule(NewMeta, StmDef) of
-        true -> execute_event_handler(NewState);
+        true -> execute_event_handler(false, NewState);
         false -> maybe_schedule_event_handler_execution(NewState)
     end.
 
