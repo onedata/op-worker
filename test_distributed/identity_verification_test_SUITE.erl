@@ -161,7 +161,8 @@ end_per_suite(Config) ->
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
-    %% clear OZ state
+    %% clear OZ state - this key is defined in appmock
+    %% state of actual OZ cannot be cleared like this
     rpc:call(Worker, oz_identities, get_public_key, [provider, <<"special-clear-state-key">>]),
 
     %% clear caches
