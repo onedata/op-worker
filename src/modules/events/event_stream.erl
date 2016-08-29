@@ -313,8 +313,7 @@ execute_event_handler(#state{stream_id = StmId, session_id = SessId,
     catch
         Error:Reason ->
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
-                              [?MODULE, State, Error, Reason]),
-            {noreply, State}
+                              [?MODULE, State, Error, Reason])
     end,
     State#state{
         events = #{},
