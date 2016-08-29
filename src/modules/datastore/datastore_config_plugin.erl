@@ -31,7 +31,7 @@ models() -> [
     session,
     onedata_user,
     onedata_group,
-    identity,
+    user_identity,
     file_meta,
     storage,
     file_location,

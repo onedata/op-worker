@@ -453,7 +453,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
         file_uuid = FileGUID, file_size = FileSize}, counter = Counter}) ->
 
         {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
-        {ok, #document{value = #session{identity = #identity{
+        {ok, #document{value = #session{identity = #user_identity{
             user_id = UserId}}}} = session:get(SessId),
         monitoring_event:emit_write_statistics(SpaceId, UserId, Size, Counter),
 
@@ -464,13 +464,13 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 
         case replica_updater:update(FileUUID, UpdatedBlocks, FileSize, true, undefined) of
             {ok, size_changed} ->
-                {ok, #document{value = #session{identity = #identity{
+                {ok, #document{value = #session{identity = #user_identity{
                     user_id = UserId}}}} = session:get(SessId),
                 fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {ok, size_not_changed} ->
-                {ok, #document{value = #session{identity = #identity{
+                {ok, #document{value = #session{identity = #user_identity{
                     user_id = UserId}}}} = session:get(SessId),
                 fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
@@ -499,11 +499,11 @@ handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
         counter = Counter}) ->
 
         {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
-        {ok, #document{value = #session{identity = #identity{
+        {ok, #document{value = #session{identity = #user_identity{
             user_id = UserId}}}} = session:get(SessId),
         monitoring_event:emit_read_statistics(SpaceId, UserId, Size, Counter),
 
-        {ok, #document{value = #session{identity = #identity{
+        {ok, #document{value = #session{identity = #user_identity{
             user_id = UserId}}}} = session:get(SessId),
         fslogic_times:update_atime({uuid, FileUUID}, UserId)
     end, Evts).

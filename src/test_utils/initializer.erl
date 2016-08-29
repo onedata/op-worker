@@ -284,7 +284,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
 
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     UserId = UserId,
-    Iden = #identity{user_id = UserId},
+    Iden = #user_identity{user_id = UserId},
 
     lists:foreach(fun({_, SpaceName}) ->
         case get(SpaceName) of
