@@ -32,7 +32,7 @@
 }).
 
 %% Identity containing user_id
--record(identity, {
+-record(user_identity, {
     user_id :: onedata_user:id(),
     provider_id :: oneprovider:id()
 }).
@@ -232,7 +232,7 @@
 %% Model for holding state of monitoring
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
-    rrd_file = undefinied :: rrd_utils:rrd_file(),
+    rrd_path :: binary(),
     state_buffer = #{} :: maps:map(),
     last_update_time :: non_neg_integer()
 }).

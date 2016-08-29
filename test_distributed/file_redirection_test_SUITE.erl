@@ -64,11 +64,13 @@ redirect_event_test(Config) ->
 
     Self = self(),
     ?assertMatch({ok, _}, rpc:call(W1, event, subscribe,
-        [#subscription{object = test_subscription,
+        [#subscription{object = #write_subscription{},
             event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-            emission_time = infinity,
-            event_handler = fun(Events, _) -> Self ! {events, Events} end
-        }}])),
+                id = <<"some_stream_id">>,
+                event_handler = fun(Events, _) -> Self ! {events, Events} end
+            }
+        }]
+    )),
 
     BaseEvent = #write_event{size = 1, file_size = 1,
         blocks = [#file_block{offset = 0, size = 1}]},

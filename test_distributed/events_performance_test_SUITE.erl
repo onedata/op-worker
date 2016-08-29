@@ -55,7 +55,7 @@
 all() ->
     ?ALL(?TEST_CASES, ?TEST_CASES).
 
--define(TIMEOUT, timer:seconds(15)).
+-define(TIMEOUT, timer:minutes(5)).
 -define(FILE_UUID(Id), <<"file_id_", (integer_to_binary(Id))/binary>>).
 -define(CTR_THR(Value), [
     {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}
@@ -147,7 +147,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
             end, lists:seq(1, EvtNum div CtrThr))
         end),
 
-        unsubscribe(Worker, SubId, {event_handler, []}),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -223,7 +223,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
             end, lists:seq(1, EvtNum div CtrThr))
         end),
 
-        unsubscribe(Worker, SubId, {event_handler, []}),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
@@ -280,7 +280,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
             end, lists:seq(1, EvtNum div CtrThr))
         end),
 
-        unsubscribe(Worker, SubId, event_handler),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -341,7 +341,7 @@ emit_should_execute_event_handler_when_size_threshold_exceeded_base(Config) ->
             end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
         end),
 
-        unsubscribe(Worker, SubId, event_handler),
+        unsubscribe(Worker, SubId),
 
         [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
             evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -378,14 +378,17 @@ multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
         initializer:remove_pending_messages(),
         % Create subscriptions for events associated with different files.
         {SubIds, FileUuids} = lists:unzip(lists:map(fun(N) ->
-            FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
+            FileUuid = ?FILE_UUID(N),
             {ok, SubId} = subscribe(Worker,
+                FileUuid,
+                infinity,
                 fun
                     (#event{object = #write_event{file_uuid = Uuid}}) ->
                         Uuid =:= FileUuid;
                     (_) -> false
                 end,
                 fun(Meta) -> Meta >= EvtsNum end,
+                fun(Meta, #event{counter = Counter}) -> Meta + Counter end,
                 fun(Evts, _) -> Self ! {event_handler, Evts} end
             ),
             {SubId, FileUuid}
@@ -412,7 +415,7 @@ multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
         end, FileUuids),
 
         lists:foreach(fun(SubId) ->
-            unsubscribe(Worker, SubId, {event_handler, []})
+            unsubscribe(Worker, SubId)
         end, SubIds),
 
         ok.
@@ -448,7 +451,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
         initializer:remove_pending_messages(),
         SessIds = lists:map(fun(N) ->
             SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-            Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
+            Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
             session_setup(Worker, SessId, Iden, Self),
             SessId
         end, lists:seq(1, CliNum)),
@@ -480,7 +483,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
             end, SessIds)
         end),
 
-        unsubscribe(Worker, SubId, event_handler),
+        unsubscribe(Worker, SubId),
         lists:foreach(fun(SessId) ->
             session_teardown(Worker, SessId)
         end, SessIds),
@@ -529,7 +532,7 @@ init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
@@ -637,8 +640,23 @@ subscribe(Worker, EmTime, AdmRule, EmRule, Handler) ->
     TrRule :: event_stream:transition_rule(), Handler :: event_stream:event_handler()) ->
     {ok, SubId :: subscription:id()}.
 subscribe(Worker, EmTime, AdmRule, EmRule, TrRule, Handler) ->
+    subscribe(Worker, <<"write_event_stream">>, EmTime, AdmRule, EmRule, TrRule, Handler).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates event subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec subscribe(Worker :: node(), StmId :: event_stream:id(),
+    EmTime :: event_stream:emission_time(), AdmRule :: event_stream:admission_rule(),
+    EmRule :: event_stream:emission_rule(), TrRule :: event_stream:transition_rule(),
+    Handler :: event_stream:event_handler()) ->
+    {ok, SubId :: subscription:id()}.
+subscribe(Worker, StmId, EmTime, AdmRule, EmRule, TrRule, Handler) ->
     Sub = #subscription{
         event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
+            id = StmId,
             metadata = 0,
             admission_rule = AdmRule,
             emission_rule = EmRule,
@@ -655,11 +673,9 @@ subscribe(Worker, EmTime, AdmRule, EmRule, TrRule, Handler) ->
 %% Removes event subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(Worker :: node(), SubId :: subscription:id(), HandlerMsg :: term()) ->
-    ok.
-unsubscribe(Worker, SubId, HandlerMsg) ->
+-spec unsubscribe(Worker :: node(), SubId :: subscription:id()) -> ok.
+unsubscribe(Worker, SubId) ->
     ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])),
-    ?assertReceivedMatch(HandlerMsg, ?TIMEOUT),
     ok.
 
 %%--------------------------------------------------------------------

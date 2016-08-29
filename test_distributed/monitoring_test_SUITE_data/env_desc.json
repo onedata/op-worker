@@ -12,11 +12,13 @@
     "os_configs": {
         "cfg1": {
             "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                }
             ],
-            "users": [
-            ],
-            "groups": {
-            }
+            "users": [],
+            "groups": {}
         }
     },
     "provider_domains": {
@@ -48,8 +50,33 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "global_registry_domain": "gr",
-                        "verify_gr_cert": false
+                        "oz_domain": "oz",
+                        "verify_oz_cert": false
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "space1"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 1000
                     }
                 }
             }

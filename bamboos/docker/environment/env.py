@@ -12,7 +12,8 @@ import copy
 import json
 import time
 from . import appmock, client, common, zone_worker, cluster_manager, \
-    worker, provider_worker, cluster_worker, docker, dns, storages, panel
+    worker, provider_worker, cluster_worker, docker, dns, storages, panel, \
+    location_service_bootstrap
 
 
 def default(key):
@@ -74,6 +75,9 @@ def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
         # so that dockers that start after can immediately see the domains.
         dns.maybe_restart_with_configuration('auto', uid, output)
 
+    ls_nodes = location_service_bootstrap.up_nodes(image, bin_oz, config, uid, logdir)
+    output['docker_ids'].extend(ls_nodes)
+
     # Start provider cluster instances
     setup_worker(zone_worker, bin_oz, 'zone_domains',
                  bin_cluster_manager, config, config_path, dns_server, image,
@@ -112,8 +116,8 @@ def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
 
     # Setup global environment - providers, users, groups, spaces etc.
     if 'zone_domains' in config and \
-            'provider_domains' in config and \
-            'global_setup' in config:
+                    'provider_domains' in config and \
+                    'global_setup' in config:
         providers_map = {}
         for provider_name in config['provider_domains']:
             providers_map[provider_name] = {

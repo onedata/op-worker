@@ -37,34 +37,29 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case session_manager:create_monitoring_session(?MONITORING_SESSION_ID) of
-        {ok, _} ->
-            EventsSubscription = #subscription{
-                id = ?MONITORING_SUB_ID,
-                object = undefined,
-                event_stream = #event_stream_definition{
-                    metadata = 0,
-                    init_handler = fun(_, _, _) -> #{} end,
-                    terminate_handler = fun(_) -> ok end,
-                    event_handler = fun monitoring_event:handle_monitoring_events/2,
-                    admission_rule = fun
-                        (#event{object = #storage_used_updated{}}) -> true;
-                        (#event{object = #space_info_updated{}}) -> true;
-                        (#event{object = #file_operations_statistics{}}) -> true;
-                        (#event{object = #rtransfer_statistics{}}) -> true;
-                        (_) -> false
-                    end,
-                    aggregation_rule = fun monitoring_event:aggregate_monitoring_events/2,
-                    transition_rule = fun(Meta, _) -> Meta end,
-                    emission_rule = fun(_) -> false end,
-                    emission_time = timer:seconds(?STEP_IN_SECONDS)
-                }
-            },
-            case event:subscribe(EventsSubscription) of
-                {ok, _} -> ok;
-                {error, already_exists} ->
-                    ok
-            end;
+    Sub = #subscription{
+        id = ?MONITORING_SUB_ID,
+        object = undefined,
+        event_stream = #event_stream_definition{
+            metadata = 0,
+            init_handler = fun(_, _, _) -> #{} end,
+            terminate_handler = fun(_) -> ok end,
+            event_handler = fun monitoring_event:handle_monitoring_events/2,
+            admission_rule = fun
+                (#event{object = #storage_used_updated{}}) -> true;
+                (#event{object = #space_info_updated{}}) -> true;
+                (#event{object = #file_operations_statistics{}}) -> true;
+                (#event{object = #rtransfer_statistics{}}) -> true;
+                (_) -> false
+            end,
+            aggregation_rule = fun monitoring_event:aggregate_monitoring_events/2,
+            transition_rule = fun(Meta, _) -> Meta end,
+            emission_rule = fun(_) -> false end,
+            emission_time = timer:seconds(?STEP_IN_SECONDS)
+        }
+    },
+    case event:subscribe(Sub) of
+        {ok, _} -> ok;
         {error, already_exists} -> ok
     end,
 

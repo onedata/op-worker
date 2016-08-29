@@ -34,6 +34,9 @@
 %% Prefix for link name for #file_location link
 -define(LOCATION_PREFIX, "location_").
 
+%% Hidden file prefix
+-define(HIDDEN_FILE_PREFIX, ".__onedata__").
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
@@ -45,6 +48,7 @@
 -export([fix_parent_links/2, fix_parent_links/1, set_link_context/1, set_link_context_for_space/1,
     exists_local_link_doc/1, get_child/2]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
+-export([hidden_file_name/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -380,7 +384,7 @@ list_children(Entry, Offset, Count) ->
                     Acc;
                 (LinkName, {_V, [{_Key, ?MODEL_NAME, _} | _] = Targets}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
                     TargetCount = length(Targets),
-                    case is_snapshot(LinkName) of
+                    case is_snapshot(LinkName) orelse is_hidden(LinkName) of
                         true ->
                             {Skip, Count1, Acc};
                         false when TargetCount > Skip ->
@@ -398,7 +402,7 @@ list_children(Entry, Offset, Count) ->
                     TargetCount = length(Targets),
                     TargetsTagged = tag_childs(LinkName, Targets),
                     SelectedTargetsTagged = lists:sublist(TargetsTagged, min(Count, TargetCount)),
-                    case is_snapshot(LinkName) of
+                    case is_snapshot(LinkName) orelse is_hidden(LinkName) of
                         true ->
                             {0, Count1, Acc};
                         false ->
@@ -662,30 +666,20 @@ setup_onedata_user(_Client, UserId) ->
         CTime = erlang:system_time(seconds),
 
         lists:foreach(fun({SpaceId, _}) ->
-            SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            case exists({uuid, SpaceDirUuid}) of
-                true ->
-                    fix_parent_links({uuid, ?ROOT_DIR_UUID},
-                        {uuid, SpaceDirUuid});
-                false ->
-                    {ok, _} = create({uuid, ?ROOT_DIR_UUID},
-                        #document{key = SpaceDirUuid,
-                            value = #file_meta{
-                                name = SpaceId, type = ?DIRECTORY_TYPE,
-                                mode = 8#1770, mtime = CTime, atime = CTime,
-                                ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
-                            }})
-            end
+            fslogic_spaces:make_space_exist(SpaceId)
         end, Spaces),
 
-        {ok, _RootUUID} = create({uuid, ?ROOT_DIR_UUID},
+        case create({uuid, ?ROOT_DIR_UUID},
             #document{key = fslogic_uuid:user_root_dir_uuid(UserId),
                 value = #file_meta{
                     name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
                     mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
                     is_scope = true
                 }
-            })
+            }) of
+            {ok, _RootUUID} -> ok;
+            {error, already_exists} -> ok
+        end
     end).
 
 
@@ -1083,3 +1077,23 @@ set_link_context(#document{}) ->
     erlang:put(other_scopes, []),
     ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file name with added hidden file prefix.
+%% @end
+%%--------------------------------------------------------------------
+-spec hidden_file_name(NAme :: name()) -> name().
+hidden_file_name(FileName) ->
+    <<?HIDDEN_FILE_PREFIX, FileName/binary>>.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given filename contains hidden file prefix.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_hidden(FileName :: name()) -> boolean().
+is_hidden(FileName) ->
+    case FileName of
+        <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
+        _ -> false
+    end.
