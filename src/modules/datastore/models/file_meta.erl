@@ -827,7 +827,6 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
                         {ok, #document{key = NewScopeUUID} = NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName, scope => NewScopeUUID}),
                         set_link_context(NewScope),
-                        ?info("WTF 2 ~p", [{FileUUID, OldParentUUID, NewParent}]),
                         ok = datastore:set_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
                         ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
 

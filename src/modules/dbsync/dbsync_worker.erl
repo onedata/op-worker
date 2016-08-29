@@ -26,7 +26,7 @@
 -export([bcast_status/0, on_status_received/3]).
 
 -define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata]).
--define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
+-define(BROADCAST_STATUS_INTERVAL, timer:seconds(5)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
 -define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
@@ -184,7 +184,14 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     queue_push(QueueKey, {init_batch, Seq}, SpaceId);
                 {ok, SpaceId} ->
                     case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
-                        ok -> queue_push(QueueKey, Change, SpaceId);
+                        ok ->
+                            case binary:match(Key, <<"#local#">>) of
+                                nomatch ->
+                                    queue_push(QueueKey, Change, SpaceId);
+                                _ ->
+                                    ?info("SKIP LINK ~p", [Key]),
+                                    skip
+                            end;
                         _  -> skip
                     end;
                 {error, not_a_space} ->
@@ -490,21 +497,23 @@ apply_changes(SpaceId,
                  Key
         end,
         MyProvId = oneprovider:get_provider_id(),
-        LinksPost = datastore:run_transaction(ModelName, MainDocKey, fun() ->
+        LinksPost = datastore:run_transaction(ModelName, couchdb_datastore_driver:transaction_key(ModelConfig, MainDocKey), fun() ->
             case Value of
                 #links{origin = MyProvId} ->
                     ok;
                 #links{origin = Origin} = Links ->
-                    ?info("MyId ~p changes from ~p : ~p", [MyProvId, Origin, Links]),
+%%                    ?info("MyId ~p, REPKEY ~p changes from ~p : ~p", [MyProvId, Key, Origin, Links]),
                     OldLinks = case couchdb_datastore_driver:get(ModelConfig, Key) of
                         {ok, #document{value = OldLinks0}} ->
                             OldLinks0;
-                        {error, _} ->
+                        {error, Reason} ->
+                            ?info("CRIT ERROR ~p : ~p", [{MyProvId, Key, Origin, Links}, Reason]),
                             #links{link_map = #{}, model = ModelName}
                     end,
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = couchdb_datastore_driver:get(ModelConfig, Key),
                     {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
+%%                    ?info("~p diff ~p ~p", [Key, OldLinks, CurrentLinks]),
 %%                    lists:foreach(fun(LName) ->
 %%                        caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
 %%                    end, maps:keys(CurrentLinks#links.link_map) ++ maps:keys(OldLinks#links.link_map)),
@@ -1036,7 +1045,7 @@ ensure_global_stream_active() ->
 
     case is_valid_stream(state_get(changes_stream)) of
         true ->
-            MaxIdleTime = timer:seconds(10),
+            MaxIdleTime = timer:minutes(5),
             case dbsync_utils:temp_get(last_change) of
                 undefined ->
                     dbsync_utils:temp_put(last_change, CTime, 0);
