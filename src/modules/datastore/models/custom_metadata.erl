@@ -154,7 +154,7 @@ get_xattr_metadata(FileUuid, Name, true) ->
         {ok, Value} ->
             {ok, Value};
         {error, {not_found, custom_metadata}} ->
-            case file_meta:get_parent_uuid(FileUuid) of
+            case file_meta:get_parent_uuid({uuid, FileUuid}) of
                 {ok, ParentUuid} ->
                     get_xattr_metadata(ParentUuid, Name, true);
                 Error ->

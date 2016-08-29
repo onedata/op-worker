@@ -50,7 +50,7 @@ get_user_metadata(Auth, FileKey) ->
         fun
             (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>) -> undefined;
             (Name) ->
-                case onedata_file_api:get_xattr(Auth, FileKey, Name) of
+                case onedata_file_api:get_xattr(Auth, FileKey, Name, false) of
                     {ok, #xattr{value = XattrValue}} ->
                         {Name, XattrValue};
                     {error, ?ENOATTR} ->
