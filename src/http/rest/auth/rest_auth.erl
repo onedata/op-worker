@@ -96,7 +96,7 @@ authenticate_using_token(Req, Token) ->
     case token_utils:deserialize(Token) of
         {ok, Macaroon} ->
             Auth = #token_auth{macaroon = Macaroon},
-            case identity:get_or_fetch(Auth) of
+            case user_identity:get_or_fetch(Auth) of
                 {ok, #document{value = Iden}} ->
                     {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
                     {{ok, SessId}, Req};
@@ -116,7 +116,7 @@ authenticate_using_token(Req, Token) ->
     {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_basic_auth(Req, BasicAuthHeader) ->
     Auth = #basic_auth{credentials = BasicAuthHeader},
-    case identity:get_or_fetch(Auth) of
+    case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = Iden}} ->
             {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
             {{ok, SessId}, Req};
@@ -136,7 +136,7 @@ authenticate_using_cert(Req) ->
     case etls:peercert(Socket) of
         {ok, Der} ->
             Certificate = public_key:pkix_decode_cert(Der, otp),
-            case identity:get_or_fetch(Certificate) of
+            case user_identity:get_or_fetch(Certificate) of
                 {ok, #document{value = Iden}} ->
                     {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden),
                     {{ok, SessId}, Req};

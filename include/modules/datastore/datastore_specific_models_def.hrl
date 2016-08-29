@@ -32,7 +32,7 @@
 }).
 
 %% Identity containing user_id
--record(identity, {
+-record(user_identity, {
     user_id :: onedata_user:id(),
     provider_id :: oneprovider:id()
 }).

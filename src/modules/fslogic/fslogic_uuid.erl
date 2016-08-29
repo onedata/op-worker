@@ -165,7 +165,7 @@ ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
 %%--------------------------------------------------------------------
 -spec uuid_to_path(fslogic_worker:ctx(), file_meta:uuid()) -> file_meta:path().
 uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
-    identity = #identity{user_id = UserId}}}, FileUuid) ->
+    identity = #user_identity{user_id = UserId}}}, FileUuid) ->
     UserRoot = user_root_dir_uuid(UserId),
     case FileUuid of
         UserRoot -> <<"/">>;

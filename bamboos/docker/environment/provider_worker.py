@@ -95,6 +95,12 @@ class ProviderWorkerConfigurator:
             extra_volumes.extend(gui.extra_volumes(gui_config, instance))
         return extra_volumes
 
+    def couchbase_ramsize(self):
+        return 1024
+
+    def couchbase_buckets(self):
+        return {"default": 512}
+
     def app_name(self):
         return "op_worker"
 
