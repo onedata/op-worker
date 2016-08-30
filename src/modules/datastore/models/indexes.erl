@@ -266,8 +266,7 @@ add_db_view(IndexId, SpaceId, Function) ->
     ok = couchdb_datastore_driver:add_view(IndexId, DbViewFunction).
 
 %%--------------------------------------------------------------------
-%% @doc escapes characters: \ " '
-%% escape_js_function(Function, [{<<"\\\\">>, <<"\\\\\\\\">>}, {<<"'">>, <<"\\\\'">>}, {<<"\"">>, <<"\\\\\"">>}]).
+%% @doc escapes characters: \ " ' \n \t \v \0 \f \r
 %%--------------------------------------------------------------------
 -spec escape_js_function(Function :: binary()) -> binary().
 escape_js_function(undefined) ->
@@ -279,9 +278,7 @@ escape_js_function(Function) ->
         {<<"\\r">>, <<"\\\\r">>}]).
 
 %%--------------------------------------------------------------------
-%% @doc
-%%
-%% @end
+%% @doc Escapes characters given as proplists, in provided Function.
 %%--------------------------------------------------------------------
 -spec escape_js_function(Function :: binary(), [{binary(), binary()}]) -> binary().
 escape_js_function(Function, []) ->
