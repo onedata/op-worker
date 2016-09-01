@@ -237,17 +237,12 @@ get_or_fetch(Auth, SpaceId, UserId) ->
 -spec fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Auth, SpaceId) ->
-    A = {ok, #space_details{
+    {ok, #space_details{
         name = Name,
         providers_supports = Supports,
-        type = Type,
-        public_url = PublicURL,
-        root_file_id = RootFileId,
-        parent_space = ParentSpace,
         shares = Shares
     }} = oz_spaces:get_details(Auth, SpaceId),
 
-    ?dump(A),
     {ok, GroupIds} = oz_spaces:get_groups(Auth, SpaceId),
     {ok, UserIds} = oz_spaces:get_users(Auth, SpaceId),
 
@@ -266,14 +261,10 @@ fetch(Auth, SpaceId) ->
 
     Doc = #document{key = SpaceId, value = #space_info{
         name = Name,
-        type = Type,
         users = UsersWithPrivileges,
         groups = GroupsWithPrivileges,
         providers_supports = Supports,
         providers = ProviderIds,
-        public_url = PublicURL,
-        root_file_id = RootFileId,
-        parent_space = ParentSpace,
         shares = Shares
     }},
 
