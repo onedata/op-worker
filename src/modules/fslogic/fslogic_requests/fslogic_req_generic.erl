@@ -33,7 +33,7 @@
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
     get_file_path/2, chmod_storage_files/3, replicate_file/3,
-    get_metadata/4, set_metadata/5]).
+    get_metadata/4, set_metadata/5, check_perms/3]).
 
 %%%===================================================================
 %%% API functions
@@ -427,9 +427,56 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
             #provider_response{status = Status}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Check given permission on file.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_perms(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_worker:open_flags()) ->
+    #provider_response{}.
+check_perms(Ctx, Uuid, read) ->
+    check_perms_read(Ctx, Uuid);
+check_perms(Ctx, Uuid, write) ->
+    check_perms_write(Ctx, Uuid);
+check_perms(Ctx, Uuid, rdwr) ->
+    check_perms_rdwr(Ctx, Uuid).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check read permission on file.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_perms_read(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
+check_perms_read(_Ctx, _Uuid) ->
+    #provider_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check write permission on file.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_perms_write(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
+check_perms_write(_Ctx, _Uuid) ->
+    #provider_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check rdwr permission on file.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_perms_rdwr(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
+check_perms_rdwr(_Ctx, _Uuid) ->
+    #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
 %% @equiv delete_impl(CTX, File, Silent) with permission check
