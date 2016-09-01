@@ -98,9 +98,14 @@ props_to_value(onedata_group, Props) ->
 props_to_value(space_info, Props) ->
     #space_info{
         name = proplists:get_value(<<"name">>, Props),
+        type = binary_to_atom(proplists:get_value(<<"type">>, Props), utf8),
         providers_supports = proplists:get_value(<<"providers_supports">>, Props),
         groups = process_ids_with_privileges(proplists:get_value(<<"groups">>, Props, [])),
-        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, []))
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
+        public_url = proplists:get_value(<<"public_url">>, Props),
+        root_file_id = proplists:get_value(<<"root_file_id">>, Props),
+        parent_space = proplists:get_value(<<"parent_space">>, Props),
+        shares = proplists:get_value(<<"shares">>, Props)
     };
 props_to_value(provider_info, Props) ->
     #provider_info{
