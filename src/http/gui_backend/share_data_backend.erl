@@ -187,7 +187,6 @@ delete_record(<<"share">>, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec share_record(ShareId :: binary()) -> proplists:proplist().
 share_record(ShareId) ->
-    CurrentUser = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #share_info{
@@ -195,7 +194,7 @@ share_record(ShareId) ->
             root_file_id = RootFileId,
             parent_space = ParentSpaceId,
             public_url = PublicURL
-        }}} = space_logic:get(UserAuth, ShareId, CurrentUser),
+        }}} = space_logic:get_share(UserAuth, ShareId),
     [
         {<<"id">>, ShareId},
         {<<"name">>, Name},

@@ -21,7 +21,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([create_or_update/2, get_or_fetch/3]).
+-export([create_or_update/2, get_or_fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -143,12 +143,12 @@ create_or_update(Doc, Diff) ->
 %% fetches it from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
-    UserId :: onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, SpaceId, ShareId) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Auth, ShareId) ->
     case ?MODULE:get(ShareId) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Auth, SpaceId, ShareId);
+        {error, {not_found, _}} -> fetch(Auth, ShareId);
         {error, Reason} -> {error, Reason}
     end.
 
@@ -162,17 +162,17 @@ get_or_fetch(Auth, SpaceId, ShareId) ->
 %% Fetches space info from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
-    ShareId :: binary()) -> {ok, datastore:document()} | datastore:get_error().
-fetch(Auth, SpaceId, ShareId) ->
+-spec fetch(Auth :: oz_endpoint:auth(), ShareId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+fetch(Auth, ShareId) ->
     {ok, #share_details{
         name = Name,
         public_url = PublicURL,
         root_file_id = RootFileId,
         parent_space = ParentSpace
-    }} = oz_spaces:get_share_details(Auth, SpaceId, ShareId),
+    }} = oz_spaces:get_share_details(Auth, ShareId),
 
-    Doc = #document{key = SpaceId, value = #share_info{
+    Doc = #document{key = ShareId, value = #share_info{
         name = Name,
         public_url = PublicURL,
         root_file_id = RootFileId,

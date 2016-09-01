@@ -24,7 +24,7 @@
 -export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_invite_provider_token/2]).
--export([get_share/3, create_share/4]).
+-export([get_share/2, create_share/4]).
 
 
 %%%===================================================================
@@ -184,10 +184,10 @@ get_invite_provider_token(Auth, SpaceId) ->
 %% Provided client should be authorised to access user details.
 %% @end
 %%--------------------------------------------------------------------
--spec get_share(oz_endpoint:auth(), SpaceId :: binary(), ShareId :: binary()) ->
+-spec get_share(oz_endpoint:auth(), ShareId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_share(Auth, SpaceId, ShareId) ->
-    share_info:get_or_fetch(Auth, SpaceId, ShareId).
+get_share(Auth, ShareId) ->
+    share_info:get_or_fetch(Auth, ShareId).
 
 
 %%--------------------------------------------------------------------
