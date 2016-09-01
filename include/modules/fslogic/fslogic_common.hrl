@@ -37,6 +37,9 @@
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 -define(ROOT_SESS, #session{identity = #user_identity{user_id = ?ROOT_USER_ID}}).
+-define(GUEST_USER_ID, <<"nobody">>).
+-define(GUEST_SESS_ID, <<"nobody">>).
+-define(GUEST_SESS, #session{identity = #user_identity{user_id = ?GUEST_USER_ID}}).
 -define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
 
 %% fslogic subscription id

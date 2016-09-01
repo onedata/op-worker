@@ -165,16 +165,21 @@
 %% Model for caching space details fetched from OZ
 -record(space_info, {
     name :: binary(),
-    type :: regular | share,
     providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
     providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
+    % All shares that belong to this space.
+    shares = [] :: [SpaceId :: binary()],
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+%% Model for caching share details fetched from OZ
+-record(share_info, {
+    name :: binary(),
     public_url = undefined :: undefined | binary(),
     root_file_id = undefined :: undefined | binary(),
     parent_space = undefined :: undefined | binary(),
-    % All shares that belong to this space. Note - share is also a space.
-    shares = [] :: [SpaceId :: binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 

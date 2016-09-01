@@ -24,7 +24,7 @@
 -export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_invite_provider_token/2]).
--export([create_share/4]).
+-export([get_share/3, create_share/4]).
 
 
 %%%===================================================================
@@ -175,6 +175,19 @@ get_invite_group_token(Auth, SpaceId) ->
     {ok, binary()} | {error, Reason :: term()}.
 get_invite_provider_token(Auth, SpaceId) ->
     oz_spaces:get_invite_provider_token(Auth, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves share document.
+%% Returned document contains parameters tied to given user
+%% (as space name may differ from user to user).
+%% Provided client should be authorised to access user details.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_share(oz_endpoint:auth(), SpaceId :: binary(), ShareId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_share(Auth, SpaceId, ShareId) ->
+    share_info:get_or_fetch(Auth, SpaceId, ShareId).
 
 
 %%--------------------------------------------------------------------

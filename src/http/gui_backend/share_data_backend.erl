@@ -190,7 +190,7 @@ share_record(ShareId) ->
     CurrentUser = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
-        value = #space_info{
+        value = #share_info{
             name = Name,
             root_file_id = RootFileId,
             parent_space = ParentSpaceId,
@@ -206,29 +206,29 @@ share_record(ShareId) ->
 
 
 add_share_mapping(FileId, ShareId) ->
-    case space_info:exists(<<"magitrzny-space">>) of
+    case share_info:exists(<<"magitrzny-rekord">>) of
         true ->
             ok;
         false ->
-            space_info:create(#document{
-                key = <<"magitrzny-space">>,
-                value = #space_info{name = #{}}
+            share_info:create(#document{
+                key = <<"magitrzny-rekord">>,
+                value = #share_info{name = #{}}
             })
     end,
-    {ok, _} = space_info:update(<<"magitrzny-space">>, fun(Space) ->
-        #space_info{name = Mapping} = Space,
+    {ok, _} = share_info:update(<<"magitrzny-rekord">>, fun(Space) ->
+        #share_info{name = Mapping} = Space,
         NewMapping = maps:put(FileId, ShareId, Mapping),
-        {ok, Space#space_info{name = NewMapping}}
+        {ok, Space#share_info{name = NewMapping}}
     end).
 
 
 get_share_mapping(FileId) ->
-    case space_info:exists(<<"magitrzny-space">>) of
+    case share_info:exists(<<"magitrzny-rekord">>) of
         true ->
             {ok, #document{
-                value = #space_info{
+                value = #share_info{
                     name = Mapping
-                }}} = space_info:get(<<"magitrzny-space">>),
+                }}} = share_info:get(<<"magitrzny-rekord">>),
             maps:get(FileId, Mapping, null);
         false ->
             null
