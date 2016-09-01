@@ -223,7 +223,10 @@ posix_mode_get(Config) ->
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
-        [[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]],
+        [[
+            {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>},
+            {<<"name">>, <<"mode">>}
+        ]],
         DecodedBody
     ).
 
@@ -245,8 +248,10 @@ posix_mode_put(Config) ->
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
-        [[{<<"name">>, <<"mode">>},
-        {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>}]],
+        [[
+            {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>},
+            {<<"name">>, <<"mode">>}
+        ]],
         DecodedBody
     ).
 
@@ -264,7 +269,10 @@ xattr_get(Config) ->
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
-        [[{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]],
+        [[
+            {<<"value">>, <<"v1">>},
+            {<<"name">>, <<"k1">>}
+        ]],
         DecodedBody
     ).
 
@@ -284,7 +292,10 @@ xattr_put(Config) ->
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
-        [[{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]],
+        [[
+            {<<"value">>, <<"v1">>},
+            {<<"name">>, <<"k1">>}
+        ]],
         DecodedBody
     ).
 
@@ -702,8 +713,8 @@ set_get_json_metadata_inherited(Config) ->
 set_get_xattr_inherited(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir">>),
-    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir/child">>),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test">>),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
 
     % when
     XattrSpace = json_utils:encode([{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]),
@@ -715,18 +726,18 @@ set_get_xattr_inherited(Config) ->
         do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpace)),
     ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"attributes/space3/dir?extended=true">>, put,
+        do_request(WorkerP1, <<"attributes/space3/dir_test?extended=true">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrDir)),
     ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"attributes/space3/dir/child?extended=true">>, put,
+        do_request(WorkerP1, <<"attributes/space3/dir_test/child?extended=true">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrChild)),
     ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"attributes/space3/dir/child?extended=true">>, put,
+        do_request(WorkerP1, <<"attributes/space3/dir_test/child?extended=true">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrChild2)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
-        do_request(WorkerP1, <<"attributes/space3/dir/child?inherited=true&extended=true">>, get,
+        do_request(WorkerP1, <<"attributes/space3/dir_test/child?inherited=true&extended=true">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     tracer:stop(),
     DecodedBody = jiffy:decode(Body, [return_maps]),

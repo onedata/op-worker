@@ -150,7 +150,7 @@ parse_attribute(Req, State) ->
 parse_attribute_body(Req, State = #{extended := Extended}) ->
     {ok, Body, Req2} = cowboy_req:body(Req),
 
-    Json = json_utils:decode(Body),
+    Json = json_utils:decode_map(Body),
     case {
         proplists:get_value(<<"name">>, Json),
         proplists:get_value(<<"value">>, Json),
@@ -195,8 +195,8 @@ parse_provider_id(Req, State) ->
 parse_callback(Req, State) ->
     {ok, Body, NewReq} = cowboy_req:body(Req),
 
-    Json = json_utils:decode(Body),
-    Callback = proplists:get_value(<<"url">>, Json),
+    Json = json_utils:decode_map(Body),
+    Callback = maps:get(<<"url">>, Json),
     {State#{callback => Callback}, NewReq}.
 
 %%--------------------------------------------------------------------

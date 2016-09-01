@@ -103,7 +103,7 @@ get_file_attributes(Req, State) ->
     case {Attribute, Extended} of
         {ModeOrUndefined, false} when ModeOrUndefined =:= <<"mode">> ; ModeOrUndefined =:= undefined ->
             {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
-            Response = json_utils:encode_map([[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]]),
+            Response = json_utils:encode_map([#{<<"name">> => <<"mode">>, <<"value">> => <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
             {Response, ReqWithAttribute, StateWithAttribute};
         {undefined, true} ->
             {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, Inherited),
@@ -115,7 +115,7 @@ get_file_attributes(Req, State) ->
             {Response, ReqWithAttribute, StateWithAttribute};
         {XattrName, true} ->
             {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
-            Response = json_utils:encode_map([[{<<"name">>, XattrName}, {<<"value">>, Value}]]),
+            Response = json_utils:encode_map([#{<<"name">> => XattrName, <<"value">> => Value}]),
             {Response, ReqWithAttribute, StateWithAttribute}
     end.
 
