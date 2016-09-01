@@ -341,6 +341,7 @@ file_record(SessionId, FileId) ->
                     end
             end,
             ChildrenIds = [ChId || {ChId, _} <- Children],
+            Share = share_data_backend:get_share_mapping(FileId),
             Res = [
                 {<<"id">>, FileId},
                 {<<"name">>, Name},
@@ -350,7 +351,8 @@ file_record(SessionId, FileId) ->
                 {<<"size">>, Size},
                 {<<"parent">>, ParentUUID},
                 {<<"children">>, ChildrenIds},
-                {<<"fileAcl">>, FileId}
+                {<<"fileAcl">>, FileId},
+                {<<"share">>, Share}
             ],
             {ok, Res}
     end.

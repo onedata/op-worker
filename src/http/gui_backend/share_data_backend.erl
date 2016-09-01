@@ -27,6 +27,8 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 -export([share_record/1]).
 
+-export([add_share_mapping/2, get_share_mapping/1]).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -107,23 +109,8 @@ find_query(<<"share">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"share">>, Data) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    Name = proplists:get_value(<<"name">>, Data),
-    case Name of
-        <<"">> ->
-            gui_error:report_warning(
-                <<"Cannot create space with empty name.">>);
-        _ ->
-            case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
-                {ok, SpaceId} ->
-                    SpaceRecord = share_record(SpaceId),
-                    {ok, SpaceRecord};
-                _ ->
-                    gui_error:report_warning(
-                        <<"Cannot create new space due to unknown error.">>)
-            end
-    end.
+create_record(<<"share">>, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -216,3 +203,28 @@ share_record(ShareId) ->
         {<<"dataSpace">>, ParentSpaceId},
         {<<"publicUrl">>, PublicURL}
     ].
+
+
+add_share_mapping(FileId, ShareId) ->
+    case space_info:exists(<<"magitrzny-space">>) of
+        true ->
+            ok;
+        false ->
+            space_info:create(#document{
+                key = <<"magitrzny-space">>,
+                value = #space_info{name = #{}}
+            })
+    end,
+    {ok, _} = space_info:update(<<"magitrzny-space">>, fun(Space) ->
+        #space_info{name = Mapping} = Space,
+        NewMapping = maps:put(FileId, ShareId, Mapping),
+        {ok, Space#space_info{name = NewMapping}}
+    end).
+
+
+get_share_mapping(FileId) ->
+    {ok, #document{
+        value = #space_info{
+            name = Mapping
+        }}} = space_info:get(<<"magitrzny-space">>),
+    maps:get(FileId, Mapping, null).

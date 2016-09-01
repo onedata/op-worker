@@ -165,6 +165,7 @@ handle(<<"createFileShare">>, Props) ->
     Name = proplists:get_value(<<"shareName">>, Props),
     SpaceId = proplists:get_value(<<"dataSpaceId">>, Props),
     {ok, ShareId} = space_logic:create_share(UserAuth, SpaceId, Name, FileId),
+    share_data_backend:add_share_mapping(FileId, SpaceId),
     {ok, [{<<"shareId">>, ShareId}]};
 
 
