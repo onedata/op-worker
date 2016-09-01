@@ -223,8 +223,13 @@ add_share_mapping(FileId, ShareId) ->
 
 
 get_share_mapping(FileId) ->
-    {ok, #document{
-        value = #space_info{
-            name = Mapping
-        }}} = space_info:get(<<"magitrzny-space">>),
-    maps:get(FileId, Mapping, null).
+    case space_info:exists(<<"magitrzny-space">>) of
+        true ->
+            {ok, #document{
+                value = #space_info{
+                    name = Mapping
+                }}} = space_info:get(<<"magitrzny-space">>),
+            maps:get(FileId, Mapping, null);
+        false ->
+            null
+    end.
