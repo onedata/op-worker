@@ -414,6 +414,8 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_metadata{metadata =
 #metadata{type = Type, value = Value}, names = Names}}) ->
     fslogic_req_generic:set_metadata(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Type, Value, Names);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #check_perms{flags = Flags}}) ->
+    fslogic_req_generic:check_perms(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Flags);
 handle_provider_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
