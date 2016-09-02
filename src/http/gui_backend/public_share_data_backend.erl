@@ -63,6 +63,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space-public">>, SpaceId) ->
+    ?dump({<<"data-space-public">>, SpaceId}),
     {ok, #document{
         value = #space_info{
             name = Name,
@@ -85,6 +86,7 @@ find(<<"data-space-public">>, SpaceId) ->
     ],
     {ok, Res};
 find(<<"share-public">>, ShareId) ->
+    ?dump({<<"share-public">>, ShareId}),
     {ok, #document{
         value = #share_info{
             name = Name,
@@ -92,14 +94,15 @@ find(<<"share-public">>, ShareId) ->
             parent_space = ParentSpaceId,
             public_url = PublicURL
         }}} = share_info:get(ShareId),
-    [
+    {ok, [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
         {<<"file">>, RootFileId},
         {<<"dataSpace">>, ParentSpaceId},
         {<<"publicUrl">>, PublicURL}
-    ];
+    ]};
 find(<<"file-public">>, FileId) ->
+    ?dump({<<"file-public">>, FileId}),
     SessionId = ?ROOT_SESS_ID,
     try
         file_record(SessionId, FileId)
