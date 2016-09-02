@@ -84,8 +84,6 @@ route(_) -> ?INDEX.
 -spec data_backend(HasSession :: boolean(), Identifier :: binary()) ->
     HandlerModule :: module().
 data_backend(true, <<"file">>) -> file_data_backend;
-% File browsing is allowed for anyone when viewing public shares
-data_backend(false, <<"file">>) -> public_file_data_backend;
 data_backend(true, <<"file-acl">>) -> file_data_backend;
 data_backend(true, <<"file-distribution">>) -> file_data_backend;
 data_backend(true, <<"data-space">>) -> data_space_data_backend;
@@ -98,7 +96,12 @@ data_backend(true, <<"group-user-permission">>) -> group_data_backend;
 data_backend(true, <<"group-group-permission">>) -> group_data_backend;
 data_backend(true, <<"system-provider">>) -> system_data_backend;
 data_backend(true, <<"system-user">>) -> system_data_backend;
-data_backend(true, <<"system-group">>) -> system_data_backend.
+data_backend(true, <<"system-group">>) -> system_data_backend;
+% File browsing is allowed for anyone when viewing public shares. It requires
+% read-only access to shares and files.
+data_backend(_, <<"data-space-public">>) -> public_share_data_backend;
+data_backend(_, <<"share-public">>) -> public_share_data_backend;
+data_backend(_, <<"file-public">>) -> public_share_data_backend.
 
 
 %%--------------------------------------------------------------------

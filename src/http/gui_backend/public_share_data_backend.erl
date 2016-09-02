@@ -12,7 +12,7 @@
 %%% the file model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(public_file_data_backend).
+-module(public_share_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 -author("Tomasz Lichon").
@@ -62,7 +62,44 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file">>, FileId) ->
+find(<<"data-space-public">>, SpaceId) ->
+    {ok, #document{
+        value = #space_info{
+            name = Name,
+            providers_supports = Providers
+        }}} = space_info:get(SpaceId),
+    % If current provider is not supported, return null rootDir which will
+    % cause the client to render a "space not supported" message.
+    RootDir = case Providers of
+        [] ->
+            null;
+        _ ->
+            fslogic_uuid:to_file_guid(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
+    end,
+    Res = [
+        {<<"id">>, SpaceId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, false},
+        {<<"rootDir">>, RootDir},
+        {<<"space">>, SpaceId}
+    ],
+    {ok, Res};
+find(<<"share-public">>, ShareId) ->
+    {ok, #document{
+        value = #share_info{
+            name = Name,
+            root_file_id = RootFileId,
+            parent_space = ParentSpaceId,
+            public_url = PublicURL
+        }}} = share_info:get(ShareId),
+    [
+        {<<"id">>, ShareId},
+        {<<"name">>, Name},
+        {<<"file">>, RootFileId},
+        {<<"dataSpace">>, ParentSpaceId},
+        {<<"publicUrl">>, PublicURL}
+    ];
+find(<<"file-public">>, FileId) ->
     SessionId = ?ROOT_SESS_ID,
     try
         file_record(SessionId, FileId)
@@ -81,7 +118,7 @@ find(<<"file">>, FileId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"file">>) ->
+find_all(_) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -92,7 +129,7 @@ find_all(<<"file">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"file">>, _Data) ->
+find_query(_, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -103,7 +140,7 @@ find_query(<<"file">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"file">>, Data) ->
+create_record(_, Data) ->
     try
         SessionId = ?ROOT_SESS_ID,
         Name = proplists:get_value(<<"name">>, Data),
@@ -161,7 +198,7 @@ create_record(<<"file">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"file">>, FileId, Data) ->
+update_record(_, FileId, Data) ->
     try
         SessionId = ?ROOT_SESS_ID,
         case proplists:get_value(<<"permissions">>, Data, undefined) of
@@ -195,7 +232,7 @@ update_record(<<"file">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file">>, FileId) ->
+delete_record(_, FileId) ->
     SessionId = ?ROOT_SESS_ID,
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
