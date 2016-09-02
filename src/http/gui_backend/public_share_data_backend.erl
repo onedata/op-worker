@@ -103,7 +103,7 @@ find(<<"share-public">>, ShareId) ->
     ]};
 find(<<"file-public">>, FileId) ->
     ?dump({<<"file-public">>, FileId}),
-    SessionId = ?ROOT_SESS_ID,
+    SessionId = g_session:get_session_id(),
     try
         file_record(SessionId, FileId)
     catch T:M ->
@@ -145,7 +145,7 @@ find_query(_, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(_, Data) ->
     try
-        SessionId = ?ROOT_SESS_ID,
+        SessionId = g_session:get_session_id(),
         Name = proplists:get_value(<<"name">>, Data),
         Type = proplists:get_value(<<"type">>, Data),
         ParentGUID = proplists:get_value(<<"parent">>, Data, null),
@@ -203,7 +203,7 @@ create_record(_, Data) ->
     ok | gui_error:error_result().
 update_record(_, FileId, Data) ->
     try
-        SessionId = ?ROOT_SESS_ID,
+        SessionId = g_session:get_session_id(),
         case proplists:get_value(<<"permissions">>, Data, undefined) of
             undefined ->
                 ok;
@@ -236,7 +236,7 @@ update_record(_, FileId, Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(_, FileId) ->
-    SessionId = ?ROOT_SESS_ID,
+    SessionId = g_session:get_session_id(),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
             ok;
