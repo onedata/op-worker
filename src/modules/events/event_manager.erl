@@ -64,7 +64,7 @@
 -spec start_link(EvtManSup :: pid(), SessId :: session:id()) ->
     {ok, EvtMan :: pid()} | ignore | {error, Reason :: term()}.
 start_link(EvtManSup, SessId) ->
-    gen_server:start_link(?MODULE, [EvtManSup, SessId], []).
+    gen_server2:start_link(?MODULE, [EvtManSup, SessId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -147,7 +147,7 @@ do_handle_cast({flush_stream, SubId, Notify}, #state{event_streams = EvtStms,
     session_id = SessId, subscriptions = Subs} = State) ->
     case get_stream(SubId, Subs, EvtStms) of
         {ok, Stm} ->
-            gen_server:cast(Stm, {flush, Notify});
+            gen_server2:cast(Stm, {flush, Notify});
         error ->
             ?warning("Event stream flush error: stream for subscription ~p and "
             "session ~p not found", [SubId, SessId])
@@ -161,7 +161,7 @@ do_handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtSt
             (#events{events = [Event]}, NewProvMap, false) -> %% Request should be handled locally only
                 {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:map(
                     fun(_, EvtStm) ->
-                        gen_server:cast(EvtStm, Event),
+                        gen_server2:cast(EvtStm, Event),
                         EvtStm
                     end, EvtStms)}};
             (_, NewProvMap, true) -> %% Request was already handled remotely
@@ -179,7 +179,7 @@ do_handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, 
             (_, NewProvMap, false) -> %% Request should be handled locally only
                 case get_stream(SubId, Subs, EvtStms) of
                     {ok, Stm} ->
-                        gen_server:cast(Stm, {flush, NotifyFun});
+                        gen_server2:cast(Stm, {flush, NotifyFun});
                     error ->
                         ?warning("Event stream flush error: stream for subscription ~p and "
                         "session ~p not found", [SubId, SessId])
@@ -199,7 +199,7 @@ do_handle_cast(#subscription{id = SubId, event_stream = #event_stream_definition
             ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
             NewEvtStms = case maps:find(StmId, EvtStms) of
                 {ok, EvtStm} ->
-                    gen_server:cast(EvtStm, {add_subscription, Sub}),
+                    gen_server2:cast(EvtStm, {add_subscription, Sub}),
                     EvtStms;
                 error ->
                     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
@@ -216,7 +216,7 @@ do_handle_cast(#subscription_cancellation{id = SubId}, #state{
     ?debug("Removing subscription ~p from session ~p", [SubId, SessId]),
     case get_stream(SubId, Subs, EvtStms) of
         {ok, EvtStm} ->
-            gen_server:cast(EvtStm, {remove_subscription, SubId});
+            gen_server2:cast(EvtStm, {remove_subscription, SubId});
         error ->
             ?warning("Cannot remove subscription ~p from session ~p: "
             "stream doesn't exist", [SubId, SessId])

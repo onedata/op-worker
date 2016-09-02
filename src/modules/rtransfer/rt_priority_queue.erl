@@ -50,7 +50,7 @@
 -spec new(BlockSize :: non_neg_integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 new(BlockSize) ->
-    gen_server:start_link(?MODULE, [BlockSize], []).
+    gen_server2:start_link(?MODULE, [BlockSize], []).
 
 
 %%--------------------------------------------------------------------
@@ -62,7 +62,7 @@ new(BlockSize) ->
 -spec new(ContainerName :: container_name(), BlockSize :: integer()) ->
     {ok, Pid :: pid()} | ignore | {error, Error :: term()}.
 new(ContainerName, BlockSize) ->
-    gen_server:start_link(ContainerName, ?MODULE, [BlockSize], []).
+    gen_server2:start_link(ContainerName, ?MODULE, [BlockSize], []).
 
 
 %%--------------------------------------------------------------------
@@ -73,7 +73,7 @@ new(ContainerName, BlockSize) ->
 -spec delete(ContainerRef) -> ok | {error, Reason :: term()} when
     ContainerRef :: container_ref().
 delete(ContainerRef) ->
-    gen_server:call(ContainerRef, delete).
+    gen_server2:call(ContainerRef, delete).
 
 
 %%--------------------------------------------------------------------
@@ -84,7 +84,7 @@ delete(ContainerRef) ->
 -spec push(ContainerRef, Block :: #rt_block{}) -> ok when
     ContainerRef :: container_ref().
 push(ContainerRef, Block) ->
-    gen_server:cast(ContainerRef, {push, Block}).
+    gen_server2:cast(ContainerRef, {push, Block}).
 
 
 %%--------------------------------------------------------------------
@@ -95,7 +95,7 @@ push(ContainerRef, Block) ->
 -spec pop(ContainerRef) -> {ok, #rt_block{}} | {error, Error :: term()} when
     ContainerRef :: container_ref().
 pop(ContainerRef) ->
-    gen_server:call(ContainerRef, pop).
+    gen_server2:call(ContainerRef, pop).
 
 
 %%--------------------------------------------------------------------
@@ -108,7 +108,7 @@ pop(ContainerRef) ->
     ContainerRef :: container_ref(),
     TermsFilterFunction :: function(). %% fun(Term) -> true | false
 pop(ContainerRef, TermsFilterFunction) ->
-    case gen_server:call(ContainerRef, pop) of
+    case gen_server2:call(ContainerRef, pop) of
         {ok, #rt_block{terms = Terms} = Block} ->
             {ok, Block#rt_block{
                 terms = lists:filter(fun(Term) ->
@@ -145,7 +145,7 @@ change_counter(ContainerRef, FileId, Offset, Size) ->
     Size :: non_neg_integer(),
     Change :: integer().
 change_counter(ContainerRef, FileId, Offset, Size, Change) ->
-    gen_server:cast(ContainerRef, {change_counter, FileId, Offset, Size, Change}).
+    gen_server2:cast(ContainerRef, {change_counter, FileId, Offset, Size, Change}).
 
 
 %%--------------------------------------------------------------------
@@ -156,7 +156,7 @@ change_counter(ContainerRef, FileId, Offset, Size, Change) ->
 -spec size(ContainerRef) -> {ok, Size :: non_neg_integer()} | {error, Error :: term()} when
     ContainerRef :: container_ref().
 size(ContainerRef) ->
-    gen_server:call(ContainerRef, size).
+    gen_server2:call(ContainerRef, size).
 
 
 %%--------------------------------------------------------------------
@@ -168,7 +168,7 @@ size(ContainerRef) ->
 -spec subscribe(ContainerRef, Pid :: pid(), Id :: reference()) -> ok when
     ContainerRef :: container_ref().
 subscribe(ContainerRef, Pid, Id) ->
-    gen_server:cast(ContainerRef, {subscribe, Pid, Id}).
+    gen_server2:cast(ContainerRef, {subscribe, Pid, Id}).
 
 
 %%--------------------------------------------------------------------
@@ -179,7 +179,7 @@ subscribe(ContainerRef, Pid, Id) ->
 %%--------------------------------------------------------------------
 -spec unsubscribe(ContainerRef :: container_ref(), Id :: reference()) -> ok.
 unsubscribe(ContainerRef, Id) ->
-    gen_server:cast(ContainerRef, {unsubscribe, Id}).
+    gen_server2:cast(ContainerRef, {unsubscribe, Id}).
 
 
 %%%===================================================================
@@ -188,7 +188,7 @@ unsubscribe(ContainerRef, Id) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:init-1">gen_server:init/1</a>
+%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:init-1">gen_server2:init/1</a>
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
@@ -210,7 +210,7 @@ init([BlockSize]) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3">gen_server:handle_call/3</a>
+%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3">gen_server2:handle_call/3</a>
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
@@ -247,7 +247,7 @@ handle_call(_Request, _From, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
+%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server2:handle_cast/2</a>
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: term()) -> Result when
@@ -285,7 +285,7 @@ handle_cast(_Request, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_info-2">gen_server:handle_info/2</a>
+%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_info-2">gen_server2:handle_info/2</a>
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout | term(), State :: term()) -> Result when
@@ -301,7 +301,7 @@ handle_info(_Info, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server:terminate/2</a>
+%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server2:terminate/2</a>
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason, State :: term()) -> Any :: term() when
@@ -315,7 +315,7 @@ terminate(_Reason, _State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server:code_change/3</a>
+%% <a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server2:code_change/3</a>
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn, State :: term(), Extra :: term()) -> Result when

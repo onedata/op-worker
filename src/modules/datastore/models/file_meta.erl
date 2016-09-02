@@ -146,22 +146,17 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                     FileDoc0#document{value = FM1}
             end,
         false = is_snapshot(FileName),
-        ?info("Create 1 ~p", [{ParentUUID, FileName}]),
         critical_section:run([?MODEL_NAME, ParentUUID],
             fun() ->
-                ?info("Create 2 ~p", [{ParentUUID, FileName}]),
                 case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                     {error, {not_found, _}} ->
                         case create(FileDoc) of
                             {ok, UUID} ->
                                 SavedDoc = FileDoc#document{key = UUID},
-                                datastore:run_transaction(?MODEL_NAME, UUID, fun() ->
-                                    ?info("Create 3 ~p", [{ParentUUID, FileName}]),
-                                    set_link_context(Scope),
-                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
-                                    ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}])
-                                end),
+                                set_link_context(Scope),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
                                 {ok, UUID};
                             {error, Reason} ->
                                 {error, Reason}
@@ -316,7 +311,6 @@ get_child(Doc, Name) ->
     file_meta:set_link_context(Doc),
     case datastore:fetch_full_link(?LINK_STORE_LEVEL, Doc, Name) of
         {ok, {_, Targets}} ->
-            ?info("get_child ~p", [{Name, Targets}]),
             {ok, [UUID || {UUID, _, _} <- Targets]};
         Other ->
             Other
@@ -374,10 +368,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 list_children(Entry, Offset, Count) ->
     ?run(begin
         {ok, #document{} = File} = get(Entry),
-%%        set_link_context(File),
-        MyProvID = oneprovider:get_provider_id(),
-        erlang:put(mother_scope, MyProvID),
-        erlang:put(other_scopes, []),
+        set_link_context(File),
         Res = datastore:foreach_link(?LINK_STORE_LEVEL, File,
             fun
                 (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->

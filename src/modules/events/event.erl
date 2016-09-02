@@ -330,7 +330,7 @@ filter_event_managers(EvtMans, ExcludedEvtMans) ->
     ok.
 send_to_event_managers(Msg, EvtMans) ->
     lists:foreach(fun(EvtMan) ->
-        gen_server:cast(EvtMan, Msg)
+        gen_server2:cast(EvtMan, Msg)
     end, EvtMans).
 
 %%--------------------------------------------------------------------

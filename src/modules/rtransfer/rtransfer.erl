@@ -101,8 +101,8 @@ fun((Ref :: ref(),
 %%--------------------------------------------------------------------
 -spec start_link(RtransferOpts :: [opt()]) -> {ok, pid()}.
 start_link(RtransferOpts) ->
-    gen_server:start({global, rtransfer}, rtransfer_server, RtransferOpts, []),
-    gen_server:start_link({local, gateway}, gateway, RtransferOpts, []).
+    gen_server2:start({global, rtransfer}, rtransfer_server, RtransferOpts, []),
+    gen_server2:start_link({local, gateway}, gateway, RtransferOpts, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -130,7 +130,7 @@ prepare_request(ProviderId, FileUUID, Offset, Size) ->
     OnComplete :: on_complete_fun()) -> ref().
 fetch(Ref, Notify, OnComplete) ->
     NewRef = Ref#request_transfer{notify = Notify, on_complete = OnComplete},
-    gen_server:cast({global, rtransfer}, NewRef),
+    gen_server2:cast({global, rtransfer}, NewRef),
     NewRef.
 
 %%--------------------------------------------------------------------

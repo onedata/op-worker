@@ -170,7 +170,7 @@ concurrent_create_test(Config) ->
 
 db_sync_test(Config) ->
     % TODO change timeout after VFS-2197
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 10, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 100, 10, 100).
 %%synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
 
 proxy_test1(Config) ->
@@ -237,7 +237,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyStats = fun(File, IsDir) ->
         VerAns = Verify(fun(W) ->
-%%            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
+            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
 
             case IsDir of
                 true ->
@@ -359,11 +359,13 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     ct:print("Stage 1"),
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+        ct:print("mkdir ~p", [{W, Level2TmpDir}]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
         VerifyStats(Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
+            ct:print("mkdir ~p", [{W2, Level3TmpDir}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
             VerifyStats(Level3TmpDir, true)
         end, Workers)

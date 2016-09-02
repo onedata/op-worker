@@ -296,7 +296,7 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(file_meta, delete, _, [Key, _], ok) ->
+'after'(file_meta, delete, ?GLOBAL_ONLY_LEVEL, [Key, _], ok) ->
     delete(Key);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

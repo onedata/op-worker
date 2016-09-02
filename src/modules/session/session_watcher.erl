@@ -49,7 +49,7 @@
 -spec start_link(SessId :: session:id(), SessType :: session:type()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SessId, SessType) ->
-    gen_server:start_link(?MODULE, [SessId, SessType], []).
+    gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
 %%%===================================================================
 %%% gen_server callbacks

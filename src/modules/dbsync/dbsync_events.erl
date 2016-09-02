@@ -88,17 +88,13 @@ change_replicated_internal(_SpaceId, _Change) ->
     ok.
 links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) ->
     #model_config{link_store_level = LinkStoreLevel} = ModelName:model_init(),
-%%    critical_section:run([?MODULE, term_to_binary({links, MainDocKey})], fun() ->
             try
                 MyProvID = oneprovider:get_provider_id(),
-                erlang:put(mother_scope, <<"#local#">>),
+                erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE),
                 erlang:put(other_scopes, []),
 
-                ?info("YEY ~p", [{MainDocKey, AddedMap, DeletedMap}]),
-
                 maps:fold(
-                    fun(K, {Version, Targets} = V, AccIn) ->
-%%                        ?info("Add forigin link ~p", [{MainDocKey, {K, V}}]),
+                    fun(K, {Version, Targets}, AccIn) ->
                         NewTargets = lists:filter(
                             fun({_, _, Scope}) ->
                                 case Scope of
@@ -119,7 +115,6 @@ links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) 
                 maps:fold(
                     fun(K, V, _AccIn) ->
                         {_, DelTargets} = V,
-%%                        ?info("Del forigin link ~p", [{MainDocKey, {K, V}}]),
                         lists:foreach(
                             fun({_, _, S}) ->
                                 ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S, size(S))])
@@ -133,7 +128,6 @@ links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) 
                 _:Reason ->
                     ?error_stacktrace("links_changed error ~p", [Reason])
             end,
-%%        end),
     ok;
 links_changed(_, _, _, _, _) ->
     ok.
