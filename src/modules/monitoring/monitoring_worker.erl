@@ -41,17 +41,11 @@ init(_Args) ->
         id = ?MONITORING_SUB_ID,
         object = undefined,
         event_stream = #event_stream_definition{
+            id = monitoring_event_stream,
             metadata = 0,
             init_handler = fun(_, _, _) -> #{} end,
             terminate_handler = fun(_) -> ok end,
             event_handler = fun monitoring_event:handle_monitoring_events/2,
-            admission_rule = fun
-                (#event{object = #storage_used_updated{}}) -> true;
-                (#event{object = #space_info_updated{}}) -> true;
-                (#event{object = #file_operations_statistics{}}) -> true;
-                (#event{object = #rtransfer_statistics{}}) -> true;
-                (_) -> false
-            end,
             aggregation_rule = fun monitoring_event:aggregate_monitoring_events/2,
             transition_rule = fun(Meta, _) -> Meta end,
             emission_rule = fun(_) -> false end,

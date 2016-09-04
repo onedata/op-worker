@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/2, maybe_update_session_atime/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -50,6 +50,23 @@
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SessId, SessType) ->
     gen_server:start_link(?MODULE, [SessId, SessType], []).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates session access time if it will expire soon.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_session_atime(Doc :: #document{}) -> ok.
+maybe_update_session_atime(#document{key = Key, value = #session{} = Sess}) ->
+    #session{accessed = Accessed, type = Type} = Sess,
+    TTL = get_session_ttl(Type),
+    InactivityPeriod = timer:now_diff(os:timestamp(), Accessed) div 1000,
+    case InactivityPeriod >= 0.2 * TTL of
+        true -> session:update(Key, #{});
+        false -> ok
+    end,
+    ok.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -222,9 +239,6 @@ code_change(_OldVsn, State, _Extra) ->
 get_session_ttl(gui) ->
     {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
     timer:seconds(Period);
-get_session_ttl(fuse) ->
-    {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
-    timer:seconds(Period);
 get_session_ttl(rest) ->
     {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
     timer:seconds(Period);
@@ -233,6 +247,9 @@ get_session_ttl(provider_incoming) ->
     timer:seconds(Period);
 get_session_ttl(provider_outgoing) ->
     {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
+    timer:seconds(Period);
+get_session_ttl(_) ->
+    {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
     timer:seconds(Period).
 
 %%--------------------------------------------------------------------

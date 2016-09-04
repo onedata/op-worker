@@ -96,7 +96,7 @@ create(#document{value = Sess} = Document) ->
 get(Key) ->
     case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
         {ok, Doc} ->
-            session:update(Key, #{}),
+            session_watcher:maybe_update_session_atime(Doc),
             {ok, Doc};
         {error, Reason} ->
             {error, Reason}
@@ -147,12 +147,9 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    case ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)) of
-        true ->
-            update(Key, #{}),
-            true;
-        false ->
-            false
+    case ?MODULE:get(Key) of
+        {ok, _Doc} -> true;
+        {error, {not_found, ?MODULE}} -> false
     end.
 
 %%--------------------------------------------------------------------

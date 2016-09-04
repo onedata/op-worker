@@ -68,7 +68,7 @@ emit(#event{key = undefined} = Evt, Ref) ->
     emit(set_key(Evt), Ref);
 
 emit(#event{} = Evt, Ref) ->
-    send_to_event_managers(Evt, get_event_managers(as_list(Ref)));
+    send_to_event_managers(set_stream_id(Evt), get_event_managers(as_list(Ref)));
 
 emit(EvtObject, Ref) ->
     emit(#event{object = EvtObject}, Ref).
@@ -195,43 +195,67 @@ unsubscribe(SubId, Ref) ->
 -spec set_key(Evt :: event()) -> NewEvt :: event().
 set_key(#event{object = #read_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
-
 set_key(#event{object = #write_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
-
 set_key(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid, stream_key = <<"file_attr.", Uuid/binary>>};
-
 set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid, stream_key = <<"file_location.", Uuid/binary>>};
-
 set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid, stream_key = <<"permission_changed.", Uuid/binary>>};
-
 set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid, stream_key = <<"file_removal.", Uuid/binary>>};
-
 set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
     Evt#event{key = <<"quota_exeeded">>};
-
 set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid, stream_key = <<"file_renamed.", Uuid/binary>>};
-
 set_key(#event{object = #file_accessed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid};
-
 set_key(#event{object = #storage_used_updated{space_id = SpaceId, user_id = UserId}} = Evt) ->
     Evt#event{key = {SpaceId, UserId, <<"storage_used_updated">>}};
-
 set_key(#event{object = #space_info_updated{space_id = SpaceId}} = Evt) ->
     Evt#event{key = {SpaceId, <<"space_info_updated">>}};
-
 set_key(#event{object = #file_operations_statistics{space_id = SpaceId, user_id = UserId}} = Evt) ->
     Evt#event{key = {SpaceId, UserId, <<"file_operations_statistics">>}};
-
 set_key(#event{object = #rtransfer_statistics{space_id = SpaceId, user_id = UserId}} = Evt) ->
     Evt#event{key = {SpaceId, UserId, <<"rtransfer_statistics">>}}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets ID of a stream that is responsible for handling the event.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_stream_id(Evt :: event()) -> NewEvt :: event().
+set_stream_id(#event{stream_id = StmId} = Evt) when StmId =/= undefined ->
+    Evt;
+set_stream_id(#event{object = #read_event{}} = Evt) ->
+    Evt#event{stream_id = read_event_stream};
+set_stream_id(#event{object = #write_event{}} = Evt) ->
+    Evt#event{stream_id = write_event_stream};
+set_stream_id(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
+    Evt#event{stream_id = file_attr_event_stream};
+set_stream_id(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
+    Evt#event{stream_id = file_location_event_stream};
+set_stream_id(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
+    Evt#event{stream_id = permission_changed_event_stream};
+set_stream_id(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
+    Evt#event{stream_id = file_removal_event_stream};
+set_stream_id(#event{object = #quota_exeeded_event{}} = Evt) ->
+    Evt#event{stream_id = quota_exceeded_event_stream};
+set_stream_id(#event{object = #file_renamed_event{
+    top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
+    Evt#event{stream_id = file_renamed_event_stream};
+set_stream_id(#event{object = #file_accessed_event{}} = Evt) ->
+    Evt#event{stream_id = file_accessed_event_stream};
+set_stream_id(#event{object = #storage_used_updated{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream};
+set_stream_id(#event{object = #space_info_updated{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream};
+set_stream_id(#event{object = #file_operations_statistics{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream};
+set_stream_id(#event{object = #rtransfer_statistics{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream}.
 
 %%--------------------------------------------------------------------
 %% @private
