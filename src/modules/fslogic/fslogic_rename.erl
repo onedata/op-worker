@@ -566,28 +566,28 @@ copy_file_attributes(SessId, From, To) ->
     case logical_file_manager:get_acl(SessId, From) of
         {ok, ACL} ->
             ok = logical_file_manager:set_acl(SessId, To, ACL);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
     case logical_file_manager:get_mimetype(SessId, From) of
         {ok, Mimetype} ->
             ok = logical_file_manager:set_mimetype(SessId, To, Mimetype);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
     case logical_file_manager:get_transfer_encoding(SessId, From) of
         {ok, TransferEncoding} ->
             ok = logical_file_manager:set_transfer_encoding(SessId, To, TransferEncoding);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
     case logical_file_manager:get_cdmi_completion_status(SessId, From) of
         {ok, CompletionStatus} ->
             ok = logical_file_manager:set_cdmi_completion_status(SessId, To, CompletionStatus);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
