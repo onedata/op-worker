@@ -169,12 +169,12 @@ get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Fil
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = FileGUID}}) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
-    DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
+    Answer = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
 
-    case proplists:get_value(<<"value">>, DirCdmi) of
+    case proplists:get_value(<<"value">>, Answer) of
         {range, Range} ->
             % prepare response
-            BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
+            BodyWithoutValue = proplists:delete(<<"value">>, Answer),
             ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {guid, FileGUID}),
             JsonBodyWithoutValue =
                 case proplists:get_value(<<"metadata">>, BodyWithoutValue) of
@@ -199,17 +199,17 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
             {{stream, StreamSize, StreamFun}, Req, State};
         undefined ->
             Response =
-                case proplists:get_value(<<"metadata">>, DirCdmi) of
+                case proplists:get_value(<<"metadata">>, Answer) of
                     undefined ->
-                        json_utils:encode_map(maps:from_list(DirCdmi));
+                        json_utils:encode_map(maps:from_list(Answer));
                     Metadata ->
                         case proplists:get_value(<<"cdmi_acl">>, Metadata) of
                             undefined ->
-                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(DirCdmi)));
+                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
                             Acl ->
                                 AclMap = lists:map(fun maps:from_list/1, Acl),
                                 MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
-                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(DirCdmi)))
+                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
                         end
                 end,
             {Response, Req, State}
