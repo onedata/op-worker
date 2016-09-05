@@ -17,6 +17,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% definition of an event stream
+%% id                - unique stream ID
 %% metadata          - arbitrary term
 %% init_handler      - function that is called when event stream starts
 %% terminate_handler - function that is called when event stream terminates
@@ -33,8 +34,11 @@
 %%                     and decides whether event handler should be executed
 %% emission_time     - maximal delay between successive event handler executions
 -record(event_stream_definition, {
+    id :: event_stream:id(),
     metadata = 0 :: event_stream:metadata(),
-    init_handler = fun(_, _, _) -> #{} end :: event_stream:init_handler(),
+    init_handler = fun(#subscription{id = SubId}, SessId, _) ->
+        #{subscription_id => SubId, session_id => SessId}
+    end :: event_stream:init_handler(),
     terminate_handler = fun(_) -> ok end :: event_stream:terminate_handler(),
     event_handler = fun(_, _) -> ok end :: event_stream:event_handler(),
     admission_rule :: event_stream:admission_rule(),
@@ -50,6 +54,7 @@
 
 %% Default read event stream specialization
 -define(READ_EVENT_STREAM, #event_stream_definition{
+    id = <<"read_event_stream">>,
     admission_rule = fun
         (#event{object = #read_event{}}) -> true;
         (_) -> false
@@ -70,6 +75,7 @@
 
 %% Default write event stream specialization
 -define(WRITE_EVENT_STREAM, #event_stream_definition{
+    id = <<"write_event_stream">>,
     admission_rule = fun
         (#event{object = #write_event{}}) -> true;
         (_) -> false
@@ -91,51 +97,73 @@
 
 %% Default file attr event stream specialization
 -define(FILE_ATTR_EVENT_STREAM, #event_stream_definition{
+    id = <<"file_attr_event_stream">>,
     admission_rule = fun
         (#event{object = #update_event{object = #file_attr{}}}) -> true;
         (_) -> false
-    end
+    end,
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file location event stream specialization
 -define(FILE_LOCATION_EVENT_STREAM, #event_stream_definition{
+    id = <<"file_location_event_stream">>,
     admission_rule = fun
         (#event{object = #update_event{object = #file_location{}}}) -> true;
         (_) -> false
-    end
+    end,
+    event_handler = event_utils:send_events_handler()
 }).
 
 
 %% Default permission_changed event stream specialization
 -define(PERMISSION_CHANGED_EVENT_STREAM, #event_stream_definition{
+    id = <<"permission_changed_event_stream">>,
     admission_rule = fun
         (#event{object = #permission_changed_event{}}) -> true;
         (_) -> false
-    end
+    end,
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file removal stream specialization
 -define(FILE_REMOVAL_EVENT_STREAM, #event_stream_definition{
+    id = <<"file_removal_event_stream">>,
     admission_rule = fun
         (#event{object = #file_removal_event{}}) -> true;
         (_) -> false
-    end
+    end,
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file renamed event stream specialization
 -define(FILE_RENAMED_EVENT_STREAM, #event_stream_definition{
+    id = <<"file_renamed_event_stream">>,
     admission_rule = fun
         (#event{object = #file_renamed_event{}}) -> true;
         (_) -> false
-    end
+    end,
+    event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file accessed event stream specialization
 -define(FILE_ACCESSED_EVENT_STREAM, #event_stream_definition{
+    id = <<"file_accessed_event_stream">>,
     admission_rule = fun
         (#event{object = #file_accessed_event{}}) -> true;
         (_) -> false
-    end
+    end,
+    event_handler = event_utils:send_events_handler()
+}).
+
+%% Default quota exceeded event stream specialization
+-define(QUOTA_EXCEEDED_EVENT_STREAM, #event_stream_definition{
+    id = <<"quota_exceeded_event_stream">>,
+    admission_rule = fun
+        (#event{object = #quota_exeeded_event{}}) -> true;
+        (_) -> false
+    end,
+    event_handler = event_utils:send_events_handler()
 }).
 
 -endif.

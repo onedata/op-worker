@@ -68,7 +68,7 @@
 -export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
     truncate/3, release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
--export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
+-export([set_perms/3, check_perms/3, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
@@ -329,10 +329,10 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% Checks if current user has given permissions for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(FileKey :: file_key(), PermsType :: check_permissions:check_type()) ->
+-spec check_perms(session:id(), file_key(), helpers:open_mode()) ->
     {ok, boolean()} | error_reply().
-check_perms(Path, PermType) ->
-    ?run(fun() -> lfm_perms:check_perms(Path, PermType) end).
+check_perms(SessId, FileKey, PermType) ->
+    ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
 
 %%--------------------------------------------------------------------

@@ -57,9 +57,9 @@ handle_handshake(#client_message{message_body = #handshake_request{
 %% Authenticate client using given token, returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(#token_auth{}) -> {ok, #identity{}} | {error, term()}.
+-spec authenticate_using_token(#token_auth{}) -> {ok, #user_identity{}} | {error, term()}.
 authenticate_using_token(Auth) ->
-    {ok, #document{value = Iden}} = identity:get_or_fetch(Auth),
+    {ok, #document{value = Iden}} = user_identity:get_or_fetch(Auth),
     {ok, Iden}.
 
 %%--------------------------------------------------------------------
@@ -68,7 +68,7 @@ authenticate_using_token(Auth) ->
 %% Authenticate client using given certificate. Returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(#'OTPCertificate'{}) -> {ok, #identity{}}.
+-spec authenticate_using_certificate(#'OTPCertificate'{}) -> {ok, #user_identity{}}.
 authenticate_using_certificate(_OtpCert) ->
     %identity:get_or_fetch(_CertInfo). todo integrate with identity model
-    {ok, #identity{}}.
+    {ok, #user_identity{}}.

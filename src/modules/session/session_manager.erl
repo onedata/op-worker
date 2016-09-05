@@ -14,6 +14,7 @@
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -21,7 +22,7 @@
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
 -export([reuse_or_create_session/5]).
--export([create_gui_session/2, create_monitoring_session/1]).
+-export([create_gui_session/2, create_root_session/0]).
 -export([remove_session/1]).
 -export([get_provider_session_id/2, session_id_to_provider_id/1, is_provider_session_id/1]).
 -export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
@@ -96,7 +97,7 @@ reuse_or_create_rest_session(Iden, Auth) ->
 -spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(), Auth :: session:auth(), SessionType :: atom()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
-    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
+    {ok, #document{value = #user_identity{} = Iden}} = user_identity:get_or_fetch(Auth),
     reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia).
 
 
@@ -121,17 +122,18 @@ create_gui_session(Iden, Auth) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates monitoring session and starts session supervisor.
+%% Creates root session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_monitoring_session(SessId :: session:id()) ->
-    {ok, SessId :: session:id()} | {error, Reason :: term()}.
-create_monitoring_session(SessId) ->
-    Sess = #session{status = active, type = monitoring, connections = []},
-    case session:create(#document{key = SessId, value = Sess}) of
-        {ok, SessId} ->
-            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, monitoring]),
-            {ok, SessId};
+-spec create_root_session() -> {ok, SessId :: session:id()} |
+    {error, Reason :: term()}.
+create_root_session() ->
+    Sess = #session{status = active, type = root, connections = [],
+        identity = #user_identity{user_id = ?ROOT_USER_ID}},
+    case session:create(#document{key = ?ROOT_SESS_ID, value = Sess}) of
+        {ok, ?ROOT_SESS_ID} ->
+            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [?ROOT_SESS_ID, root]),
+            {ok, ?ROOT_SESS_ID};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -244,7 +246,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
 %%--------------------------------------------------------------------
 -spec subscribe_user(Iden :: session:identity()) -> ok.
 subscribe_user(Iden) ->
-    UID = Iden#identity.user_id,
+    UID = Iden#user_identity.user_id,
     case UID of
         undefined -> ok;
         _ ->

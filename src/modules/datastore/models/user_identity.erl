@@ -9,7 +9,7 @@
 %%% Cache that maps credentials to users' identities
 %%% @end
 %%%-------------------------------------------------------------------
--module(identity).
+-module(user_identity).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
@@ -30,8 +30,8 @@
 -export_type([credentials/0]).
 
 %% todo split this model to:
-%% todo globally cached - #certificate{} -> #identity{},
-%% todo and locally cached - #token{} | #certificate_info{} -> #identity{}
+%% todo globally cached - #certificate{} -> #user_identity{},
+%% todo and locally cached - #token{} | #certificate_info{} -> #user_identity{}
 -type credentials() :: #token_auth{} | #basic_auth{} | #'OTPCertificate'{}.
 
 %%%===================================================================
@@ -132,7 +132,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(identity:credentials()) ->
+-spec fetch(user_identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(#'OTPCertificate'{}) ->
     {error, cannot_fetch};
@@ -140,8 +140,8 @@ fetch(Auth) ->
     try
         {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
         {ok, #document{key = Id}} = onedata_user:get_or_fetch(Auth, UserId),
-        NewDoc = #document{key = Auth, value = #identity{user_id = Id}},
-        case identity:create(NewDoc) of
+        NewDoc = #document{key = Auth, value = #user_identity{user_id = Id}},
+        case user_identity:create(NewDoc) of
             {ok, _} -> ok;
             {error, already_exists} -> ok
         end,
@@ -158,10 +158,10 @@ fetch(Auth) ->
 %% and store its identity
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(identity:credentials()) ->
+-spec get_or_fetch(user_identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Cred) ->
-    case identity:get(Cred) of
+    case user_identity:get(Cred) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Cred);
         Error -> Error

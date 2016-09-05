@@ -188,7 +188,7 @@ reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, messa
     #status{}.
 handle(SessId, #dbsync_request{message_body = MessageBody}) ->
     ?debug("DBSync request from ~p ~p", [SessId, MessageBody]),
-    {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
+    {ok, #document{value = #session{identity = #user_identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle_impl(ProviderId, MessageBody) of
         ok ->
             #status{code = ?OK};

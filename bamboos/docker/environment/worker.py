@@ -152,7 +152,7 @@ def _riak_up(cluster_name, db_nodes, dns_servers, uid):
     return db_node_mappings, riak_output
 
 
-def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
+def _couchbase_up(cluster_name, db_nodes, dns_servers, uid, configurator):
     db_node_mappings = {}
     for node in db_nodes:
         db_node_mappings[node] = ''
@@ -164,8 +164,10 @@ def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    couchbase_output = couchbase.up('couchbase/server:community-4.0.0', dns,
-                                    uid, cluster_name, len(db_node_mappings))
+    couchbase_output = couchbase.up('couchbase/server:community-4.1.0', dns,
+                                    uid, cluster_name, len(db_node_mappings),
+                                    configurator.couchbase_buckets(),
+                                    configurator.couchbase_ramsize())
 
     return db_node_mappings, couchbase_output
 
@@ -231,7 +233,8 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
                                                 dns_servers, uid)
         elif db_driver in ['couchbase', 'couchdb']:
             db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes,
-                                                     dns_servers, uid)
+                                                     dns_servers, uid,
+                                                     configurator)
         else:
             raise ValueError("Invalid db_driver: {0}".format(db_driver))
 

@@ -95,6 +95,10 @@
     names = [] :: custom_metadata:names()
 }).
 
+-record(check_perms, {
+    flags :: fslogic_worker:open_flags()
+}).
+
 -type provider_request() ::
     #get_xattr{} | #set_xattr{} | #remove_xattr{} | #list_xattr{} |
     #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
@@ -102,7 +106,7 @@
     #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
     #get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
     #get_file_distribution{} | #replicate_file{} | #get_metadata{} |
-    #set_metadata{}.
+    #set_metadata{} | #check_perms{}.
 
 -record(xattr_list, {
     names :: [xattr:name()]

@@ -11,12 +11,14 @@
 -module(rrd_utils).
 -author("Michal Wrona").
 
--include_lib("ctool/include/logging.hrl").
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/monitoring/rrd_definitions.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([create_rrd/3, update_rrd/4, export_rrd/3]).
+-export([create_rrd/4, update_rrd/4, export_rrd/3]).
 
 -type rrd_file() :: binary().
 %% Params: [Heartbeat, MinValue, MaxValue]
@@ -34,31 +36,47 @@
 %% Creates rrd with given parameters if database entry for it is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec create_rrd(#monitoring_id{}, maps:map(), non_neg_integer()) -> ok.
-create_rrd(MonitoringId, StateBuffer, CreationTime) ->
-    #rrd_definition{datastores = Datastores, rras_map = RRASMap, options = Options} =
-        get_rrd_definition(MonitoringId),
-
+-spec create_rrd(datastore:id(), #monitoring_id{}, maps:map(), non_neg_integer()) -> ok.
+create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
     case monitoring_state:exists(MonitoringId) of
         false ->
-            Path = get_path(),
+            #rrd_definition{datastores = Datastores, rras_map = RRASMap, options = Options} =
+                get_rrd_definition(MonitoringId),
+
+            TmpPath = get_path(),
             poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
-                ok = rrdtool:create(Pid, Path, Datastores, parse_rras_map(RRASMap),
+                ok = rrdtool:create(Pid, TmpPath, Datastores, parse_rras_map(RRASMap),
                     Options ++ [{start, CreationTime}])
             end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
-            {ok, RRDFile} = read_rrd_from_file(Path),
+            {ok, RRDFile} = read_rrd_from_file(TmpPath),
+            RRDSize = byte_size(RRDFile),
+
+            {ok, #document{value = #file_meta{name = SpaceName}}} =
+                fslogic_spaces:get_space({id, SpaceId}),
+
+            RRDPathDir = filename:join([<<"/">>, SpaceName, file_meta:hidden_file_name(?RRD_DIR)]),
+            RRDPath = filename:join([RRDPathDir, monitoring_state:encode_id(MonitoringId)]),
+
+            case logical_file_manager:mkdir(?ROOT_SESS_ID, RRDPathDir) of
+                {ok, _} -> ok;
+                {error, ?EEXIST} -> ok
+            end,
+            {ok, _} = logical_file_manager:create(?ROOT_SESS_ID, RRDPath),
+
+            {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {path, RRDPath}, write),
+            {ok, Handle2, RRDSize} = logical_file_manager:write(Handle, 0, RRDFile),
+            ok = logical_file_manager:release(Handle2),
 
             {ok, _} = monitoring_state:save(#document{key = MonitoringId,
                 value = #monitoring_state{
                     monitoring_id = MonitoringId,
-                    rrd_file = RRDFile,
+                    rrd_path = RRDPath,
                     state_buffer = StateBuffer,
                     last_update_time = CreationTime
                 }}),
             ok;
-        true ->
-            ok
+        true -> ok
     end.
 
 %%--------------------------------------------------------------------
@@ -69,22 +87,28 @@ create_rrd(MonitoringId, StateBuffer, CreationTime) ->
 -spec update_rrd(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), [term()]) -> ok.
 update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
     #rrd_definition{datastores = Datastores} = get_rrd_definition(MonitoringId),
-    #monitoring_state{rrd_file = RRDFile} = MonitoringState,
+    #monitoring_state{rrd_path = RRDPath} = MonitoringState,
 
     UpdatesList = lists:zip(
         lists:map(fun({DSName, _, _}) -> DSName end, Datastores),
         UpdateValues
     ),
 
-    {ok, Path} = write_rrd_to_file(RRDFile),
+    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {path, RRDPath}, rdwr),
+    {ok, Handle2, RRDFile} = lfm_files:read_without_events(Handle, 0, ?RRD_READ_SIZE),
+
+    {ok, TmpPath} = write_rrd_to_file(RRDFile),
     poolboy:transaction(?RRDTOOL_POOL_NAME, fun(Pid) ->
-        ok = rrdtool:update(Pid, Path, UpdatesList, integer_to_list(UpdateTime))
+        ok = rrdtool:update(Pid, TmpPath, UpdatesList, integer_to_list(UpdateTime))
     end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
-    {ok, UpdatedRRDFile} = read_rrd_from_file(Path),
+    {ok, UpdatedRRDFile} = read_rrd_from_file(TmpPath),
 
-    {ok, _} = monitoring_state:update(MonitoringId, #{rrd_file => UpdatedRRDFile,
-        last_update_time => UpdateTime}),
+    RRDSize = byte_size(UpdatedRRDFile),
+    {ok, Handle3, RRDSize} = logical_file_manager:write(Handle2, 0, UpdatedRRDFile),
+    ok = logical_file_manager:release(Handle3),
+
+    {ok, _} = monitoring_state:update(MonitoringId, #{last_update_time => UpdateTime}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -98,10 +122,13 @@ export_rrd(MonitoringId, Step, Format) ->
         get_rrd_definition(MonitoringId),
     StepInSeconds = proplists:get_value(step, Options),
 
-    {ok, #document{value = #monitoring_state{rrd_file = RRDFile}}} =
+    {ok, #document{value = #monitoring_state{rrd_path = RRDPath, monitoring_id = #monitoring_id{provider_id = ProviderId}}}} =
         monitoring_state:get(MonitoringId),
 
-    {ok, Path} = write_rrd_to_file(RRDFile),
+    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {path, RRDPath}, read),
+    {ok, Handle2, RRDFile} = lfm_files:read_without_events(Handle, 0, ?RRD_READ_SIZE),
+    ok = logical_file_manager:release(Handle2),
+    {ok, TmpPath} = write_rrd_to_file(RRDFile),
     {CF, _, PDPsPerCDP, _} = maps:get(Step, RRASMap),
 
     FormatOptions = case Format of
@@ -134,7 +161,7 @@ export_rrd(MonitoringId, Step, Format) ->
     Sources = lists:foldl(
         fun({DSName, _, _}, Acc) ->
             lists:flatten(io_lib:format("~s DEF:~s=~s:~s:~s:step=~b",
-                [Acc, DSName, Path, DSName, atom_to_list(CF), StepInSeconds * PDPsPerCDP]))
+                [Acc, DSName, TmpPath, DSName, atom_to_list(CF), StepInSeconds * PDPsPerCDP]))
         end, "", Datastores),
 
     Exports = lists:foldl(
@@ -148,7 +175,7 @@ export_rrd(MonitoringId, Step, Format) ->
             ++ maps:get(Step, ?MAKESPAN_FOR_STEP) ++ " --end now")
     end, ?RRDTOOL_POOL_TRANSACTION_TIMEOUT),
 
-    file:delete(Path),
+    file:delete(TmpPath),
     {ok, list_to_binary(Data)}.
 
 
@@ -165,7 +192,7 @@ export_rrd(MonitoringId, Step, Format) ->
 -spec write_rrd_to_file(rrd_file()) -> {ok, Path :: string()}.
 write_rrd_to_file(RRDFile) ->
     Path = get_path(),
-    ok = file:write_file(Path, base64:decode(RRDFile)),
+    ok = file:write_file(Path, RRDFile),
     {ok, Path}.
 
 %%--------------------------------------------------------------------
@@ -178,7 +205,7 @@ write_rrd_to_file(RRDFile) ->
 read_rrd_from_file(Path) ->
     {ok, RRDFile} = file:read_file(Path),
     file:delete(Path),
-    {ok, base64:encode(RRDFile)}.
+    {ok, RRDFile}.
 
 %%--------------------------------------------------------------------
 %% @private

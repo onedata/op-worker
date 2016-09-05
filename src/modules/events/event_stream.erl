@@ -26,10 +26,12 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--export_type([ctx/0, definition/0, metadata/0, init_handler/0, terminate_handler/0,
-    event_handler/0, admission_rule/0, aggregation_rule/0, transition_rule/0,
-    emission_rule/0, emission_time/0]).
+-export_type([id/0, key/0, ctx/0, definition/0, metadata/0, init_handler/0,
+    terminate_handler/0, event_handler/0, admission_rule/0, aggregation_rule/0,
+    transition_rule/0, emission_rule/0, emission_time/0]).
 
+-type id() :: binary().
+-type key() :: binary().
 -type ctx() :: #{}.
 -type definition() :: #event_stream_definition{}.
 -type metadata() :: term().
@@ -41,6 +43,7 @@
 -type transition_rule() :: fun((metadata(), event:event()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
+-type subscriptions() :: #{subscription:id() => #subscription{}}.
 
 -type events() :: #{event:key() => event:event()}.
 
@@ -54,7 +57,7 @@
 %% events          - mapping form an event key to an aggregated event
 %% emission_ref    - reference associated with the last 'periodic_emission' message
 -record(state, {
-    subscription_id :: subscription:id(),
+    stream_id :: id(),
     session_id :: session:id(),
     session_type :: session:type(),
     event_manager :: pid(),
@@ -62,7 +65,8 @@
     ctx :: term(),
     metadata :: metadata(),
     events = #{} :: events(),
-    emission_ref :: reference()
+    emission_ref :: undefined | reference(),
+    subscriptions = #{} :: subscriptions()
 }).
 
 %%%===================================================================
@@ -92,19 +96,20 @@ start_link(SessType, EvtMan, Sub, SessId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessType, EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, SessId]) ->
-    ?debug("Initializing event stream for subscription ~p in session ~p", [SubId, SessId]),
+init([SessType, EvtMan, #subscription{event_stream = #event_stream_definition{
+    id = StmId} = StmDef} = Sub, SessId]) ->
+    ?debug("Initializing event stream ~p in session ~p", [StmId, SessId]),
     process_flag(trap_exit, true),
-    register_stream(EvtMan, SubId),
+    register_stream(EvtMan, StmId),
     {ok, #state{
-        subscription_id = SubId,
+        stream_id = StmId,
         session_id = SessId,
         session_type = SessType,
         event_manager = EvtMan,
         ctx = execute_init_handler(StmDef, Sub, SessId, SessType),
         metadata = get_initial_metadata(StmDef),
         definition = StmDef,
-        emission_ref = schedule_event_handler_execution(StmDef)
+        subscriptions = add_subscription(SessId, Sub, #{})
     }}.
 
 %%--------------------------------------------------------------------
@@ -130,19 +135,30 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(#event{} = Evt, #state{subscription_id = SubId, session_id = SessId,
+handle_cast(#event{} = Evt, #state{stream_id = StmId, session_id = SessId,
     definition = StmDef} = State) ->
     case apply_admission_rule(Evt, StmDef) of
         true ->
-            ?debug("Handling event ~p in event stream for subscription ~p and "
-            "session ~p", [Evt, SubId, SessId]),
+            ?debug("Handling event ~p in event stream ~p and session ~p", 
+                [Evt, StmId, SessId]),
             {noreply, process_event(Evt, State)};
         false -> {noreply, State}
     end;
 
+handle_cast({add_subscription, Sub}, #state{session_id = SessId,
+    subscriptions = Subs} = State) ->
+    {noreply, State#state{subscriptions = add_subscription(SessId, Sub, Subs)}};
+
+handle_cast({remove_subscription, SubId}, #state{session_id = SessId,
+    subscriptions = Subs} = State) ->
+    case remove_subscription(SessId, SubId, Subs) of
+        {true, NewSubs} -> {stop, normal, State#state{subscriptions = NewSubs}};
+        {false, NewSubs} -> {noreply, State#state{subscriptions = NewSubs}}
+    end;
+
 handle_cast({flush, NotifyFun}, #state{ctx = Ctx} = State) ->
     #state{ctx = NewCtx} = NewState = execute_event_handler(
-        State#state{ctx = Ctx#{notify => NotifyFun}}
+        true, State#state{ctx = Ctx#{notify => NotifyFun}}
     ),
     {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
 
@@ -164,7 +180,7 @@ handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
 
 handle_info({execute_event_handler, Ref}, #state{emission_ref = Ref} = State) ->
-    {noreply, execute_event_handler(State)};
+    {noreply, execute_event_handler(false, State)};
 
 handle_info({execute_event_handler, _}, State) ->
     {noreply, State};
@@ -184,12 +200,12 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{event_manager = EvtMan, subscription_id = SubId,
+terminate(Reason, #state{event_manager = EvtMan, stream_id = StmId,
     definition = StmDef, ctx = Ctx} = State) ->
     ?log_terminate(Reason, State),
-    execute_event_handler(State),
+    execute_event_handler(false, State),
     execute_terminate_handler(StmDef, Ctx),
-    unregister_stream(EvtMan, SubId).
+    unregister_stream(EvtMan, StmId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -212,9 +228,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% Registers event stream in the event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec register_stream(EvtMan :: pid(), SubId :: subscription:id()) -> ok.
-register_stream(EvtMan, SubId) ->
-    gen_server:cast(EvtMan, {register_stream, SubId, self()}).
+-spec register_stream(EvtMan :: pid(), StmId :: id()) -> ok.
+register_stream(EvtMan, StmId) ->
+    gen_server:cast(EvtMan, {register_stream, StmId, self()}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -222,9 +238,39 @@ register_stream(EvtMan, SubId) ->
 %% Unregisters event stream in the event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec unregister_stream(EvtMan :: pid(), SubId :: subscription:id()) -> ok.
-unregister_stream(EvtMan, SubId) ->
-    gen_server:cast(EvtMan, {unregister_stream, SubId}).
+-spec unregister_stream(EvtMan :: pid(), StmId :: id()) -> ok.
+unregister_stream(EvtMan, StmId) ->
+    gen_server:cast(EvtMan, {unregister_stream, StmId}).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_subscription(SessId :: session:id(), Sub :: #subscription{},
+    Subs :: subscriptions()) -> NewSubs :: subscriptions().
+add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
+    file_subscription:add(SessId, Sub),
+    maps:put(SubId, Sub, Subs).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_subscription(SessId :: session:id(), SubId :: subscription:id(),
+    Subs :: subscriptions()) -> {LastSub :: boolean(), NewSubs :: subscriptions()}.
+remove_subscription(SessId, SubId, Subs) ->
+    NewSubs = case maps:find(SubId, Subs) of
+        {ok, Sub} ->
+            file_subscription:remove(SessId, Sub),
+            maps:remove(SubId, Subs);
+        error ->
+            Subs
+    end,
+    {maps:size(NewSubs) == 0, NewSubs}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -257,17 +303,22 @@ execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
 %% Resets periodic emission of events.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_event_handler(State :: #state{}) -> NewState :: #state{}.
-execute_event_handler(#state{subscription_id = SubId, session_id = SessId,
+-spec execute_event_handler(Force :: boolean(), State :: #state{}) ->
+    NewState :: #state{}.
+execute_event_handler(Force, #state{stream_id = StmId, session_id = SessId,
     events = Evts, definition = #event_stream_definition{event_handler = Handler
     } = StmDef, ctx = Ctx} = State) ->
-    ?debug("Executing event handler on events ~p in event stream for subscription "
-    "~p and session ~p", [Evts, SubId, SessId]),
-    Handler(maps:values(Evts), Ctx),
+    ?debug("Executing event handler on events ~p in event stream ~p and session ~p",
+        [Evts, StmId, SessId]),
+    case {Force, maps:values(Evts)} of
+        {true, EvtsList} -> Handler(EvtsList, Ctx);
+        {false, []} -> ok;
+        {_, EvtsList} -> Handler(EvtsList, Ctx)
+    end,
     State#state{
         events = #{},
         metadata = get_initial_metadata(StmDef),
-        emission_ref = schedule_event_handler_execution(StmDef)
+        emission_ref = undefined
     }.
 
 %%--------------------------------------------------------------------
@@ -293,10 +344,8 @@ process_event(Evt, #state{events = Evts, metadata = Meta,
     NewMeta = apply_transition_rule(Evt, Meta, StmDef),
     NewState = State#state{events = NewEvts, metadata = NewMeta},
     case apply_emission_rule(NewMeta, StmDef) of
-        true ->
-            execute_event_handler(NewState);
-        false ->
-            NewState
+        true -> execute_event_handler(false, NewState);
+        false -> maybe_schedule_event_handler_execution(NewState)
     end.
 
 %%--------------------------------------------------------------------
@@ -307,16 +356,16 @@ process_event(Evt, #state{events = Evts, metadata = Meta,
 %% can ignore messages with reference different from the one saved in the state.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_event_handler_execution(StmDef :: definition()) ->
-    Ref :: undefined | reference().
-schedule_event_handler_execution(#event_stream_definition{emission_time = Time})
+-spec maybe_schedule_event_handler_execution(State :: #state{}) -> NewState :: #state{}.
+maybe_schedule_event_handler_execution(#state{emission_ref = undefined,
+    definition = #event_stream_definition{emission_time = Time}} = State)
     when is_integer(Time) ->
     Ref = make_ref(),
     erlang:send_after(Time, self(), {execute_event_handler, Ref}),
-    Ref;
+    State#state{emission_ref = Ref};
 
-schedule_event_handler_execution(#event_stream_definition{}) ->
-    undefined.
+maybe_schedule_event_handler_execution(State) ->
+    State.
 
 %%--------------------------------------------------------------------
 %% @private

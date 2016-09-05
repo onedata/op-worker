@@ -317,7 +317,7 @@ end_per_testcase(_Case, Config) ->
 
 init_session(Worker, SessID) ->
     Self = self(),
-    Iden = #identity{user_id = <<"u1">>},
+    Iden = #user_identity{user_id = <<"u1">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_fuse_session, [SessID, Iden, Self])).
 
