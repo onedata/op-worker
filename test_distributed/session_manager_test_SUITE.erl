@@ -14,12 +14,12 @@
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
--include_lib("modules/monitoring/rrd_definitions.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -58,8 +58,8 @@ session_manager_session_creation_and_reuse_test(Config) ->
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Iden1 = #identity{user_id = <<"user_id_1">>},
-    Iden2 = #identity{user_id = <<"user_id_2">>},
+    Iden1 = #user_identity{user_id = <<"user_id_1">>},
+    Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
     lists:foreach(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
@@ -233,7 +233,7 @@ session_supervisor_child_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
@@ -278,7 +278,7 @@ init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
     initializer:communicator_mock(Worker),
     initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
@@ -302,8 +302,8 @@ init_per_testcase(Case, Config) when
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Iden1 = #identity{user_id = <<"user_id_1">>},
-    Iden2 = #identity{user_id = <<"user_id_2">>},
+    Iden1 = #user_identity{user_id = <<"user_id_1">>},
+    Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
     initializer:communicator_mock(Workers),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
@@ -311,7 +311,7 @@ init_per_testcase(Case, Config) when
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_fuse_session, [SessId2, Iden2, Self])),
     ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
-        remove_session, [?MONITORING_SESSION_ID])),
+        remove_session, [?ROOT_SESS_ID])),
 
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 

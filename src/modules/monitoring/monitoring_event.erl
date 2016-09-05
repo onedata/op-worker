@@ -35,7 +35,11 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
         size_difference = SizeDifference
     },
     event:emit(#event{object = EventBase#storage_used_updated{user_id = undefined}}),
-    event:emit(#event{object = EventBase#storage_used_updated{user_id = UserId}}).
+    case UserId of
+        ?ROOT_USER_ID -> ok;
+        _ ->
+            event:emit(#event{object = EventBase#storage_used_updated{user_id = UserId}})
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -58,15 +62,19 @@ emit_space_info_updated(SpaceId) ->
     ok | {error, Reason :: term()}.
 emit_file_operations_statistics(SpaceId, UserId, DataAccessRead, DataAccessWrite,
     BlockAccessRead, BlockAccessWrite) ->
-    EventBase = #file_operations_statistics{
-        space_id = SpaceId,
-        data_access_read = DataAccessRead,
-        data_access_write = DataAccessWrite,
-        block_access_read = BlockAccessRead,
-        block_access_write = BlockAccessWrite
-    },
-    event:emit(#event{object = EventBase#file_operations_statistics{user_id = undefined}}),
-    event:emit(#event{object = EventBase#file_operations_statistics{user_id = UserId}}).
+    case UserId of
+        ?ROOT_USER_ID -> ok;
+        _ ->
+            EventBase = #file_operations_statistics{
+                space_id = SpaceId,
+                data_access_read = DataAccessRead,
+                data_access_write = DataAccessWrite,
+                block_access_read = BlockAccessRead,
+                block_access_write = BlockAccessWrite
+            },
+            event:emit(#event{object = EventBase#file_operations_statistics{user_id = undefined}}),
+            event:emit(#event{object = EventBase#file_operations_statistics{user_id = UserId}})
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -118,7 +126,7 @@ emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
 -spec emit_rtransfer_statistics(fslogic_worker:ctx(), non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 emit_rtransfer_statistics(CTX, TransferIn) ->
-    #fslogic_ctx{session = #session{identity = #identity{user_id = UserId}},
+    #fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}},
         space_id = SpaceId} = CTX,
     emit_rtransfer_statistics(SpaceId, UserId, TransferIn).
 
@@ -178,7 +186,7 @@ aggregate_monitoring_events(#event{object = #rtransfer_statistics{} = O1} = E1,
 %%--------------------------------------------------------------------
 -spec handle_monitoring_events(Events :: [event:event()], Ctx :: #{}) ->
     [ok | {error, Reason :: term()}].
-handle_monitoring_events(Events, Ctx) ->
+handle_monitoring_events(Events, _Ctx) ->
     lists:map(fun handle_monitoring_event/1, Events).
 
 %%--------------------------------------------------------------------
@@ -190,8 +198,8 @@ handle_monitoring_events(Events, Ctx) ->
 -spec handle_monitoring_event(Events :: event:event()) ->
     ok | {error, Reason :: term()}.
 handle_monitoring_event(#event{object = #storage_used_updated{user_id = undefined,
-    space_id = SpaceId}}) ->
-    monitoring_utils:create_and_update(#monitoring_id{
+        space_id = SpaceId}}) ->
+    monitoring_utils:create_and_update(SpaceId, #monitoring_id{
         main_subject_type = space,
         main_subject_id = SpaceId,
         metric_type = storage_used
@@ -200,7 +208,7 @@ handle_monitoring_event(#event{object = #storage_used_updated{user_id = undefine
 handle_monitoring_event(#event{object = #storage_used_updated{} = Event}) ->
     #storage_used_updated{user_id = UserId, space_id = SpaceId,
         size_difference = SizeDifference} = Event,
-    monitoring_utils:create_and_update(#monitoring_id{
+    monitoring_utils:create_and_update(SpaceId, #monitoring_id{
         main_subject_type = space,
         main_subject_id = SpaceId,
         metric_type = storage_used,
@@ -209,12 +217,12 @@ handle_monitoring_event(#event{object = #storage_used_updated{} = Event}) ->
     }, #{size_difference => SizeDifference});
 
 handle_monitoring_event(#event{object = #space_info_updated{space_id = SpaceId}}) ->
-    monitoring_utils:create_and_update(#monitoring_id{
+    monitoring_utils:create_and_update(SpaceId, #monitoring_id{
         main_subject_type = space,
         main_subject_id = SpaceId,
         metric_type = storage_quota
     }),
-    monitoring_utils:create_and_update(#monitoring_id{
+    monitoring_utils:create_and_update(SpaceId, #monitoring_id{
         main_subject_type = space,
         main_subject_id = SpaceId,
         metric_type = connected_users
@@ -231,11 +239,11 @@ handle_monitoring_event(#event{object = #file_operations_statistics{} = Event}) 
     } = Event,
     MonitoringId = get_monitoring_id(SpaceId, UserId),
 
-    monitoring_utils:create_and_update(MonitoringId#monitoring_id{
+    monitoring_utils:create_and_update(SpaceId, MonitoringId#monitoring_id{
         metric_type = data_access
     }, #{read_counter => DataAccessRead, write_counter => DataAccessWrite}),
 
-    monitoring_utils:create_and_update(MonitoringId#monitoring_id{
+    monitoring_utils:create_and_update(SpaceId, MonitoringId#monitoring_id{
         metric_type = block_access
     }, #{read_operations_counter => BlockAccessRead,
         write_operations_counter => BlockAccessWrite});
@@ -248,7 +256,7 @@ handle_monitoring_event(#event{object = #rtransfer_statistics{} = Event}) ->
     } = Event,
 
     MonitoringId = get_monitoring_id(SpaceId, UserId),
-    monitoring_utils:create_and_update(MonitoringId#monitoring_id{
+    monitoring_utils:create_and_update(SpaceId, MonitoringId#monitoring_id{
         metric_type = remote_transfer}, #{transfer_in => TransferIn}).
 
 

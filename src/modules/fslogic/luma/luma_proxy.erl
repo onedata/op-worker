@@ -195,7 +195,7 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
 %%--------------------------------------------------------------------
 -spec get_auth(session:id() | session:identity()) ->
     {ok, session:auth() | undefined} | {error, term()}.
-get_auth(#identity{}) ->
+get_auth(#user_identity{}) ->
     {ok, undefined};
 get_auth(SessionId) ->
     session:get_auth(SessionId).

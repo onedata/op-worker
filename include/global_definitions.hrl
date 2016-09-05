@@ -42,6 +42,6 @@
 %%% Global identities
 %%%===================================================================
 
--define(OZ_IDENTITY, #identity{user_id = <<"ONE-ZONE">>}).
+-define(OZ_IDENTITY, #user_identity{user_id = <<"ONE-ZONE">>}).
 
 -endif.

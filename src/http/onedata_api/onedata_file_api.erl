@@ -24,7 +24,7 @@
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, unlink/1,
     unlink/2, fsync/1, release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
--export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
+-export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
@@ -249,10 +249,10 @@ set_perms(Auth, FileKey, NewPerms) ->
 %%--------------------------------------------------------------------
 %% @doc Checks if current user has given permissions for given file.
 %%--------------------------------------------------------------------
--spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) ->
+-spec check_perms(onedata_auth_api:auth(), FileKey :: file_key(), PermsType :: permission_type()) ->
     {ok, boolean()} | error_reply().
-check_perms(Path, PermType) ->
-    logical_file_manager:check_perms(Path, PermType).
+check_perms(Auth, FileKey, PermType) ->
+    logical_file_manager:check_perms(Auth, FileKey, PermType).
 
 %%--------------------------------------------------------------------
 %% @doc Returns file's Access Control List.

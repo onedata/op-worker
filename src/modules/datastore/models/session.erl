@@ -34,9 +34,9 @@
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
 -type auth() :: #token_auth{} | #basic_auth{}.
--type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | monitoring.
+-type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root.
 -type status() :: active | inactive.
--type identity() :: #identity{}.
+-type identity() :: #user_identity{}.
 
 -export_type([id/0, ttl/0, auth/0, type/0, status/0, identity/0]).
 
@@ -93,10 +93,6 @@ create(#document{value = Sess} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_SESS_ID) ->
-    {ok, #document{key = ?ROOT_SESS_ID, value = #session{
-        identity = #identity{user_id = ?ROOT_USER_ID}
-    }}};
 get(Key) ->
     case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
         {ok, Doc} ->
@@ -205,7 +201,7 @@ all_with_user() ->
         ('$end_of_table', Acc) ->
             {abort, Acc};
         (#document{
-            value = #session{identity = #identity{user_id = UserID}}
+            value = #session{identity = #user_identity{user_id = UserID}}
         } = Doc, Acc) when is_binary(UserID) ->
             {next, [Doc | Acc]};
         (_X, Acc) ->
@@ -220,7 +216,7 @@ all_with_user() ->
 %%--------------------------------------------------------------------
 -spec get_user_id(SessIdOrSession :: id() | #session{}) ->
     {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
-get_user_id(#session{identity = #identity{user_id = UserId}}) ->
+get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
     {ok, UserId};
 get_user_id(SessId) ->
     case session:get(SessId) of
@@ -415,7 +411,7 @@ get_auth(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_rest_session_id(session:identity()) -> id().
-get_rest_session_id(#identity{user_id = Uid}) ->
+get_rest_session_id(#user_identity{user_id = Uid}) ->
     <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
 
 %%--------------------------------------------------------------------
