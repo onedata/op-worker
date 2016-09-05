@@ -24,24 +24,63 @@
     end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, file_consistency_test/1
+    db_sync_test/1, db_sync_test_base/1, file_consistency_test/1, file_consistency_test_base/1
+]).
+
+-define(TEST_CASES, [
+    db_sync_test, file_consistency_test
 ]).
 
 all() ->
-    ?ALL([
-        db_sync_test, file_consistency_test
-    ]).
+    ?ALL(?TEST_CASES, ?TEST_CASES).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
+-define(performance_description(Desc),
+    [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, dirs_num}, {value, 2}, {description, "Numbers of directories used during test."}],
+            [{name, files_num}, {value, 5}, {description, "Numbers of files used during test."}]
+        ]},
+        {description, Desc},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, dirs_num}, {value, 10}],
+                [{name, files_num}, {value, 20}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+
 db_sync_test(Config) ->
-    % TODO change timeout after VFS-2197
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 150, 3, 10).
-%%multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 120, 3, 10).
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+db_sync_test_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 120, DirsNum, FilesNum).
 
 file_consistency_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_cases}, {value, [1,14]}, {description, "Number of test cases to be executed"}]
+        ]},
+        {description, "Tests file consistency"},
+        {config, [{name, all_cases},
+            {parameters, [
+                [{name, test_cases}, {value, [1,2,3,4,5,6,7,8,9,10,11,12,13,14]}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+file_consistency_test_base(Config) ->
+    ConfigsNum = ?config(test_cases, Config),
+
     Workers = ?config(op_worker_nodes, Config),
     {Worker1, Worker2, Worker3} = lists:foldl(fun(W, {Acc1, Acc2, Acc3}) ->
         Check = fun(Acc, Prov) ->
@@ -58,7 +97,7 @@ file_consistency_test(Config) ->
         {Check(Acc1, "p1"), Check(Acc2, "p2"), Check(Acc3, "p3")}
     end, {[], [], []}, Workers),
 
-    multi_provider_file_ops_test_SUITE:file_consistency_test_base(Config, Worker1, Worker2, Worker3).
+    multi_provider_file_ops_test_SUITE:file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

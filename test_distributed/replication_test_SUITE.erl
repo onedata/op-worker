@@ -54,8 +54,6 @@
     external_file_location_notification_should_wait_for_grandparent_file_meta/1
 ]).
 
-
--performance({test_cases, []}).
 all() ->
     ?ALL([
         dbsync_trigger_should_create_local_file_location,

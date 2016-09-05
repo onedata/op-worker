@@ -143,7 +143,7 @@ protobuf_msg_test(Config) ->
 multi_message_test(Config) ->
     ?PERFORMANCE(Config, [
             {repeats, 5},
-            {success_rate, 80},
+            {success_rate, 90},
             {parameters, [
                 [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
                 [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
@@ -278,7 +278,7 @@ client_communicate_async_test(Config) ->
 multi_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
             {repeats, 5},
-            {success_rate, 80},
+            {success_rate, 90},
             {parameters, [
                 [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
                 [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
@@ -396,7 +396,11 @@ multi_connection_test(Config) ->
             ]},
             {description, "Opens 'connections_num' connections to the server, checks "
             "their state, and closes them."},
-            {config, [{name, multi_connection}]}
+            {config, [{name, multi_connection},
+                {parameters, [
+                    [{name, connections_num}, {value, 1000}]
+                ]}
+            ]}
         ]
     ).
 multi_connection_test_base(Config) ->

@@ -24,22 +24,44 @@
     end_per_testcase/2]).
 
 -export([
-    db_sync_test/1
+    db_sync_test/1, db_sync_test_base/1
+]).
+
+-define(TEST_CASES, [
+    db_sync_test
 ]).
 
 all() ->
-    ?ALL([
-        db_sync_test
-    ]).
+    ?ALL(?TEST_CASES, ?TEST_CASES).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
+-define(performance_description(Desc),
+    [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, dirs_num}, {value, 2}, {description, "Numbers of directories used during test."}],
+            [{name, files_num}, {value, 5}, {description, "Numbers of files used during test."}]
+        ]},
+        {description, Desc},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, dirs_num}, {value, 25}],
+                [{name, files_num}, {value, 75}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+
 db_sync_test(Config) ->
-    % TODO change timeout after VFS-2197
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {3,0,0}, 150, 10, 50).
-%%multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {3,0,0}, 60, 10, 50).
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+db_sync_test_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {3,0,0}, 60, DirsNum, FilesNum).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

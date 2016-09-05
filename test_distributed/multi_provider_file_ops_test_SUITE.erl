@@ -25,17 +25,21 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, proxy_test1/1, proxy_test2/1, file_consistency_test/1, file_consistency_test_base/4
+    db_sync_test/1, proxy_test1/1, proxy_test2/1,
+    db_sync_test_base/1, proxy_test1_base/1, proxy_test2_base/1,
+    file_consistency_test/1, file_consistency_test_base/1, file_consistency_test_skeleton/5
 ]).
 -export([synchronization_test_base/6, get_links/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4]).
 
+-define(TEST_CASES, [
+    proxy_test1, proxy_test2, db_sync_test, file_consistency_test
+]).
+
 all() ->
-    ?ALL([
-        proxy_test1, proxy_test2, db_sync_test, file_consistency_test
-    ]).
+    ?ALL(?TEST_CASES, ?TEST_CASES).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -53,16 +57,44 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
+-define(performance_description(Desc),
+    [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, dirs_num}, {value, 5}, {description, "Numbers of directories used during test."}],
+            [{name, files_num}, {value, 5}, {description, "Numbers of files used during test."}]
+        ]},
+        {description, Desc},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, dirs_num}, {value, 50}],
+                [{name, files_num}, {value, 100}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+
 db_sync_test(Config) ->
-    % TODO change timeout after VFS-2197
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 10, 10, 100).
-%%synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+db_sync_test_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 10, DirsNum, FilesNum).
 
 proxy_test1(Config) ->
-    synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with proxy and support by p1")).
+proxy_test1_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, DirsNum, FilesNum).
 
 proxy_test2(Config) ->
-    synchronization_test_base(Config, <<"user3">>, {0,4,1,2}, 0, 10, 100).
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with proxy and support by p2")).
+proxy_test2_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    synchronization_test_base(Config, <<"user3">>, {0,4,1,2}, 0, DirsNum, FilesNum).
 
 synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
     synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
@@ -85,7 +117,6 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
                 end
         end
     end, [], Workers),
-    timer:sleep(10000), % TODO - connection must appear after mock setup
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
@@ -402,6 +433,23 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     ok.
 
 file_consistency_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_cases}, {value, [1,2,12,13]}, {description, "Number of test cases to be executed"}]
+        ]},
+        {description, "Tests file consistency"},
+        {config, [{name, all_cases},
+            {parameters, [
+                [{name, test_cases}, {value, [1,2,3,4,5,6,7,8,9,10,11,12,13,14]}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+file_consistency_test_base(Config) ->
+    ConfigsNum = ?config(test_cases, Config),
+
     Workers = ?config(op_worker_nodes, Config),
     {Worker1, Worker2} = lists:foldl(fun(W, {Acc1, Acc2}) ->
         NAcc1 = case is_atom(Acc1) of
@@ -425,9 +473,9 @@ file_consistency_test(Config) ->
         {NAcc1, NAcc2}
     end, {[], []}, Workers),
 
-    file_consistency_test_base(Config, Worker1, Worker2, Worker1).
+    file_consistency_test_skeleton(Config, Worker1, Worker2, Worker1, ConfigsNum).
 
-file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
+file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     timer:sleep(10000), % TODO - connection must appear after mock setup
     Attempts = 15,
     User = <<"user1">>,
@@ -511,259 +559,250 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
     {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
     SleepTime = round(CacheDelay / 1000 + 5),
 
-    T1 = [
-        {create_doc, 1},
-        {sleep, SleepTime},
-        {set_parent_link, 1},
-        {sleep, SleepTime},
-        {set_link_to_parent, 1},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {sleep, SleepTime},
-        {set_parent_link, 2},
-        {sleep, SleepTime},
-        {set_link_to_parent, 2},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T1),
+    TestConfigs = [
+        _T1 = [
+            {create_doc, 1},
+            {sleep, SleepTime},
+            {set_parent_link, 1},
+            {sleep, SleepTime},
+            {set_link_to_parent, 1},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {sleep, SleepTime},
+            {set_parent_link, 2},
+            {sleep, SleepTime},
+            {set_link_to_parent, 2},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_location, 3}
+        ],
 
-    T2 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T2),
+        _T2 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3}
+        ],
 
-    T3 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2}
-    ],
-    DoTest(T3),
+        _T3 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2}
+        ],
 
-    T4 = [
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {sleep, SleepTime},
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1}
-    ],
-    DoTest(T4),
+        _T4 = [
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {sleep, SleepTime},
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1}
+        ],
 
-    T5 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T5),
+        _T5 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {set_link_to_location, 3}
+        ],
 
-    T6 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T6),
+        _T6 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {set_link_to_location, 3}
+        ],
 
-    T7 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {create_location, 3}
-    ],
-    DoTest(T7),
+        _T7 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {create_location, 3}
+        ],
 
-    T8 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 3}
-    ],
-    DoTest(T8),
+        _T8 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 3}
+        ],
 
-    T9 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3}
-    ],
-    DoTest(T9),
+        _T9 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3}
+        ],
 
-    T10 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3}
-    ],
-    DoTest(T10),
+        _T10 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3}
+        ],
 
-    T11 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_location, 3}
-    ],
-    DoTest(T11),
+        _T11 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_location, 3}
+        ],
 
-    T12 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {sleep, SleepTime},
-        {create_doc, 3}
-    ],
-    DoTest(T12),
+        _T12 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {sleep, SleepTime},
+            {create_doc, 3}
+        ],
 
-    T13 = [
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 2},
-        {sleep, SleepTime},
-        {set_link_to_parent, 2},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {sleep, SleepTime},
-        {set_parent_link, 1},
-        {sleep, SleepTime},
-        {set_link_to_parent, 1},
-        {sleep, SleepTime},
-        {create_doc, 1}
-    ],
-    DoTest(T13),
+        _T13 = [
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 2},
+            {sleep, SleepTime},
+            {set_link_to_parent, 2},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {sleep, SleepTime},
+            {set_parent_link, 1},
+            {sleep, SleepTime},
+            {set_link_to_parent, 1},
+            {sleep, SleepTime},
+            {create_doc, 1}
+        ],
 
-    T14 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {create_doc, 4, Worker3},
-        {set_parent_link, 4, Worker3},
-        {set_link_to_parent, 4, Worker3},
-        {create_location, 4, Worker3},
-        {set_link_to_location, 4, Worker3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3}
+        _T14 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {create_doc, 4, Worker3},
+            {set_parent_link, 4, Worker3},
+            {set_link_to_parent, 4, Worker3},
+            {create_location, 4, Worker3},
+            {set_link_to_location, 4, Worker3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3}
+        ]
     ],
-    DoTest(T14),
+    lists:foreach(fun(Num) ->
+        DoTest(lists:nth(Num, TestConfigs))
+    end, ConfigsNum),
 
     ok.
 
