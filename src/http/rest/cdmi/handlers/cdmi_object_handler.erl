@@ -181,7 +181,14 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
                     undefined ->
                         json_utils:encode_map(maps:from_list(BodyWithoutValue));
                     Metadata ->
-                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(BodyWithoutValue)))
+                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
+                            undefined ->
+                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(BodyWithoutValue)));
+                            Acl ->
+                                AclMap = lists:map(fun maps:from_list/1, Acl),
+                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
+                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(BodyWithoutValue)))
+                        end
                 end,
             JsonBodyPrefix =
                 case BodyWithoutValue of
@@ -340,7 +347,14 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                     undefined ->
                         json_utils:encode_map(maps:from_list(Answer));
                     Metadata ->
-                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)))
+                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
+                            undefined ->
+                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
+                            Acl ->
+                                AclMap = lists:map(fun maps:from_list/1, Acl),
+                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
+                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
+                        end
                 end,
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),

@@ -119,14 +119,25 @@ delete_resource(Req, State = #{auth := Auth, path := Path}) ->
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, #{options := Options} = State) ->
     NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
-    DirCdmi = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
+    Answer = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
+
     Response =
-        case proplists:get_value(<<"metadata">>, DirCdmi) of
+        case proplists:get_value(<<"metadata">>, Answer) of
             undefined ->
-                json_utils:encode_map(maps:from_list(DirCdmi));
+                json_utils:encode_map(maps:from_list(Answer));
             Metadata ->
-                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(DirCdmi)))
-        end,    {Response, Req, State}.
+                case proplists:get_value(<<"cdmi_acl">>, Metadata) of
+                    undefined ->
+                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
+                    Acl ->
+                        AclMap = lists:map(fun maps:from_list/1, Acl),
+                        MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
+                        json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
+                end
+        end,
+    {Response, Req, State}.
+
+
 
 %%--------------------------------------------------------------------
 %% @doc Handles PUT with "application/cdmi-container" content-type
@@ -179,7 +190,8 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
                                 AclMap = lists:map(fun maps:from_list/1, Acl),
                                 MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
                                 json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
-                        end                end,
+                        end
+                end,
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
     end.
