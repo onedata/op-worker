@@ -23,7 +23,7 @@
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/5, set_metadata/6,
-    check_perms/4]).
+    check_perms/4, create_share/3]).
 
 %%%===================================================================
 %%% API
@@ -402,32 +402,44 @@ rm_recursive(Worker, SessId, FileKey) ->
         end).
 
 -spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()]) -> {ok, #{}}.
-get_metadata(Worker, SessionId, FileKey, Type, Names) ->
+get_metadata(Worker, SessId, FileKey, Type, Names) ->
         exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:get_metadata(SessionId, FileKey, Type, Names),
+                logical_file_manager:get_metadata(SessId, FileKey, Type, Names),
             Host ! {self(), Result}
         end).
 
 -spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), #{}, [binary()]) -> ok.
-set_metadata(Worker, SessionId, FileKey, Type, Value, Names) ->
+set_metadata(Worker, SessId, FileKey, Type, Value, Names) ->
         exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:set_metadata(SessionId, FileKey, Type, Value, Names),
+                logical_file_manager:set_metadata(SessId, FileKey, Type, Value, Names),
             Host ! {self(), Result}
         end).
 
 -spec check_perms(node(), session:id(), logical_file_manager:file_key(), helpers:open_mode()) ->
     {ok, boolean()} | {error, term()}.
-check_perms(Worker, SessionId, FileKey, OpenMode) ->
+check_perms(Worker, SessId, FileKey, OpenMode) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:check_perms(SessionId, FileKey, OpenMode),
+                logical_file_manager:check_perms(SessId, FileKey, OpenMode),
             Host ! {self(), Result}
         end).
+
+-spec create_share(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, ShareGuid :: fslogic_worker:file_guid()} | {error, term()}.
+create_share(Worker, SessId, FileKey) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:create_share(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+%todo refactor this module
 
 %%%===================================================================
 %%% Internal functions

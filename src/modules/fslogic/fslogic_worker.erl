@@ -80,6 +80,11 @@ init(_Args) ->
         {error, already_exists} -> ok
     end,
 
+    case session_manager:create_guest_session() of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
+
     {ok, #{sub_id => ?FSLOGIC_SUB_ID}}.
 
 %%--------------------------------------------------------------------

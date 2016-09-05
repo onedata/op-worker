@@ -35,8 +35,11 @@
 -define(ROOT_DIR_UUID, <<"">>).
 -define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
+-define(GUEST_USER_ID, <<"guest">>).
 -define(ROOT_SESS_ID, <<"0">>).
+-define(GUEST_SESS_ID, <<"guest">>).
 -define(ROOT_SESS, #session{identity = #user_identity{user_id = ?ROOT_USER_ID}}).
+-define(GUEST_SESS, #session{identity = #user_identity{user_id = ?GUEST_SESS_ID}}).
 -define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
 
 %% fslogic subscription id

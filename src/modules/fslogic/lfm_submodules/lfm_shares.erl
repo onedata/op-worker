@@ -17,7 +17,7 @@
 -export_type([share_id/0]).
 
 %% API
--export([create_share/2, get_share/1, remove_share/1]).
+-export([create_share/1, remove_share/1]).
 
 %%%===================================================================
 %%% API
@@ -30,23 +30,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(FileKey :: logical_file_manager:file_key(), ShareWith :: all | [{user, onedata_user:id()} | {group, onedata_group:id()}]) ->
+-spec create_share(FileKey :: logical_file_manager:file_key()) ->
     {ok, ShareID :: share_id()} | logical_file_manager:error_reply().
-create_share(_Path, _ShareWith) ->
+create_share(_FileKey) ->
     {ok, <<"">>}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns shared file by share_id.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) ->
-    {ok, {file_meta:uuid(), file_meta:name()}} | logical_file_manager:error_reply().
-get_share(_ShareID) ->
-    {ok, {<<"">>, <<"">>}}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
