@@ -101,7 +101,7 @@ read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
     StorageId :: storage:id(), FileId :: helpers:file(), OpenMode :: helpers:open_mode()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
 get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     case maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined) of
         undefined ->

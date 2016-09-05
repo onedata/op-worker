@@ -606,7 +606,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [identity, serializator]);
+    test_utils:mock_validate_and_unload(Workers, [user_identity, serializator]);
 
 end_per_testcase(Case, Config) when
     Case =:= protobuf_msg_test;
@@ -614,17 +614,17 @@ end_per_testcase(Case, Config) when
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
 end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
-    test_utils:mock_validate_and_unload(Workers, [identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, identity).
+    test_utils:mock_validate_and_unload(Workers, user_identity).
 
 %%%===================================================================
 %%% Internal functions
@@ -720,10 +720,10 @@ spawn_ssl_echo_client(NodeToConnect) ->
 
 mock_identity(Workers) ->
     Macaroon = ?MACAROON,
-    test_utils:mock_new(Workers, identity),
-    test_utils:mock_expect(Workers, identity, get_or_fetch,
+    test_utils:mock_new(Workers, user_identity),
+    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
         fun(#token_auth{macaroon = M}) when M =:= Macaroon ->
-            {ok, #document{value = #identity{}}}
+            {ok, #document{value = #user_identity{}}}
         end
     ).
 

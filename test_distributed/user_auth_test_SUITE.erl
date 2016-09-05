@@ -54,12 +54,12 @@ token_authentication(Config) ->
         rpc:call(Worker1, onedata_user, get, [?USER_ID])
     ),
     ?assertMatch(
-        {ok, #document{value = #session{identity = #identity{user_id = ?USER_ID}}}},
+        {ok, #document{value = #session{identity = #user_identity{user_id = ?USER_ID}}}},
         rpc:call(Worker1, session, get, [SessionId])
     ),
     ?assertMatch(
-        {ok, #document{value = #identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, identity, get, [#token_auth{macaroon = ?MACAROON}])
+        {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
+        rpc:call(Worker1, user_identity, get, [#token_auth{macaroon = ?MACAROON}])
     ),
     test_utils:mock_validate_and_unload(Workers, oz_endpoint),
     ok = etls:close(Sock).

@@ -74,7 +74,7 @@ rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) 
 -spec rename_storage_file(SessId :: session:id(), Location :: #file_location{},
     TargetFileId :: helpers:file(), TargetSpaceId :: binary()) -> ok.
 rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessId),
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} = session:get(SessId),
     #file_location{uuid = FileUUID, space_id = SourceSpaceId,
         storage_id = SourceStorageId, file_id = SourceFileId} = Location,
     {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get(FileUUID),

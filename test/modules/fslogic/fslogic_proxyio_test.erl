@@ -441,7 +441,7 @@ start() ->
 
     meck:expect(session, get, 1, {ok,
         #document{value = #session{
-            identity = #identity{user_id = <<"UserId">>}}}}),
+            identity = #user_identity{user_id = <<"UserId">>}}}}),
 
     meck:expect(session, get_handle, 2, {ok, file_handle_mock}),
 

@@ -59,7 +59,7 @@ is_provider(_) ->
     session:id() | no_return().
 handshake(Cert, Conn) ->
     ProviderId = provider_auth_manager:get_provider_id(Cert),
-    Identity = #identity{provider_id = ProviderId},
+    Identity = #user_identity{provider_id = ProviderId},
     SessionId = session_manager:get_provider_session_id(incoming, ProviderId),
     {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider_incoming, Identity, Conn),
     SessionId.

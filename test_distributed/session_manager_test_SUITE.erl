@@ -58,8 +58,8 @@ session_manager_session_creation_and_reuse_test(Config) ->
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Iden1 = #identity{user_id = <<"user_id_1">>},
-    Iden2 = #identity{user_id = <<"user_id_2">>},
+    Iden1 = #user_identity{user_id = <<"user_id_1">>},
+    Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
     lists:foreach(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
@@ -233,7 +233,7 @@ session_supervisor_child_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
@@ -278,7 +278,7 @@ init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
     initializer:communicator_mock(Worker),
     initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
@@ -302,8 +302,8 @@ init_per_testcase(Case, Config) when
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Iden1 = #identity{user_id = <<"user_id_1">>},
-    Iden2 = #identity{user_id = <<"user_id_2">>},
+    Iden1 = #user_identity{user_id = <<"user_id_1">>},
+    Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
     initializer:communicator_mock(Workers),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,

@@ -97,7 +97,7 @@ reuse_or_create_rest_session(Iden, Auth) ->
 -spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(), Auth :: session:auth(), SessionType :: atom()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
-    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
+    {ok, #document{value = #user_identity{} = Iden}} = user_identity:get_or_fetch(Auth),
     reuse_or_create_session(SessId, SessionType, Iden, Auth, [], ProxyVia).
 
 
@@ -129,7 +129,7 @@ create_gui_session(Iden, Auth) ->
     {error, Reason :: term()}.
 create_root_session() ->
     Sess = #session{status = active, type = root, connections = [],
-        identity = #identity{user_id = ?ROOT_USER_ID}},
+        identity = #user_identity{user_id = ?ROOT_USER_ID}},
     case session:create(#document{key = ?ROOT_SESS_ID, value = Sess}) of
         {ok, ?ROOT_SESS_ID} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [?ROOT_SESS_ID, root]),
@@ -246,7 +246,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
 %%--------------------------------------------------------------------
 -spec subscribe_user(Iden :: session:identity()) -> ok.
 subscribe_user(Iden) ->
-    UID = Iden#identity.user_id,
+    UID = Iden#user_identity.user_id,
     case UID of
         undefined -> ok;
         _ ->
