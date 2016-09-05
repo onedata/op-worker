@@ -152,8 +152,8 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
 
     Json = json_utils:decode_map(Body),
     case {
-        proplists:get_value(<<"name">>, Json),
-        proplists:get_value(<<"value">>, Json),
+        maps:get(<<"name">>, Json, undefined),
+        maps:get(<<"value">>, Json, undefined),
         Extended
     } of
         {undefined, _, _} ->

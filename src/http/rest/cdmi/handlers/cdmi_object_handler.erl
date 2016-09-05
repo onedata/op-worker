@@ -176,7 +176,13 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
             % prepare response
             BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
             ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {guid, FileGUID}),
-            JsonBodyWithoutValue = json_utils:encode({struct, BodyWithoutValue}),
+            JsonBodyWithoutValue =
+                case proplists:get_value(<<"metadata">>, BodyWithoutValue) of
+                    undefined ->
+                        json_utils:encode_map(maps:from_list(BodyWithoutValue));
+                    Metadata ->
+                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(BodyWithoutValue)))
+                end,
             JsonBodyPrefix =
                 case BodyWithoutValue of
                     [] -> <<"{\"value\":\"">>;
@@ -192,7 +198,13 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
             % reply
             {{stream, StreamSize, StreamFun}, Req, State};
         undefined ->
-            Response = json_utils:encode({struct, DirCdmi}),
+            Response =
+                case proplists:get_value(<<"metadata">>, DirCdmi) of
+                    undefined ->
+                        json_utils:encode_map(maps:from_list(DirCdmi));
+                    Metadata ->
+                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(DirCdmi)))
+                end,
             {Response, Req, State}
     end.
 
@@ -316,7 +328,13 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_user_metadata(Auth, {guid, FileGUID}, RequestedUserMetadata),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {guid, FileGUID}, CdmiPartialFlag),
             Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{attributes => NewAttrs}),
-            Response = json_utils:encode(Answer),
+            Response =
+                case proplists:get_value(<<"metadata">>, Answer) of
+                    undefined ->
+                        json_utils:encode_map(maps:from_list(Answer));
+                    Metadata ->
+                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)))
+                end,
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
             {true, Req2, State};
