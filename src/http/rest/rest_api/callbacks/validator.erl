@@ -195,8 +195,14 @@ parse_provider_id(Req, State) ->
 parse_callback(Req, State) ->
     {ok, Body, NewReq} = cowboy_req:body(Req),
 
-    Json = json_utils:decode_map(Body),
-    Callback = maps:get(<<"url">>, Json),
+    Callback =
+        case Body of
+            <<"">> ->
+                undefined;
+            _ ->
+                Json = json_utils:decode_map(Body),
+                maps:get(<<"url">>, Json)
+        end,
     {State#{callback => Callback}, NewReq}.
 
 %%--------------------------------------------------------------------
