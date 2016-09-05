@@ -203,7 +203,14 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
                     undefined ->
                         json_utils:encode_map(maps:from_list(DirCdmi));
                     Metadata ->
-                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(DirCdmi)))
+                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
+                            undefined ->
+                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(DirCdmi)));
+                            Acl ->
+                                AclMap = lists:map(fun maps:from_list/1, Acl),
+                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
+                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(DirCdmi)))
+                        end
                 end,
             {Response, Req, State}
     end.

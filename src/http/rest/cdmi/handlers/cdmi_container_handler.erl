@@ -172,8 +172,15 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
                     undefined ->
                         json_utils:encode_map(maps:from_list(Answer));
                     Metadata ->
-                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)))
-                end,            Req2 = cowboy_req:set_resp_body(Response, Req1),
+                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
+                            undefined ->
+                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
+                            Acl ->
+                                AclMap = lists:map(fun maps:from_list/1, Acl),
+                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
+                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
+                        end                end,
+            Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
     end.
 
