@@ -739,7 +739,6 @@ set_get_xattr_inherited(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
         do_request(WorkerP1, <<"attributes/space3/dir_test/child?inherited=true&extended=true">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
-    tracer:stop(),
     DecodedBody = jiffy:decode(Body, [return_maps]),
     ?assertMatch(
         [
