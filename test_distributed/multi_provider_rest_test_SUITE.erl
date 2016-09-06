@@ -717,11 +717,15 @@ set_get_xattr_inherited(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
 
     % when
+    XattrSpaceJson = json_utils:encode([{<<"name">>, <<"onedata_json">>}, {<<"value">>, <<"5">>}]),
     XattrSpace = json_utils:encode([{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]),
     XattrDir = json_utils:encode([{<<"name">>, <<"k2">>}, {<<"value">>, <<"v2">>}]),
     XattrChild = json_utils:encode([{<<"name">>, <<"k2">>}, {<<"value">>, <<"v22">>}]),
     XattrChild2 = json_utils:encode([{<<"name">>, <<"k3">>}, {<<"value">>, <<"v3">>}]),
 
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpaceJson)),
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpace)),
@@ -744,7 +748,8 @@ set_get_xattr_inherited(Config) ->
         [
             #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
             #{<<"name">> := <<"k2">>, <<"value">> := <<"v22">>},
-            #{<<"name">> := <<"k3">>, <<"value">> := <<"v3">>}
+            #{<<"name">> := <<"k3">>, <<"value">> := <<"v3">>},
+            #{<<"name">> := <<"onedata_json">>, <<"value">> := <<"5">>}
         ],
         DecodedBody
     ).
