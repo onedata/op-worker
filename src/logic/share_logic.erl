@@ -46,13 +46,18 @@ get(Auth, ShareId) ->
     ParentSpaceId :: space_info:id(), RootFileId :: share_info:share_guid(),
     FileUuid :: file_meta:uuid()) ->
     {ok, share_info:id()} | {error, Reason :: term()}.
-create(Auth, ShareId, Name, ParentSpaceId, ShareFileGuid, _FileUuid) ->
+create(Auth, ShareId, Name, ParentSpaceId, ShareFileGuid, FileUuid) ->
     Parameters = [
         {<<"name">>, Name},
         {<<"root_file_id">>, ShareFileGuid},
         {<<"parent_space">>, ParentSpaceId}
     ],
-    oz_spaces:create_share(Auth, ShareId, Parameters). %todo add share_id to file_meta
+    case oz_spaces:create_share(Auth, ShareId, Parameters) of
+        {ok, _} ->
+            file_meta:add_share(FileUuid, ShareId);
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

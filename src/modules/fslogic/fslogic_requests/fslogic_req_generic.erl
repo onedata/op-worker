@@ -452,10 +452,10 @@ check_perms(Ctx, Uuid, rdwr) ->
 create_share(Ctx, {guid, Guid}) ->
     SessId = fslogic_context:get_session_id(Ctx),
     Auth = session:get_auth(SessId),
-    SpaceId = fslogic_spaces:get_space_id({guid, Guid}),
     ShareId = datastore_utils:gen_uuid(),
+    {FileUuid, SpaceId} = fslogic_uuid:unpack_guid(Guid),
     ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
-    {ok, _} = share_logic:create(Auth, ShareId, <<"share_name">>, SpaceId, ShareGuid), %todo add name to api
+    {ok, _} = share_logic:create(Auth, ShareId, <<"share_name">>, SpaceId, ShareGuid, FileUuid), %todo add name to api
 
     #provider_response{status = ?OK, provider_response = #share{uuid = ShareGuid}}.
 

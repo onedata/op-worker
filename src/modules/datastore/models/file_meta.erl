@@ -49,6 +49,7 @@
     exists_local_link_doc/1, get_child/2]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 -export([hidden_file_name/1]).
+-export([add_share/2]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -746,6 +747,18 @@ set_link_context_default() ->
     erlang:put(mother_scope, MyProvID),
     erlang:put(other_scopes, []),
     ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets default link's scopes.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_share(uuid(), share_info:id()) -> ok | datastore:generic_error().
+add_share(FileUuid, ShareId) ->
+    update({uuid, FileUuid},
+        fun(FileMeta = #file_meta{shares = Shares}) ->
+            {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
+        end).
 
 %%%===================================================================
 %%% Internal functions

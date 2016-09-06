@@ -136,7 +136,7 @@ unpack_guid(FileGUID) ->
     try binary_to_term(http_utils:base64url_decode(FileGUID)) of
         {guid, FileUUID, SpaceId} ->
             {FileUUID, SpaceId};
-        {share_guid, FileUUID, SpaceId, ShareId} ->
+        {share_guid, FileUUID, SpaceId, _ShareId} ->
             {FileUUID, SpaceId};
         _ ->
             {FileGUID, undefined}
