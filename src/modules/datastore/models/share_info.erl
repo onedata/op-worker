@@ -28,8 +28,40 @@
     'after'/5, before/4]).
 
 -type id() :: binary().
+-type name() :: binary().
+-type share_guid() :: fslogic_worker:file_guid().
 
--export_type([id/0]).
+-export_type([id/0, name/0, share_guid/0]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
+{ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets space info from the database in user context. If space info is not found
+%% fetches it from onezone and stores it in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Auth, ShareId) ->
+    case ?MODULE:get(ShareId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Auth, ShareId);
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -119,38 +151,6 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: onedata_user:id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, ShareId) ->
-    case ?MODULE:get(ShareId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Auth, ShareId);
-        {error, Reason} -> {error, Reason}
-    end.
 
 %%%===================================================================
 %%% Internal functions

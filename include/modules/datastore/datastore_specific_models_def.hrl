@@ -118,7 +118,8 @@
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     %% symlink_value for symlinks, file_guid for phantom files (redirection)
-    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid()
+    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid(),
+    shares = [] :: [share_info:id()]
 }).
 
 

@@ -447,17 +447,31 @@ check_perms(Ctx, Uuid, rdwr) ->
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(Ctx, Uuid) -> #provider_response{}.
-create_share(Ctx, Uuid) ->
-    #provider_response{status = ?OK, provider_response = #share{uuid = <<"id">>}}.
+-spec create_share(fslogic_worker:ctx(), {guid, fslogic_worker:guid()}) -> #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}]).
+create_share(Ctx, {guid, Guid}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    Auth = session:get_auth(SessId),
+    SpaceId = fslogic_spaces:get_space_id({guid, Guid}),
+    ShareId = datastore_utils:gen_uuid(),
+    ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
+    {ok, _} = share_logic:create(Auth, ShareId, <<"share_name">>, SpaceId, ShareGuid), %todo add name to api
+
+    #provider_response{status = ?OK, provider_response = #share{uuid = ShareGuid}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(Ctx, Uuid) -> #provider_response{}.
-remove_share(Ctx, Uuid) ->
+-spec remove_share(fslogic_worker:ctx(), {guid, fslogic_worker:guid()}) -> #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}]).
+remove_share(Ctx, {guid, ShareGuid}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    Auth = session:get_auth(SessId),
+    {Uuid, SpaceId, ShareId} = fslogic_uuid:unpack_share_guid(ShareGuid),
+
+    share_logic:delete(Auth, SpaceId, ShareId, Uuid),
     #provider_response{status = ?OK}.
 
 %%%===================================================================
