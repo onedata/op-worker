@@ -194,7 +194,7 @@ share_record(ShareId) ->
             root_file_id = RootFileId,
             parent_space = ParentSpaceId,
             public_url = PublicURL
-        }}} = space_logic:get_share(UserAuth, ShareId),
+        }}} = share_logic:get(UserAuth, ShareId),
     [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
