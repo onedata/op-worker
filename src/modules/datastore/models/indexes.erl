@@ -139,7 +139,7 @@ get_all_indexes(UserId) ->
 -spec query_view(index_id(), list()) -> {ok, [file_meta:uuid()]}.
 query_view(Id, Options) ->
     {ok, FileUuids} = couchdb_datastore_driver:query_view(Id, Options),
-    {ok, lists:map(fun(Uuid) -> fslogic_uuid:to_file_guid(Uuid) end, FileUuids)}.
+    {ok, lists:map(fun(Uuid) -> fslogic_uuid:uuid_to_guid(Uuid) end, FileUuids)}.
 
 %%%===================================================================
 %%% model_behaviour callbacks

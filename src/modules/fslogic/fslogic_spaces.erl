@@ -36,7 +36,7 @@ get_space_id({uuid, FileUUID}) ->
     {ok, #document{key = SpaceUUID}} = get_space({uuid, FileUUID}),
     fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID);
 get_space_id({guid, FileGUID}) ->
-    case fslogic_uuid:unpack_file_guid(FileGUID) of
+    case fslogic_uuid:unpack_guid(FileGUID) of
         {FileUUID, undefined} ->
             get_space_id({uuid, FileUUID});
         {_, SpaceId} ->
@@ -86,7 +86,7 @@ get_space({id, SpaceId}) ->
         Res -> Res
     end;
 get_space({guid, FileGUID}) ->
-    case fslogic_uuid:unpack_file_guid(FileGUID) of
+    case fslogic_uuid:unpack_guid(FileGUID) of
         {FileUUID, undefined} -> get_space({uuid, FileUUID});
         {_, SpaceId} ->
             get_space({id, SpaceId})
@@ -113,7 +113,7 @@ get_space(FileEntry) ->
 -spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}, UserId :: onedata_user:id()) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
 get_space({guid, FileGUID}, UserId) ->
-    case fslogic_uuid:unpack_file_guid(FileGUID) of
+    case fslogic_uuid:unpack_guid(FileGUID) of
         {FileUUID, undefined} -> get_space({uuid, FileUUID}, UserId);
         {_, SpaceId} ->
             file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId))

@@ -179,7 +179,7 @@ open(SessId, FileKey, OpenType) ->
         #get_file_location{flags = OpenType},
         fun(#file_location{provider_id = ProviderId, uuid = FileGUID,
             file_id = FileId, storage_id = StorageId} = Location) ->
-            {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+            {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID,
                 FileUUID, StorageId, FileId, ProviderId),
@@ -228,7 +228,7 @@ fsync(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID, sfm_handles = 
     lists:foreach(fun({_, SFMHandle}) ->
             ok = storage_file_manager:fsync(SFMHandle)
         end, maps:values(SFMHandles)),
-    RecvRef = event:flush(ProviderId, fslogic_uuid:file_guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
+    RecvRef = event:flush(ProviderId, fslogic_uuid:guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
     receive
         {RecvRef, Response} ->
             Response
@@ -409,7 +409,7 @@ get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_guid =
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
                 {SID, FID} = Key,
-                {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+                {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
                 SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ProviderId),
 

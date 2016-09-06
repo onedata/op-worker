@@ -660,7 +660,7 @@ get_space_dir(SpaceId) ->
 to_uuid({uuid, UUID}) ->
     {ok, UUID};
 to_uuid({guid, FileGUID}) ->
-    {ok, fslogic_uuid:file_guid_to_uuid(FileGUID)};
+    {ok, fslogic_uuid:guid_to_uuid(FileGUID)};
 to_uuid(#document{key = UUID}) ->
     {ok, UUID};
 to_uuid({path, Path}) ->

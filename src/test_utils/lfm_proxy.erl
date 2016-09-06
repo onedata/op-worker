@@ -476,6 +476,6 @@ exec(Worker, Fun) ->
 uuid_to_guid(W, {uuid, UUID}) ->
     {guid, uuid_to_guid(W, UUID)};
 uuid_to_guid(W, UUID) when is_binary(UUID) ->
-    rpc:call(W, fslogic_uuid, to_file_guid, [UUID]);
+    rpc:call(W, fslogic_uuid, uuid_to_guid, [UUID]);
 uuid_to_guid(_, Other) ->
     Other.

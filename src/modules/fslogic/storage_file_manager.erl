@@ -303,7 +303,7 @@ write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, helper_handle = Helpe
     helpers:write(HelperHandle, File, Offset, Buffer);
 
 write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Data) ->
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
+    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
     ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_write{byte_sequence = [#byte_sequence{offset = Offset, data = Data}]}},
@@ -329,7 +329,7 @@ read(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Of
     helpers:read(HelperHandle, File, Offset, MaxSize);
 
 read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Size) ->
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
+    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
     ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_read{offset = Offset, size = Size}},

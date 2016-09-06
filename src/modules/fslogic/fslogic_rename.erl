@@ -54,7 +54,7 @@ rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) 
             {ok, #document{key = SourceUuid}} = file_meta:get(SourceEntry),
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_renamed{
-                    new_uuid = fslogic_uuid:to_file_guid(SourceUuid)}};
+                    new_uuid = fslogic_uuid:uuid_to_guid(SourceUuid)}};
         false ->
             case rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
                 {ok, FileRenamed} ->
@@ -374,8 +374,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 end,
                 fun(#document{key = Uuid} = Entry, Acc, _) ->
                     {ok, NewPath} = fslogic_path:gen_path(Entry, SessId),
-                    [{fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
-                        fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewPath} | Acc]
+                    [{fslogic_uuid:uuid_to_guid(Uuid, SourceSpaceId),
+                        fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId), NewPath} | Acc]
                 end, []);
 
         #document{key = Uuid} = File ->
@@ -397,8 +397,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 end, FileSnapshots),
 
             {ok, NewLogicalPath} = fslogic_path:gen_path({uuid, Uuid}, SessId),
-            [{fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
-                fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewLogicalPath}]
+            [{fslogic_uuid:uuid_to_guid(Uuid, SourceSpaceId),
+                fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId), NewLogicalPath}]
     end,
 
     ok = create_phantom_files(RenamedEntries, SourceSpaceId, TargetSpaceId),
@@ -434,7 +434,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
 
     RenamedEntries = for_each_child_file(SourceEntry,
         fun(#document{key = SourceUuid} = Doc, Acc) ->
-            SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
+            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
             {ok, OldPath} = fslogic_path:gen_path(Doc, SessId),
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
@@ -452,7 +452,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
         end,
         fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
             mtime = MTime, ctime = CTime, mode = Mode}}, Acc, {TargetGuid, NewPath}) ->
-            SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
+            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, {guid, TargetGuid}, Mode),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, {guid, TargetGuid}),
             ok = logical_file_manager:update_times(SessId, {guid, TargetGuid}, ATime, MTime, CTime),
@@ -709,7 +709,7 @@ create_phantom_files(Entries, OldSpaceId, NewSpaceId) ->
         false ->
             lists:foreach(
                 fun({OldGuid, NewGuid, _}) ->
-                    file_meta:create_phantom_file(fslogic_uuid:file_guid_to_uuid(OldGuid),
+                    file_meta:create_phantom_file(fslogic_uuid:guid_to_uuid(OldGuid),
                         OldSpaceId, NewGuid)
                 end, Entries)
     end.

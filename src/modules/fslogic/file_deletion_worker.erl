@@ -147,7 +147,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
         true -> ok;
         false ->
             fslogic_event:emit_file_removal(
-                fslogic_uuid:to_file_guid(FileUUID, SpaceId), [SessId])
+                fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), [SessId])
     end,
     ok.
 

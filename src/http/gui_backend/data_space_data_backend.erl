@@ -71,7 +71,7 @@ find(<<"data-space">>, SpaceId) ->
         [] ->
             null;
         _ ->
-            fslogic_uuid:to_file_guid(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
+            fslogic_uuid:uuid_to_guid(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
     end,
     Res = [
         {<<"id">>, SpaceId},

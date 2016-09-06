@@ -159,7 +159,7 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, Inputs, 
 get_validation_subject(UserId, #sfm_handle{file_uuid = FileGUID}) ->
     get_validation_subject(UserId, {guid, FileGUID});
 get_validation_subject(UserId, {guid, FileGUID}) ->
-    get_validation_subject(UserId, {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
+    get_validation_subject(UserId, {uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
 get_validation_subject(_UserId, FileEntry) ->
     {ok, #document{key = _FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
     FileDoc.

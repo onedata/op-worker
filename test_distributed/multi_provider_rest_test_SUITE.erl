@@ -114,7 +114,7 @@ replicate_file(Config) ->
 
     % when
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
-        [fslogic_uuid:file_guid_to_uuid(FileGuid), <<"space3">>])), 15),
+        [fslogic_uuid:guid_to_uuid(FileGuid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),
@@ -170,11 +170,11 @@ replicate_dir(Config) ->
 
     % when
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
-        [fslogic_uuid:file_guid_to_uuid(File1Guid), <<"space3">>])), 15),
+        [fslogic_uuid:guid_to_uuid(File1Guid), <<"space3">>])), 15),
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
-        [fslogic_uuid:file_guid_to_uuid(File2Guid), <<"space3">>])), 15),
+        [fslogic_uuid:guid_to_uuid(File2Guid), <<"space3">>])), 15),
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
-        [fslogic_uuid:file_guid_to_uuid(File3Guid), <<"space3">>])), 15),
+        [fslogic_uuid:guid_to_uuid(File3Guid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body} = do_request(WorkerP1, <<"replicas/space3/dir1?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
@@ -400,7 +400,7 @@ replicate_file_by_id(Config) ->
 
     % when
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
-        [fslogic_uuid:file_guid_to_uuid(FileGuid), <<"space3">>])), 15),
+        [fslogic_uuid:guid_to_uuid(FileGuid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),

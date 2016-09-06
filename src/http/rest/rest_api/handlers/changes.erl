@@ -184,7 +184,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     Ctx = fslogic_context:new(?ROOT_SESS_ID),
     Guid =
         try
-            fslogic_uuid:to_file_guid(Uuid)
+            fslogic_uuid:uuid_to_guid(Uuid)
         catch
             _:Error ->
                 ?error("Cannot fetch guid for changes, error: ~p", [Error]),

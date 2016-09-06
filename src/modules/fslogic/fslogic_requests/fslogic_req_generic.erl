@@ -145,7 +145,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
-                uuid = fslogic_uuid:to_file_guid(UUID, SpaceId),
+                uuid = fslogic_uuid:uuid_to_guid(UUID, SpaceId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};
@@ -411,13 +411,13 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
                     when length(ChildLinks) < Chunk ->
                     utils:pforeach(
                         fun(#child_link{uuid = ChildGuid}) ->
-                            replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ChildGuid)}, Block)
+                            replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)
                         end, ChildLinks),
                     #provider_response{status = #status{code = ?OK}};
                 #fuse_response{fuse_response = #file_children{child_links = ChildLinks}}->
                     utils:pforeach(
                         fun(#child_link{uuid = ChildGuid}) ->
-                            replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ChildGuid)}, Block)
+                            replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)
                         end, ChildLinks),
                     replicate_file(Ctx, {uuid, Uuid}, Block, Offset + Chunk);
                 Other ->

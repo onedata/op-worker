@@ -48,7 +48,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         {ok, DirUUID} ->
             fslogic_times:update_mtime_ctime(ParentUUID, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-                #dir{uuid = fslogic_uuid:to_file_guid(DirUUID)}
+                #dir{uuid = fslogic_uuid:uuid_to_guid(DirUUID)}
             };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
@@ -85,7 +85,7 @@ read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offs
                         SpacesChunk = lists:sublist(Spaces, Offset + 1, Size),
                         lists:map(fun({SpaceId, SpaceName}) ->
                             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                            #child_link{uuid = fslogic_uuid:to_file_guid(SpaceUUID, SpaceId), name = SpaceName}
+                            #child_link{uuid = fslogic_uuid:uuid_to_guid(SpaceUUID, SpaceId), name = SpaceName}
                         end, SpacesChunk);
                     false ->
                         []
@@ -98,7 +98,7 @@ read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offs
             };
         _ ->
             #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:to_file_guid(UUID, SpaceId)}
+                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:uuid_to_guid(UUID, SpaceId)}
                     || CL = #child_link{uuid = UUID} <- ChildLinks]}}
     end.
 
