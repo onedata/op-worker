@@ -29,11 +29,11 @@
 %% @doc Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: fslogic_worker:file(),
+-spec mkdir(CTX :: fslogic_worker:ctx(), ParentFile :: fslogic_worker:file(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
-mkdir(CTX, ParentUUID, Name, Mode) ->
+mkdir(CTX, ParentFile, Name, Mode) ->
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
@@ -44,9 +44,9 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
-    case file_meta:create(ParentUUID, File) of
+    case file_meta:create(ParentFile, File) of
         {ok, DirUUID} ->
-            fslogic_times:update_mtime_ctime(ParentUUID, fslogic_context:get_user_id(CTX)),
+            fslogic_times:update_mtime_ctime(ParentFile, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = fslogic_uuid:uuid_to_guid(DirUUID)}
             };
@@ -64,7 +64,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
-read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offset, Size) ->
+read_dir(#fslogic_ctx{space_id = SpaceId} = CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),

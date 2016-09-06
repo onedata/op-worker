@@ -24,7 +24,6 @@
 -export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
 -export([guid_to_share_guid/2, unpack_share_guid/1]).
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -200,11 +199,19 @@ guid_to_share_guid(Guid, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec unpack_share_guid(share_info:share_guid()) ->
-    {file_meta:uuid(), space_info:id(), share_info:id()}.
+    {file_meta:uuid(), space_info:id(), share_info:id()} | {error, non_share_guid}.
 unpack_share_guid(ShareGUID) ->
-    {share_guid, FileUUID, SpaceId, ShareId} =
-        binary_to_term(http_utils:base64url_decode(ShareGUID)),
-    {FileUUID, SpaceId, ShareId}.
+    try binary_to_term(http_utils:base64url_decode(ShareGUID)) of
+        {share_guid, FileUUID, SpaceId, ShareId} ->
+            {FileUUID, SpaceId, ShareId};
+        {guid, FileUUID, SpaceId} ->
+            {FileUUID, SpaceId, undefined};
+        _ ->
+            {ShareGUID, undefined, undefined}
+    catch
+        _:_ ->
+            {ShareGUID, undefined, undefined}
+    end.
 
 %%%===================================================================
 %%% Internal functions

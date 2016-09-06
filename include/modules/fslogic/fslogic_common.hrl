@@ -28,7 +28,8 @@
 -record(fslogic_ctx, {
     session :: #session{},
     session_id :: session:id(),
-    space_id :: file_meta:uuid()
+    space_id :: file_meta:uuid(),
+    share_id :: share_info:id()
 }).
 
 %% root user definitions

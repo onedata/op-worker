@@ -45,9 +45,9 @@
 %% @doc Translates given file's UUID to absolute path.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(fslogic_worker:ctx(), file_meta:uuid()) ->
+-spec get_file_path(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     #provider_response{} | no_return().
-get_file_path(Ctx, FileUUID) ->
+get_file_path(Ctx, {uuid, FileUUID}) ->
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
@@ -81,16 +81,16 @@ update_times(CTX, FileEntry, ATime, MTime, CTime) ->
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
-chmod(CTX, FileEntry, Mode) ->
-    chmod_storage_files(CTX, FileEntry, Mode),
+chmod(CTX, File, Mode) ->
+    chmod_storage_files(CTX, File, Mode),
 
     % remove acl
-    {ok, FileUuid} = file_meta:to_uuid(FileEntry),
+    {ok, FileUuid} = file_meta:to_uuid(File),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
-    {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
+    {ok, _} = file_meta:update(File, #{mode => Mode}),
     ok = permissions_cache:invalidate_permissions_cache(),
 
-    fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
+    fslogic_times:update_ctime(File, fslogic_context:get_user_id(CTX)),
     spawn(
         fun() ->
             fslogic_event:emit_permission_changed(FileUuid)
@@ -563,8 +563,8 @@ delete_impl(CTX, File, Silent) ->
 %%--------------------------------------------------------------------
 -spec chmod_storage_files(fslogic_worker:ctx(), file_meta:entry(), file_meta:posix_permissions()) ->
     ok | no_return().
-chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
-    case file_meta:get(FileEntry) of
+chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, File, Mode) ->
+    case file_meta:get(File) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
             Results = lists:map(
@@ -572,7 +572,7 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
                     {ok, Storage} = storage:get(SID),
                     SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
                     {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
-                end, fslogic_utils:get_local_storage_file_locations(FileEntry)),
+                end, fslogic_utils:get_local_storage_file_locations(File)),
 
             case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
                 [] -> ok;

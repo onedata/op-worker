@@ -237,7 +237,7 @@ resolve_provider_for_file(Context, Entry, Request, UserRootDir) ->
             {Context, [oneprovider:get_provider_id()], Request};
         _ ->
             #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
-                fslogic_context:set_space_id(Context, Entry),
+                fslogic_context:set_space_and_share_id(Context, Entry),
 
             {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessionId, SpaceId),
             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
@@ -351,10 +351,10 @@ handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #upda
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #get_new_file_location{name = Name,
     flags = Flags, mode = Mode, create_handle = CreateHandle}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, ParentGUID}),
+    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, ParentGUID}),
     fslogic_req_regular:get_new_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, Name, Mode, Flags, CreateHandle);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_file_location{flags = Flags, create_handle = CreateHandle}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, GUID}),
+    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
     fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Flags, CreateHandle);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #truncate{size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Size);
@@ -408,11 +408,11 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_mimetype{value = Value}}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Value);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_file_path{}}) ->
-    fslogic_req_generic:get_file_path(Ctx, fslogic_uuid:guid_to_uuid(GUID));
+    fslogic_req_generic:get_file_path(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_file_distribution{}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #replicate_file{block = Block}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, GUID}),
+    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
     fslogic_req_generic:replicate_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Block);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_metadata{type = Type, names = Names}}) ->
     fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Type, Names);
