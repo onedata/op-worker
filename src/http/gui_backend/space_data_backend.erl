@@ -366,7 +366,8 @@ perm_db_to_gui(space_remove_user) -> <<"permRemoveUser">>;
 perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
 perm_db_to_gui(space_remove_group) -> <<"permRemoveGroup">>;
 perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
-perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>.
+perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>;
+perm_db_to_gui(space_manage_shares) -> <<"permManageShares">>.
 
 
 %%--------------------------------------------------------------------
@@ -385,4 +386,5 @@ perm_gui_to_db(<<"permRemoveUser">>) -> space_remove_user;
 perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;
 perm_gui_to_db(<<"permRemoveGroup">>) -> space_remove_group;
 perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
-perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider.
+perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider;
+perm_gui_to_db(<<"permManageShares">>) -> space_manage_shares.

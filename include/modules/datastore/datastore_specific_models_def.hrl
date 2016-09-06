@@ -169,6 +169,17 @@
     providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
+    % All shares that belong to this space.
+    shares = [] :: [SpaceId :: binary()],
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+%% Model for caching share details fetched from OZ
+-record(share_info, {
+    name :: binary(),
+    public_url = undefined :: undefined | binary(),
+    root_file_id = undefined :: undefined | binary(),
+    parent_space = undefined :: undefined | binary(),
     revision_history = [] :: [subscriptions:rev()]
 }).
 

@@ -71,7 +71,7 @@ handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
             URL = str_utils:format_bin("https://~s/download/~s",
                 [Hostname, FileId]),
             {ok, [{<<"fileUrl">>, URL}]};
-        {error,eacces} ->
+        {error, eacces} ->
             gui_error:report_error(<<"Permission denied">>);
         Other ->
             ?error("Error while downloading file ~s: ~p", [Other]),
@@ -158,6 +158,16 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
             gui_error:report_error(
                 <<"Cannot get invite provider token due to unknown error.">>)
     end;
+
+handle(<<"createFileShare">>, Props) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    FileId = proplists:get_value(<<"fileId">>, Props),
+    Name = proplists:get_value(<<"shareName">>, Props),
+    SpaceId = proplists:get_value(<<"dataSpaceId">>, Props),
+    {ok, ShareId} = space_logic:create_share(UserAuth, SpaceId, Name, FileId),
+    share_data_backend:add_share_mapping(FileId, ShareId),
+    {ok, [{<<"shareId">>, ShareId}]};
+
 
 %%--------------------------------------------------------------------
 %% Group related procedures

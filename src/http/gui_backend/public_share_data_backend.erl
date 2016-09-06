@@ -12,7 +12,7 @@
 %%% the file model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_data_backend).
+-module(public_share_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 -author("Tomasz Lichon").
@@ -62,7 +62,47 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file">>, FileId) ->
+find(<<"data-space-public">>, SpaceId) ->
+    ?dump({<<"data-space-public">>, SpaceId}),
+    {ok, #document{
+        value = #space_info{
+            name = Name,
+            providers_supports = Providers
+        }}} = space_info:get(SpaceId),
+    % If current provider is not supported, return null rootDir which will
+    % cause the client to render a "space not supported" message.
+    RootDir = case Providers of
+        [] ->
+            null;
+        _ ->
+            fslogic_uuid:to_file_guid(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
+    end,
+    Res = [
+        {<<"id">>, SpaceId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, false},
+        {<<"rootDir">>, RootDir},
+        {<<"space">>, SpaceId}
+    ],
+    {ok, Res};
+find(<<"share-public">>, ShareId) ->
+    ?dump({<<"share-public">>, ShareId}),
+    {ok, #document{
+        value = #share_info{
+            name = Name,
+            root_file_id = RootFileId,
+            parent_space = ParentSpaceId,
+            public_url = PublicURL
+        }}} = share_info:get(ShareId),
+    {ok, [
+        {<<"id">>, ShareId},
+        {<<"name">>, Name},
+        {<<"file">>, RootFileId},
+        {<<"dataSpace">>, ParentSpaceId},
+        {<<"publicUrl">>, PublicURL}
+    ]};
+find(<<"file-public">>, FileId) ->
+    ?dump({<<"file-public">>, FileId}),
     SessionId = g_session:get_session_id(),
     try
         file_record(SessionId, FileId)
@@ -71,10 +111,7 @@ find(<<"file">>, FileId) ->
             FileId, T, M
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
-    end;
-find(<<"file-acl">>, FileId) ->
-    SessionId = g_session:get_session_id(),
-    file_acl_record(SessionId, FileId).
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -84,9 +121,7 @@ find(<<"file-acl">>, FileId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"file">>) ->
-    gui_error:report_error(<<"Not iplemented">>);
-find_all(<<"file-acl">>) ->
+find_all(_) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -97,33 +132,8 @@ find_all(<<"file-acl">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"file">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
-find_query(<<"file-acl">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
-find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
-    SessionId = g_session:get_session_id(),
-    {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
-    Res = lists:map(
-        fun([{<<"providerId">>, ProviderId}, {<<"blocks">>, Blocks}]) ->
-            BlocksList =
-                case Blocks of
-                    [] ->
-                        [0, 0];
-                    _ ->
-                        lists:foldl(
-                            fun([Offset, Size], Acc) ->
-                                Acc ++ [Offset, Offset + Size]
-                            end, [], Blocks)
-                end,
-            [
-                {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
-                {<<"fileId">>, FileId},
-                {<<"provider">>, ProviderId},
-                {<<"blocks">>, BlocksList}
-            ]
-        end, Distributions),
-    {ok, Res}.
+find_query(_, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -133,7 +143,7 @@ find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"file">>, Data) ->
+create_record(_, Data) ->
     try
         SessionId = g_session:get_session_id(),
         Name = proplists:get_value(<<"name">>, Data),
@@ -180,14 +190,6 @@ create_record(<<"file">>, Data) ->
             <<"file">> ->
                 gui_error:report_warning(<<"Failed to create new file.">>)
         end
-    end;
-create_record(<<"file-acl">>, Data) ->
-    Id = proplists:get_value(<<"file">>, Data),
-    case update_record(<<"file-acl">>, Id, Data) of
-        ok ->
-            file_acl_record(?ROOT_SESS_ID, Id);
-        Error ->
-            Error
     end.
 
 
@@ -199,7 +201,7 @@ create_record(<<"file-acl">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"file">>, FileId, Data) ->
+update_record(_, FileId, Data) ->
     try
         SessionId = g_session:get_session_id(),
         case proplists:get_value(<<"permissions">>, Data, undefined) of
@@ -223,19 +225,6 @@ update_record(<<"file">>, FileId, Data) ->
         end
     catch _:_ ->
         gui_error:report_warning(<<"Cannot change permissions.">>)
-    end;
-update_record(<<"file-acl">>, FileId, Data) ->
-    try
-        SessionId = g_session:get_session_id(),
-        Acl = acl_utils:json_to_acl(Data),
-        case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
-            ok ->
-                ok;
-            {error, ?EACCES} ->
-                gui_error:report_warning(<<"Cannot change ACL - access denied.">>)
-        end
-    catch _:_ ->
-        gui_error:report_warning(<<"Cannot change ACL.">>)
     end.
 
 
@@ -246,7 +235,7 @@ update_record(<<"file-acl">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file">>, FileId) ->
+delete_record(_, FileId) ->
     SessionId = g_session:get_session_id(),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
@@ -254,15 +243,6 @@ delete_record(<<"file">>, FileId) ->
         {error, ?EACCES} ->
             gui_error:report_warning(
                 <<"Cannot remove file or directory - access denied.">>)
-    end;
-delete_record(<<"file-acl">>, FileId) ->
-    SessionId = g_session:get_session_id(),
-    case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
-        ok ->
-            ok;
-        {error, ?EACCES} ->
-            gui_error:report_warning(
-                <<"Cannot remove ACL - access denied.">>)
     end.
 
 
@@ -354,26 +334,5 @@ file_record(SessionId, FileId) ->
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, Share}
             ],
-            {ok, Res}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Constructs a file acl record from given FileId.
-%% @end
-%%--------------------------------------------------------------------
--spec file_acl_record(SessionId :: binary(), FileId :: binary()) ->
-    {ok, proplists:proplist()}.
-file_acl_record(SessionId, FileId) ->
-    case logical_file_manager:get_acl(SessionId, {guid, FileId}) of
-        {error, ?ENOENT} ->
-            gui_error:report_error(<<"No such file or directory.">>);
-        {error, ?ENOATTR} ->
-            gui_error:report_error(<<"No ACL defined.">>);
-        {error, ?EACCES} ->
-            gui_error:report_error(<<"Cannot read ACL - access denied.">>);
-        {ok, Acl} ->
-            Res = acl_utils:acl_to_json(FileId, Acl),
             {ok, Res}
     end.

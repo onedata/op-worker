@@ -50,8 +50,8 @@
 }).
 
 -define(INDEX, #gui_route{
-    requires_session = ?SESSION_LOGGED_IN,
-    websocket = ?SESSION_LOGGED_IN,
+    requires_session = ?SESSION_ANY,
+    websocket = ?SESSION_ANY,
     html_file = <<"index.html">>,
     page_backend = undefined
 }).
@@ -72,7 +72,8 @@ route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/logout.html">>) -> ?LOGOUT;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?INDEX;
-route(<<"/index.html">>) -> ?INDEX.
+route(<<"/index.html">>) -> ?INDEX;
+route(_) -> ?INDEX.
 
 
 %%--------------------------------------------------------------------
@@ -89,12 +90,18 @@ data_backend(true, <<"data-space">>) -> data_space_data_backend;
 data_backend(true, <<"space">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
+data_backend(true, <<"share">>) -> share_data_backend;
 data_backend(true, <<"group">>) -> group_data_backend;
 data_backend(true, <<"group-user-permission">>) -> group_data_backend;
 data_backend(true, <<"group-group-permission">>) -> group_data_backend;
 data_backend(true, <<"system-provider">>) -> system_data_backend;
 data_backend(true, <<"system-user">>) -> system_data_backend;
-data_backend(true, <<"system-group">>) -> system_data_backend.
+data_backend(true, <<"system-group">>) -> system_data_backend;
+% File browsing is allowed for anyone when viewing public shares. It requires
+% read-only access to shares and files.
+data_backend(_, <<"data-space-public">>) -> public_share_data_backend;
+data_backend(_, <<"share-public">>) -> public_share_data_backend;
+data_backend(_, <<"file-public">>) -> public_share_data_backend.
 
 
 %%--------------------------------------------------------------------
@@ -127,15 +134,10 @@ session_details() ->
         value = #onedata_user{
             name = Name
         }}} = onedata_user:get(g_session:get_user_id()),
-    ConnectionRef = base64:encode(pid_to_list(self())),
     Res = [
         {<<"userName">>, Name},
         {<<"manageProvidersURL">>,
-            str_utils:to_binary(oneprovider:get_oz_providers_page())},
-        % @todo VFS-2051 temporary solution for model pushing during upload
-        % Used for model pushing during file upload - the client informs which
-        % connection is his and updates are pushed to that pid.
-        {<<"connectionRef">>, ConnectionRef}
+            str_utils:to_binary(oneprovider:get_oz_providers_page())}
     ],
     {ok, Res}.
 

@@ -24,6 +24,7 @@
 -export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_invite_provider_token/2]).
+-export([get_share/2, create_share/4]).
 
 
 %%%===================================================================
@@ -174,3 +175,31 @@ get_invite_group_token(Auth, SpaceId) ->
     {ok, binary()} | {error, Reason :: term()}.
 get_invite_provider_token(Auth, SpaceId) ->
     oz_spaces:get_invite_provider_token(Auth, SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves share document.
+%% Returned document contains parameters tied to given user
+%% (as space name may differ from user to user).
+%% Provided client should be authorised to access user details.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_share(oz_endpoint:auth(), ShareId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_share(Auth, ShareId) ->
+    share_info:get_or_fetch(Auth, ShareId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new share.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_share(oz_endpoint:auth(), Name :: binary(), RootFileId :: binary(), SpaceId :: binary()) ->
+    {ok, binary()} | {error, Reason :: term()}.
+create_share(Auth, ParentSpaceId, Name, RootFileId) ->
+    Parameters = [
+        {<<"name">>, Name},
+        {<<"root_file_id">>, RootFileId}
+    ],
+    oz_spaces:create_share(Auth, ParentSpaceId, Parameters).
