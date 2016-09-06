@@ -24,11 +24,12 @@
     end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, db_sync_test_base/1, file_consistency_test/1, file_consistency_test_base/1
+    db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
+    db_sync_many_ops_test_base/1
 ]).
 
 -define(TEST_CASES, [
-    db_sync_test, file_consistency_test
+    db_sync_many_ops_test
 ]).
 
 all() ->
@@ -56,12 +57,18 @@ all() ->
         ]}
     ]).
 
-db_sync_test(Config) ->
+db_sync_basic_opts_test(Config) ->
+    multi_provider_file_ops_test_SUITE:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 120).
+
+db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
-db_sync_test_base(Config) ->
+db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 120, DirsNum, FilesNum).
+    multi_provider_file_ops_test_SUITE:many_ops_test_base(Config, <<"user1">>, {4,2,0}, 120, DirsNum, FilesNum).
+
+db_sync_distributed_modification_test(Config) ->
+    multi_provider_file_ops_test_SUITE:distributed_modification_test_base(Config, <<"user1">>, {4,2,0}, 120).
 
 file_consistency_test(Config) ->
     ?PERFORMANCE(Config, [

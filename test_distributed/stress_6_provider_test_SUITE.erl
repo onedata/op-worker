@@ -50,7 +50,7 @@ stress_test_base(Config) ->
 db_sync_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, dirs_num}, {value, 3}, {description, "Number of directorines with single parent."}],
+            [{name, dirs_num}, {value, 5}, {description, "Number of directorines with single parent."}],
             [{name, files_num}, {value, 10}, {description, "Number of files with single parent."}],
             [{name, attempts}, {value, 120}, {description, "Attempts param for assertion macros"}]
         ]},
@@ -60,7 +60,8 @@ db_sync_test_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, Attempts, Dirs, Files).
+    multi_provider_file_ops_test_SUITE:many_ops_test_base(Config, <<"user1">>, {4,2,0}, Attempts, Dirs, Files),
+    multi_provider_file_ops_test_SUITE:distributed_modification_test_base(Config, <<"user1">>, {4,2,0}, Attempts).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
