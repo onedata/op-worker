@@ -116,7 +116,9 @@
     acl_read_acl_group_test/1,
     acl_write_acl_user_test/1,
     acl_write_acl_group_test/1,
-    permission_cache_test/1
+    permission_cache_test/1,
+    check_perms_test/1
+
 ]).
 
 all() ->
@@ -162,7 +164,8 @@ all() ->
         acl_read_acl_group_test,
         acl_write_acl_user_test,
         acl_write_acl_group_test,
-        permission_cache_test
+        permission_cache_test,
+        check_perms_test
     ]).
 
 %%%===================================================================
@@ -1064,6 +1067,26 @@ permission_cache_test(Config) ->
     ?assertEqual({ok, xyz}, ?rpcCache(W, check_permission, [p1])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
     ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p3])).
+
+check_perms_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
+    {_, DirGUID} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/space_name3/t41_dir">>, 8#740)),
+    {_, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name3/t41_file">>, 8#720)),
+
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, DirGUID}, read)),
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, DirGUID}, write)),
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, DirGUID}, rdwr)),
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId2, {guid, DirGUID}, read)),
+    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, DirGUID}, write)),
+    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, DirGUID}, rdwr)),
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, FileGUID}, read)),
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, FileGUID}, write)),
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId1, {guid, FileGUID}, rdwr)),
+    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, read)),
+    ?assertEqual({ok, true}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, write)),
+    ?assertEqual({ok, false}, lfm_proxy:check_perms(W, SessId2, {guid, FileGUID}, rdwr)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

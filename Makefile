@@ -97,7 +97,8 @@ eunit:
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 coverage:
-	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR)
+## Set on_bamboo=true so that coverage.escript will collect coverdata from all ct_logs directories
+	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR) ${on_bamboo}
 
 ##
 ## Dialyzer targets local
@@ -112,7 +113,7 @@ plt:
 	if [ $$? != 0 ]; then \
 	    dialyzer --build_plt --output_plt ${PLT} --apps kernel stdlib sasl erts \
 		ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
-		mnesia edoc common_test test_server syntax_tools compiler ./deps/*/ebin; \
+		mnesia edoc common_test syntax_tools compiler ./deps/*/ebin; \
 	fi; exit 0
 
 

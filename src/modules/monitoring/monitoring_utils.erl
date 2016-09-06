@@ -17,7 +17,7 @@
 -include_lib("modules/monitoring/rrd_definitions.hrl").
 
 %% API
--export([create_and_update/1, create_and_update/2, create/2, update/4]).
+-export([create_and_update/2, create_and_update/3, create/3, update/4]).
 
 -define(BYTES_TO_BITS, 8).
 
@@ -26,9 +26,9 @@
 %% Creates RRD if not exists and updates it.
 %% @end
 %%--------------------------------------------------------------------
--spec create_and_update(#monitoring_id{}) -> ok.
-create_and_update(MonitoringId) ->
-    create_and_update(MonitoringId, #{}).
+-spec create_and_update(datastore:id(), #monitoring_id{}) -> ok.
+create_and_update(SpaceId, MonitoringId) ->
+    create_and_update(SpaceId, MonitoringId, #{}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -37,8 +37,8 @@ create_and_update(MonitoringId) ->
 %% this slot was not performed earlier.
 %% @end
 %%--------------------------------------------------------------------
--spec create_and_update(#monitoring_id{}, maps:map()) -> ok.
-create_and_update(MonitoringId, UpdateValue) ->
+-spec create_and_update(datastore:id(), #monitoring_id{}, maps:map()) -> ok.
+create_and_update(SpaceId, MonitoringId, UpdateValue) ->
     try
         CurrentTime = erlang:system_time(seconds),
         {PreviousPDPTime, CurrentPDPTime, WaitingTime} =
@@ -50,7 +50,7 @@ create_and_update(MonitoringId, UpdateValue) ->
                         ?STEP_IN_SECONDS - Value}
             end,
 
-        ok = monitoring_utils:create(MonitoringId, PreviousPDPTime - ?STEP_IN_SECONDS),
+        ok = monitoring_utils:create(SpaceId, MonitoringId, PreviousPDPTime - ?STEP_IN_SECONDS),
         {ok, #document{value = #monitoring_state{last_update_time = LastUpdateTime} =
             MonitoringState}} = monitoring_state:get(MonitoringId),
 
@@ -76,13 +76,13 @@ create_and_update(MonitoringId, UpdateValue) ->
 %% Creates rrd with optional initial buffer state.
 %% @end
 %%--------------------------------------------------------------------
--spec create(#monitoring_id{}, non_neg_integer()) -> ok.
-create(#monitoring_id{main_subject_type = space, metric_type = storage_used,
+-spec create(datastore:id(), #monitoring_id{}, non_neg_integer()) -> ok.
+create(SpaceId, #monitoring_id{main_subject_type = space, metric_type = storage_used,
     secondary_subject_type = user} = MonitoringId, CreationTime) ->
-    rrd_utils:create_rrd(MonitoringId, #{storage_used => 0}, CreationTime);
+    rrd_utils:create_rrd(SpaceId, MonitoringId, #{storage_used => 0}, CreationTime);
 
-create(MonitoringId, CreationTime) ->
-    rrd_utils:create_rrd(MonitoringId, #{}, CreationTime).
+create(SpaceId, MonitoringId, CreationTime) ->
+    rrd_utils:create_rrd(SpaceId, MonitoringId, #{}, CreationTime).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,37 +96,32 @@ update(#monitoring_id{main_subject_type = space, metric_type = storage_used,
     #monitoring_state{state_buffer = StateBuffer} = MonitoringState,
     CurrentSize = maps:get(storage_used, StateBuffer),
     SizeDifference = maps:get(size_difference, UpdateValue, 0),
-    NewSize = CurrentSize + SizeDifference,
 
-    {ok, _} = monitoring_state:update(MonitoringId,
-        #{state_buffer => #{storage_used => NewSize}}),
+    case SizeDifference of
+        0 -> ok;
+        _ ->
+            NewSize = CurrentSize + SizeDifference,
+            {ok, _} = monitoring_state:update(MonitoringId,
+                #{state_buffer => #{storage_used => NewSize}}),
 
-    ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [NewSize]);
+            ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [NewSize])
+    end;
 
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_used} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
     {ok, #document{value = #space_quota{current_size = CurrentSize}}} =
         space_quota:get(SpaceId),
-
-    ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [CurrentSize]);
+    maybe_update(MonitoringId, MonitoringState, UpdateTime, CurrentSize);
 
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_quota} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
-    #monitoring_state{state_buffer = StateBuffer} = MonitoringState,
     {ok, #document{value = #space_info{providers_supports = ProvSupport}}} =
         space_info:get(SpaceId),
     SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
 
-    case maps:get(previous_value, StateBuffer, undefined) of
-        SupSize ->
-            ok;
-        _ ->
-            {ok, _} = monitoring_state:update(MonitoringId,
-                #{state_buffer => #{previous_value => SupSize}}),
-            ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [SupSize])
-    end;
+    maybe_update(MonitoringId, MonitoringState, UpdateTime, SupSize);
 
 
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
@@ -134,16 +129,8 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
 
     {ok, #document{value = #space_info{users = Users}}} = space_info:get(SpaceId),
     ConnectedUsers = length(Users),
-    #monitoring_state{state_buffer = StateBuffer} = MonitoringState,
 
-    case maps:get(previous_value, StateBuffer, undefined) of
-        ConnectedUsers ->
-            ok;
-        _ ->
-            {ok, _} = monitoring_state:update(MonitoringId,
-                #{state_buffer => #{previous_value => ConnectedUsers}}),
-            ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [ConnectedUsers])
-    end;
+    maybe_update(MonitoringId, MonitoringState, UpdateTime, ConnectedUsers);
 
 update(#monitoring_id{main_subject_type = space, metric_type = data_access} =
     MonitoringId, MonitoringState, UpdateTime, UpdateValue) ->
@@ -165,3 +152,25 @@ update(#monitoring_id{main_subject_type = space, metric_type = remote_transfer} 
     TransferIn = maps:get(transfer_in, UpdateValue, 0) * ?BYTES_TO_BITS,
     ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [TransferIn]).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates rrd if current update value is different than previous
+%% update value.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), term()) -> ok.
+maybe_update(MonitoringId, #monitoring_state{state_buffer = StateBuffer} = MonitoringState,
+    UpdateTime, UpdateValue) ->
+    case maps:get(previous_value, StateBuffer, undefined) of
+        UpdateValue -> ok;
+        _ ->
+            {ok, _} = monitoring_state:update(MonitoringId,
+                #{state_buffer => #{previous_value => UpdateValue}}),
+
+            ok = rrd_utils:update_rrd(MonitoringId, MonitoringState, UpdateTime, [UpdateValue])
+    end.

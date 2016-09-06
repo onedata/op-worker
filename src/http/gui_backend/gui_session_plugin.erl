@@ -59,7 +59,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec create_session(UserId :: term(), CustomArgs :: [term()]) ->
     {ok, SessionId :: binary()} | {error, term()}.
-create_session(_UserId, [#identity{} = Identity, #token_auth{} = Auth]) ->
+create_session(_UserId, [#user_identity{} = Identity, #token_auth{} = Auth]) ->
     %% UserId no needed here to crete session as it is indicated by Auth.
     case session_manager:create_gui_session(Identity, Auth) of
         {ok, SessionId} ->

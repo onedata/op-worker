@@ -39,6 +39,12 @@ class ClusterWorkerConfigurator:
     def extra_volumes(self, config, bindir, instance_domain, storages_dockers):
         return []
 
+    def couchbase_ramsize(self):
+        return 1024
+
+    def couchbase_buckets(self):
+        return {"default": 512}
+
     def app_name(self):
         return "cluster_worker"
 

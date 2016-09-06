@@ -30,10 +30,10 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(session:id() | session:identity()) -> onedata_user:id().
-get_user_id(#identity{user_id = UserId}) ->
+get_user_id(#user_identity{user_id = UserId}) ->
     UserId;
 get_user_id(SessionId) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     UserId.
 
