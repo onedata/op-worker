@@ -96,14 +96,20 @@
     flags :: fslogic_worker:open_flags()
 }).
 
+-record(create_share, {
+}).
+
+-record(remove_share, {
+}).
+
 -type provider_request() ::
-    #get_xattr{} | #set_xattr{} | #remove_xattr{} | #list_xattr{} |
-    #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
-    #get_transfer_encoding{} | #set_transfer_encoding{} |
-    #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
-    #get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
-    #get_file_distribution{} | #replicate_file{} | #get_metadata{} |
-    #set_metadata{} | #check_perms{}.
+#get_xattr{} | #set_xattr{} | #remove_xattr{} | #list_xattr{} |
+#get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
+#get_transfer_encoding{} | #set_transfer_encoding{} |
+#get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
+#get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
+#get_file_distribution{} | #replicate_file{} | #get_metadata{} |
+#set_metadata{} | #check_perms{} | #create_share{} | #remove_share{}.
 
 -record(xattr_list, {
     names :: [xattr:name()]
@@ -139,10 +145,14 @@
     value :: term()
 }).
 
+-record(share, {
+    uuid :: fslogic_worker:file_guid()
+}).
+
 -type provider_response() ::
-    #xattr{} | #xattr_list{} | #transfer_encoding{} | #cdmi_completion_status{} |
-    #mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{} |
-    #metadata{}.
+#xattr{} | #xattr_list{} | #transfer_encoding{} | #cdmi_completion_status{} |
+#mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{} |
+#metadata{} | #share{}.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

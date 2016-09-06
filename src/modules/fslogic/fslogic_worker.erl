@@ -421,6 +421,10 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
     fslogic_req_generic:set_metadata(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Type, Value, Names);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #check_perms{flags = Flags}}) ->
     fslogic_req_generic:check_perms(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Flags);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #create_share{}}) ->
+    fslogic_req_generic:create_share(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #remove_share{}}) ->
+    fslogic_req_generic:remove_share(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
 handle_provider_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

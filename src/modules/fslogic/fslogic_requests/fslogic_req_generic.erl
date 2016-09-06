@@ -33,7 +33,8 @@
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
     get_file_path/2, chmod_storage_files/3, replicate_file/3,
-    get_metadata/4, set_metadata/5, check_perms/3]).
+    get_metadata/4, set_metadata/5, check_perms/3, create_share/2,
+    remove_share/2]).
 
 %%%===================================================================
 %%% API functions
@@ -440,6 +441,24 @@ check_perms(Ctx, Uuid, write) ->
     check_perms_write(Ctx, Uuid);
 check_perms(Ctx, Uuid, rdwr) ->
     check_perms_rdwr(Ctx, Uuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Share file under given uuid
+%% @end
+%%--------------------------------------------------------------------
+-spec create_share(Ctx, Uuid) -> #provider_response{}.
+create_share(Ctx, Uuid) ->
+    #provider_response{status = ?OK, provider_response = #share{uuid = <<"id">>}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Share file under given uuid
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share(Ctx, Uuid) -> #provider_response{}.
+remove_share(Ctx, Uuid) ->
+    #provider_response{status = ?OK}.
 
 %%%===================================================================
 %%% Internal functions

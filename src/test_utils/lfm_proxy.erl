@@ -23,7 +23,7 @@
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/5, set_metadata/6,
-    check_perms/4, create_share/3]).
+    check_perms/4, create_share/3, remove_share/3]).
 
 %%%===================================================================
 %%% API
@@ -436,6 +436,16 @@ create_share(Worker, SessId, FileKey) ->
         fun(Host) ->
             Result =
                 logical_file_manager:create_share(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec remove_share(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, ShareGuid :: fslogic_worker:file_guid()} | {error, term()}.
+remove_share(Worker, SessId, FileKey) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:remove_share(SessId, FileKey),
             Host ! {self(), Result}
         end).
 

@@ -426,7 +426,12 @@ translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
     #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
 translate_from_protobuf(#'CheckPerms'{flags = Flags}) ->
     #check_perms{flags = open_flags_translate_from_protobuf(Flags)};
-
+translate_from_protobuf(#'CreateShare'{}) ->
+    #'create_share'{};
+translate_from_protobuf(#'RemoveShare'{}) ->
+    #'remove_share'{};
+translate_from_protobuf(#'Share'{uuid = Uuid}) ->
+    #'share'{uuid = Uuid};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -813,6 +818,12 @@ translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
     {metadata, #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)}};
 translate_to_protobuf(#check_perms{flags = Flags}) ->
     {check_perms, #'CheckPerms'{flags = open_flags_translate_to_protobuf(Flags)}};
+translate_to_protobuf(#create_share{}) ->
+    {create_share, #'CreateShare'{}};
+translate_to_protobuf(#remove_share{}) ->
+    {remove_share, #'RemoveShare'{}};
+translate_to_protobuf(#share{uuid = Uuid}) ->
+    {share, #'Share'{uuid = Uuid}};
 
 
 %% DBSYNC
