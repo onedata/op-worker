@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, maybe_update_session_atime/1]).
+-export([start_link/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -50,23 +50,6 @@
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SessId, SessType) ->
     gen_server:start_link(?MODULE, [SessId, SessType], []).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates session access time if it will expire soon.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_update_session_atime(Doc :: #document{}) -> ok.
-maybe_update_session_atime(#document{key = Key, value = #session{} = Sess}) ->
-    #session{accessed = Accessed, type = Type} = Sess,
-    TTL = get_session_ttl(Type),
-    InactivityPeriod = timer:now_diff(os:timestamp(), Accessed) div 1000,
-    case InactivityPeriod >= 0.2 * TTL of
-        true -> session:update(Key, #{});
-        false -> ok
-    end,
-    ok.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -138,7 +121,7 @@ handle_info(remove_session, #state{session_id = SessId} = State) ->
 
 handle_info(check_session_status, #state{session_id = SessId,
     session_ttl = TTL} = State) ->
-    RemoveSession = case session:const_get(SessId) of
+    RemoveSession = case session:get(SessId) of
         {ok, #document{value = #session{status = inactive}}} ->
             true;
         {ok, #document{value = #session{connections = [_ | _]}}} ->

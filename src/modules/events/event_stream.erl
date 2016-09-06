@@ -330,7 +330,7 @@ execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Spawn event handler execution if no other event handler is currently being
+%% Spawns event handler execution if no other event handler is currently being
 %% executed.
 %% @end
 %%--------------------------------------------------------------------
@@ -387,7 +387,7 @@ process_event(Evt, #state{events = Evts, metadata = Meta,
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Schedules sending 'event_handler' message to itself. Message is
+%% Schedules sending 'periodic_emission' message to itself. Message is
 %% marked with new reference stored in event stream state, so that event stream
 %% can ignore messages with reference different from the one saved in the state.
 %% @end

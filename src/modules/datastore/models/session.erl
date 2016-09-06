@@ -25,7 +25,7 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
+-export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
@@ -94,23 +94,6 @@ create(#document{value = Sess} = Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
-        {ok, Doc} ->
-            session_watcher:maybe_update_session_atime(Doc),
-            {ok, Doc};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% Does not modify access time.
-%% @end
-%%--------------------------------------------------------------------
--spec const_get(datastore:key()) ->
-    {ok, datastore:document()} | datastore:get_error().
-const_get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -147,10 +130,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    case ?MODULE:get(Key) of
-        {ok, _Doc} -> true;
-        {error, {not_found, ?MODULE}} -> false
-    end.
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -339,7 +319,7 @@ get_connections(SessId) ->
 -spec get_connections(SessId :: id(), HideOverloaded :: boolean()) ->
     {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId, HideOverloaded) ->
-    case session:const_get(SessId) of
+    case ?MODULE:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),

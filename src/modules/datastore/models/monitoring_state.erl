@@ -149,7 +149,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 run_transaction(#monitoring_id{} = MonitoringIdRecord, Fun) ->
     monitoring_state:run_transaction(encode_id(MonitoringIdRecord), Fun);
 run_transaction(ResourceId, Fun) ->
-    datastore:run_transaction(?MODEL_NAME, ResourceId, Fun).
+    critical_section:run([?MODEL_NAME, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc

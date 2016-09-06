@@ -488,9 +488,7 @@ apply_changes(SpaceId,
                  ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
                  Key
         end,
-        datastore:run_transaction(ModelName, MainDocKey, fun() ->
-            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
-        end),
+        {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
 
         case Value of
             #links{} ->
@@ -584,7 +582,7 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
         DBSyncPid ->
             DoUpdate();
         _ ->
-            datastore:run_transaction(dbsync_state, term_to_binary(Key), DoUpdate)
+            critical_section:run([dbsync_state, term_to_binary(Key)], DoUpdate)
     end.
 
 

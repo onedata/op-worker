@@ -134,7 +134,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec run_transaction(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
 run_transaction(ResourceId, Fun) ->
-    datastore:run_transaction(?MODEL_NAME, ResourceId, Fun).
+    critical_section:run([?MODEL_NAME, ResourceId], Fun).
 
 %%%===================================================================
 %%% API

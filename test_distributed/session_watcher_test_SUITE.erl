@@ -28,7 +28,7 @@
     session_watcher_should_remove_inactive_session/1,
     session_watcher_should_remove_session_on_error/1,
     session_watcher_should_retry_session_removal/1,
-    session_get_should_update_session_access_time/1,
+    session_create_or_reuse_session_should_update_session_access_time/1,
     session_update_should_update_session_access_time/1,
     session_save_should_update_session_access_time/1,
     session_create_should_set_session_access_time/1
@@ -41,7 +41,7 @@ all() ->
         session_watcher_should_remove_inactive_session,
         session_watcher_should_remove_session_on_error,
         session_watcher_should_retry_session_removal,
-        session_get_should_update_session_access_time,
+        session_create_or_reuse_session_should_update_session_access_time,
         session_update_should_update_session_access_time,
         session_save_should_update_session_access_time,
         session_create_should_set_session_access_time
@@ -81,10 +81,12 @@ session_watcher_should_retry_session_removal(Config) ->
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
-session_get_should_update_session_access_time(Config) ->
+session_create_or_reuse_session_should_update_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Accessed1 = get_session_access_time(Config),
+    rpc:call(Worker, session_manager, reuse_or_create_fuse_session,
+        [SessId, undefined, self()]),
     ?call(Worker, get, [SessId]),
     Accessed2 = get_session_access_time(Config),
     ?assert(timer:now_diff(Accessed2, Accessed1) >= 0).
@@ -212,7 +214,7 @@ get_session(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     {ok, #document{value = Session}} =
-        ?assertMatch({ok, _}, ?call(Worker, const_get, [SessId])),
+        ?assertMatch({ok, _}, ?call(Worker, get, [SessId])),
     Session.
 
 %%--------------------------------------------------------------------
