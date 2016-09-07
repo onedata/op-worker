@@ -49,7 +49,7 @@
 -spec start(session:id(), file_meta:entry(), oneprovider:id(), binary()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileEntry, ProviderId, Callback) ->
-    {ok, Pid} = gen_server:start(?MODULE,
+    {ok, Pid} = gen_server2:start(?MODULE,
         [SessionId, FileEntry, ProviderId, Callback], []),
     TransferId = pid_to_id(Pid),
     session:add_transfer(SessionId, TransferId),
@@ -62,7 +62,7 @@ start(SessionId, FileEntry, ProviderId, Callback) ->
 %%--------------------------------------------------------------------
 -spec get_status(TransferId :: id()) -> status().
 get_status(TransferId)  ->
-    gen_server:call(id_to_pid(TransferId), get_status).
+    gen_server2:call(id_to_pid(TransferId), get_status).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,7 +71,7 @@ get_status(TransferId)  ->
 %%--------------------------------------------------------------------
 -spec get(TransferId :: id()) -> list().
 get(TransferId)  ->
-    gen_server:call(id_to_pid(TransferId), get_info).
+    gen_server2:call(id_to_pid(TransferId), get_info).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -80,7 +80,7 @@ get(TransferId)  ->
 %%--------------------------------------------------------------------
 -spec stop(id()) -> ok.
 stop(TransferId) ->
-    gen_server:stop(id_to_pid(TransferId)).
+    gen_server2:stop(id_to_pid(TransferId)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -99,13 +99,13 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
     Server = self(),
     spawn(fun() ->
         try
-            ok = gen_server:call(Server, transfer_active),
+            ok = gen_server2:call(Server, transfer_active),
             ok = logical_file_manager:replicate_file(SessionId, FileEntry, ProviderId),
-            gen_server:cast(Server, transfer_completed)
+            gen_server2:cast(Server, transfer_completed)
         catch
             _:E ->
                 ?error_stacktrace("Could not replicate file ~p due to ~p", [FileEntry, E]),
-                gen_server:cast(Server, transfer_failed)
+                gen_server2:cast(Server, transfer_failed)
         end
     end),
     FilePath =
