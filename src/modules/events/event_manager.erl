@@ -118,12 +118,11 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(Request, State) ->
-    try do_handle_cast(Request, State) of
-        AResult -> AResult
+    try do_handle_cast(Request, State)
     catch
         Error:Reason ->
-            ?error_stacktrace("event_manager handler of ~p (state: ~p) failed "
-            "with ~p:~p", [Request, State, Error, Reason]),
+            ?error_stacktrace("~p handler of ~p (state: ~p) failed with ~p:~p",
+                              [?MODULE, Request, State, Error, Reason]),
             {noreply, State}
     end.
 

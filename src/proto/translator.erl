@@ -424,6 +424,8 @@ translate_from_protobuf(#'FileDistribution'{provider_file_distributions = Distri
     #file_distribution{provider_file_distributions = TranslatedDistributions};
 translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
     #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
+translate_from_protobuf(#'CheckPerms'{flags = Flags}) ->
+    #check_perms{flags = open_flags_translate_from_protobuf(Flags)};
 
 
 %% DBSYNC
@@ -809,6 +811,8 @@ translate_to_protobuf(#file_distribution{provider_file_distributions = Distribut
     {file_distribution, #'FileDistribution'{provider_file_distributions = TranslatedDistributions}};
 translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
     {metadata, #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)}};
+translate_to_protobuf(#check_perms{flags = Flags}) ->
+    {check_perms, #'CheckPerms'{flags = open_flags_translate_to_protobuf(Flags)}};
 
 
 %% DBSYNC
