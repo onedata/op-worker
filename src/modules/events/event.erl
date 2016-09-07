@@ -233,18 +233,17 @@ set_stream_id(#event{object = #read_event{}} = Evt) ->
     Evt#event{stream_id = read_event_stream};
 set_stream_id(#event{object = #write_event{}} = Evt) ->
     Evt#event{stream_id = write_event_stream};
-set_stream_id(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
+set_stream_id(#event{object = #update_event{object = #file_attr{}}} = Evt) ->
     Evt#event{stream_id = file_attr_event_stream};
-set_stream_id(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
+set_stream_id(#event{object = #update_event{object = #file_location{}}} = Evt) ->
     Evt#event{stream_id = file_location_event_stream};
-set_stream_id(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
+set_stream_id(#event{object = #permission_changed_event{}} = Evt) ->
     Evt#event{stream_id = permission_changed_event_stream};
-set_stream_id(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
+set_stream_id(#event{object = #file_removal_event{}} = Evt) ->
     Evt#event{stream_id = file_removal_event_stream};
 set_stream_id(#event{object = #quota_exeeded_event{}} = Evt) ->
     Evt#event{stream_id = quota_exceeded_event_stream};
-set_stream_id(#event{object = #file_renamed_event{
-    top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
+set_stream_id(#event{object = #file_renamed_event{}} = Evt) ->
     Evt#event{stream_id = file_renamed_event_stream};
 set_stream_id(#event{object = #file_accessed_event{}} = Evt) ->
     Evt#event{stream_id = file_accessed_event_stream};

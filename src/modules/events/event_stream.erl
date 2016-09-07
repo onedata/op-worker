@@ -92,7 +92,7 @@ start_link(SessType, EvtMan, Sub, SessId) ->
 -spec execute_event_handler(Force :: boolean(), State :: #state{}) -> ok.
 execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
     ctx = Ctx, definition = #event_stream_definition{event_handler = Handler},
-    session_id = SessId, stream_id = StmId}) ->
+    session_id = SessId, stream_id = StmId} = State) ->
     try
         Start = os:timestamp(),
         EvtsList = maps:values(Evts),

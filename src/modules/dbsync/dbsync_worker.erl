@@ -540,7 +540,12 @@ run_posthooks(SpaceId, [Change | Done]) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
+    case dbsync_state:get(Key) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            ok;
+        _ ->
+            {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}})
+    end,
     ok.
 
 %%--------------------------------------------------------------------
