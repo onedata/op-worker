@@ -475,18 +475,25 @@ apply_changes(SpaceId,
     try
         ModelConfig = ModelName:model_init(),
 
-        MainDocKey = case Value of
+        {MainDocKey, HelperKeys} = case Value of
             #links{} ->
                 % TODO - work only on local tree (after refactoring of link_utils)
                 MDK = Value#links.doc_key,
                 file_meta:set_link_context_for_space(SpaceId),
+
+                OldLinkMap = case couchdb_datastore_driver:get_link_doc(ModelConfig, Key) of
+                                 {ok, #document{value = #links{link_map = OLM}}} -> OLM;
+                                 {error, {not_found, _}} -> #{}
+                             end,
+                HKs = maps:keys(maps:merge(Value#links.link_map, OldLinkMap)),
+
                 lists:foreach(fun(LName) ->
                     ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
-                end, maps:keys(Value#links.link_map)),
-                MDK;
+                end, HKs),
+                {MDK, HKs};
              _ ->
                  ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
-                 Key
+                 {Key, []}
         end,
         {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
 
@@ -495,7 +502,7 @@ apply_changes(SpaceId,
                 % TODO - work only on local tree (after refactoring of link_utils)
                 lists:foreach(fun(LName) ->
                     caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
-                end, maps:keys(Value#links.link_map));
+                end, HelperKeys);
             _ ->
                 ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
         end,
@@ -923,7 +930,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
         case Acc + 1 >= S of
             true ->
                 #batch{until = U} = maps:get(S, Batches),
-                U;
+                max(U, Acc);
             _ -> Acc
         end
     end, CurrentUntil, SortedKeys),
