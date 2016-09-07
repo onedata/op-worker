@@ -1,0 +1,12 @@
+
+##
+## Export all variables to sub-invocation
+##
+export
+
+bootstrap:
+	mkdir -p $(PKG_ID)/fbsd
+	cd $(PKG_ID)/fbsd && ../node_package/rebar -v create \
+                              template_dir=../node_package/priv/templates \
+                              template_vars=../$(PKG_VARS_CONFIG) template=fbsd
+	$(MAKE) -C $(PKG_ID) -f fbsd/Makefile

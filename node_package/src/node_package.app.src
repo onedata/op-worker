@@ -1,0 +1,10 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ft=erlang ts=4 sw=4 et
+
+{application, node_package,
+ [{description, "RPM/Debian/Solaris packaging templates for Erlang Nodes"},
+  {vsn, git},
+  {modules, []},
+  {registered, []},
+  {applications, [kernel, stdlib]}
+]}.
