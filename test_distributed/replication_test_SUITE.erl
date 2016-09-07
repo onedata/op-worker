@@ -1064,7 +1064,7 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     ModelConfig = ?rpc(file_meta, model_init, []),
     FM_SL = ModelConfig#model_config.store_level,
     {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FM_SL, file_meta, Dir1Uuid]),
-    ok = ?rpc(datastore, delete, [FM_SL, file_meta, Dir1Uuid]),
+    ok = ?rpc(datastore, delete, [FM_SL, file_meta, Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
     timer:sleep(1000), % wait for posthook that deletes file_consistency record
 
     %when

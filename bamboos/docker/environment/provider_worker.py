@@ -99,7 +99,7 @@ class ProviderWorkerConfigurator:
         return 1024
 
     def couchbase_buckets(self):
-        return {"default": 512}
+        return {"default": 400, "nosync": 300}
 
     def app_name(self):
         return "op_worker"

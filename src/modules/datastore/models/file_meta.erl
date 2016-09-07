@@ -50,6 +50,8 @@
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 -export([hidden_file_name/1]).
 
+-export([bucket_override/1]).
+
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
@@ -324,7 +326,7 @@ get_child(Doc, Name) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true).
+        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1087,3 +1089,6 @@ is_hidden(FileName) ->
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
         _ -> false
     end.
+
+bucket_override(_) ->
+    <<"default">>.

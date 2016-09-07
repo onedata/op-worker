@@ -27,7 +27,7 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
+-define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
 -define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
@@ -401,7 +401,7 @@ queue_push(QueueKey, #change{seq = Until, doc = #document{key = ChangeKey}} = Ch
                     ChangeKey /= Key
                 end, Batch0#batch.changes),
             ?info("Reduction ~p", [{length(FilteredChanges), length(Batch0#batch.changes)}]),
-            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = max(Until, Since)},
+            Batch = Batch0#batch{changes = [Change | FilteredChanges], until = max(Until, Since)},
             UntilToSet = max(Batch0#batch.until, Until),
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
                 until = queue_calculate_until(UntilToSet, Queue1)}
@@ -485,8 +485,8 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 
 forign_links_get(ModelConfig, Key) ->
     case ets:lookup(doc_cache, Key) of
-        _ ->
-            case couchdb_datastore_driver:get(ModelConfig, Key) of
+        [] ->
+            case couchdb_datastore_driver:get(ModelConfig, <<"nosync">>, Key) of
                 {ok, Doc = #document{key = Key}} ->
                     ets:insert_new(doc_cache, {Key, Doc}),
                     {ok, Doc};
@@ -500,7 +500,7 @@ forign_links_get(ModelConfig, Key) ->
 
 forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewRevNum, _}}) ->
     ?info("REV VS ~p", [{OldRevNum, NewRevNum}]),
-    case couchdb_datastore_driver:force_save(ModelConfig, Doc) of
+    case couchdb_datastore_driver:force_save(ModelConfig, <<"nosync">>, Doc) of
         {ok, _} ->
             case OldRevNum of
                 _ when OldRevNum > NewRevNum ->
@@ -521,6 +521,7 @@ forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewR
             end,
             Ret;
         Error ->
+            ?error("forign_links_save error ~p", [Error]),
             Error
     end.
 
@@ -573,6 +574,7 @@ apply_changes(SpaceId,
                     {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = forign_links_save(ModelConfig, OldRev, Doc),
 %%                    {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = couchdb_datastore_driver:get(ModelConfig, Key),
                     {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
+                    ?info("DIFF ~p", [{Origin, MainDocKey, AddedMap, DeletedMap}]),
                     dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
                     lists:foreach(fun(LName) ->
                         caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName),
@@ -675,13 +677,7 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
         end
     end,
 
-    DBSyncPid = whereis(?MODULE),
-    case self() of
-        DBSyncPid ->
-            DoUpdate();
-        _ ->
-            datastore:run_transaction(dbsync_state, term_to_binary(Key), DoUpdate)
-    end.
+    datastore:run_transaction(dbsync_state, term_to_binary(Key), DoUpdate).
 
 
 %%--------------------------------------------------------------------

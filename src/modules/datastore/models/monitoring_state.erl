@@ -114,7 +114,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(monitoring_state_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(monitoring_state_bucket, [], ?DISK_ONLY_LEVEL)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc

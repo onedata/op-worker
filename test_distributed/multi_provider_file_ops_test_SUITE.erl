@@ -170,7 +170,7 @@ concurrent_create_test(Config) ->
 
 db_sync_test(Config) ->
     % TODO change timeout after VFS-2197
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 100, 10, 100).
+    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 50, 10, 100).
 %%synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
 
 proxy_test1(Config) ->

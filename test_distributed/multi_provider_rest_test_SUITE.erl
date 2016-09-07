@@ -416,6 +416,7 @@ replicate_file_by_id(Config) ->
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
+    ct:print("~p", [DecodedBody]),
     assertLists(
         [
             [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],
