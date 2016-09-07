@@ -495,10 +495,13 @@ apply_changes(SpaceId,
         case Value of
             #links{} ->
                 % TODO - work only on local tree (after refactoring of link_utils)
-%%                lists:foreach(fun(LName) ->
-%%                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
-%%                end, maps:keys(Value#links.link_map));
-                caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all);
+                OldLinkMap = case couchdb_datastore_driver:get_link_doc(ModelConfig, Key) of
+                                 {ok, #document{value = #links{link_map = OLM}}} -> OLM;
+                                 {error, {not_found, _}} -> #{}
+                             end,
+                lists:foreach(fun(LName) ->
+                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
+                end, maps:keys(maps:merge(Value#links.link_map, OldLinkMap)));
             _ ->
                 ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
         end,
