@@ -94,14 +94,14 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
     ctx = Ctx, definition = #event_stream_definition{event_handler = Handler},
     session_id = SessId, stream_id = StmId} = State) ->
     try
-        Start = os:timestamp(),
+        Start = erlang:monotonic_time(milli_seconds),
         EvtsList = maps:values(Evts),
         case {Force, EvtsList} of
             {true, _} -> Handler(EvtsList, Ctx);
             {false, []} -> ok;
             {_, _} -> Handler(EvtsList, Ctx)
         end,
-        Duration = timer:now_diff(os:timestamp(), Start) div 1000,
+        Duration = erlang:monotonic_time(milli_seconds) - Start,
         ?debug("Execution of handler on events ~p in event stream ~p and session
         ~p took ~p milliseconds", [EvtsList, StmId, SessId, Duration])
     catch

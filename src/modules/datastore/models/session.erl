@@ -51,9 +51,8 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(#document{value = Sess} = Document) ->
-    Timestamp = os:timestamp(),
     datastore:save(?STORE_LEVEL, Document#document{value = Sess#session{
-        accessed = Timestamp
+        accessed = erlang:system_time(seconds)
     }}).
 
 %%--------------------------------------------------------------------
@@ -64,11 +63,15 @@ save(#document{value = Sess} = Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) when is_map(Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{accessed => os:timestamp()});
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{
+        accessed => erlang:system_time(seconds)
+    });
 update(Key, Diff) when is_function(Diff) ->
     NewDiff = fun(Sess) ->
         case Diff(Sess) of
-            {ok, NewSess} -> {ok, NewSess#session{accessed = os:timestamp()}};
+            {ok, NewSess} -> {ok, NewSess#session{
+                accessed = erlang:system_time(seconds)
+            }};
             {error, Reason} -> {error, Reason}
         end
     end,
@@ -81,9 +84,8 @@ update(Key, Diff) when is_function(Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(#document{value = Sess} = Document) ->
-    Timestamp = os:timestamp(),
     datastore:create(?STORE_LEVEL, Document#document{value = Sess#session{
-        accessed = Timestamp
+        accessed = erlang:system_time(seconds)
     }}).
 
 %%--------------------------------------------------------------------
