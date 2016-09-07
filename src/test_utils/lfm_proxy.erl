@@ -401,7 +401,7 @@ rm_recursive(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()]) -> {ok, #{}}.
+-spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()]) -> {ok, maps:map()}.
 get_metadata(Worker, SessionId, FileKey, Type, Names) ->
         exec(Worker,
         fun(Host) ->
@@ -410,7 +410,7 @@ get_metadata(Worker, SessionId, FileKey, Type, Names) ->
             Host ! {self(), Result}
         end).
 
--spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), #{}, [binary()]) -> ok.
+-spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), maps:map(), [binary()]) -> ok.
 set_metadata(Worker, SessionId, FileKey, Type, Value, Names) ->
         exec(Worker,
         fun(Host) ->

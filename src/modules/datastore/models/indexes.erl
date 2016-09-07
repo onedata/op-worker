@@ -120,7 +120,7 @@ change_index_function(UserId, IndexId, Function) ->
 %% Get all indexes from db, with given space id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_all_indexes(onedata_user:id()) -> {ok, #{}} | {error, any()}.
+-spec get_all_indexes(onedata_user:id()) -> {ok, maps:map()} | {error, any()}.
 get_all_indexes(UserId) ->
     case indexes:get(UserId) of
         {ok, #document{value = #indexes{value = Indexes}}} ->

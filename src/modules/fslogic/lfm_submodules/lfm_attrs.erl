@@ -261,7 +261,7 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), logical_file_manager:file_key(), binary(), [binary()]) ->
-    {ok, #{}} | logical_file_manager:error_reply().
+    {ok, maps:map()} | logical_file_manager:error_reply().
 get_metadata(SessId, FileKey, Type, Names) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),

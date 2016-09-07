@@ -47,7 +47,7 @@
 %% @equiv get_json_metadata(FileUuid, []).
 %%--------------------------------------------------------------------
 -spec get_json_metadata(file_meta:uuid()) ->
-    {ok, #{}} | datastore:get_error().
+    {ok, maps:map()} | datastore:get_error().
 get_json_metadata(FileUuid) ->
     get_json_metadata(FileUuid, []).
 
@@ -65,7 +65,7 @@ get_json_metadata(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_json_metadata(file_meta:uuid(), [binary()]) ->
-    {ok, #{}} | datastore:get_error().
+    {ok, maps:map()} | datastore:get_error().
 get_json_metadata(FileUuid, Names) ->
     case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
@@ -78,7 +78,7 @@ get_json_metadata(FileUuid, Names) ->
 %%--------------------------------------------------------------------
 %% @equiv set_json_metadata(FileUuid, Json, []).
 %%--------------------------------------------------------------------
--spec set_json_metadata(file_meta:uuid(), #{}) ->
+-spec set_json_metadata(file_meta:uuid(), maps:map()) ->
     {ok, file_meta:uuid()} | datastore:get_error().
 set_json_metadata(FileUuid, Json) ->
     set_json_metadata(FileUuid, Json, []).
@@ -96,7 +96,7 @@ set_json_metadata(FileUuid, Json) ->
 %% set_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
 %%    meta: 'new_value'
 %%--------------------------------------------------------------------
--spec set_json_metadata(file_meta:uuid(), #{}, [binary()]) ->
+-spec set_json_metadata(file_meta:uuid(), maps:map(), [binary()]) ->
     {ok, file_meta:uuid()} | datastore:get_error().
 set_json_metadata(FileUuid, JsonToInsert, Names) ->
     ToCreate = #document{key = FileUuid, value = #custom_metadata{

@@ -449,7 +449,7 @@ handle_proxyio_request(_CTX, Req) ->
 %% Processes write events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_write_events(Evts :: [event:event()], Ctx :: #{}) ->
+-spec handle_write_events(Evts :: [event:event()], Ctx :: maps:map()) ->
     [ok | {error, Reason :: term()}].
 handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(Ev) ->
@@ -510,7 +510,7 @@ handle_write_event(Event, SessId) ->
 %% Processes read events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_read_events(Evts :: [event:event()], Ctx :: #{}) ->
+-spec handle_read_events(Evts :: [event:event()], Ctx :: maps:map()) ->
     [ok | {error, Reason :: term()}].
 handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
     lists:map(fun(Ev) ->

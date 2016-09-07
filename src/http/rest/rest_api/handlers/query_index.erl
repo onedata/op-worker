@@ -36,28 +36,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, query_index}
@@ -70,7 +70,7 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc This method returns the list of files which match the query on a predefined index.
 %%--------------------------------------------------------------------
--spec query_index(req(), #{}) -> {term(), req(), #{}}.
+-spec query_index(req(), maps:map()) -> {term(), req(), maps:map()}.
 query_index(Req, State) ->
     {StateWithId, ReqWithId} = validator:parse_id(Req, State),
     {StateWithBbox, ReqWithBbox} = validator:parse_bbox(ReqWithId, StateWithId),
@@ -96,7 +96,7 @@ query_index(Req, State) ->
 %% Convert Request parameters to couchdb view query options
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_options(#{} | list()) -> list().
+-spec prepare_options(maps:map() | list()) -> list().
 prepare_options(Map) when is_map(Map) ->
     prepare_options(maps:to_list(Map));
 prepare_options([]) ->

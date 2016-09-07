@@ -51,7 +51,7 @@
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
     proxy_via :: session:id() | undefined,
-    response_map = #{} :: #{},
+    response_map = #{} :: maps:map(),
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
     open_files = sets:new() :: sets:set(file_meta:uuid()),
@@ -204,7 +204,7 @@
 
 %% Model that holds state entries for DBSync worker
 -record(dbsync_batches, {
-    batches = #{} :: #{}
+    batches = #{} :: maps:map()
 }).
 
 %% Model that holds files created by root, whose owner needs to be changed when
@@ -246,7 +246,7 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: space_info:id(),
-    value = #{} :: #{}
+    value = #{} :: maps:map()
 }).
 
 %% Model that holds database views

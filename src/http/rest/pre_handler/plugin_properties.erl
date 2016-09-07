@@ -43,7 +43,7 @@ fill_with_default(HandlerDesc) ->
 %% Sets key to default value in map if it's not present there.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_if_empty(term(), #{}, term()) -> #{}.
+-spec fill_if_empty(term(), maps:map(), term()) -> maps:map().
 fill_if_empty(Key, Map, Default) ->
     case maps:is_key(Key, Map) of
         false ->

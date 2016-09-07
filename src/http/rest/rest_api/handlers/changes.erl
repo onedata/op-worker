@@ -42,7 +42,7 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
     gen_changes:stop(Stream),
     Pid ! {Ref, stream_ended};
@@ -54,21 +54,21 @@ terminate(_, _, #{}) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, get_space_changes}
@@ -87,7 +87,7 @@ content_types_provided(Req, State) ->
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
 %% @param attribute Type of attribute to query for.
 %%--------------------------------------------------------------------
--spec get_space_changes(req(), #{}) -> {term(), req(), #{}}.
+-spec get_space_changes(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_space_changes(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_timeout(Req2, State2),
@@ -111,7 +111,7 @@ get_space_changes(Req, State) ->
 %% Init couchbeam changes stream
 %% @end
 %%--------------------------------------------------------------------
--spec init_stream(State :: #{}) -> #{}.
+-spec init_stream(State :: maps:map()) -> maps:map().
 init_stream(State = #{last_seq := Since}) ->
     ?info("[ changes ]: Starting stream ~p", [Since]),
     Ref = make_ref(),
@@ -126,7 +126,7 @@ init_stream(State = #{last_seq := Since}) ->
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_loop(function(), #{}) -> ok | no_return().
+-spec stream_loop(function(), maps:map()) -> ok | no_return().
 stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := SpaceId}) ->
     receive
         {Ref, stream_ended} ->

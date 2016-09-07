@@ -26,7 +26,7 @@
 %% Find sub-json in json tree
 %% @end
 %%--------------------------------------------------------------------
--spec find(Json :: #{}, [binary()]) -> #{} | no_return().
+-spec find(Json :: maps:map(), [binary()]) -> maps:map() | no_return().
 find(Json, []) ->
     Json;
 find(Json, [_Name | _Rest]) when not is_map(Json) ->
@@ -44,7 +44,7 @@ find(Json, [Name | Rest]) ->
 %% Insert sub-json to json tree
 %% @end
 %%--------------------------------------------------------------------
--spec insert(Json :: #{} | undefined, JsonToInsert :: #{}, [binary()]) -> #{} | no_return().
+-spec insert(Json :: maps:map() | undefined, JsonToInsert :: maps:map(), [binary()]) -> maps:map() | no_return().
 insert(_Json, JsonToInsert, []) ->
     JsonToInsert;
 insert(undefined, JsonToInsert, [Name | Rest]) ->

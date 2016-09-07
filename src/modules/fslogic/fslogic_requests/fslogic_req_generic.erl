@@ -556,7 +556,7 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
 %% Get metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()]) -> {ok, #{}}.
+-spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()]) -> {ok, maps:map()}.
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names) ->
     case custom_metadata:get_json_metadata(FileUuid, Names) of
@@ -578,7 +578,7 @@ get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _) ->
 %% Set metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), #{}, [binary()]) -> ok.
+-spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), maps:map(), [binary()]) -> ok.
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Value, Names) ->
     {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
