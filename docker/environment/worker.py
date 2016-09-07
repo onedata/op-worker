@@ -12,10 +12,6 @@ import os
 from . import common, docker, riak, couchbase, dns, cluster_manager
 from timeouts import *
 
-# mounting point for op-worker-node docker
-DOCKER_BINDIR_PATH = '/root/build'
-
-
 def cluster_domain(instance, uid):
     """Formats domain for a cluster."""
     return common.format_hostname(instance, uid)
@@ -73,6 +69,8 @@ def _node_up(image, bindir, dns_servers, config, db_node_mappings, logdir,
     (name, sep, hostname) = node_name.partition('@')
     (_, _, domain) = hostname.partition('.')
 
+    bindir = os.path.abspath(bindir)
+
     command = '''set -e
 mkdir -p /root/bin/node/log/
 bindfs --create-for-user={uid} --create-for-group={gid} /root/bin/node/log /root/bin/node/log
@@ -81,11 +79,13 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 EOF
 {mount_commands}
 {pre_start_commands}
+ln -s {bindir} /root/build
 /root/bin/node/bin/{executable} console'''
 
     mount_commands = common.mount_nfs_command(config, storages_dockers)
     pre_start_commands = configurator.pre_start_commands(domain)
     command = command.format(
+        bindir=bindir,
         gen_dev_args=json.dumps({configurator.app_name(): config}),
         mount_commands=mount_commands,
         pre_start_commands=pre_start_commands,
@@ -94,7 +94,7 @@ EOF
         executable=configurator.app_name()
     )
 
-    volumes = ['/root/bin', (bindir, DOCKER_BINDIR_PATH, 'ro')]
+    volumes = ['/root/bin', (bindir, bindir, 'ro')]
     volumes += configurator.extra_volumes(config, bindir, domain,
                                           storages_dockers)
 
@@ -110,7 +110,7 @@ EOF
         detach=True,
         interactive=True,
         tty=True,
-        workdir=DOCKER_BINDIR_PATH,
+        workdir=bindir,
         volumes=volumes,
         dns_list=dns_servers,
         privileged=True,
