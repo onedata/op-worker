@@ -1,0 +1,10 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%%
+{variables, [
+             {package_name, "package_name"},
+             {package_install_name, "package_install_name"},
+             {package_install_user, "package_install_user"}
+             ]
+}.
+{template, "Makefile", "Makefile"}.
+{template, "vars.config", "vars.config"}.
