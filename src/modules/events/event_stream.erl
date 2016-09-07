@@ -93,16 +93,22 @@ start_link(SessType, EvtMan, Sub, SessId) ->
 execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
     ctx = Ctx, definition = #event_stream_definition{event_handler = Handler},
     session_id = SessId, stream_id = StmId}) ->
-    Start = os:timestamp(),
-    EvtsList = maps:values(Evts),
-    case {Force, EvtsList} of
-        {true, _} -> Handler(EvtsList, Ctx);
-        {false, []} -> ok;
-        {_, _} -> Handler(EvtsList, Ctx)
-    end,
-    Duration = timer:now_diff(os:timestamp(), Start) div 1000,
-    ?debug("Execution of handler on events ~p in event stream ~p and session
-    ~p took ~p milliseconds", [EvtsList, StmId, SessId, Duration]);
+    try
+        Start = os:timestamp(),
+        EvtsList = maps:values(Evts),
+        case {Force, EvtsList} of
+            {true, _} -> Handler(EvtsList, Ctx);
+            {false, []} -> ok;
+            {_, _} -> Handler(EvtsList, Ctx)
+        end,
+        Duration = timer:now_diff(os:timestamp(), Start) div 1000,
+        ?debug("Execution of handler on events ~p in event stream ~p and session
+        ~p took ~p milliseconds", [EvtsList, StmId, SessId, Duration])
+    catch
+        Error:Reason ->
+            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
+                [?MODULE, State, Error, Reason])
+    end;
 execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
     MonitorRef = monitor(process, Pid),
     receive

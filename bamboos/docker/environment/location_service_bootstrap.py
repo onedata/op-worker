@@ -23,7 +23,7 @@ def _node_up(image, bin_oz, config, name, uid, logdir=None):
         volumes.extend([(logdir, container_logs_root, 'rw')])
 
     cmd = '''mkdir {container_logs_root}/{hostname} && \
-    node /root/bin/nodejs/location-service/start.js  -vvvv -p {port} -h {hostname} \
+    node /root/bin/lib/location-service/start.js  -vvvv -p {port} -h {hostname} \
     | tee {container_logs_root}/{hostname}/debug.log'''.format(
         container_logs_root=container_logs_root,
         hostname=hostname,
