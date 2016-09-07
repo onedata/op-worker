@@ -921,7 +921,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
         case Acc + 1 >= S of
             true ->
                 #batch{until = U} = maps:get(S, Batches),
-                U;
+                max(U, Acc);
             _ -> Acc
         end
     end, CurrentUntil, SortedKeys),
