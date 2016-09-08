@@ -310,14 +310,16 @@ execute_event_handler(Force, #state{stream_id = StmId, session_id = SessId,
     } = StmDef, ctx = Ctx} = State) ->
     ?debug("Executing event handler on events ~p in event stream ~p and session ~p",
         [Evts, StmId, SessId]),
-    try {Force, maps:values(Evts)} of
-        {true, EvtsList} -> Handler(EvtsList, Ctx);
-        {false, []} -> ok;
-        {_, EvtsList} -> Handler(EvtsList, Ctx)
+    try
+        case {Force, maps:values(Evts)} of
+            {true, EvtsList} -> Handler(EvtsList, Ctx);
+            {false, []} -> ok;
+            {_, EvtsList} -> Handler(EvtsList, Ctx)
+        end
     catch
         Error:Reason ->
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
-                              [?MODULE, State, Error, Reason])
+                [?MODULE, State, Error, Reason])
     end,
     State#state{
         events = #{},

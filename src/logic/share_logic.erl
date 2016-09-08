@@ -49,10 +49,9 @@ get(Auth, ShareId) ->
 create(Auth, ShareId, Name, ParentSpaceId, ShareFileGuid, FileUuid) ->
     Parameters = [
         {<<"name">>, Name},
-        {<<"root_file_id">>, ShareFileGuid},
-        {<<"parent_space">>, ParentSpaceId}
+        {<<"root_file_id">>, ShareFileGuid}
     ],
-    case oz_spaces:create_share(Auth, ShareId, Parameters) of
+    case oz_spaces:create(Auth, ShareId, ParentSpaceId, Parameters) of
         {ok, _} ->
             file_meta:add_share(FileUuid, ShareId);
         Error ->
