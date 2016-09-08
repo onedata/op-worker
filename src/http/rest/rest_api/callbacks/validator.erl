@@ -17,6 +17,7 @@
 
 -define(ALLOWED_ATTRIBUTES, [<<"mode">>, undefined]).
 -define(DEFAULT_EXTENDED, <<"false">>).
+-define(DEFAULT_INHERITED, <<"false">>).
 
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
 
@@ -28,13 +29,13 @@
 
 %% API
 -export([malformed_request/2, parse_path/2,
-    parse_id/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
+    parse_id/2, parse_objectid/2, parse_attribute/2, parse_extended/2, parse_attribute_body/2,
     parse_provider_id/2, parse_callback/2, parse_space_id/2, parse_user_id/2,
     parse_timeout/2, parse_last_seq/2, parse_offset/2, parse_dir_limit/2,
     parse_status/2, parse_metadata_type/2, parse_name/2, parse_query_space_id/2,
     parse_function/2, parse_bbox/2, parse_descending/2, parse_endkey/2, parse_key/2,
     parse_keys/2, parse_skip/2, parse_stale/2, parse_limit/2, parse_inclusive_end/2,
-    parse_startkey/2, parse_filter/2, parse_filter_type/2]).
+    parse_startkey/2, parse_filter/2, parse_filter_type/2, parse_inherited/2]).
 
 %%%===================================================================
 %%% API
@@ -74,6 +75,22 @@ parse_path(Req, State) ->
 parse_id(Req, State) ->
     {Id, NewReq} = cowboy_req:binding(id, Req),
     {State#{id => Id}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's object id, converts it to uuid and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_objectid(cowboy_req:req(), #{}) ->
+    {#{id => binary()}, cowboy_req:req()}.
+parse_objectid(Req, State) ->
+    {Id, NewReq} = cowboy_req:binding(id, Req),
+    case catch cdmi_id:objectid_to_uuid(Id) of
+        {ok, Guid} ->
+            {State#{id => Guid}, NewReq};
+        Error ->
+            throw(?ERROR_INVALID_OBJECTID)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -133,10 +150,10 @@ parse_attribute(Req, State) ->
 parse_attribute_body(Req, State = #{extended := Extended}) ->
     {ok, Body, Req2} = cowboy_req:body(Req),
 
-    Json = json_utils:decode(Body),
+    Json = json_utils:decode_map(Body),
     case {
-        proplists:get_value(<<"name">>, Json),
-        proplists:get_value(<<"value">>, Json),
+        maps:get(<<"name">>, Json, undefined),
+        maps:get(<<"value">>, Json, undefined),
         Extended
     } of
         {undefined, _, _} ->
@@ -178,8 +195,14 @@ parse_provider_id(Req, State) ->
 parse_callback(Req, State) ->
     {ok, Body, NewReq} = cowboy_req:body(Req),
 
-    Json = json_utils:decode(Body),
-    Callback = proplists:get_value(<<"url">>, Json),
+    Callback =
+        case Body of
+            <<"">> ->
+                undefined;
+            _ ->
+                Json = json_utils:decode_map(Body),
+                maps:get(<<"url">>, Json)
+        end,
     {State#{callback => Callback}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -475,6 +498,23 @@ parse_filter_type(Req, State) ->
     {Val, NewReq} = cowboy_req:qs_val(<<"filter_type">>, Req),
     {State#{filter_type => Val}, NewReq}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves request's inherited param and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_inherited(cowboy_req:req(), #{}) ->
+    {#{inherited => binary()}, cowboy_req:req()}.
+parse_inherited(Req, State) ->
+    {Inherited, NewReq} = cowboy_req:qs_val(<<"inherited">>, Req, ?DEFAULT_EXTENDED),
+    case Inherited of
+        <<"true">> ->
+            {State#{inherited => true}, NewReq};
+        <<"false">> ->
+            {State#{inherited => false}, NewReq};
+        _ ->
+            throw(?ERROR_INVALID_INHERITED_FLAG)
+    end.
 
 %%%===================================================================
 %%% Internal functions

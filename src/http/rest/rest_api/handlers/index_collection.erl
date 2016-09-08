@@ -168,6 +168,8 @@ create_index(Req, State) ->
         _ ->
             ok
     end,
+    space_membership:check_with_user(UserId, SpaceId),
+
     {ok, Id} = indexes:add_index(UserId, Name, Function, SpaceId),
 
     {{true, <<"/api/v3/oneprovider/index/", Id/binary>>}, Req3, State3}.
