@@ -585,17 +585,11 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
             NewValue ->
                 ok;
             _ ->
-                state_put(Key, NewValue)
+                dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = NewValue}})
         end
     end,
 
-    DBSyncPid = whereis(?MODULE),
-    case self() of
-        DBSyncPid ->
-            DoUpdate();
-        _ ->
-            critical_section:run([dbsync_state, term_to_binary(Key)], DoUpdate)
-    end.
+    critical_section:run([dbsync_state, term_to_binary(Key)], DoUpdate).
 
 
 %%--------------------------------------------------------------------
