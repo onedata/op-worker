@@ -160,7 +160,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec get(SpaceId :: binary(), UserId :: onedata_user:id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get(SpaceId, ?ROOT_USER_ID) ->
+get(SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
     case space_info:get(SpaceId) of
         {ok, Doc} -> {ok, Doc};
         {error, Reason} -> {error, Reason}
@@ -200,8 +200,8 @@ get_or_fetch(SessionId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_or_fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
     UserId :: onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) ->
-    case get(SpaceId, ?ROOT_USER_ID) of
+get_or_fetch(Auth, SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
+    case get(SpaceId, SpecialUser) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Auth, SpaceId);
         {error, Reason} -> {error, Reason}

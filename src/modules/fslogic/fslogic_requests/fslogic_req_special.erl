@@ -64,7 +64,7 @@ mkdir(CTX, ParentFile, Name, Mode) ->
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
-read_dir(#fslogic_ctx{space_id = SpaceId} = CTX, File, Offset, Size) ->
+read_dir(#fslogic_ctx{space_id = SpaceId, share_id = ShareId} = CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),
@@ -98,7 +98,7 @@ read_dir(#fslogic_ctx{space_id = SpaceId} = CTX, File, Offset, Size) ->
             };
         _ ->
             #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:uuid_to_guid(UUID, SpaceId)}
+                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId)}
                     || CL = #child_link{uuid = UUID} <- ChildLinks]}}
     end.
 

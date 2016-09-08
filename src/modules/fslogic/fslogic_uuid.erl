@@ -22,7 +22,7 @@
 -export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1, unpack_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1]).
 -export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
--export([guid_to_share_guid/2, unpack_share_guid/1]).
+-export([uuid_to_share_guid/3, guid_to_share_guid/2, unpack_share_guid/1]).
 
 %%%===================================================================
 %%% API
@@ -181,6 +181,18 @@ uuid_to_phantom_uuid(FileUUID) ->
 phantom_uuid_to_uuid(PhantomUUID) ->
     {phantom, FileUUID} = binary_to_term(http_utils:base64url_decode(PhantomUUID)),
     FileUUID.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convert Guid and share id to share guid (allowing for guest read)
+%% @end
+%%--------------------------------------------------------------------
+-spec uuid_to_share_guid(file_meta:uuid(), space_info:id(), share_info:id()) ->
+    share_info:share_guid().
+uuid_to_share_guid(FileUUID, SpaceId, undefined) ->
+    uuid_to_guid(FileUUID, SpaceId);
+uuid_to_share_guid(FileUUID, SpaceId, ShareId) ->
+    http_utils:base64url_encode(term_to_binary({share_guid, FileUUID, SpaceId, ShareId})).
 
 %%--------------------------------------------------------------------
 %% @doc

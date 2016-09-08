@@ -216,8 +216,12 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
         false -> throw(?EACCES)
     end;
 validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, _ShareId) ->
-    validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, undefined) orelse
-        AccessType =:= read orelse AccessType =:= exec.
+    case AccessType =:= read orelse AccessType =:= exec of
+        true ->
+            ok;
+        false ->
+            validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, undefined)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Checks whether given user has permission to see given scope file.

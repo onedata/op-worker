@@ -82,6 +82,8 @@ create(Document) ->
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(?ROOT_USER_ID) ->
     {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
+get(?GUEST_USER_ID) ->
+    {ok, #document{key = ?GUEST_USER_ID, value = #onedata_user{name = <<"nobody">>}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 

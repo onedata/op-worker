@@ -94,27 +94,21 @@ expand_access_definitions([root | _Rest], _UserId, _ShareId, _Inputs, _FileMap, 
     throw(?EACCES);
 expand_access_definitions([{traverse_ancestors, ItemDefinition} | Rest], UserId, ShareId, Inputs, FileMap, AclMap, UserMap) ->
     {User, NewUserMap} = get_user(UserId, UserMap),
-    {ExpandedTraverseDefs, NFM} = % if file is a scope check scope access also
-        case (catch get_file(ItemDefinition, FileMap, UserId, Inputs)) of
-            {#document{value = #file_meta{is_scope = true}} = File, NewFileMap} ->
-                {expand_traverse_ancestors_check(File, User, ShareId, AclMap), NewFileMap};
-            _ ->
-                {ParentFile, NewFileMap} = get_file({parent, ItemDefinition}, FileMap, UserId, Inputs),
-                {expand_traverse_ancestors_check(ParentFile, User, ShareId, AclMap), NewFileMap}
-        end,
-    ExpandedTraverseDefs ++ expand_access_definitions(Rest, UserId, ShareId, Inputs, NFM, AclMap, NewUserMap);
+    {SubjectDoc, NewFileMap} = (catch get_file(ItemDefinition, FileMap, UserId, Inputs)),
+    expand_traverse_ancestors_check(SubjectDoc, User, ShareId, AclMap)
+    ++ expand_access_definitions(Rest, UserId, ShareId, Inputs, NewFileMap, AclMap, NewUserMap);
 expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, ShareId, Inputs, FileMap, AclMap, UserMap) ->
     % TODO - do not get document when not needed
     {File = #document{key = Key}, NewFileMap} = get_file(ItemDefinition, FileMap, UserId, Inputs),
     case permissions_cache:check_permission({CheckType, UserId, ShareId, Key}) of
         {ok, ok} ->
-            expand_access_definitions(Rest, UserId, ShareId, Inputs, FileMap, AclMap, UserMap);
+            expand_access_definitions(Rest, UserId, ShareId, Inputs, NewFileMap, AclMap, UserMap);
         {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
             {Acl, NewAclMap} = get_acl(Key, AclMap),
             {User, NewUserMap} = get_user(UserId, UserMap),
-            [{CheckType, File, User, Acl} | expand_access_definitions(Rest, UserId, ShareId, Inputs, NewFileMap, NewAclMap, NewUserMap)]
+            [{CheckType, File, User, ShareId, Acl} | expand_access_definitions(Rest, UserId, ShareId, Inputs, NewFileMap, NewAclMap, NewUserMap)]
     end.
 
 
@@ -150,8 +144,17 @@ resolve_file_entry({parent, Item}, Inputs) ->
 %%--------------------------------------------------------------------
 -spec expand_traverse_ancestors_check(datastore:document(), datastore:document(), share_info:id(), #{}) ->
     [{check_type(), datastore:document(), datastore:document(), share_info:id(), [#accesscontrolentity{}]}].
-expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_meta{type = Type}},
-  UserDoc = #document{key = UserId}, ShareId, AclMap) ->
+expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_meta{type = Type, is_scope = SubjectIsScope}},
+    UserDoc = #document{key = UserId}, ShareId, AclMap) ->
+
+    NewSubjDoc =
+        case SubjectIsScope of
+            true ->
+                SubjDoc;
+            false ->
+                {ok, Doc} = file_meta:get_parent(SubjDoc),
+                Doc
+        end,
     SubjectCheck =
         case Type of
             ?DIRECTORY_TYPE ->
@@ -162,13 +165,13 @@ expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_me
                         throw(?EACCES);
                     _ ->
                         {Acl, _} = get_acl(Uuid, AclMap),
-                        [{?traverse_container, SubjDoc, UserDoc, ShareId, Acl}]
+                        [{?traverse_container, NewSubjDoc, UserDoc, ShareId, Acl}]
                 end;
             _ ->
                 []
         end,
 
-    file_meta:set_link_context(SubjDoc),
+    file_meta:set_link_context(NewSubjDoc),
     {AncestorsCheck, CacheUsed} = expand_ancestors_check(Uuid, [], UserId, UserDoc, ShareId, AclMap),
     case {ShareId, CacheUsed} of
         {undefined, _} ->
@@ -176,10 +179,11 @@ expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_me
         {_, true} ->
             SubjectCheck ++ AncestorsCheck;
         {_, false} ->
+            PotentialShares = [SubjDoc, NewSubjDoc] ++ [Doc || {_, Doc, _, _, _} <- AncestorsCheck],
             IsValidShare = lists:any(
-                fun({?traverse_container, #document{value = #file_meta{shares = Shares}}, _UserDoc, _ShareId, _AncestorAcl}) ->
+                fun(#document{value = #file_meta{shares = Shares}}) ->
                     lists:member(ShareId, Shares)
-                end, AncestorsCheck),
+                end, PotentialShares),
             case IsValidShare of
                 true ->
                     SubjectCheck ++ AncestorsCheck;
@@ -274,13 +278,13 @@ get_user(UserId, Map) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_rule_and_cache_result({term(), FileDoc :: datastore:document() | undefined,
-    UserDoc :: datastore:document(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
-check_rule_and_cache_result({AccessType, FileDoc, UserDoc, _} = Def) ->
+    UserDoc :: datastore:document(), ShareId :: share_info:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
+check_rule_and_cache_result({AccessType, FileDoc, UserDoc, ShareId, _} = Def) ->
     try
         ok = rules:check(Def)
     catch
         _:?EACCES ->
-            permissions_cache:cache_permission({AccessType, get_doc_id(UserDoc), get_doc_id(FileDoc)}, ?EACCES),
+            permissions_cache:cache_permission({AccessType, get_doc_id(UserDoc), ShareId, get_doc_id(FileDoc)}, ?EACCES),
             throw(?EACCES)
     end.
 %%--------------------------------------------------------------------
@@ -290,8 +294,8 @@ check_rule_and_cache_result({AccessType, FileDoc, UserDoc, _} = Def) ->
 %%--------------------------------------------------------------------
 -spec cache_ok_result({term(), FileDoc :: datastore:document() | undefined,
     UserDoc :: datastore:document(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
-cache_ok_result({AccessType, FileDoc, UserDoc, _}) ->
-    permissions_cache:cache_permission({AccessType, get_doc_id(UserDoc), get_doc_id(FileDoc)}, ok).
+cache_ok_result({AccessType, FileDoc, UserDoc, ShareId, _}) ->
+    permissions_cache:cache_permission({AccessType, get_doc_id(UserDoc), ShareId, get_doc_id(FileDoc)}, ok).
 
 %%--------------------------------------------------------------------
 %% @doc

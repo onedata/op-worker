@@ -135,6 +135,8 @@ get_space(FileEntry, UserId) ->
     case UserId of
         ?ROOT_USER_ID ->
             {ok, SpaceDocument};
+        ?GUEST_USER_ID ->
+            {ok, SpaceDocument};
         _ ->
             {ok, Spaces} = user_logic:get_spaces(UserId),
             #document{key = SpaceUUID} = SpaceDocument,

@@ -221,7 +221,8 @@ release(#lfm_handle{file_guid = FileGUID, fslogic_ctx = CTX,
 %%--------------------------------------------------------------------
 -spec fsync(FileHandle :: logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
-fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = ?ROOT_SESS_ID}}) ->
+fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SpecialSession}})
+    when SpecialSession =:= ?ROOT_SESS_ID orelse SpecialSession =:= ?GUEST_SESS_ID ->
     lists:foreach(fun({_, SFMHandle}) ->
         ok = storage_file_manager:fsync(SFMHandle)
     end, maps:values(SFMHandles));

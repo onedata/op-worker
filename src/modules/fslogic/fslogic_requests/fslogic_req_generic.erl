@@ -119,7 +119,7 @@ chown(_, _File, _UserId) ->
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
+get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File) ->
     ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
@@ -137,7 +137,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 % TODO (VFS-2024) - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
                 _:_ -> {?ROOT_POSIX_CTX, undefined}
             end,
-            FinalUID = case  session:get(SessId) of
+            FinalUID = case session:get(SessId) of
                 {ok, #document{value = #session{identity = #user_identity{user_id = UserID}}}} ->
                     UID;
                 _ ->
@@ -145,7 +145,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
-                uuid = fslogic_uuid:uuid_to_guid(UUID, SpaceId),
+                uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};
@@ -447,32 +447,30 @@ check_perms(Ctx, Uuid, rdwr) ->
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(fslogic_worker:ctx(), {guid, fslogic_worker:guid()}) -> #provider_response{}.
+-spec create_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) -> #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}]).
-create_share(Ctx, {guid, Guid}) ->
+create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}) ->
     SessId = fslogic_context:get_session_id(Ctx),
     Auth = session:get_auth(SessId),
     ShareId = datastore_utils:gen_uuid(),
-    {FileUuid, SpaceId} = fslogic_uuid:unpack_guid(Guid),
-    ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
+    ShareGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
     {ok, _} = share_logic:create(Auth, ShareId, <<"share_name">>, SpaceId, ShareGuid, FileUuid), %todo add name to api
 
-    #provider_response{status = ?OK, provider_response = #share{uuid = ShareGuid}}.
+    #provider_response{status = #status{code = ?OK}, provider_response = #share{uuid = ShareGuid}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(fslogic_worker:ctx(), {guid, fslogic_worker:guid()}) -> #provider_response{}.
+-spec remove_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) -> #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}]).
-remove_share(Ctx, {guid, ShareGuid}) ->
+remove_share(Ctx = #fslogic_ctx{space_id = SpaceId, share_id = ShareId}, {uuid, FileUuid}) ->
     SessId = fslogic_context:get_session_id(Ctx),
     Auth = session:get_auth(SessId),
-    {Uuid, SpaceId, ShareId} = fslogic_uuid:unpack_share_guid(ShareGuid),
 
-    share_logic:delete(Auth, SpaceId, ShareId, Uuid),
-    #provider_response{status = ?OK}.
+    share_logic:delete(Auth, SpaceId, ShareId, FileUuid),
+    #provider_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
 %%% Internal functions

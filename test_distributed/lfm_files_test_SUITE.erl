@@ -702,7 +702,7 @@ share_getattr_test(Config) ->
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
     {ok, ShareGuid} = lfm_proxy:create_share(W, SessId, {guid, Guid}),
 
-    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE}},
+    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE, uuid = ShareGuid}},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})).
 
 share_list_test(Config) ->
@@ -715,7 +715,7 @@ share_list_test(Config) ->
     {ok, _Guid2} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/2">>, 8#700),
     {ok, _Guid3} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/3">>, 8#700),
 
-    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid})),
+    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 10)),
     ?assertMatch([{<<_/binary>>, <<"1">>}, {<<_/binary>>, <<"2">>}, {<<_/binary>>, <<"3">>}], Result).
 
 share_read_test(Config) ->
@@ -735,7 +735,7 @@ share_child_getattr_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
-    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/file">>, 8#700),
+    {ok, _} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/file">>, 8#700),
     {ok, ShareGuid} = lfm_proxy:create_share(W, SessId, {guid, Guid}),
     {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
 
@@ -753,7 +753,7 @@ share_child_list_test(Config) ->
     {ok, _Guid3} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/1/3">>, 8#707),
     {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
 
-    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})),
+    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareChildGuid}, 0, 10)),
     ?assertMatch([{<<_/binary>>, <<"2">>}, {<<_/binary>>, <<"3">>}], Result).
 
 share_child_read_test(Config) ->
@@ -791,12 +791,39 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
+init_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test orelse
+    ShareTest =:= create_share_file_test orelse
+    ShareTest =:= share_getattr_test orelse
+    ShareTest =:= share_list_test orelse
+    ShareTest =:= share_read_test orelse
+    ShareTest =:= share_child_getattr_test orelse
+    ShareTest =:= share_child_list_test orelse
+    ShareTest =:= share_child_read_test orelse
+    ShareTest =:= share_permission_denied_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, oz_shares),
+    test_utils:mock_expect(Workers, oz_shares, create, fun(_Auth, ShareId, _SpaceId, _Parameters) -> {ok, ShareId} end),
+    init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+end_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test orelse
+        ShareTest =:= create_share_file_test orelse
+        ShareTest =:= share_getattr_test orelse
+        ShareTest =:= share_list_test orelse
+        ShareTest =:= share_read_test orelse
+        ShareTest =:= share_child_getattr_test orelse
+        ShareTest =:= share_child_list_test orelse
+        ShareTest =:= share_child_read_test orelse
+        ShareTest =:= share_permission_denied_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, oz_shares),
+    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
