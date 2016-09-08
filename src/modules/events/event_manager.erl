@@ -157,12 +157,9 @@ do_handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtSt
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
-            (#events{events = [Event]}, NewProvMap, false) -> %% Request should be handled locally only
-                {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:map(
-                    fun(_, EvtStm) ->
-                        gen_server:cast(EvtStm, Event),
-                        EvtStm
-                    end, EvtStms)}};
+            (#events{events = [#event{stream_id = StmId} = Event]}, NewProvMap, false) -> %% Request should be handled locally only
+                gen_server:cast(maps:get(StmId, EvtStms, undefined), Event),
+                {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = EvtStms}};
             (_, NewProvMap, true) -> %% Request was already handled remotely
                 {noreply, State#state{entry_to_provider_map = NewProvMap}}
         end,
