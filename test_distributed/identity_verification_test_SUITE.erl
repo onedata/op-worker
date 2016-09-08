@@ -166,10 +166,10 @@ init_per_testcase(_Case, Config) ->
     rpc:call(Worker, oz_identities, get_public_key, [provider, <<"special-clear-state-key">>]),
 
     %% clear caches
-    lists:foreach(fun(Worker) ->
-        {ok, Docs} = rpc:call(Worker, cached_identity, list, []),
+    lists:foreach(fun(W) ->
+        {ok, Docs} = rpc:call(W, cached_identity, list, []),
         lists:foreach(fun(#document{key = ID}) ->
-            rpc:call(Worker, cached_identity, delete, [ID])
+            rpc:call(W, cached_identity, delete, [ID])
         end, Docs)
     end, Workers),
 

@@ -82,9 +82,9 @@ all() ->
 
 -define(TIMEOUT, timer:seconds(5)).
 
-user_1_token_header() ->
-    {ok, Srlzd} = token_utils:serialize62(macaroon:create("a", "b", "c")),
-    {<<"X-Auth-Token">>, Srlzd}.
+%%user_1_token_header() ->
+%%    {ok, Srlzd} = token_utils:serialize62(macaroon:create("a", "b", "c")),
+%%    {<<"X-Auth-Token">>, Srlzd}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).

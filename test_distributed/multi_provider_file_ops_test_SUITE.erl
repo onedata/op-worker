@@ -191,6 +191,7 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
+    FileBeg = <<"1234567890abcd">>,
 
     Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -995,7 +996,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     end),
     {File, FileUUID, LocToAns}.
 
-verify_del(Config, {F,  FileUUID, Locations}) ->
+verify_del(Config, {F,  _FileUUID, _Locations}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
 

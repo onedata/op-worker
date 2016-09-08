@@ -29,6 +29,10 @@
 ]).
 
 -define(TEST_CASES, [
+    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test
+]).
+
+-define(PERFORMANCE_TEST_CASES, [
     db_sync_many_ops_test
 ]).
 

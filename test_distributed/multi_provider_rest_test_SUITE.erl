@@ -345,7 +345,7 @@ list_file(Config) ->
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"files/space3/file1">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -359,7 +359,7 @@ list_dir(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"files">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -377,7 +377,7 @@ list_dir_range(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"files?offset=1&limit=1">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -504,7 +504,7 @@ list_spaces(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"spaces">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -522,7 +522,7 @@ get_space(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"spaces/space3">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -554,7 +554,7 @@ set_get_json_metadata(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"key\": \"value\"}")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode(Body),
@@ -581,7 +581,7 @@ set_get_json_metadata_id(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"key\": \"value\"}")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode(Body),
@@ -607,7 +607,7 @@ set_get_rdf_metadata(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/rdf+xml">>}], "some_xml")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=rdf">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
@@ -623,7 +623,7 @@ set_get_rdf_metadata_id(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/rdf+xml">>}], "some_xml")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=rdf">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
