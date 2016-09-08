@@ -139,7 +139,7 @@ handle_cast(#event{} = Evt, #state{stream_id = StmId, session_id = SessId,
     definition = StmDef} = State) ->
     case apply_admission_rule(Evt, StmDef) of
         true ->
-            ?debug("Handling event ~p in event stream ~p and session ~p", 
+            ?debug("Handling event ~p in event stream ~p and session ~p",
                 [Evt, StmId, SessId]),
             {noreply, process_event(Evt, State)};
         false -> {noreply, State}
@@ -310,10 +310,16 @@ execute_event_handler(Force, #state{stream_id = StmId, session_id = SessId,
     } = StmDef, ctx = Ctx} = State) ->
     ?debug("Executing event handler on events ~p in event stream ~p and session ~p",
         [Evts, StmId, SessId]),
-    case {Force, maps:values(Evts)} of
-        {true, EvtsList} -> Handler(EvtsList, Ctx);
-        {false, []} -> ok;
-        {_, EvtsList} -> Handler(EvtsList, Ctx)
+    try
+        case {Force, maps:values(Evts)} of
+            {true, EvtsList} -> Handler(EvtsList, Ctx);
+            {false, []} -> ok;
+            {_, EvtsList} -> Handler(EvtsList, Ctx)
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
+                [?MODULE, State, Error, Reason])
     end,
     State#state{
         events = #{},
