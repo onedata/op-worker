@@ -81,7 +81,7 @@
 -spec start_link(SessType :: session:type(), EvtMan :: pid(), Sub :: #subscription{},
     SessId :: session:id()) -> {ok, Pid :: pid()} | ignore |{error, Reason :: term()}.
 start_link(SessType, EvtMan, Sub, SessId) ->
-    gen_server:start_link(?MODULE, [SessType, EvtMan, Sub, SessId], []).
+    gen_server2:start_link(?MODULE, [SessType, EvtMan, Sub, SessId], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -267,7 +267,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec register_stream(EvtMan :: pid(), StmId :: id()) -> ok.
 register_stream(EvtMan, StmId) ->
-    gen_server:cast(EvtMan, {register_stream, StmId, self()}).
+    gen_server2:cast(EvtMan, {register_stream, StmId, self()}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -277,7 +277,7 @@ register_stream(EvtMan, StmId) ->
 %%--------------------------------------------------------------------
 -spec unregister_stream(EvtMan :: pid(), StmId :: id()) -> ok.
 unregister_stream(EvtMan, StmId) ->
-    gen_server:cast(EvtMan, {unregister_stream, StmId}).
+    gen_server2:cast(EvtMan, {unregister_stream, StmId}).
 
 %%--------------------------------------------------------------------
 %% @private
