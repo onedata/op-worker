@@ -106,11 +106,12 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
     case maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined) of
         undefined ->
             FileUuid = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
+            ShareId = maps:get(?PROXYIO_PARAMETER_SHARE_ID, Parameters),
             {ok, #document{key = SpaceUUID}} =
                 fslogic_spaces:get_space({uuid, FileUuid}, UserId),
             {ok, Storage} = storage:get(StorageId),
             SFMHandle =
-                storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
+                storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId, ShareId),
             storage_file_manager:open(SFMHandle, OpenMode);
         HandleId ->
             session:get_handle(SessionId, HandleId)

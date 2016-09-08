@@ -175,6 +175,7 @@ create(SessId, Path, Mode) ->
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    CTX2 = #fslogic_ctx{share_id = ShareId} = fslogic_context:set_space_and_share_id(CTX, {guid, FileGUID}),
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
         #get_file_location{flags = OpenType},
         fun(#file_location{provider_id = ProviderId, uuid = FileGUID,
@@ -182,7 +183,7 @@ open(SessId, FileKey, OpenType) ->
             {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID,
-                FileUUID, StorageId, FileId, ProviderId),
+                FileUUID, StorageId, FileId, ShareId, ProviderId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
@@ -190,7 +191,7 @@ open(SessId, FileKey, OpenType) ->
                         provider_id = ProviderId,
                         sfm_handles = maps:from_list([{default,
                             {{StorageId, FileId}, NewSFMHandle}}]),
-                        fslogic_ctx = CTX, file_guid = FileGUID,
+                        fslogic_ctx = CTX2, file_guid = FileGUID,
                         open_mode = OpenType}};
                 {error, Reason} ->
                     {error, Reason}
@@ -403,7 +404,7 @@ get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: logical_file_manager:handle()} |  no_return().
 get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
+    fslogic_ctx = #fslogic_ctx{session_id = SessId, share_id = ShareId}} = Handle,
     Key, SFMHandles, OpenType) ->
     {{StorageId, FileId}, SFMHandle} =
         case maps:get(Key, SFMHandles, undefined) of
@@ -411,7 +412,7 @@ get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_guid =
                 {SID, FID} = Key,
                 {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
                 SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ProviderId),
+                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ShareId, ProviderId),
 
                 case storage_file_manager:open(SFMHandle0, OpenType) of
                     {ok, NewSFMHandle} ->

@@ -54,5 +54,6 @@
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_UUID, <<"file_uuid">>).
+-define(PROXYIO_PARAMETER_SHARE_ID, <<"share_id">>).
 
 -endif.

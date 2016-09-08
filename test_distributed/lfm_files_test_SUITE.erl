@@ -64,16 +64,16 @@
     rm_recursive_test,
     file_gap_test,
     ls_test,
-    ls_with_stats_test
-%%    create_share_dir_test, %todo enable
-%%    create_share_file_test,
-%%    share_getattr_test,
-%%    share_list_test,
-%%    share_read_test,
-%%    share_child_getattr_test,
-%%    share_child_list_test,
-%%    share_child_read_test,
-%%    share_permission_denied_test
+    ls_with_stats_test,
+    create_share_dir_test,
+    create_share_file_test,
+    share_getattr_test,
+    share_list_test,
+    share_read_test,
+    share_child_getattr_test,
+    share_child_list_test,
+    share_child_read_test,
+    share_permission_denied_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [

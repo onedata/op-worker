@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
--export([new_handle/5, new_handle/6]).
+-export([new_handle/5, new_handle/6, new_handle/7]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, symlink/2, link/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
     fsync/1]).
@@ -36,6 +36,14 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc @equiv new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, undefined).
+%%--------------------------------------------------------------------
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
+    Storage :: datastore:document(), FileId :: helpers:file()) ->
+    handle().
+new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
+    new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -46,9 +54,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
-  Storage :: datastore:document(), FileId :: helpers:file()) ->
+  Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: share_info:id()) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
+new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, ShareId) ->
     FSize =
         case FileUUID of
             undefined ->
@@ -68,7 +76,8 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
         provider_id = oneprovider:get_provider_id(),
         is_local = true,
         storage = Storage,
-        file_size = FSize
+        file_size = FSize,
+        share_id = ShareId
     }.
 
 %%--------------------------------------------------------------------
@@ -81,9 +90,9 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
-    StorageId :: storage:id(), FileId :: helpers:file(), oneprovider:id()) ->
+    StorageId :: storage:id(), FileId :: helpers:file(), share_info:id(), oneprovider:id()) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
+new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ShareId, ProviderId) ->
     {IsLocal, Storage, Size} =
         case oneprovider:get_provider_id() of
             ProviderId ->
@@ -107,7 +116,8 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
         is_local = IsLocal,
         storage = Storage,
         storage_id = StorageId,
-        file_size = Size
+        file_size = Size,
+        share_id = ShareId
     }.
 
 %%--------------------------------------------------------------------

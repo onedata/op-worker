@@ -289,7 +289,7 @@ get_file_location_for_rdwr(CTX, File, CreateHandle) ->
 -spec get_file_location_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(),
     helpers:open_mode(), boolean()) ->
     no_return() | #fuse_response{}.
-get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Mode, CreateHandle) ->
+get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = ShareId} = CTX, File, Mode, CreateHandle) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(File),
 
     {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
@@ -301,7 +301,7 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = C
 
     {ok, HandleId} = case (SessId =/= ?ROOT_SESS_ID) andalso CreateHandle of
         true ->
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId, ShareId),
             {ok, Handle} = storage_file_manager:open(SFMHandle, Mode),
             save_handle(SessId, Handle);
         false ->

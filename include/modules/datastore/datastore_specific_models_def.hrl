@@ -71,7 +71,8 @@
     needs_root_privileges :: boolean(),
     is_local = false :: boolean(),
     provider_id :: oneprovider:id(),
-    file_size :: non_neg_integer() %% Available only if file is_local
+    file_size :: non_neg_integer(), %% Available only if file is_local
+    share_id :: share_info:id()
 }).
 
 %% Local, cached version of OZ user
