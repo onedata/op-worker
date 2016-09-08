@@ -50,7 +50,6 @@ get(Auth, ShareId) ->
 create(Auth, ShareId, Name, ParentSpaceId, ShareFileGuid) ->
     Parameters = [
         {<<"name">>, Name},
-        {<<"root_file_id">>, ShareFileGuid},
-        {<<"parent_space">>, ParentSpaceId}
+        {<<"root_file_id">>, ShareFileGuid}
     ],
-    oz_spaces:create_share(Auth, ShareId, Parameters).
+    oz_shares:create(Auth, ShareId, ParentSpaceId, Parameters).

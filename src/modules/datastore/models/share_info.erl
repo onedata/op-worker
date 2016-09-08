@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
+-include_lib("ctool/include/oz/oz_shares.hrl").
 
 %% API
 -export([create_or_update/2, get_or_fetch/2]).
@@ -170,7 +170,7 @@ fetch(Auth, ShareId) ->
         public_url = PublicURL,
         root_file_id = RootFileId,
         parent_space = ParentSpace
-    }} = oz_spaces:get_share_details(Auth, ShareId),
+    }} = oz_shares:get_details(Auth, ShareId),
 
     Doc = #document{key = ShareId, value = #share_info{
         name = Name,
