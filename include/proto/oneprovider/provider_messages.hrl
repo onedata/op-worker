@@ -97,6 +97,7 @@
 }).
 
 -record(create_share, {
+    name :: share_info:name()
 }).
 
 -record(remove_share, {
