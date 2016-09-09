@@ -93,7 +93,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_json(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_json(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     get_json_internal(ReqWithId, StateWithId);
 get_json(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
@@ -107,18 +107,20 @@ get_json_internal(Req, State) ->
     {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
     {StateWithFilterType, ReqWithFilterType} = validator:parse_filter_type(ReqWithMetadataType, StateWithMetadataType),
     {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
+    {StateWithInherited, ReqWithInherited} = validator:parse_inherited(ReqWithFilter, StateWithFilter),
 
-    #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType, filter := Filter} = StateWithFilter,
+    #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType,
+        filter := Filter, inherited := Inherited} = StateWithInherited,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
     FilterList = get_filter_list(FilterType, Filter),
 
-    case onedata_file_api:get_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, FilterList) of
+    case onedata_file_api:get_metadata(Auth, get_file(StateWithInherited), DefinedMetadataType, FilterList, Inherited) of
         {ok, Meta} ->
             Response = jiffy:encode(Meta),
-            {Response, ReqWithFilter, StateWithFilter};
+            {Response, ReqWithInherited, StateWithInherited};
         {error, ?ENOATTR} ->
             Response = jiffy:encode(#{}),
-            {Response, ReqWithFilter, StateWithFilter}
+            {Response, ReqWithInherited, StateWithInherited}
     end.
 
 %%--------------------------------------------------------------------
@@ -127,7 +129,7 @@ get_json_internal(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_rdf(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_rdf(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     get_rdf_internal(ReqWithId, StateWithId);
 get_rdf(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
@@ -144,7 +146,7 @@ get_rdf_internal(Req, State) ->
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"rdf">>),
 
     {ok, Meta} = onedata_file_api:get_metadata(Auth, get_file(StateWithMetadataType),
-        DefinedMetadataType, []),
+        DefinedMetadataType, [], false),
     {Meta, ReqWithMetadataType, StateWithMetadataType}.
 
 %%--------------------------------------------------------------------
@@ -153,7 +155,7 @@ get_rdf_internal(Req, State) ->
 %%--------------------------------------------------------------------
 -spec set_json(req(), maps:map()) -> {term(), req(), maps:map()}.
 set_json(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     set_json_internal(ReqWithId, StateWithId);
 set_json(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
@@ -165,15 +167,19 @@ set_json(Req, State) ->
 -spec set_json_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 set_json_internal(Req, State) ->
     {StateWithMetadataType, ReqWithMetadataType} = validator:parse_metadata_type(Req, State),
-    {ok, Body, FinalReq} = cowboy_req:body(ReqWithMetadataType),
+    {StateWithFilterType, ReqWithFilterType} = validator:parse_filter_type(ReqWithMetadataType, StateWithMetadataType),
+    {StateWithFilter, ReqWithFilter} = validator:parse_filter(ReqWithFilterType, StateWithFilterType),
+    {ok, Body, FinalReq} = cowboy_req:body(ReqWithFilter),
 
     Json = jiffy:decode(Body, [return_maps]),
-    #{auth := Auth, metadata_type := MetadataType} = StateWithMetadataType,
+    #{auth := Auth, metadata_type := MetadataType, filter_type := FilterType,
+        filter := Filter} = StateWithFilter,
     DefinedMetadataType = validate_metadata_type(MetadataType, <<"json">>),
+    FilterList = get_filter_list(FilterType, Filter),
 
-    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithMetadataType), DefinedMetadataType, Json, []),
+    ok = onedata_file_api:set_metadata(Auth, get_file(StateWithFilter), DefinedMetadataType, Json, FilterList),
 
-    {true, FinalReq, StateWithMetadataType}.
+    {true, FinalReq, StateWithFilter}.
 
 %%--------------------------------------------------------------------
 %% '/api/v3/oneprovider/metadata/{path}'
@@ -181,7 +187,7 @@ set_json_internal(Req, State) ->
 %%--------------------------------------------------------------------
 -spec set_rdf(req(), maps:map()) -> {term(), req(), maps:map()}.
 set_rdf(Req, State = #{resource_type := id}) ->
-    {StateWithId, ReqWithId} = validator:parse_id(Req, State),
+    {StateWithId, ReqWithId} = validator:parse_objectid(Req, State),
     set_rdf_internal(ReqWithId, StateWithId);
 set_rdf(Req, State) ->
     {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),

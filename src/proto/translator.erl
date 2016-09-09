@@ -352,14 +352,14 @@ translate_from_protobuf(#'ProviderRequest'{context_guid = ContextGuid,
     provider_request = {_, Record}}) ->
     #provider_request{context_guid = ContextGuid,
         provider_request = translate_from_protobuf(Record)};
-translate_from_protobuf(#'GetXattr'{name = Name}) ->
-    #get_xattr{name = Name};
+translate_from_protobuf(#'GetXattr'{name = Name, inherited = Inherited}) ->
+    #get_xattr{name = Name, inherited = Inherited};
 translate_from_protobuf(#'SetXattr'{xattr = Xattr}) ->
     #set_xattr{xattr = translate_from_protobuf(Xattr)};
 translate_from_protobuf(#'RemoveXattr'{name = Name}) ->
     #remove_xattr{name = Name};
-translate_from_protobuf(#'ListXattr'{}) ->
-    #list_xattr{};
+translate_from_protobuf(#'ListXattr'{inherited = Inherited}) ->
+    #list_xattr{inherited = Inherited};
 translate_from_protobuf(#'GetParent'{}) ->
     #get_parent{};
 translate_from_protobuf(#'GetAcl'{}) ->
@@ -388,8 +388,8 @@ translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
     block = Block}) ->
     #replicate_file{provider_id = ProviderId,
         block = translate_from_protobuf(Block)};
-translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names}) ->
-    #get_metadata{type = Type, names = Names};
+translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names, inherited = Inherited}) ->
+    #get_metadata{type = Type, names = Names, inherited = Inherited};
 translate_from_protobuf(#'WriteMetadata'{metadata = Metadata, names = Names}) ->
     #set_metadata{metadata = translate_from_protobuf(Metadata), names = Names};
 
@@ -739,15 +739,15 @@ translate_to_protobuf(#provider_request{context_guid = ContextGuid,
     provider_request = Record}) ->
     {provider_request, #'ProviderRequest'{context_guid = ContextGuid,
         provider_request = translate_to_protobuf(Record)}};
-translate_to_protobuf(#get_xattr{name = Name}) ->
-    {get_xattr, #'GetXattr'{name = Name}};
+translate_to_protobuf(#get_xattr{name = Name, inherited = Inherited}) ->
+    {get_xattr, #'GetXattr'{name = Name, inherited = Inherited}};
 translate_to_protobuf(#set_xattr{xattr = Xattr}) ->
     {_, XattrT} = translate_to_protobuf(Xattr),
     {set_xattr, #'SetXattr'{xattr = XattrT}};
 translate_to_protobuf(#remove_xattr{name = Name}) ->
     {remove_xattr, #'RemoveXattr'{name = Name}};
-translate_to_protobuf(#list_xattr{}) ->
-    {list_xattr, #'ListXattr'{}};
+translate_to_protobuf(#list_xattr{inherited = Inherited}) ->
+    {list_xattr, #'ListXattr'{inherited = Inherited}};
 translate_to_protobuf(#get_parent{}) ->
     {get_parent, #'GetParent'{}};
 translate_to_protobuf(#get_acl{}) ->
@@ -777,8 +777,8 @@ translate_to_protobuf(#replicate_file{provider_id = ProviderId,
     block = Block}) ->
     {replicate_file, #'ReplicateFile'{provider_id = ProviderId,
         block = translate_to_protobuf(Block)}};
-translate_to_protobuf(#get_metadata{type = Type, names = Names}) ->
-    {read_metadata, #'ReadMetadata'{type = Type, names = Names}};
+translate_to_protobuf(#get_metadata{type = Type, names = Names, inherited = Inherited}) ->
+    {read_metadata, #'ReadMetadata'{type = Type, names = Names, inherited = Inherited}};
 translate_to_protobuf(#set_metadata{metadata = Metadata, names = Names}) ->
     {_, MetadataProto} = translate_to_protobuf(Metadata),
     {write_metadata, #'WriteMetadata'{metadata = MetadataProto, names = Names}};

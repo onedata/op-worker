@@ -119,7 +119,7 @@ term_to_stream_id(Term) ->
 -spec send_to_sequencer_manager(Msg :: term(), Ref :: sequencer_manager_ref()) ->
     ok | {error, Reason :: term()}.
 send_to_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
-    gen_server:cast(Ref, Msg);
+    gen_server2:cast(Ref, Msg);
 
 send_to_sequencer_manager(Msg, Ref) ->
 
@@ -137,7 +137,7 @@ send_to_sequencer_manager(Msg, Ref) ->
 -spec communicate_with_sequencer_manager(Msg :: term(),
     Ref :: sequencer_manager_ref()) -> Reply :: term().
 communicate_with_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
-    gen_server:call(Ref, Msg);
+    gen_server2:call(Ref, Msg);
 
 communicate_with_sequencer_manager(Msg, Ref) ->
     case session:get_sequencer_manager(Ref) of

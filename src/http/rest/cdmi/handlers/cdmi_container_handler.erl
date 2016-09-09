@@ -119,9 +119,25 @@ delete_resource(Req, State = #{auth := Auth, path := Path}) ->
 -spec get_cdmi(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_cdmi(Req, #{options := Options} = State) ->
     NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
-    DirCdmi = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
-    Response = json_utils:encode({struct, DirCdmi}),
+    Answer = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
+
+    Response =
+        case proplists:get_value(<<"metadata">>, Answer) of
+            undefined ->
+                json_utils:encode_map(maps:from_list(Answer));
+            Metadata ->
+                case proplists:get_value(<<"cdmi_acl">>, Metadata) of
+                    undefined ->
+                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
+                    Acl ->
+                        AclMap = lists:map(fun maps:from_list/1, Acl),
+                        MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
+                        json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
+                end
+        end,
     {Response, Req, State}.
+
+
 
 %%--------------------------------------------------------------------
 %% @doc Handles PUT with "application/cdmi-container" content-type
@@ -162,7 +178,20 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
             {ok, NewAttrs = #file_attr{uuid = FileGUID}} = onedata_file_api:stat(Auth, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Auth, {guid, FileGUID}, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, options => ?DEFAULT_GET_DIR_OPTS}),
-            Response = json_utils:encode(Answer),
+            Response =
+                case proplists:get_value(<<"metadata">>, Answer) of
+                    undefined ->
+                        json_utils:encode_map(maps:from_list(Answer));
+                    Metadata ->
+                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
+                            undefined ->
+                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
+                            Acl ->
+                                AclMap = lists:map(fun maps:from_list/1, Acl),
+                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
+                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
+                        end
+                end,
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
     end.

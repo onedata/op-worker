@@ -20,6 +20,8 @@
 -include("http/rest/http_status.hrl").
 -include("modules/dbsync/common.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
@@ -93,8 +95,10 @@ get_space_changes(Req, State) ->
     {State3, Req3} = validator:parse_timeout(Req2, State2),
     {State4, Req4} = validator:parse_last_seq(Req3, State3),
 
-    State5 = init_stream(State4),
+    #{auth := Auth, space_id := SpaceId} = State4,
 
+    space_membership:check_with_auth(Auth, SpaceId),
+    State5 = init_stream(State4),
     StreamFun = fun(SendChunk) ->
         stream_loop(SendChunk, State5)
     end,
@@ -117,6 +121,7 @@ init_stream(State = #{last_seq := Since}) ->
     Ref = make_ref(),
     Pid = self(),
 
+    % todo limit to admin only (when we will have admin users)
     {ok, Stream} = couchdb_datastore_driver:changes_start_link(
         couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity),
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
@@ -184,7 +189,8 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     Ctx = fslogic_context:new(?ROOT_SESS_ID),
     Guid =
         try
-            fslogic_uuid:to_file_guid(Uuid)
+            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:to_file_guid(Uuid)),
+            Val
         catch
             _:Error ->
                 ?error("Cannot fetch guid for changes, error: ~p", [Error]),

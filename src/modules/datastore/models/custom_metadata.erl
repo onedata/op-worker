@@ -14,13 +14,14 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_json_metadata/1, get_json_metadata/2, set_json_metadata/2, set_json_metadata/3,
-    get_xattr_metadata/2, list_xattr_metadata/1, remove_xattr_metadata/2, set_xattr_metadata/3,
+-export([get_json_metadata/1, get_json_metadata/3, set_json_metadata/2, set_json_metadata/3,
+    get_xattr_metadata/3, list_xattr_metadata/2, remove_xattr_metadata/2, set_xattr_metadata/3,
     exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2]).
 
 %% model_behaviour callbacks
@@ -49,7 +50,7 @@
 -spec get_json_metadata(file_meta:uuid()) ->
     {ok, maps:map()} | datastore:get_error().
 get_json_metadata(FileUuid) ->
-    get_json_metadata(FileUuid, []).
+    get_json_metadata(FileUuid, [], false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,13 +65,28 @@ get_json_metadata(FileUuid) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_json_metadata(file_meta:uuid(), [binary()]) ->
+-spec get_json_metadata(file_meta:uuid(), [binary()], boolean()) ->
     {ok, maps:map()} | datastore:get_error().
-get_json_metadata(FileUuid, Names) ->
+get_json_metadata(FileUuid, Names, false) ->
     case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
             Json = maps:get(?JSON_PREFIX, Meta, #{}),
             {ok, custom_meta_manipulation:find(Json, Names)};
+        Error ->
+            Error
+    end;
+get_json_metadata(FileUuid, Names, true) ->
+    case file_meta:get_ancestors(FileUuid) of
+        {ok, Uuids} ->
+            Jsons = lists:map(fun(Uuid) ->
+                case get_json_metadata(Uuid, Names, false) of
+                    {ok, Json} ->
+                        Json;
+                    {error, {not_found,custom_metadata}} ->
+                        #{}
+                end
+            end, [FileUuid | Uuids]),
+            {ok, custom_meta_manipulation:merge(Jsons)};
         Error ->
             Error
     end.
@@ -115,7 +131,7 @@ set_json_metadata(FileUuid, JsonToInsert, Names) ->
 %%--------------------------------------------------------------------
 -spec get_rdf_metadata(file_meta:uuid()) -> {ok, rdf()} | datastore:get_error().
 get_rdf_metadata(FileUuid) ->
-    get_xattr_metadata(FileUuid, ?RDF_PREFIX).
+    get_xattr_metadata(FileUuid, ?RDF_PREFIX, false).
 
 %%--------------------------------------------------------------------
 %% @doc Gets file's rdf metadata
@@ -129,9 +145,25 @@ set_rdf_metadata(FileUuid, Value) ->
 %%--------------------------------------------------------------------
 %% @doc Get extended attribute metadata
 %%--------------------------------------------------------------------
--spec get_xattr_metadata(file_meta:uuid(), xattr:name()) ->
+-spec get_xattr_metadata(file_meta:uuid(), xattr:name(), boolean()) ->
     {ok, xattr:value()} | datastore:get_error().
-get_xattr_metadata(FileUuid, Name) ->
+get_xattr_metadata(?ROOT_DIR_UUID, Name, true) ->
+    get_xattr_metadata(?ROOT_DIR_UUID, Name, false);
+get_xattr_metadata(FileUuid, Name, true) ->
+    case get_xattr_metadata(FileUuid, Name, false) of
+        {ok, Value} ->
+            {ok, Value};
+        {error, {not_found, custom_metadata}} ->
+            case file_meta:get_parent_uuid({uuid, FileUuid}) of
+                {ok, ParentUuid} ->
+                    get_xattr_metadata(ParentUuid, Name, true);
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end;
+get_xattr_metadata(FileUuid, Name, false) ->
     case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
             case maps:get(Name, Meta, undefined) of
@@ -147,9 +179,25 @@ get_xattr_metadata(FileUuid, Name) ->
 %%--------------------------------------------------------------------
 %% @doc List extended attribute metadata names
 %%--------------------------------------------------------------------
--spec list_xattr_metadata(file_meta:uuid()) ->
+-spec list_xattr_metadata(file_meta:uuid(), boolean()) ->
     {ok, [xattr:name()]} | datastore:generic_error().
-list_xattr_metadata(FileUuid) ->
+list_xattr_metadata(FileUuid, true) ->
+    case file_meta:get_ancestors(FileUuid) of
+        {ok, Uuids} ->
+            Xattrs = lists:foldl(fun(Uuid, Acc) ->
+                case list_xattr_metadata(Uuid, false) of
+                    {ok, Json} ->
+                        Acc ++ Json;
+                    {error, {not_found,custom_metadata}} ->
+                        Acc
+                end
+            end, [], [FileUuid | Uuids]),
+            UniqueAttrs = lists:usort(Xattrs),
+            {ok, UniqueAttrs};
+        Error ->
+            Error
+    end;
+list_xattr_metadata(FileUuid, false) ->
     case get(FileUuid) of
         {ok, #document{value = #custom_metadata{value = Meta}}} ->
             Keys = maps:keys(Meta),
@@ -167,9 +215,9 @@ list_xattr_metadata(FileUuid) ->
     ok | datastore:generic_error().
 remove_xattr_metadata(FileUuid, Name) ->
     case update(FileUuid, fun(Meta = #custom_metadata{value = MetaValue}) ->
-            NewMetaValue = maps:remove(Name, MetaValue),
-            {ok, Meta#custom_metadata{value = NewMetaValue}}
-        end) of
+        NewMetaValue = maps:remove(Name, MetaValue),
+        {ok, Meta#custom_metadata{value = NewMetaValue}}
+    end) of
         {ok, _} ->
             ok;
         {error, {not_found, custom_metadata}} ->

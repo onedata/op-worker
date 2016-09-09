@@ -47,7 +47,7 @@
 %% User session
 -record(session, {
     status :: undefined | session:status(),
-    accessed :: undefined | erlang:timestamp(),
+    accessed :: undefined | integer(),
     type :: undefined | session:type(),
     identity :: undefined | session:identity(),
     auth :: undefined | session:auth(),

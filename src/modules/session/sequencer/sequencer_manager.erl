@@ -65,7 +65,7 @@
 -spec start_link(SeqManSup :: pid(), SessId :: session:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqManSup, SessId) ->
-    gen_server:start_link(?MODULE, [SeqManSup, SessId], []).
+    gen_server2:start_link(?MODULE, [SeqManSup, SessId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -149,7 +149,7 @@ handle_cast(#client_message{message_body = #message_stream_reset{
     session_id = SessId} = State) ->
     ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     maps:map(fun(_, SeqStm) ->
-        gen_server:cast(SeqStm, Msg)
+        gen_server2:cast(SeqStm, Msg)
     end, Stms),
     {noreply, State};
 
@@ -174,7 +174,7 @@ handle_cast(#client_message{message_body = #message_acknowledgement{
 %% Handle outgoing messages
 handle_cast(#client_message{message_stream = #message_stream{sequence_number = undefined}} = Msg, State) ->
     {ok, SeqStm, NewState} = get_or_create_sequencer_out_stream(Msg, State),
-    gen_server:cast(SeqStm, Msg),
+    gen_server2:cast(SeqStm, Msg),
     {noreply, NewState};
 
 %% Handle incoming messages
@@ -185,7 +185,7 @@ handle_cast(#client_message{} = Msg, State) ->
 
 handle_cast(#server_message{} = Msg, #state{session_id = SessionId} = State) ->
     case get_sequencer_out_stream(Msg#server_message{proxy_session_id = SessionId}, State) of
-        {ok, SeqStm} -> gen_server:cast(SeqStm, Msg);
+        {ok, SeqStm} -> gen_server2:cast(SeqStm, Msg);
         {error, not_found} -> ok
     end,
     {noreply, State};
@@ -341,7 +341,7 @@ create_sequencer_out_stream(StmId, #state{sequencer_out_stream_sup = SeqStmSup,
     State :: #state{}) -> ok.
 forward_to_sequencer_out_stream(Msg, StmId, State) ->
     case get_sequencer_out_stream(StmId, State) of
-        {ok, SeqStm} -> gen_server:cast(SeqStm, Msg);
+        {ok, SeqStm} -> gen_server2:cast(SeqStm, Msg);
         {error, not_found} -> ok
     end.
 

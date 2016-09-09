@@ -16,7 +16,8 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -record(get_xattr, {
-    name :: xattr:name()
+    name :: xattr:name(),
+    inherited = false :: boolean()
 }).
 
 -record(set_xattr, {
@@ -28,6 +29,7 @@
 }).
 
 -record(list_xattr, {
+    inherited = false :: boolean()
 }).
 
 -record(get_parent, {
@@ -84,7 +86,8 @@
 
 -record(get_metadata, {
     type :: custom_metadata:type(),
-    names = [] :: custom_metadata:names()
+    names = [] :: custom_metadata:names(),
+    inherited = false :: boolean()
 }).
 
 -record(set_metadata, {
