@@ -282,7 +282,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         mtime = FileAttr#'FileAttr'.mtime,
         ctime = FileAttr#'FileAttr'.ctime,
         type = FileAttr#'FileAttr'.type,
-        size = FileAttr#'FileAttr'.size
+        size = FileAttr#'FileAttr'.size,
+        shares = FileAttr#'FileAttr'.shares
     };
 translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
     #file_children{child_links = lists:map(
@@ -674,7 +675,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         mtime = FileAttr#file_attr.mtime,
         ctime = FileAttr#file_attr.ctime,
         type = FileAttr#file_attr.type,
-        size = FileAttr#file_attr.size
+        size = FileAttr#file_attr.size,
+        shares = FileAttr#file_attr.shares
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
