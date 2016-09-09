@@ -451,7 +451,7 @@ check_perms(Ctx, Uuid, rdwr) ->
 -check_permissions([{traverse_ancestors, 2}]).
 create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}, Name) ->
     SessId = fslogic_context:get_session_id(Ctx),
-    Auth = session:get_auth(SessId),
+    {ok, Auth} = session:get_auth(SessId),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
     {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),

@@ -62,28 +62,6 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space-public">>, SpaceId) ->
-    {ok, #document{
-        value = #space_info{
-            name = Name,
-            providers_supports = Providers
-        }}} = space_info:get(SpaceId),
-    % If current provider is not supported, return null rootDir which will
-    % cause the client to render a "space not supported" message.
-    RootDir = case Providers of
-        [] ->
-            null;
-        _ ->
-            fslogic_uuid:uuid_to_guid(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
-    end,
-    Res = [
-        {<<"id">>, SpaceId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, false},
-        {<<"rootDir">>, RootDir},
-        {<<"space">>, SpaceId}
-    ],
-    {ok, Res};
 find(<<"share-public">>, ShareId) ->
     {ok, #document{
         value = #share_info{
@@ -100,9 +78,8 @@ find(<<"share-public">>, ShareId) ->
         {<<"publicUrl">>, PublicURL}
     ]};
 find(<<"file-public">>, FileId) ->
-    SessionId = g_session:get_session_id(),
     try
-        file_record(SessionId, FileId)
+        file_record(?GUEST_SESS_ID, FileId)
     catch T:M ->
         ?warning("Cannot get meta-data for file (~p). ~p:~p", [
             FileId, T, M

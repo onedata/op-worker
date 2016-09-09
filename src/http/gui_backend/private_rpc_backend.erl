@@ -163,7 +163,9 @@ handle(<<"createFileShare">>, Props) ->
     SessionId = g_session:get_session_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
-    {ok, ShareId} = logical_file_manager:create_share(SessionId, FileId),
+    {ok, ShareId} = logical_file_manager:create_share(
+        SessionId, {guid, FileId}, Name
+    ),
     share_data_backend:add_share_mapping(FileId, ShareId),
     {ok, [{<<"shareId">>, ShareId}]};
 
