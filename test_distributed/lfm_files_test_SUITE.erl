@@ -266,7 +266,7 @@ ls_test(Config) ->
         {description, "Tests ls operation"},
         {config, [{name, medium_dir},
             {parameters, [
-                [{name, dir_size_multiplier}, {value, 5}]
+                [{name, dir_size_multiplier}, {value, 1}]
             ]},
             {description, ""}
         ]},
