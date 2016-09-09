@@ -62,24 +62,24 @@ all() ->
     ]).
 
 db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_SUITE:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_SUITE:many_ops_test_base(Config, <<"user1">>, {3,0,0}, 60, DirsNum, FilesNum).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {3,0,0}, 60, DirsNum, FilesNum).
 
 db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_SUITE:distributed_modification_test_base(Config, <<"user1">>, {3,0,0}, 60).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {3,0,0}, 60).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_SUITE]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

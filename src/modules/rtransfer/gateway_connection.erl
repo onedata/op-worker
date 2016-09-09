@@ -55,7 +55,7 @@
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
 start_link(RtransferOpts, Remote, Local, ConnectionManager) ->
-    gen_server:start_link(?MODULE, {Remote, Local, ConnectionManager, RtransferOpts}, []).
+    gen_server2:start_link(?MODULE, {Remote, Local, ConnectionManager, RtransferOpts}, []).
 
 
 %%--------------------------------------------------------------------
@@ -228,7 +228,7 @@ terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager
                 Reason
         end,
 
-    gen_server:cast(CM, {connection_closed, Remote}),
+    gen_server2:cast(CM, {connection_closed, Remote}),
     lists:foreach(
         fun({_, Action, _}) ->
             gateway:notify(fetch_error, {send_error, NotifyReason}, Action)

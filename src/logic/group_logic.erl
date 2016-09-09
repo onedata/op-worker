@@ -64,7 +64,8 @@ create(Auth, Record) ->
     Name = Record#onedata_group.name,
     oz_users:create_group(Auth, [
         {<<"name">>, Name},
-        {<<"type">>, <<"undefined">>}
+        % Use default group type
+        {<<"type">>, <<"role">>}
     ]).
 
 
@@ -152,7 +153,8 @@ leave_group(Auth, ParentGroupId, ChildGroupId) ->
 set_name(Auth, GroupId, Name) ->
     oz_groups:modify_details(Auth, GroupId, [
         {<<"name">>, Name},
-        {<<"type">>, <<"undefined">>}
+        % Use default group type
+        {<<"type">>, <<"role">>}
     ]).
 
 

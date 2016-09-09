@@ -61,8 +61,8 @@ db_sync_test_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
-    multi_provider_file_ops_test_SUITE:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
-    multi_provider_file_ops_test_SUITE:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {2,0,0}, Attempts, Dirs, Files),
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {2,0,0}, Attempts).
 
 %%%===================================================================
 
@@ -77,8 +77,8 @@ proxy_test1(Config) ->
 proxy_test1_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
-    multi_provider_file_ops_test_SUITE:many_ops_test_base(Config, <<"user2">>, {0,2,1}, 0, Dirs, Files),
-    multi_provider_file_ops_test_SUITE:distributed_modification_test_base(Config, <<"user2">>, {0,2,1}, 0).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,2,1}, 0, Dirs, Files),
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,2,1}, 0).
 
 %%%===================================================================
 
@@ -93,15 +93,15 @@ proxy_test2(Config) ->
 proxy_test2_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
-    multi_provider_file_ops_test_SUITE:many_ops_test_base(Config, <<"user3">>, {0,2,1}, 0, Dirs, Files),
-    multi_provider_file_ops_test_SUITE:distributed_modification_test_base(Config, <<"user3">>, {0,2,1}, 0).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,2,1}, 0, Dirs, Files),
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,2,1}, 0).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_SUITE]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

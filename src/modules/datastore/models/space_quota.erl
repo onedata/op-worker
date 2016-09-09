@@ -145,7 +145,7 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, datastore:key()} | datastore:update_error().
 apply_size_change(SpaceId, SizeDiff) ->
     % TODO - use create_or_update
-    datastore:run_transaction(?MODEL_NAME, term_to_binary({quota, SpaceId}),
+    critical_section:run([?MODEL_NAME, term_to_binary({quota, SpaceId})],
         fun() ->
             {ok, #document{value = Quot = #space_quota{current_size = OldSize}} = Doc} = get(SpaceId),
             save(Doc#document{value = Quot#space_quota{current_size = OldSize + SizeDiff}})
