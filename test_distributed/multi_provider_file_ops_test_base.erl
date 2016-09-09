@@ -1,10 +1,12 @@
 %%%-------------------------------------------------------------------
+%%% @author Michal Wrzeszcz
 %%% @author Jakub Kudzia
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
-%%% WRITEME
+%%% Module with base test functions for multi provider file
+%%% operation tests
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_file_ops_test_base).
