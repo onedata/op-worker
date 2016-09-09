@@ -94,8 +94,18 @@ expand_access_definitions([root | _Rest], _UserId, _ShareId, _Inputs, _FileMap, 
     throw(?EACCES);
 expand_access_definitions([{traverse_ancestors, ItemDefinition} | Rest], UserId, ShareId, Inputs, FileMap, AclMap, UserMap) ->
     {User, NewUserMap} = get_user(UserId, UserMap),
-    {SubjectDoc, NewFileMap} = (catch get_file(ItemDefinition, FileMap, UserId, Inputs)),
-    expand_traverse_ancestors_check(SubjectDoc, User, ShareId, AclMap)
+    {SubjectDoc, ParentDoc, NewFileMap} =
+        case (catch get_file(ItemDefinition, FileMap, UserId, Inputs)) of
+            {Doc = #document{value = #file_meta{is_scope = true}}, Map} ->
+                {Doc, undefined, Map};
+            {Doc = #document{}, Map} ->
+                {Parent, Map2} = get_file({parent, ItemDefinition}, Map, UserId, Inputs),
+                {Doc, Parent, Map2};
+            _ ->
+                {Parent, Map} = get_file({parent, ItemDefinition}, FileMap, UserId, Inputs),
+                {undefined, Parent, Map}
+        end,
+    expand_traverse_ancestors_check(SubjectDoc, ParentDoc, User, ShareId, AclMap)
     ++ expand_access_definitions(Rest, UserId, ShareId, Inputs, NewFileMap, AclMap, NewUserMap);
 expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, ShareId, Inputs, FileMap, AclMap, UserMap) ->
     % TODO - do not get document when not needed
@@ -142,19 +152,20 @@ resolve_file_entry({parent, Item}, Inputs) ->
 %% each ancestor and subject document
 %% @end
 %%--------------------------------------------------------------------
--spec expand_traverse_ancestors_check(datastore:document(), datastore:document(), share_info:id(), #{}) ->
+-spec expand_traverse_ancestors_check(file_meta:doc() | undefined, file_meta:doc() | undefined,
+    onedata_user:doc(), share_info:id(), #{}) ->
     [{check_type(), datastore:document(), datastore:document(), share_info:id(), [#accesscontrolentity{}]}].
-expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_meta{type = Type, is_scope = SubjectIsScope}},
+expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
     UserDoc = #document{key = UserId}, ShareId, AclMap) ->
 
     NewSubjDoc =
-        case SubjectIsScope of
+        case SubjectDoc =/= undefined andalso SubjectDoc#document.value#file_meta.is_scope of
             true ->
-                SubjDoc;
+                SubjectDoc;
             false ->
-                {ok, Doc} = file_meta:get_parent(SubjDoc),
-                Doc
+                ParentDoc
         end,
+    #document{key = Uuid, value = #file_meta{type = Type}} = NewSubjDoc,
     SubjectCheck =
         case Type of
             ?DIRECTORY_TYPE ->
@@ -179,7 +190,7 @@ expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_me
         {_, true} ->
             SubjectCheck ++ AncestorsCheck;
         {_, false} ->
-            PotentialShares = [SubjDoc, NewSubjDoc] ++ [Doc || {_, Doc, _, _, _} <- AncestorsCheck],
+            PotentialShares = [SubjectDoc, NewSubjDoc] ++ [Doc || {_, Doc, _, _, _} <- AncestorsCheck],
             IsValidShare = lists:any(
                 fun(#document{value = #file_meta{shares = Shares}}) ->
                     lists:member(ShareId, Shares)

@@ -28,8 +28,9 @@
 %% API
 -export([fetch/1, get_or_fetch/2, create_or_update/2]).
 
--export_type([id/0, connected_account/0]).
+-export_type([doc/0, id/0, connected_account/0]).
 
+-type doc() :: datastore:document().
 -type id() :: binary().
 
 %% Oauth connected accounts in form of proplist:
