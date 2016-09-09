@@ -159,13 +159,16 @@ parse_content(Content) ->
 %%% Internal functions
 %%%===================================================================
 
+-type result_state() :: #{options => list(), cdmi_version => binary(),
+    path => onedata_file_api:file_path()}.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Parses request's version adds it to State.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_version_to_state(cowboy_req:req(), maps:map()) ->
-    {#{cdmi_version => binary()}, cowboy_req:req()}.
+    {result_state(), cowboy_req:req()}.
 add_version_to_state(Req, State) ->
     {RawVersion, NewReq} = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     Version = get_supported_version(RawVersion),
@@ -177,7 +180,7 @@ add_version_to_state(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_opts_to_state(cowboy_req:req(), maps:map()) ->
-    {#{options => list()}, cowboy_req:req()}.
+    {result_state(), cowboy_req:req()}.
 add_opts_to_state(Req, State) ->
     {Qs, NewReq} = cowboy_req:qs(Req),
     Opts = parse_opts(Qs),
@@ -189,7 +192,7 @@ add_opts_to_state(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_path_to_state(cowboy_req:req(), maps:map()) ->
-    {#{path => onedata_file_api:file_path()}, cowboy_req:req()}.
+    {result_state(), cowboy_req:req()}.
 add_path_to_state(Req, State) ->
     {RawPath, NewReq} = cowboy_req:path(Req),
     <<"/cdmi", Path/binary>> = RawPath,
@@ -208,7 +211,7 @@ add_path_to_state(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_objectid_path_to_state(cowboy_req:req(), maps:map()) ->
-    {#{path => onedata_file_api:file_path()}, cowboy_req:req()}.
+    {result_state(), cowboy_req:req()}.
 add_objectid_path_to_state(Req, State) ->
     % get objectid
     {Id, Req2} = cowboy_req:binding(id, Req),

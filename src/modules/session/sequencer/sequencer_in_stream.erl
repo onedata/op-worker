@@ -46,7 +46,7 @@
 %%                        waiting to be forwarded
 -record(state, {
     session_id :: session:id(),
-    proxy_session_id :: session:id(),
+    proxy_session_id :: undefined | session:id(),
     sequencer_manager :: pid(),
     stream_id :: stream_id(),
     sequence_number = 0 :: sequence_number(),

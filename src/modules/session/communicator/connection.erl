@@ -44,7 +44,7 @@
     % actual connection state
     socket :: etls:socket(),
     transport :: module(),
-    session_id :: session:id(),
+    session_id :: undefined | session:id(),
     connection_type :: incoming | outgoing,
     peer_type = fuse_client :: fuse_client | provider_incoming
 }).

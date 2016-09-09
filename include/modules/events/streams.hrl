@@ -34,7 +34,7 @@
 %%                     and decides whether event handler should be executed
 %% emission_time     - maximal delay between successive event handler executions
 -record(event_stream_definition, {
-    id :: event_stream:id(),
+    id :: undefined | event_stream:id(),
     metadata = 0 :: event_stream:metadata(),
     init_handler = fun(#subscription{id = SubId}, SessId, _) ->
         #{subscription_id => SubId, session_id => SessId}

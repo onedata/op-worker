@@ -25,7 +25,7 @@
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), maps:map()} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
-    {ok, Req, maps:map()}.
+    {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3

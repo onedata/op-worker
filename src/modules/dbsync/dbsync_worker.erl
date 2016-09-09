@@ -42,7 +42,7 @@
 
 %% Record for storing current state of dbsync stream queue.
 -record(queue, {
-    key :: queue(),
+    key :: undefined | queue(),
     since = 0 :: non_neg_integer(),
     until = 0 :: non_neg_integer(),
     batch_map = #{} :: maps:map(),
