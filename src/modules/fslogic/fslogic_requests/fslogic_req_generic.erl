@@ -148,7 +148,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
                 uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name,
-                shares = [fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShId) || ShId <- Shares]
+                shares = Shares
             }};
         {error, {not_found, _}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -457,7 +457,7 @@ create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}, Name) ->
     ShareGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
     {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
     {ok, _} = file_meta:add_share(FileUuid, ShareId),
-    #provider_response{status = #status{code = ?OK}, provider_response = #share{uuid = ShareGuid}}.
+    #provider_response{status = #status{code = ?OK}, provider_response = #share{uuid = ShareId}}.
 
 %%--------------------------------------------------------------------
 %% @doc
