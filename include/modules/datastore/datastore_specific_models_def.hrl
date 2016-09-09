@@ -40,7 +40,7 @@
 %% User session
 -record(session, {
     status :: session:status(),
-    accessed :: erlang:timestamp(),
+    accessed :: integer(),
     type :: session:type(),
     identity :: session:identity(),
     auth :: session:auth(),

@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -133,12 +134,12 @@ rename_file_test(Config) ->
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
     ExpectedLs = ordsets:from_list([
         <<"renamed_file1_target">>,
-        <<"renamed_file2_target">>, 
+        <<"renamed_file2_target">>,
         <<"renamed_file3_target">>,
         <<"renamed_file3">>
     ]),
     ?assertEqual(ExpectedLs, ActualLs),
-    
+
     ok.
 
 rename_file_test_with_failing_link(Config) ->
@@ -462,7 +463,7 @@ attributes_retaining_test(Config) ->
     {_, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(1, TestDir, "/dir2/file2"), 8#770)),
     {_, Dir3Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(1, TestDir, "/dir3"))),
     {_, File3Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(1, TestDir, "/dir3/file3"), 8#770)),
-    
+
     PreRenameGuids = [Dir1Guid, File1Guid, Dir2Guid, File2Guid, Dir3Guid, File3Guid],
 
     Ace = #accesscontrolentity{
@@ -672,14 +673,14 @@ redirecting_event_to_renamed_file_test(Config) ->
 
     Self = self(),
     lists:foreach(fun(W) ->
+        ?assertEqual(ok, rpc:call(W, event, unsubscribe, [?FSLOGIC_SUB_ID])),
         ?assertMatch({ok, _}, rpc:call(W, event, subscribe, [#subscription{
             object = #write_subscription{},
             event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-                id = <<"some_stream_id">>,
-                event_handler = fun(Events, _) ->
-                    Self ! {events, Events}
-                end}}]))
-        end, [W1, W2]),
+                event_handler = fun(Events, _) -> Self ! {events, Events} end
+            }
+        }]))
+    end, [W1, W2]),
 
     BaseEvent = #write_event{size = 1, file_size = 1,
         blocks = [#file_block{offset = 0, size = 1}]},

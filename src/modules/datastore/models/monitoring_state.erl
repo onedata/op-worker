@@ -18,7 +18,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, run_transaction/2]).
+    model_init/0, 'after'/5, before/4, run_in_critical_section/2]).
 
 -export([encode_id/1]).
 
@@ -143,13 +143,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% that 2 funs with same ResourceId won't run at the same time.
 %% @end
 %%--------------------------------------------------------------------
--spec run_transaction(ResourceId :: binary() | #monitoring_id{},
+-spec run_in_critical_section(ResourceId :: binary() | #monitoring_id{},
     Fun :: fun(() -> Result :: term())) -> Result :: term().
 % TODO remove after update of monitoring worker
-run_transaction(#monitoring_id{} = MonitoringIdRecord, Fun) ->
-    monitoring_state:run_transaction(encode_id(MonitoringIdRecord), Fun);
-run_transaction(ResourceId, Fun) ->
-    datastore:run_transaction(?MODEL_NAME, ResourceId, Fun).
+run_in_critical_section(#monitoring_id{} = MonitoringIdRecord, Fun) ->
+    monitoring_state:run_in_critical_section(encode_id(MonitoringIdRecord), Fun);
+run_in_critical_section(ResourceId, Fun) ->
+    critical_section:run([?MODEL_NAME, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc

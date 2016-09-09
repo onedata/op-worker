@@ -119,3 +119,83 @@ override_level_1_json_meta_test() ->
     ?assertEqual(Json#{<<"operatingsystem_support">> => #{
         <<"operatingsystem">> => <<"Ubuntu">>,
         <<"operatingsystemrelease">> => [<<"5.0">>, <<"6.0">>]}}, NewJson).
+
+merge_single_json_test() ->
+    Json1 = #{<<"a">> => <<"b">>},
+
+    NewJson = custom_meta_manipulation:merge([Json1]),
+
+    ?assertEqual(#{<<"a">> => <<"b">>}, NewJson).
+
+merge_empty_jsons_test() ->
+    Json1 = #{},
+    Json2 = #{},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(#{}, NewJson).
+
+merge_empty_json_and_primitive_test() ->
+    Json1 = #{},
+    Json2 = <<"string">>,
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(#{}, NewJson).
+
+merge_primitive_and_empty_json_test() ->
+    Json1 = <<"string">>,
+    Json2 = #{},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(<<"string">>, NewJson).
+
+merge_empty_json_and_non_empty_json_test() ->
+    Json1 = #{},
+    Json2 = #{<<"a">> => <<"b">>, <<"c">> => []},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(#{<<"a">> => <<"b">>, <<"c">> => []}, NewJson).
+
+merge_non_empty_json_and_empty_json_test() ->
+    Json1 = #{<<"a">> => <<"b">>, <<"c">> => []},
+    Json2 = #{},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(#{<<"a">> => <<"b">>, <<"c">> => []}, NewJson).
+
+merge_jsons_without_common_keys_test() ->
+    Json1 = #{<<"a">> => <<"b">>, <<"c">> => #{<<"d">> => <<"d">>}},
+    Json2 = #{<<"e">> => <<"f">>, <<"g">> => []},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(#{<<"a">> => <<"b">>, <<"c">> => #{<<"d">> => <<"d">>}, <<"e">> => <<"f">>, <<"g">> => []}, NewJson).
+
+merge_jsons_with_simple_common_key_test() ->
+    Json1 = #{<<"a">> => <<"b">>, <<"c">> => <<"d">>},
+    Json2 = #{<<"a">> => <<"f">>, <<"g">> => []},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(#{<<"a">> => <<"b">>, <<"c">> => <<"d">>, <<"g">> => []}, NewJson).
+
+merge_jsons_with_json_as_common_key_test() ->
+    Json1 = #{<<"a">> => #{<<"a1">> => <<"b1">>}},
+    Json2 = #{<<"a">> => #{<<"a2">> => <<"b2">>}},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2]),
+
+    ?assertEqual(#{<<"a">> =>  #{<<"a1">> => <<"b1">>, <<"a2">> => <<"b2">>}}, NewJson).
+
+merge_three_jsons_test() ->
+    Json1 = #{<<"a">> => #{<<"a1">> => <<"b1">>}},
+    Json2 = #{<<"a">> => #{<<"a2">> => <<"b2">>}, <<"b">> => <<"c">>},
+    Json3 = #{<<"a">> => #{<<"a1">> => <<"b4">>, <<"a3">> => <<"b3">>}, <<"d">> => <<"e">>},
+
+    NewJson = custom_meta_manipulation:merge([Json1, Json2, Json3]),
+
+    ?assertEqual(#{<<"a">> =>  #{<<"a1">> => <<"b1">>, <<"a2">> => <<"b2">>, <<"a3">> => <<"b3">>}, <<"b">> => <<"c">>, <<"d">> => <<"e">>}, NewJson).

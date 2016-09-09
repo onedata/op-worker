@@ -23,6 +23,7 @@
 %% object     - wrapped event
 -record(event, {
     key :: event:key(),
+    stream_id :: event_stream:id(),
     stream_key :: event_stream:key(),
     counter = 1 :: event:counter(),
     object :: event:object()
