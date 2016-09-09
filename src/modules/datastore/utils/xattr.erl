@@ -12,7 +12,7 @@
 -author("Tomasz Lichon").
 
 %% API
--export([get_by_name/2, delete_by_name/2, exists_by_name/2, save/3, list/1]).
+-export([get_by_name/2, get_by_name/3, delete_by_name/2, exists_by_name/2, save/3, list/1, list/2]).
 
 -type name() :: binary().
 -type value() :: binary().
@@ -27,12 +27,20 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Gets extended attribute with given name
+%% @equiv get_by_name(FileUuid, XattrName, false).
 %%--------------------------------------------------------------------
 -spec get_by_name(file_meta:uuid(), xattr:name()) ->
     {ok, value()} | datastore:get_error().
 get_by_name(FileUuid, XattrName) ->
-    custom_metadata:get_xattr_metadata(FileUuid, XattrName).
+    get_by_name(FileUuid, XattrName, false).
+
+%%--------------------------------------------------------------------
+%% @doc Gets extended attribute with given name
+%%--------------------------------------------------------------------
+-spec get_by_name(file_meta:uuid(), xattr:name(), boolean()) ->
+    {ok, value()} | datastore:get_error().
+get_by_name(FileUuid, XattrName, Inherited) ->
+    custom_metadata:get_xattr_metadata(FileUuid, XattrName, Inherited).
 
 %%--------------------------------------------------------------------
 %% @doc Deletes extended attribute with given name
@@ -58,8 +66,15 @@ save(FileUuid, XattrName, XattreValue) ->
     custom_metadata:set_xattr_metadata(FileUuid, XattrName, XattreValue).
 
 %%--------------------------------------------------------------------
-%% @doc Lists names of all extended attributes associated with given file
+%% @equiv list(FileUuid, false).
 %%--------------------------------------------------------------------
 -spec list(file_meta:uuid()) -> {ok, [xattr:name()]} | datastore:generic_error().
 list(FileUuid) ->
-    custom_metadata:list_xattr_metadata(FileUuid).
+    list(FileUuid, false).
+
+%%--------------------------------------------------------------------
+%% @doc Lists names of all extended attributes associated with given file
+%%--------------------------------------------------------------------
+-spec list(file_meta:uuid(), boolean()) -> {ok, [xattr:name()]} | datastore:generic_error().
+list(FileUuid, Inherited) ->
+    custom_metadata:list_xattr_metadata(FileUuid, Inherited).

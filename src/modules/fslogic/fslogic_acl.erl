@@ -158,7 +158,7 @@ ace_name_to_uid(AceName) ->
     case binary:split(AceName, <<"#">>, [global]) of
         [_UserName, Uid] ->
             Uid;
-        Uid ->
+        [Uid] ->
             Uid
     end.
 
@@ -182,7 +182,7 @@ ace_name_to_gid(AceName) ->
     case binary:split(AceName, <<"#">>, [global]) of
         [_GroupName, GroupId] ->
             GroupId;
-        GroupId ->
+        [GroupId] ->
             GroupId
     end.
 

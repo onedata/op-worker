@@ -98,7 +98,7 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec replicate_file(req(), #{}) -> {term(), req(), #{}}.
 replicate_file(Req, State = #{resource_type := id}) ->
-    {State2, Req2} = validator:parse_id(Req, State),
+    {State2, Req2} = validator:parse_objectid(Req, State),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_callback(Req3, State3),
 
@@ -120,7 +120,7 @@ replicate_file(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_file_replicas(req(), #{}) -> {term(), req(), #{}}.
 get_file_replicas(Req, State = #{resource_type := id}) ->
-    {State2, Req2} = validator:parse_id(Req, State),
+    {State2, Req2} = validator:parse_objectid(Req, State),
 
     get_file_replicas_internal(Req2, State2);
 get_file_replicas(Req, State) ->

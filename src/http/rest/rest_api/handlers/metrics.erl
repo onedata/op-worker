@@ -89,16 +89,17 @@ content_types_provided(Req, State) ->
 get_metric(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_user_id(Req2, State2),
-    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3),
+    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3), %todo use validator
     {Step, Req5} = cowboy_req:qs_val(<<"step">>, Req4),
 
-    #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := Id, user_id := UId} = State3,
+    #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := SpaceId, user_id := UId} = State3,
 
-    case space_info:get_or_fetch(Auth, Id) of
+    space_membership:check_with_auth(Auth, SpaceId),
+    case space_info:get_or_fetch(Auth, SpaceId) of
         {ok, #document{value = #space_info{providers = Providers}}} ->
             Json =
                 lists:map(fun(ProviderId) ->
-                    case onedata_metrics_api:get_metric(Auth, SubjectType, Id, SecondarySubjectType, UId,
+                    case onedata_metrics_api:get_metric(Auth, SubjectType, SpaceId, SecondarySubjectType, UId,
                         transform_metric(Metric, SubjectType, SecondarySubjectType), transform_step(Step), ProviderId, json)
                     of
                         {ok, Data} ->

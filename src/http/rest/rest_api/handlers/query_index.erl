@@ -78,8 +78,8 @@ query_index(Req, State) ->
     {StateWithEndkey, ReqWithEndkey} = validator:parse_endkey(ReqWithDescending, StateWithDescending),
     {StateWithInclusiveEnd, ReqWithInclusiveEnd} = validator:parse_inclusive_end(ReqWithEndkey, StateWithEndkey),
     {StateWithKey, ReqWithKey} = validator:parse_key(ReqWithInclusiveEnd, StateWithInclusiveEnd),
-%%    {StateWithKeys, ReqWithKeys} = validator:parse_keys(ReqWithKey, StateWithKey), %todo VFS-2369 support complex keys
-    {StateWithLimit, ReqWithLimit} = validator:parse_limit(ReqWithKey, StateWithKey),
+    {StateWithKeys, ReqWithKeys} = validator:parse_keys(ReqWithKey, StateWithKey),
+    {StateWithLimit, ReqWithLimit} = validator:parse_limit(ReqWithKeys, StateWithKeys),
     {StateWithSkip, ReqWithSkip} = validator:parse_skip(ReqWithLimit, StateWithLimit),
     {StateWithStale, ReqWithStale} = validator:parse_stale(ReqWithSkip, StateWithSkip),
     {StateWithStartkey, ReqWithStartkey} = validator:parse_startkey(ReqWithStale, StateWithStale),
@@ -87,9 +87,13 @@ query_index(Req, State) ->
     #{auth := _Auth, id := Id} = StateWithStartkey,
 
     Options = prepare_options(StateWithStartkey),
-    {ok, Results} = indexes:query_view(Id, Options),
+    {ok, Guids} = indexes:query_view(Id, Options),
+    ObjectIds = lists:map(fun(Guid) ->
+        {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+        ObjectId
+    end, Guids),
 
-    {json_utils:encode(Results), ReqWithStartkey, StateWithStartkey}.
+    {json_utils:encode(ObjectIds), ReqWithStartkey, StateWithStartkey}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -118,12 +122,12 @@ prepare_options([{descending, _} | _Rest]) ->
 prepare_options([{endkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{endkey, Endkey} | Rest]) ->
-    [{endkey, Endkey} | prepare_options(Rest)];
+    [{endkey, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)];
 
 prepare_options([{startkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{startkey, StartKey} | Rest]) ->
-    [{startkey, StartKey} | prepare_options(Rest)];
+    [{startkey, couchbeam_ejson:decode(StartKey)} | prepare_options(Rest)];
 
 prepare_options([{inclusive_end, true} | Rest]) ->
     [inclusive_end | prepare_options(Rest)];
@@ -135,14 +139,12 @@ prepare_options([{inclusive_end, _} | _Rest]) ->
 prepare_options([{key, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{key, Key} | Rest]) ->
-    [{key, Key} | prepare_options(Rest)];
+    [{key, couchbeam_ejson:decode(Key)} | prepare_options(Rest)];
 
 prepare_options([{keys, undefined} | Rest]) ->
     prepare_options(Rest);
-prepare_options([{keys, Keys} | Rest]) when is_list(Keys) ->
-    [{keys, Keys} | prepare_options(Rest)];
-prepare_options([{keys, Key} | Rest]) ->
-    [{keys, [Key]} | prepare_options(Rest)];
+prepare_options([{keys, Keys} | Rest]) ->
+    [{keys, couchbeam_ejson:decode(Keys)} | prepare_options(Rest)];
 
 prepare_options([{limit, undefined} | Rest]) ->
     prepare_options(Rest);
@@ -170,5 +172,7 @@ prepare_options([{stale, <<"ok">>} | Rest]) ->
     [{stale, ok} | prepare_options(Rest)];
 prepare_options([{stale, <<"update_after">>} | Rest]) ->
     [{stale, update_after} | prepare_options(Rest)];
+prepare_options([{stale, <<"false">>} | Rest]) ->
+    [{stale, false} | prepare_options(Rest)];
 prepare_options([{stale, _} | _]) ->
     throw(?ERROR_INVALID_STALE).

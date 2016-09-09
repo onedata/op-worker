@@ -254,6 +254,7 @@ get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
     get_supported_version(VersionList);
 get_supported_version([]) -> throw(?ERROR_UNSUPPORTED_VERSION);
 get_supported_version([<<"1.1.1">> | _Rest]) -> <<"1.1.1">>;
+get_supported_version([<<"1.1">> | _Rest]) -> <<"1.1.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 
 

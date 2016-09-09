@@ -68,30 +68,32 @@ event_manager_should_update_session_on_terminate(Config) ->
 
 event_manager_should_start_event_streams_on_init(_) ->
     ?assertReceivedMatch({start_event_stream, #subscription{
-        event_stream = #event_stream_definition{id = 1}
+        event_stream = #event_stream_definition{id = stream_1}
     }}, ?TIMEOUT),
     ?assertReceivedMatch({start_event_stream, #subscription{
-        event_stream = #event_stream_definition{id = 2}
+        event_stream = #event_stream_definition{id = stream_2}
     }}, ?TIMEOUT).
 
 event_manager_should_register_event_stream(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, {register_stream, 1, self()}),
-    gen_server:cast(EvtMan, #event{}),
+    gen_server:cast(EvtMan, {register_stream, stream_1, self()}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_1}),
     ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_unregister_event_stream(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, {unregister_stream, 1}),
-    gen_server:cast(EvtMan, {unregister_stream, 2}),
-    gen_server:cast(EvtMan, #event{}),
+    gen_server:cast(EvtMan, {unregister_stream, stream_1}),
+    gen_server:cast(EvtMan, {unregister_stream, stream_2}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_1}),
     ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_forward_events_to_event_streams(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, #event{}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_1}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_2}),
     ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
+    ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_start_event_stream_on_subscription(Config) ->
     EvtMan = ?config(event_manager, Config),
@@ -262,9 +264,9 @@ mock_event_stream_sup(Worker) ->
 mock_subscription(Worker) ->
     mock_subscription(Worker, [
         #document{key = 1, value = #subscription{id = 1, object = test_subscription,
-            event_stream = #event_stream_definition{id = 1}}},
+            event_stream = #event_stream_definition{id = stream_1}}},
         #document{key = 2, value = #subscription{id = 2, object = test_subscription,
-            event_stream = #event_stream_definition{id = 2}}}
+            event_stream = #event_stream_definition{id = stream_2}}}
     ]).
 
 %%--------------------------------------------------------------------
