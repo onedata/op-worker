@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Michał Wrzeszcz
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -10,7 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(massive_multi_provider_file_ops_test_SUITE).
--author("Michał Wrzeszcz").
+-author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

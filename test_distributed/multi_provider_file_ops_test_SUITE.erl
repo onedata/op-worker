@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Michał Wrzeszcz
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -10,7 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_file_ops_test_SUITE).
--author("Michał Wrzeszcz").
+-author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -146,7 +146,7 @@ file_consistency_test_base(Config) ->
                         end
                 end,
         {NAcc1, NAcc2}
-                                     end, {[], []}, Workers),
+    end, {[], []}, Workers),
 
     multi_provider_file_ops_test_base:file_consistency_test_skeleton(Config, Worker1, Worker2, Worker1, ConfigsNum).
 
