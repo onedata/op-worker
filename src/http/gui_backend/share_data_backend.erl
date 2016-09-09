@@ -164,14 +164,14 @@ update_record(<<"share">>, SpaceId, [{<<"name">>, Name}]) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"share">>, SpaceId) ->
+delete_record(<<"share">>, ShareId) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    case space_logic:delete(UserAuth, SpaceId) of
+    case share_logic:delete(UserAuth, ShareId) of
         ok ->
             ok;
         {error, _} ->
             gui_error:report_warning(
-                <<"Cannot remove space due to unknown error.">>)
+                <<"Cannot remove share due to unknown error.">>)
     end.
 
 
