@@ -38,8 +38,8 @@ all() ->
 
 db_sync_test(Config) ->
     % TODO change timeout after VFS-2197
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 150, 3, 10).
-%%multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 120, 3, 10).
+    multi_provider_file_ops_test_base:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 150, 3, 10).
+%%multi_provider_file_ops_test_base:synchronization_test_base(Config, <<"user1">>, {4,2,0}, 120, 3, 10).
 
 file_consistency_test(Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -58,14 +58,14 @@ file_consistency_test(Config) ->
         {Check(Acc1, "p1"), Check(Acc2, "p2"), Check(Acc3, "p3")}
     end, {[], [], []}, Workers),
 
-    multi_provider_file_ops_test_SUITE:file_consistency_test_base(Config, Worker1, Worker2, Worker3).
+    multi_provider_file_ops_test_base:file_consistency_test_base(Config, Worker1, Worker2, Worker3).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_SUITE]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

@@ -118,7 +118,7 @@ supervisor_child_spec() ->
 %%--------------------------------------------------------------------
 -spec remove_session(SessId :: session:id()) -> ok | {error, Reason :: term()}.
 remove_session(SessId) ->
-    case session:const_get(SessId) of
+    case session:get(SessId) of
         {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
             session:delete(SessId),
             close_connections(Cons);
@@ -141,5 +141,5 @@ remove_session(SessId) ->
 -spec close_connections(Cons :: [pid()]) -> ok.
 close_connections(Cons) ->
     lists:foreach(fun(Con) ->
-        gen_server:cast(Con, disconnect)
+        gen_server2:cast(Con, disconnect)
     end, Cons).

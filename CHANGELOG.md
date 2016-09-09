@@ -4,6 +4,95 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc5
+
+* VFS-2534 Use erlang:system_time/1 instead of os:timestamp/0
+* VFS-2534 Skip dbsync state update if not changed
+* VFS-2543 Integrate gen_server2
+* VFS-2446 Use default group type rather than undefined in group logic
+* VFS-2472 Convert metadata to from proplists to maps.
+* VFS-2472 Do not fail when user provides empty callback for replicate operation.
+* VFS-2540 add on_bamboo variable to coverage target
+* VFS-2540 implement collecting .coverdata files in coverage.escript from many ct directories
+* VFS-2534 Improve events processing
+* VFS-2426 Add check_perms operation to logical_file_manager.
+* VFS-2472 Add 1.1 as possible cdmi version, improve documentation.
+* VFS-2472 Handle acl identifier without '&#35;' separator.
+* VFS-2472 Add correct handling of key and keys parameters to query_index handler.
+* VFS-2490 Update op-gui-default ref
+* VFS-2472 Add filter option to metadata PUT.
+* VFS-2472 Unify file identifiers in REST interface.
+* VFS-2472 Add checking permissions to REST API operations.
+* VFS-2472 Add listing and getting inherited xattrs to REST API.
+* VFS-2472 Add inherited option to listing and getting xattrs internals.
+* VFS-2472 Add inherited option to getting json metadata.
+* VFS-2472 Add json merging function.
+* VFS-2472 Add 'inherited' option to list_xattr and get_metadata interface.
+* VFS-2472 Add escaping of user defined js function.
+* VFS-2309 oz test mock updated to match actual implementation
+* VFS-2309 implemented provider registration besed on public keys & updated tests
+* VFS-2309 listener starting fixes
+* VFS-2309 fixed public key encoding
+* VFS-2309 public key based identity endpoind
+
+
+### 3.0.0-rc4
+
+* VFS-2384 Prevent unrelated events from being lost on crash.
+* VFS-2320 Move RRD databases to file system
+
+
+### 3.0.0-RC3
+
+* VFS-2156 Remove GUI files
+* VFS-2311 Add private RPC to retrieve file download URL
+* VFS-2389 Change event stream management
+* VFS-2263 Do not create handles for created file if not needed
+* VFS-2189 Close connection after file upload failure
+* VFS-2319 Remove spawns on event emits
+* VFS-2402 Update cluster_worker
+* Releasing new version 3.0.0-RC2
+* VFS-2273 Handle handshake errors
+* VFS-2233 Changing separate fuse request types to nested types
+* VFS-2336 Update LUMA API to swagger version
+* VFS-2303 Fix eunit tests.
+* VFS-2303 Add metadata-id endpoint.
+* VFS-2303 Add filters for getting metadata.
+* VFS-2303 Add query-index rest endpoint.
+* VFS-2340 Minor comments update
+* VFS-2303 Adjust query_view function to handle any view option.
+* VFS-2303 Fix /index/:id PUT rest internal error.
+* VFS-2303 Add /index and /index/:id endpoints to rest API.
+* VFS-2269 Enable Symmetric Multiprocessing
+* VFS-2303 Store all user indexes in one file.
+* VFS-2303 Adjust metadata changes stream to the new metadata organization.
+* VFS-2303 Add index model.
+* VFS-2303 Add validation of metadata type.
+* VFS-2303 Add filtering by spaceID to views.
+* VFS-2303 Add view tests.
+* VFS-2303 Add better error handling for custom metadata.
+* VFS-2319 Reimplement monitoring using events
+* VFS-2303 Add support for rdf metadata.
+* VFS-2303 Move xattrs to custom_metadata document.
+* VFS-2303 Add basic metadata operations.
+* VFS-2361 Turn off HSTS by default, allow configuration via app.config
+* VFS-2340, Update deps
+* Releasing new version 3.0.0-RC1
+* VFS-2049 Improve file_consistency waiting for parent mechanism.
+* VFS-2049 Add waiting for parent_links in dbsync hook.
+* VFS-2049 Fix file_consistency wrong list ordering.
+* VFS-2303 Add custom_metadata model.
+* VFS-2229 Add reaction to rename of external file_location
+* VFS-2215 Disable blocks prefetching.
+* VFS-2215 Exclude file removal originator from event recipients.
+* VFS-2049 Make file_consistency work after system restart.
+* VFS-1847 Refactor LUMA and helpers modules
+* Squashed 'appmock/' changes from 71733d3..1f49f58
+* VFS-2049 Improve file_consistency model.
+* VFS-2233 Extract file entry to generic fuse request
+* VFS-2049 Basic consistency checking before executing hook.
+
+
 ### 3.0.0-RC2
 
 * VFS-2336 Update LUMA API to swagger version

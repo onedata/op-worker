@@ -89,7 +89,7 @@ handle_cast(#request_transfer{} = Request, State) ->
             FetchRequest = #gw_fetch{file_id = BFileId, offset = BOffset, size = BSize,
                 remote = Remote, notify = [Aggregator | AdditionalNotify], retry = FetchRetryNumber},
 
-            [gen_server:cast(GW, FetchRequest) || GW <- Gateways]
+            [gen_server2:cast(GW, FetchRequest) || GW <- Gateways]
         end, Blocks),
 
     {noreply, State}.
@@ -168,7 +168,7 @@ retry(_Why, #gw_fetch{file_id = FileId, offset = Offset, size = Size, retry = Re
             rt_map:put(?gateways_map, Block#rt_block{terms = [Gateway]}),
             FetchRequest = #gw_fetch{file_id = BFileId, offset = BOffset, size = BSize,
                 remote = Remote, notify = [self() | Aggregators], retry = Retry},
-            gen_server:cast(Gateway, FetchRequest)
+            gen_server2:cast(Gateway, FetchRequest)
         end, UnfinishedBlocks),
     ok.
 

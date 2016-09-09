@@ -35,9 +35,10 @@
 
 all() ->
     ?ALL([
-        global_stream_test,
-        global_stream_document_remove_test,
-        global_stream_with_proto_test
+%%        @todo Disabled until VFS-2306 is resolved
+%%        global_stream_test,
+%%        global_stream_document_remove_test,
+%%        global_stream_with_proto_test
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).

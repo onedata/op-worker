@@ -207,8 +207,8 @@ clean_test_users_and_spaces_no_validate(Config) ->
 
 clear_cache(W) ->
     A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
-%%     A2 = gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
-%%     A3 = gen_server:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
+%%     A2 = gen_server2:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
+%%     A3 = gen_server2:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
 %%     ?assertMatch({ok, ok, {ok, ok}}, {A1, A2, A3}).
     ok.
 
