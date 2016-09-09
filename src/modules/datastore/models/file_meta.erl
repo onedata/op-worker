@@ -51,6 +51,7 @@
 -export([hidden_file_name/1]).
 -export([add_share/2, remove_share/2]).
 
+-type doc() :: datastore:document().
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
@@ -65,7 +66,7 @@
 -type file_meta() :: model_record().
 -type posix_permissions() :: non_neg_integer().
 
--export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
+-export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
     size/0, mode/0, time/0, symlink_value/0, posix_permissions/0, file_meta/0]).
 
 %%%===================================================================
