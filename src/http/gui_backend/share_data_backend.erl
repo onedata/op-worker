@@ -27,8 +27,6 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 -export([share_record/1]).
 
--export([add_share_mapping/2, get_share_mapping/1]).
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -185,33 +183,3 @@ share_record(ShareId) ->
         {<<"dataSpace">>, ParentSpaceId},
         {<<"publicUrl">>, PublicURL}
     ].
-
-
-add_share_mapping(FileId, ShareId) ->
-    case share_info:exists(<<"magitrzny-rekord">>) of
-        true ->
-            ok;
-        false ->
-            share_info:create(#document{
-                key = <<"magitrzny-rekord">>,
-                value = #share_info{name = #{}}
-            })
-    end,
-    {ok, _} = share_info:update(<<"magitrzny-rekord">>, fun(Share) ->
-        #share_info{name = Mapping} = Share,
-        NewMapping = maps:put(FileId, ShareId, Mapping),
-        {ok, Share#share_info{name = NewMapping}}
-    end).
-
-
-get_share_mapping(FileId) ->
-    case share_info:exists(<<"magitrzny-rekord">>) of
-        true ->
-            {ok, #document{
-                value = #share_info{
-                    name = Mapping
-                }}} = share_info:get(<<"magitrzny-rekord">>),
-            maps:get(FileId, Mapping, null);
-        false ->
-            null
-    end.

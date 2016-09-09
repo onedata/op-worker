@@ -166,7 +166,6 @@ handle(<<"createFileShare">>, Props) ->
     {ok, ShareId} = logical_file_manager:create_share(
         SessionId, {guid, FileId}, Name
     ),
-    share_data_backend:add_share_mapping(FileId, ShareId),
     {ok, [{<<"shareId">>, ShareId}]};
 
 
