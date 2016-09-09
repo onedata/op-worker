@@ -65,5 +65,6 @@ create(Auth, ShareId, Name, ParentSpaceId, ShareFileGuid, FileUuid) ->
 %%--------------------------------------------------------------------
 -spec delete(oz_endpoint:auth(), space_info:id(), share_info:id(), file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
-delete(_Auth, _ParentSpaceId, _ShareId, _FileUuid) ->
-    ok. %todo
+delete(Auth, _ParentSpaceId, ShareId, _FileUuid) ->
+    % Todo remove share from file meta
+    oz_shares:remove(Auth, ShareId).
