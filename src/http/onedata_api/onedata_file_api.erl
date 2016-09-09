@@ -34,7 +34,7 @@
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
--export([create_share/2, get_share/1, remove_share/1]).
+-export([create_share/3, remove_share/2]).
 %% Functions concerning metadata
 -export([get_metadata/4, set_metadata/5]).
 
@@ -56,10 +56,11 @@
 -type file_attributes() :: #file_attr{}.
 -type xattr_name() :: binary().
 -type access_control_entity() :: #accesscontrolentity{}.
--type share_id() :: binary().
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
+-type share_id() :: binary().
+-type share_name() :: binary().
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
@@ -415,26 +416,19 @@ remove_symlink(FileKey) ->
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
-    {ok, ShareID :: share_id()} | error_reply().
-create_share(Path, ShareWith) ->
-    logical_file_manager:create_share(Path, ShareWith).
+-spec create_share(onedata_auth_api:auth(), file_key(), share_name()) ->
+    {ok, share_id()} | error_reply().
+create_share(Auth, FileKey, Name) ->
+    logical_file_manager:create_share(Auth, FileKey, Name).
 
 %%--------------------------------------------------------------------
-%% @doc Returns shared file by share_id.
+%% @doc
+%% Removes file share by ShareID.
+%% @end
 %%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) ->
-    {ok, {file_guid(), file_name()}} | error_reply().
-get_share(ShareID) ->
-    logical_file_manager:get_share(ShareID).
-
-%%--------------------------------------------------------------------
-%% @doc Removes file share by ShareID.
-%%--------------------------------------------------------------------
--spec remove_share(ShareID :: share_id()) -> ok | error_reply().
-remove_share(ShareID) ->
-    logical_file_manager:remove_share(ShareID).
-
+-spec remove_share(onedata_auth_api:auth(), share_id()) -> ok | error_reply().
+remove_share(Auth, ShareID) ->
+    logical_file_manager:remove_share(Auth, ShareID).
 %%--------------------------------------------------------------------
 %% @doc
 %% Get json metadata linked with file

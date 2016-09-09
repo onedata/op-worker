@@ -80,7 +80,7 @@
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
--export([create_share/2, remove_share/2]).
+-export([create_share/3, remove_share/2]).
 %% Functions concerning metadata
 -export([get_metadata/4, set_metadata/5]).
 
@@ -553,10 +553,10 @@ remove_symlink(FileKey) ->
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), file_key()) ->
+-spec create_share(session:id(), file_key(), share_info:name()) ->
     {ok, lfm_shares:share_id()} | error_reply().
-create_share(SessId, FileKey) ->
-    ?run(fun() -> lfm_shares:create_share(SessId, FileKey) end).
+create_share(SessId, FileKey, Name) ->
+    ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
 %%--------------------------------------------------------------------
 %% @doc

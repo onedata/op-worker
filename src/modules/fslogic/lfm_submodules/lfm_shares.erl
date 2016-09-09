@@ -18,7 +18,7 @@
 -export_type([share_id/0]).
 
 %% API
--export([create_share/2, remove_share/2]).
+-export([create_share/3, remove_share/2]).
 
 %%%===================================================================
 %%% API
@@ -29,13 +29,13 @@
 %% Creates a share for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), logical_file_manager:file_key()) ->
+-spec create_share(session:id(), logical_file_manager:file_key(), share_info:name()) ->
     {ok, ShareID :: share_id()} | logical_file_manager:error_reply().
-create_share(SessId, FileKey) ->
+create_share(SessId, FileKey, Name) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, GUID,
-        #create_share{},
+        #create_share{name = Name},
         fun(#share{uuid = ShareGuid}) -> {ok, ShareGuid} end).
 
 %%--------------------------------------------------------------------

@@ -33,7 +33,7 @@
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
     get_file_path/2, chmod_storage_files/3, replicate_file/3,
-    get_metadata/4, set_metadata/5, check_perms/3, create_share/2,
+    get_metadata/4, set_metadata/5, check_perms/3, create_share/3,
     remove_share/2]).
 
 %%%===================================================================
@@ -447,14 +447,14 @@ check_perms(Ctx, Uuid, rdwr) ->
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) -> #provider_response{}.
+-spec create_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, share_info:name()) -> #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}]).
-create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}) ->
+create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}, Name) ->
     SessId = fslogic_context:get_session_id(Ctx),
     Auth = session:get_auth(SessId),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
-    {ok, _} = share_logic:create(Auth, ShareId, <<"share_name">>, SpaceId, ShareGuid, FileUuid), %todo add name to api
+    {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid, FileUuid),
 
     #provider_response{status = #status{code = ?OK}, provider_response = #share{uuid = ShareGuid}}.
 
