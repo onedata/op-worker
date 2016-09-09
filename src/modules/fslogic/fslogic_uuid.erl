@@ -94,7 +94,7 @@ uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
 %% For given file UUID and spaceId generates file's GUID.
 %% @end
 %%--------------------------------------------------------------------
--spec uuid_to_guid(file_meta:uuid(), space_info:id()) ->
+-spec uuid_to_guid(file_meta:uuid(), space_info:id() | undefined) ->
     fslogic_worker:file_guid().
 uuid_to_guid(FileUUID, SpaceId) ->
     http_utils:base64url_encode(term_to_binary({guid, FileUUID, SpaceId})).
@@ -130,7 +130,7 @@ guid_to_uuid(FileGUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec unpack_guid(FileGUID :: fslogic_worker:file_guid()) ->
-    {file_meta:uuid(), space_info:id()}.
+    {file_meta:uuid(), space_info:id() | undefined}.
 unpack_guid(FileGUID) ->
     try binary_to_term(http_utils:base64url_decode(FileGUID)) of
         {guid, FileUUID, SpaceId} ->

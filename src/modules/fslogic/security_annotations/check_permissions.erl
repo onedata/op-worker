@@ -211,8 +211,8 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
 %%--------------------------------------------------------------------
 -spec expand_ancestors_check(datastore:ext_key(),
     [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}],
-    datastore:ext_key(), datastore:document(), share_info:id(), #{}) ->
-    [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
+    onedata_user:id(), onedata_user:doc(), share_info:id(), #{}) ->
+    [{check_type(), file_meta:doc(), onedata_user:doc(), share_info:id(), [#accesscontrolentity{}]}].
 expand_ancestors_check(?ROOT_DIR_UUID, Acc, _UserId, _UserDoc, _ShareId, _AclMap) ->
     {Acc, false};
 expand_ancestors_check(Key, Acc, UserId, UserDoc, ShareId, AclMap) ->
@@ -303,8 +303,8 @@ check_rule_and_cache_result({AccessType, FileDoc, UserDoc, ShareId, _} = Def) ->
 %% Cache given rules result check as 'ok'
 %% @end
 %%--------------------------------------------------------------------
--spec cache_ok_result({term(), FileDoc :: datastore:document() | undefined,
-    UserDoc :: datastore:document(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
+-spec cache_ok_result({CheckType :: term(), file_meta:doc() | undefined,
+    onedata_user:doc(), share_info:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
 cache_ok_result({AccessType, FileDoc, UserDoc, ShareId, _}) ->
     permissions_cache:cache_permission({AccessType, get_doc_id(UserDoc), ShareId, get_doc_id(FileDoc)}, ok).
 
