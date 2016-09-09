@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the data-space model used in Ember application.
+%%% the share model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(share_data_backend).
@@ -121,38 +121,21 @@ create_record(<<"share">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"share">>, SpaceId, [{<<"isDefault">>, Flag}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case Flag of
-        undefined ->
-            ok;
-        false ->
-            ok;
-        true ->
-            case user_logic:set_default_space(UserAuth, SpaceId) of
-                ok ->
-                    ok;
-                {error, _} ->
-                    gui_error:report_warning(
-                        <<"Cannot change default space due to unknown error.">>)
-            end
-    end;
-
-update_record(<<"share">>, SpaceId, [{<<"name">>, Name}]) ->
+update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
     UserAuth = op_gui_utils:get_user_auth(),
     case Name of
         undefined ->
             ok;
         <<"">> ->
             gui_error:report_warning(
-                <<"Cannot set space name to empty string.">>);
+                <<"Cannot set share name to empty string.">>);
         NewName ->
-            case space_logic:set_name(UserAuth, SpaceId, NewName) of
+            case share_logic:set_name(UserAuth, ShareId, NewName) of
                 ok ->
                     ok;
                 {error, _} ->
                     gui_error:report_warning(
-                        <<"Cannot change space name due to unknown error.">>)
+                        <<"Cannot change share name due to unknown error.">>)
             end
     end.
 
@@ -165,8 +148,8 @@ update_record(<<"share">>, SpaceId, [{<<"name">>, Name}]) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"share">>, ShareId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case share_logic:delete(UserAuth, ShareId) of
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:remove_share(SessionId, ShareId) of
         ok ->
             ok;
         {error, _} ->
@@ -182,7 +165,7 @@ delete_record(<<"share">>, ShareId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a client-compliant space record based on space id.
+%% Returns a client-compliant share record based on share id.
 %% @end
 %%--------------------------------------------------------------------
 -spec share_record(ShareId :: binary()) -> proplists:proplist().
@@ -214,10 +197,10 @@ add_share_mapping(FileId, ShareId) ->
                 value = #share_info{name = #{}}
             })
     end,
-    {ok, _} = share_info:update(<<"magitrzny-rekord">>, fun(Space) ->
-        #share_info{name = Mapping} = Space,
+    {ok, _} = share_info:update(<<"magitrzny-rekord">>, fun(Share) ->
+        #share_info{name = Mapping} = Share,
         NewMapping = maps:put(FileId, ShareId, Mapping),
-        {ok, Space#share_info{name = NewMapping}}
+        {ok, Share#share_info{name = NewMapping}}
     end).
 
 
