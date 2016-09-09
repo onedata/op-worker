@@ -314,7 +314,8 @@ file_record(SessionId, FileId) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr} = FileAttr,
+                mode = PermissionsAttr,
+                shares = Shares} = FileAttr,
 
             UserRootDirUUID = get_user_root_dir_uuid(SessionId),
             ParentUUID = case get_parent(SessionId, FileId) of
@@ -334,14 +335,18 @@ file_record(SessionId, FileId) ->
                 <<"dir">> ->
                     case logical_file_manager:ls(
                         SessionId, {guid, FileId}, 0, 1000) of
-                        {ok, Chldrn} ->
-                            Chldrn;
+                        {ok, List} ->
+                            List;
                         _ ->
                             []
                     end
             end,
             ChildrenIds = [ChId || {ChId, _} <- Children],
-            Share = share_data_backend:get_share_mapping(FileId),
+            % Currently only one share per file is allowed
+            Share = case Shares of
+                [] -> null;
+                [ShareId] -> ShareId
+            end,
             Res = [
                 {<<"id">>, FileId},
                 {<<"name">>, Name},

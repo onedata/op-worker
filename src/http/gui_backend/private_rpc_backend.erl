@@ -160,12 +160,12 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     end;
 
 handle(<<"createFileShare">>, Props) ->
-    UserAuth = op_gui_utils:get_user_auth(),
+    SessionId = g_session:get_session_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
-    ParentSpaceId = proplists:get_value(<<"dataSpaceId">>, Props),
-    {ok, ShareId} = share_logic:create(UserAuth, datastore_utils:gen_uuid(), Name, ParentSpaceId, FileId),
-    share_data_backend:add_share_mapping(FileId, ShareId),
+    {ok, ShareId} = logical_file_manager:create_share(
+        SessionId, {guid, FileId}, Name
+    ),
     {ok, [{<<"shareId">>, ShareId}]};
 
 

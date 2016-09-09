@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
--export([get/2, create/5, delete/2]).
+-export([get/2, create/5, set_name/3, delete/2]).
 
 %%%===================================================================
 %%% API
@@ -36,6 +36,7 @@
 get(Auth, ShareId) ->
     share_info:get_or_fetch(Auth, ShareId).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new share. ShareId must be given -
@@ -51,6 +52,19 @@ create(Auth, ShareId, Name, ParentSpaceId, ShareFileGuid) ->
         {<<"root_file_id">>, ShareFileGuid}
     ],
     oz_shares:create(Auth, ShareId, ParentSpaceId, Parameters).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets name for an user.
+%% User identity is determined using provided auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_name(oz_endpoint:auth(), SpaceId :: binary(), NewName :: binary()) ->
+    ok | {error, Reason :: term()}.
+set_name(Auth, ShareId, NewName) ->
+    oz_shares:modify_details(Auth, ShareId, [{<<"name">>, NewName}]).
+
 
 %%--------------------------------------------------------------------
 %% @doc
