@@ -702,7 +702,7 @@ share_getattr_test(Config) ->
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
     {ok, ShareGuid} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
 
-    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE, uuid = ShareGuid}},
+    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE, uuid = ShareGuid, shares = [ShareGuid]}},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})).
 
 share_list_test(Config) ->
@@ -739,7 +739,7 @@ share_child_getattr_test(Config) ->
     {ok, ShareGuid} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
     {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
 
-    ?assertMatch({ok, #file_attr{mode = 8#700, name = <<"file">>, type = ?REGULAR_FILE_TYPE}},
+    ?assertMatch({ok, #file_attr{mode = 8#700, name = <<"file">>, type = ?REGULAR_FILE_TYPE, shares = []}},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})).
 
 share_child_list_test(Config) ->

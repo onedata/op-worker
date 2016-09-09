@@ -27,7 +27,7 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--type id() :: binary().
+-type id() :: binary() | undefined.
 -type name() :: binary().
 -type share_guid() :: fslogic_worker:file_guid().
 

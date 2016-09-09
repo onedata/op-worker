@@ -124,7 +124,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
+            ctime = CTime, uid = UserID, name = Name, shares = Shares}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(FileDoc),
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
@@ -147,7 +147,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
                 gid = GID,
                 uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                ctime = CTime, uid = FinalUID, size = Size, name = Name
+                ctime = CTime, uid = FinalUID, size = Size, name = Name,
+                shares = [fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShId) || ShId <- Shares]
             }};
         {error, {not_found, _}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -465,11 +466,11 @@ create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}, Name) ->
 %%--------------------------------------------------------------------
 -spec remove_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) -> #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}]).
-remove_share(Ctx = #fslogic_ctx{space_id = SpaceId, share_id = ShareId}, {uuid, FileUuid}) ->
+remove_share(Ctx = #fslogic_ctx{share_id = ShareId}, {uuid, FileUuid}) ->
     SessId = fslogic_context:get_session_id(Ctx),
     Auth = session:get_auth(SessId),
 
-    ok = share_logic:delete(Auth, SpaceId, ShareId, FileUuid),
+    ok = share_logic:delete(Auth, ShareId),
     {ok, _} = file_meta:remove_share(FileUuid, ShareId),
 
     #provider_response{status = #status{code = ?OK}}.

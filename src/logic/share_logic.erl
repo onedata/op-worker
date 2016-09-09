@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
--export([get/2, create/5, set_name/3, delete/4]).
+-export([get/2, create/5, set_name/3, delete/2]).
 
 %%%===================================================================
 %%% API
@@ -71,7 +71,7 @@ set_name(Auth, ShareId, NewName) ->
 %% Delete given share.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(oz_endpoint:auth(), space_info:id(), share_info:id(), file_meta:uuid()) ->
+-spec delete(oz_endpoint:auth(), share_info:id()) ->
     ok | {error, Reason :: term()}.
-delete(Auth, _ParentSpaceId, ShareId, _FileUuid) ->
+delete(Auth, ShareId) ->
     oz_shares:remove(Auth, ShareId).

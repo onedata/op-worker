@@ -85,7 +85,7 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec expand_access_definitions([access_definition()], onedata_user:id(), share_info:id(), list(), #{}, #{}, #{}) ->
-    [{check_type(), undefined | datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
+    [{check_type(), undefined | datastore:document(), datastore:document(), share_info:id(), [#accesscontrolentity{}]}].
 expand_access_definitions([], _UserId, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];
 expand_access_definitions(_, ?ROOT_USER_ID, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
