@@ -454,8 +454,8 @@ create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}, Name) ->
     Auth = session:get_auth(SessId),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
-    {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid, FileUuid),
-
+    {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
+    {ok, _} = file_meta:add_share(FileUuid, ShareId),
     #provider_response{status = #status{code = ?OK}, provider_response = #share{uuid = ShareGuid}}.
 
 %%--------------------------------------------------------------------
@@ -469,7 +469,9 @@ remove_share(Ctx = #fslogic_ctx{space_id = SpaceId, share_id = ShareId}, {uuid, 
     SessId = fslogic_context:get_session_id(Ctx),
     Auth = session:get_auth(SessId),
 
-    share_logic:delete(Auth, SpaceId, ShareId, FileUuid),
+    ok = share_logic:delete(Auth, SpaceId, ShareId, FileUuid),
+    {ok, _} = file_meta:remove_share(FileUuid, ShareId),
+
     #provider_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
