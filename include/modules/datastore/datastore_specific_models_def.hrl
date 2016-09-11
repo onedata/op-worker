@@ -16,42 +16,49 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
+-type active_descriptors() :: #{session:id() => non_neg_integer()}.
+-type ceph_user_ctx() :: #{storage:id() => ceph_user:ctx()}.
+-type posix_user_ctx() :: #{storage:id() => posix_user:ctx()}.
+-type s3_user_ctx() :: #{storage:id() => s3_user:ctx()}.
+-type swift_user_ctx() :: #{storage:id() => swift_user:ctx()}.
+-type indexes_value() :: #{indexes:index_id() => indexes:index()}.
+
 %% Message ID containing recipient for remote response.
 -record(message_id, {
-    issuer :: client | server,
-    id :: binary(),
+    issuer :: undefined | client | server,
+    id :: undefined | binary(),
     recipient :: pid() | undefined
 }).
 
 % State of subscription tracking.
 -record(subscriptions_state, {
     refreshing_node :: node(),
-    largest :: subscriptions:seq(),
-    missing :: [subscriptions:seq()],
-    users :: sets:set(onedata_user:id())
+    largest :: undefined | subscriptions:seq(),
+    missing :: undefined | [subscriptions:seq()],
+    users :: undefined | sets:set(onedata_user:id())
 }).
 
 %% Identity containing user_id
 -record(user_identity, {
-    user_id :: onedata_user:id(),
-    provider_id :: oneprovider:id()
+    user_id :: undefined | onedata_user:id(),
+    provider_id :: undefined | oneprovider:id()
 }).
 
 %% User session
 -record(session, {
-    status :: session:status(),
-    accessed :: integer(),
-    type :: session:type(),
-    identity :: session:identity(),
-    auth :: session:auth(),
+    status :: undefined | session:status(),
+    accessed :: undefined | integer(),
+    type :: undefined | session:type(),
+    identity :: undefined | session:identity(),
+    auth :: undefined | session:auth(),
     node :: node(),
-    supervisor :: pid(),
-    event_manager :: pid(),
-    watcher :: pid(),
-    sequencer_manager :: pid(),
+    supervisor :: undefined | pid(),
+    event_manager :: undefined | pid(),
+    watcher :: undefined | pid(),
+    sequencer_manager :: undefined | pid(),
     connections = [] :: [pid()],
     proxy_via :: session:id() | undefined,
-    response_map = #{} :: #{},
+    response_map = #{} :: maps:map(),
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
     open_files = sets:new() :: sets:set(file_meta:uuid()),
@@ -60,18 +67,18 @@
 
 %% File handle used by the module
 -record(sfm_handle, {
-    helper_handle :: helpers:handle(),
-    file :: helpers:file(),
-    session_id :: session:id(),
+    helper_handle :: undefined | helpers:handle(),
+    file :: undefined | helpers:file(),
+    session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
     space_uuid :: file_meta:uuid(),
     storage :: datastore:document() | undefined,
-    storage_id :: storage:id(),
-    open_mode :: helpers:open_mode(),
-    needs_root_privileges :: boolean(),
+    storage_id :: undefined | storage:id(),
+    open_mode :: undefined | helpers:open_mode(),
+    needs_root_privileges :: undefined | boolean(),
     is_local = false :: boolean(),
-    provider_id :: oneprovider:id(),
-    file_size :: non_neg_integer() %% Available only if file is_local
+    provider_id :: undefined | oneprovider:id(),
+    file_size :: undefined | non_neg_integer() %% Available only if file is_local
 }).
 
 %% Local, cached version of OZ user
@@ -79,7 +86,7 @@
     name = <<"">>:: binary(),
     spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
-    group_ids :: [binary()],
+    group_ids :: undefined | [binary()],
     effective_group_ids = [] :: [binary()],
     connected_accounts = [] :: [onedata_user:connected_account()],
     alias = <<"">>:: binary(),
@@ -95,8 +102,8 @@
 
 %% Local, cached version of OZ group
 -record(onedata_group, {
-    name :: binary(),
-    type :: onedata_group:type(),
+    name :: undefined | binary(),
+    type :: undefined | onedata_group:type(),
     users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
     effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
     nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
@@ -106,19 +113,19 @@
 }).
 
 -record(file_meta, {
-    name :: file_meta:name(),
-    type :: file_meta:type(),
+    name :: undefined | file_meta:name(),
+    type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
-    mtime :: file_meta:time(),
-    atime :: file_meta:time(),
-    ctime :: file_meta:time(),
-    uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
-    size = 0 :: file_meta:size(),
+    mtime :: undefined | file_meta:time(),
+    atime :: undefined | file_meta:time(),
+    ctime :: undefined | file_meta:time(),
+    uid :: undefined | onedata_user:id(), %% Reference to onedata_user that owns this file
+    size = 0 :: undefined | file_meta:size(),
     version = 1, %% Snapshot version
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     %% symlink_value for symlinks, file_guid for phantom files (redirection)
-    link_value :: file_meta:symlink_value() | fslogic_worker:file_guid()
+    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid()
 }).
 
 
@@ -130,22 +137,22 @@
 
 %% Model for storing storage information
 -record(storage, {
-    name :: storage:name(),
-    helpers :: [helpers:init()]
+    name :: undefined | storage:name(),
+    helpers :: undefined | [helpers:init()]
 }).
 
 
 %% Model for storing file's location data
 -record(file_location, {
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
-    provider_id :: oneprovider:id(),
-    storage_id :: storage:id(),
-    file_id :: helpers:file(),
+    provider_id :: undefined | oneprovider:id(),
+    storage_id :: undefined | storage:id(),
+    file_id :: undefined | helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     handle_id :: binary() | undefined,
-    space_id :: space_info:id(),
+    space_id :: undefined | space_info:id(),
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
@@ -155,7 +162,7 @@
 
 %% Model for caching provider details fetched from OZ
 -record(provider_info, {
-    client_name :: binary(),
+    client_name :: undefined | binary(),
     urls = [] :: [binary()],
     space_ids = [] :: [SpaceId :: binary()],
     public_only = false :: boolean(), %% see comment in onedata_users
@@ -164,7 +171,7 @@
 
 %% Model for caching space details fetched from OZ
 -record(space_info, {
-    name :: binary(),
+    name :: undefined | binary(),
     providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
     providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
@@ -179,22 +186,22 @@
 
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
-    ctx = #{} :: #{storage:id() => ceph_user:ctx()}
+    ctx = #{} :: ceph_user_ctx()
 }).
 
 %% Model that maps onedata user to POSIX user
 -record(posix_user, {
-    ctx = #{} :: #{storage:id() => posix_user:ctx()}
+    ctx = #{} :: posix_user_ctx()
 }).
 
 %% Model that maps onedata user to Amazon S3 user
 -record(s3_user, {
-    ctx = #{} :: #{storage:id() => s3_user:ctx()}
+    ctx = #{} :: s3_user_ctx()
 }).
 
 %% Model that maps onedata user to Openstack Swift user
 -record(swift_user, {
-    ctx = #{} :: #{storage:id() => swift_user:ctx()}
+    ctx = #{} :: swift_user_ctx()
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -204,7 +211,7 @@
 
 %% Model that holds state entries for DBSync worker
 -record(dbsync_batches, {
-    batches = #{} :: #{}
+    batches = #{} :: maps:map()
 }).
 
 %% Model that holds files created by root, whose owner needs to be changed when
@@ -232,26 +239,26 @@
 %% Model for holding state of monitoring
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
-    rrd_path :: binary(),
+    rrd_path :: undefined | binary(),
     state_buffer = #{} :: maps:map(),
-    last_update_time :: non_neg_integer()
+    last_update_time :: undefined | non_neg_integer()
 }).
 
 %% Model that stores open file
 -record(open_file, {
     is_removed = false :: true | false,
-    active_descriptors = #{} :: #{session:id() => non_neg_integer()}
+    active_descriptors = #{} :: active_descriptors()
 }).
 
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
-    space_id :: space_info:id(),
-    value = #{} :: #{}
+    space_id :: undefined | space_info:id(),
+    value = #{} :: maps:map()
 }).
 
 %% Model that holds database views
 -record(indexes, {
-    value = #{} :: #{indexes:index_id() => indexes:index()}
+    value = #{} :: indexes_value()
 }).
 
 %% Model that keeps track of consistency of file metadata

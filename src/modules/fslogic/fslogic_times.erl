@@ -105,7 +105,7 @@ update_mtime_ctime(Entry, UserId, CurrentTime) ->
 %% @doc Updates entry with given map and emits times update event
 %%--------------------------------------------------------------------
 -spec update_times_and_emit(fslogic_worker:file(),
-    TimesMap :: #{atom => file_meta:time()}, UserId :: onedata_user:id()) -> ok.
+    TimesMap :: #{atom() => file_meta:time()}, UserId :: onedata_user:id()) -> ok.
 update_times_and_emit(Entry, TimesMap, UserId) ->
     {ok, UUID} = file_meta:update(Entry, TimesMap),
     spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, UUID}) end),

@@ -600,7 +600,7 @@ remove_share(ShareID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), file_key(), binary(), [binary()], boolean()) ->
-    {ok, #{}} | error_reply().
+    {ok, maps:map()} | error_reply().
 get_metadata(SessId, FileKey, Type, Names, Inherited) ->
     ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names, Inherited) end).
 

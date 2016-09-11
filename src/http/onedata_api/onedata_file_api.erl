@@ -441,7 +441,7 @@ remove_share(ShareID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()], boolean()) ->
-    {ok, #{}} | error_reply().
+    {ok, maps:map()} | error_reply().
 get_metadata(Auth, FileKey, Type, Names, Inherited) ->
     logical_file_manager:get_metadata(Auth, FileKey, Type, Names, Inherited).
 

@@ -20,6 +20,13 @@ all: \
 		../priv/rt_priority_queue_drv.so \
 		../priv/rt_map_drv.so
 
+../priv/helpers/lib/libhelpers.a:
+	make LDFLAGS= CFLAGS= CXXFLAGS= INSTALL_PREFIX=../../priv/helpers BUILD_PROXY_IO=OFF -C ../helpers/ install
+	rm -rf ../priv/helpers/**/*.so
+
+%.o: %.cc ../priv/helpers/lib/libhelpers.a
+	$(CXX) $(CXXFLAGS) $(CFLAGS) -c $< -o $@
+
 ../priv/csr_creator_drv.so: \
 		csr_creator/csr_creator.o \
 		csr_creator/csr_creator_nif.o

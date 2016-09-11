@@ -15,11 +15,11 @@
 
 -record(message_stream, {
     stream_id :: sequencer:stream_id(),
-    sequence_number :: sequencer:sequence_number()
+    sequence_number :: undefined | sequencer:sequence_number()
 }).
 
 -record(message_stream_reset, {
-    stream_id :: sequencer:stream_id()
+    stream_id :: undefined | sequencer:stream_id()
 }).
 
 -record(end_of_message_stream, {

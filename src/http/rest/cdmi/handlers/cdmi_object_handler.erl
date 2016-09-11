@@ -54,50 +54,50 @@
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
--spec rest_init(req(), term()) -> {ok, req(), #{}} | {shutdown, req()}.
+-spec rest_init(req(), term()) -> {ok, req(), maps:map()} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
     {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:malformed_request/2
 %%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
+-spec malformed_request(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_request(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
+-spec resource_exists(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 resource_exists(Req, State) ->
     cdmi_existence_checker:object_resource_exists(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) ->
+    {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, #{cdmi_version := undefined} = State) ->
     {[
         {<<"application/binary">>, get_binary}
@@ -111,8 +111,8 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
+-spec content_types_accepted(req(), maps:map()) ->
+    {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
     {[
         {'*', put_binary}
@@ -126,7 +126,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
--spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
+-spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, #{path := Path, auth := Auth} = State) ->
     ok = onedata_file_api:unlink(Auth, {path, Path}),
     {true, Req, State}.
@@ -141,7 +141,7 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 %% Handles GET requests for file, returning file content as response body.
 %% @end
 %%--------------------------------------------------------------------
--spec get_binary(req(), #{}) -> {term(), req(), #{}}.
+-spec get_binary(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = FileGUID}} = State) ->
     % prepare response
     {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, Size),
@@ -166,7 +166,7 @@ get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Fil
 %% Handles GET with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
+-spec get_cdmi(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = FileGUID}}) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
     Answer = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
@@ -227,7 +227,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
 %% Handles PUT without cdmi content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put_binary(req(), #{}) -> {term(), req(), #{}}.
+-spec put_binary(req(), maps:map()) -> {term(), req(), maps:map()}.
 put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
     % prepare request data
     {Content, Req0} = cowboy_req:header(<<"content-type">>, ReqArg, <<"application/octet-stream">>),
@@ -288,7 +288,7 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
 %% Handles PUT with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
+-spec put_cdmi(req(), maps:map()) -> {term(), req(), maps:map()}.
 put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
     % parse body
     {ok, Body, Req0} = cdmi_arg_parser:parse_body(Req),
@@ -400,7 +400,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 %% wrong path as it ends with '/'
 %% @end
 %%--------------------------------------------------------------------
--spec error_wrong_path(req(), #{}) -> no_return().
+-spec error_wrong_path(req(), maps:map()) -> no_return().
 error_wrong_path(_Req, _State) ->
     throw(?ERROR_WRONG_PATH).
 
