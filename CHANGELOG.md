@@ -4,6 +4,38 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc5
+
+* VFS-2534 Use erlang:system_time/1 instead of os:timestamp/0
+* VFS-2534 Skip dbsync state update if not changed
+* VFS-2543 Integrate gen_server2
+* VFS-2446 Use default group type rather than undefined in group logic
+* VFS-2472 Convert metadata to from proplists to maps.
+* VFS-2472 Do not fail when user provides empty callback for replicate operation.
+* VFS-2540 add on_bamboo variable to coverage target
+* VFS-2540 implement collecting .coverdata files in coverage.escript from many ct directories
+* VFS-2534 Improve events processing
+* VFS-2426 Add check_perms operation to logical_file_manager.
+* VFS-2472 Add 1.1 as possible cdmi version, improve documentation.
+* VFS-2472 Handle acl identifier without '&#35;' separator.
+* VFS-2472 Add correct handling of key and keys parameters to query_index handler.
+* VFS-2490 Update op-gui-default ref
+* VFS-2472 Add filter option to metadata PUT.
+* VFS-2472 Unify file identifiers in REST interface.
+* VFS-2472 Add checking permissions to REST API operations.
+* VFS-2472 Add listing and getting inherited xattrs to REST API.
+* VFS-2472 Add inherited option to listing and getting xattrs internals.
+* VFS-2472 Add inherited option to getting json metadata.
+* VFS-2472 Add json merging function.
+* VFS-2472 Add 'inherited' option to list_xattr and get_metadata interface.
+* VFS-2472 Add escaping of user defined js function.
+* VFS-2309 oz test mock updated to match actual implementation
+* VFS-2309 implemented provider registration besed on public keys & updated tests
+* VFS-2309 listener starting fixes
+* VFS-2309 fixed public key encoding
+* VFS-2309 public key based identity endpoind
+
+
 ### 3.0.0-rc4
 
 * VFS-2384 Prevent unrelated events from being lost on crash.

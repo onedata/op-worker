@@ -49,7 +49,7 @@
 -spec start_link(SessId :: session:id(), SessType :: session:type()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SessId, SessType) ->
-    gen_server:start_link(?MODULE, [SessId, SessType], []).
+    gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -121,7 +121,7 @@ handle_info(remove_session, #state{session_id = SessId} = State) ->
 
 handle_info(check_session_status, #state{session_id = SessId,
     session_ttl = TTL} = State) ->
-    RemoveSession = case session:const_get(SessId) of
+    RemoveSession = case session:get(SessId) of
         {ok, #document{value = #session{status = inactive}}} ->
             true;
         {ok, #document{value = #session{connections = [_ | _]}}} ->
@@ -221,19 +221,19 @@ code_change(_OldVsn, State, _Extra) ->
     Milliseconds :: non_neg_integer().
 get_session_ttl(gui) ->
     {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
-    timer:seconds(Period);
-get_session_ttl(fuse) ->
-    {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
-    timer:seconds(Period);
+    Period;
 get_session_ttl(rest) ->
     {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
-    timer:seconds(Period);
+    Period;
 get_session_ttl(provider_incoming) ->
     {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
-    timer:seconds(Period);
+    Period;
 get_session_ttl(provider_outgoing) ->
     {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
-    timer:seconds(Period).
+    Period;
+get_session_ttl(_) ->
+    {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
+    Period.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -249,7 +249,7 @@ get_session_ttl(provider_outgoing) ->
 is_session_ttl_exceeded(SessId, TTL) ->
     Diff = fun
         (#session{status = active, accessed = Accessed} = Sess) ->
-            InactivityPeriod = timer:now_diff(os:timestamp(), Accessed) div 1000,
+            InactivityPeriod = erlang:system_time(seconds) - Accessed,
             case InactivityPeriod >= TTL of
                 true -> {ok, Sess#session{status = inactive}};
                 false -> {error, {ttl_not_exceeded, TTL - InactivityPeriod}}

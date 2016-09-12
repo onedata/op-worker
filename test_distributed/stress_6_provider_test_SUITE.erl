@@ -60,14 +60,14 @@ db_sync_test_base(Config) ->
     Dirs = ?config(dirs_num, Config),
     Files = ?config(files_num, Config),
     Attempts = ?config(attempts, Config),
-    multi_provider_file_ops_test_SUITE:synchronization_test_base(Config, <<"user1">>, {4,2,0}, Attempts, Dirs, Files).
+    multi_provider_file_ops_test_base:synchronization_test_base(Config, <<"user1">>, {4,2,0}, Attempts, Dirs, Files).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_SUITE]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

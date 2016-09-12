@@ -112,7 +112,7 @@ set_default_space(Auth, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec join_group(oz_endpoint:auth(), GroupId :: binary()) ->
-    ok | {error, Reason :: term()}.
+    {ok, GroupId :: binary()} | {error, Reason :: term()}.
 join_group(Auth, Token) ->
     oz_users:join_group(Auth, [{<<"token">>, Token}]).
 

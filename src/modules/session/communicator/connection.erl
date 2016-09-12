@@ -44,7 +44,7 @@
     % actual connection state
     socket :: etls:socket(),
     transport :: module(),
-    session_id :: session:id(),
+    session_id :: undefined | session:id(),
     connection_type :: incoming | outgoing,
     peer_type = fuse_client :: fuse_client | provider_incoming
 }).
@@ -96,7 +96,7 @@ init(Ref, Socket, Transport, _Opts) ->
         false -> fuse_client
     end,
 
-    gen_server:enter_loop(?MODULE, [], #state{
+    gen_server2:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
@@ -129,7 +129,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
         provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
 
     ok = proc_lib:init_ack({ok, self()}),
-    gen_server:enter_loop(?MODULE, [], #state{
+    gen_server2:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
@@ -149,7 +149,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     ok | {error, Reason :: term()} | {exit, Reason :: term()}.
 send(Msg, Ref) when is_pid(Ref) ->
     try
-        gen_server:call(Ref, {send, Msg})
+        gen_server2:call(Ref, {send, Msg})
     catch
         _:Reason -> {error, Reason}
     end;
@@ -168,7 +168,7 @@ send(Msg, Ref) ->
     ok | {error, Reason :: term()}.
 send_async(Msg, Ref) when is_pid(Ref) ->
     try
-        gen_server:cast(Ref, {send, Msg})
+        gen_server2:cast(Ref, {send, Msg})
     catch
         _:Reason -> {error, Reason}
     end;

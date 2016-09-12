@@ -43,28 +43,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, list_files}
@@ -84,7 +84,7 @@ content_types_provided(Req, State) ->
 %%
 %% @param path Directory path (e.g. &#39;/My Private Space/testfiles&#39;)
 %%--------------------------------------------------------------------
--spec list_files(req(), #{}) -> {term(), req(), #{}}.
+-spec list_files(req(), maps:map()) -> {term(), req(), maps:map()}.
 list_files(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_offset(Req2, State2),
@@ -102,11 +102,13 @@ list_files(Req, State) ->
                         DefinedLimit = utils:ensure_defined(Limit, undefined, ?MAX_ENTRIES),
                         {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
                         json_utils:encode(
-                            lists:map(fun({Guid, ChildPath}) ->
-                                [{<<"id">>, Guid}, {<<"path">>, filename:join(Path, ChildPath)}]
+                            lists:map(fun({ChildGuid, ChildPath}) ->
+                                {ok, ObjectId} = cdmi_id:uuid_to_objectid(ChildGuid),
+                                [{<<"id">>, ObjectId}, {<<"path">>, filename:join(Path, ChildPath)}]
                             end, Children))
                 end;
             {ok, #file_attr{uuid = Guid}} ->
-                json_utils:encode([[{<<"id">>, Guid}, {<<"path">>, Path}]])
+                {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+                json_utils:encode([[{<<"id">>, ObjectId}, {<<"path">>, Path}]])
         end,
     {Response, Req4, State4}.

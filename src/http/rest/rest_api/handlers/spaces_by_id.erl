@@ -42,28 +42,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, get_space}
@@ -81,12 +81,13 @@ content_types_provided(Req, State) ->
 %%
 %% @param sid Space ID.
 %%--------------------------------------------------------------------
--spec get_space(req(), #{}) -> {term(), req(), #{}}.
+-spec get_space(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_space(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
 
     #{auth := Auth, space_id := SpaceId} = State2,
 
+    space_membership:check_with_auth(Auth, SpaceId),
     {ok, #document{value = #space_info{name = Name, providers = Providers}}} =
         space_info:get_or_fetch(Auth, SpaceId),
     ProvidersRawResponse = lists:map(fun(ProviderId) ->

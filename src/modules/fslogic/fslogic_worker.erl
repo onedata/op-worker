@@ -381,14 +381,14 @@ handle_fuse_request(_Ctx, Req) ->
     ProviderResponse :: #provider_response{}.
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_parent{}}) ->
     fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
-handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_xattr{name = XattrName}}) ->
-    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, XattrName);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_xattr{name = XattrName, inherited = Inherited}}) ->
+    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, XattrName, Inherited);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_xattr{xattr = Xattr}}) ->
     fslogic_req_generic:set_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Xattr);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #remove_xattr{name = XattrName}}) ->
     fslogic_req_generic:remove_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, XattrName);
-handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #list_xattr{}}) ->
-    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #list_xattr{inherited = Inherited}}) ->
+    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Inherited);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_acl{}}) ->
     fslogic_req_generic:get_acl(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_acl{acl = Acl}}) ->
@@ -414,8 +414,8 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #replicate_file{block = Block}}) ->
     NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
     fslogic_req_generic:replicate_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Block);
-handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_metadata{type = Type, names = Names}}) ->
-    fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Type, Names);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_metadata{type = Type, names = Names, inherited = Inherited}}) ->
+    fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Type, Names, Inherited);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_metadata{metadata =
 #metadata{type = Type, value = Value}, names = Names}}) ->
     fslogic_req_generic:set_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Type, Value, Names);
@@ -460,7 +460,7 @@ handle_proxyio_request(_CTX, Req) ->
 %% Processes write events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_write_events(Evts :: [event:event()], Ctx :: #{}) ->
+-spec handle_write_events(Evts :: [event:event()], Ctx :: maps:map()) ->
     [ok | {error, Reason :: term()}].
 handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(Ev) ->
@@ -521,7 +521,7 @@ handle_write_event(Event, SessId) ->
 %% Processes read events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_read_events(Evts :: [event:event()], Ctx :: #{}) ->
+-spec handle_read_events(Evts :: [event:event()], Ctx :: maps:map()) ->
     [ok | {error, Reason :: term()}].
 handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
     lists:map(fun(Ev) ->

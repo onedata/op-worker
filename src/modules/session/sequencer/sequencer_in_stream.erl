@@ -46,7 +46,7 @@
 %%                        waiting to be forwarded
 -record(state, {
     session_id :: session:id(),
-    proxy_session_id :: session:id(),
+    proxy_session_id :: undefined | session:id(),
     sequencer_manager :: pid(),
     stream_id :: stream_id(),
     sequence_number = 0 :: sequence_number(),
@@ -305,7 +305,7 @@ requesting(#client_message{} = Msg, State) ->
 %%--------------------------------------------------------------------
 -spec register_stream(SeqMan :: pid(), StmId :: stream_id()) -> ok.
 register_stream(SeqMan, StmId) ->
-    gen_server:cast(SeqMan, {register_in_stream, StmId, self()}).
+    gen_server2:cast(SeqMan, {register_in_stream, StmId, self()}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -315,7 +315,7 @@ register_stream(SeqMan, StmId) ->
 %%--------------------------------------------------------------------
 -spec unregister_stream(State :: #state{}) -> ok.
 unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
-    gen_server:cast(SeqMan, {unregister_in_stream, StmId}).
+    gen_server2:cast(SeqMan, {unregister_in_stream, StmId}).
 
 %%--------------------------------------------------------------------
 %% @private

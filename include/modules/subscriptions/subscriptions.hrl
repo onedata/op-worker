@@ -20,10 +20,10 @@
     ignore = false :: boolean(),
 
     seq :: subscriptions:seq(),
-    doc :: datastore:document(),
+    doc :: undefined | datastore:document(),
     id :: datastore:ext_key(),
-    model :: subscriptions:model(),
-    revs :: [subscriptions:rev()]
+    model :: undefined | subscriptions:model(),
+    revs :: undefined | [subscriptions:rev()]
 }).
 
 -endif.

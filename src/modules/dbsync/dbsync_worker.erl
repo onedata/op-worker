@@ -42,10 +42,10 @@
 
 %% Record for storing current state of dbsync stream queue.
 -record(queue, {
-    key :: queue(),
+    key :: undefined | queue(),
     since = 0 :: non_neg_integer(),
     until = 0 :: non_neg_integer(),
-    batch_map = #{} :: #{},
+    batch_map = #{} :: maps:map(),
     removed = false :: boolean()
 }).
 
@@ -495,9 +495,7 @@ apply_changes(SpaceId,
                  ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
                  {Key, []}
         end,
-        datastore:run_transaction(ModelName, MainDocKey, fun() ->
-            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
-        end),
+        {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
 
         case Value of
             #links{} ->
@@ -549,7 +547,12 @@ run_posthooks(SpaceId, [Change | Done]) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
+    case dbsync_state:get(Key) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            ok;
+        _ ->
+            {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}})
+    end,
     ok.
 
 %%--------------------------------------------------------------------
@@ -582,17 +585,11 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
             NewValue ->
                 ok;
             _ ->
-                state_put(Key, NewValue)
+                dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = NewValue}})
         end
     end,
 
-    DBSyncPid = whereis(?MODULE),
-    case self() of
-        DBSyncPid ->
-            DoUpdate();
-        _ ->
-            datastore:run_transaction(dbsync_state, term_to_binary(Key), DoUpdate)
-    end.
+    critical_section:run([dbsync_state, term_to_binary(Key)], DoUpdate).
 
 
 %%--------------------------------------------------------------------
@@ -848,7 +845,7 @@ do_request_changes(ProviderId, Since, Until) ->
 %% Gets stashed batches from datastore
 %% @end
 %%--------------------------------------------------------------------
--spec get_stashed_batches(ProviderId :: oneprovider:id(), SpaceId :: binary()) -> Value :: #{}.
+-spec get_stashed_batches(ProviderId :: oneprovider:id(), SpaceId :: binary()) -> Value :: maps:map().
 get_stashed_batches(ProviderId, SpaceId) ->
     case dbsync_batches:get({ProviderId, SpaceId}) of
         {ok, #document{value = #dbsync_batches{batches = Value}}} ->

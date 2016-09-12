@@ -75,13 +75,9 @@ parser.add_argument(
     '--test-type', '-tt',
     action='store',
     default="acceptance",
-    help="Type of test (cucumber, acceptance, performance, packaging, gui). Default is: acceptance",
+    help="Type of test (acceptance, env_up, performance, packaging, gui)",
     dest='test_type')
 
-parser.add_argument(
-    '--runxfail',
-    help="Causes test cases marked with xfail to be started normally"
-)
 
 parser.add_argument(
     '--copy-etc-hosts',

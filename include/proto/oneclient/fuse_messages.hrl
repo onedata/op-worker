@@ -150,15 +150,15 @@
 
 -record(file_renamed, {
     new_uuid :: fslogic_worker:file_guid(),
-    child_entries :: [#file_renamed_entry{}]
+    child_entries :: undefined | [#file_renamed_entry{}]
 }).
 
 -type fuse_response() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
-    #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{}.
+    #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{} | undefined.
 
 -record(fuse_response, {
-    status :: #status{},
+    status :: undefined | #status{},
     fuse_response :: fuse_response()
 }).
 

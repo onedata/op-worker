@@ -42,28 +42,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, list_spaces}
@@ -80,7 +80,7 @@ content_types_provided(Req, State) ->
 %% HTTP method: GET
 %%
 %%--------------------------------------------------------------------
--spec list_spaces(req(), #{}) -> {term(), req(), #{}}.
+-spec list_spaces(req(), maps:map()) -> {term(), req(), maps:map()}.
 list_spaces(Req, State = #{auth := Auth}) ->
     {ok, UserId} = session:get_user_id(Auth),
     {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get_or_fetch(Auth, UserId),

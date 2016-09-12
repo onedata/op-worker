@@ -168,7 +168,7 @@ start_queue_loop(Max) ->
 act_on_fetch_result({ok, Block}, _SubRef) ->
     #gw_fetch{notify = Notify} = Request = repackage(Block),
     MyRequest = Request#gw_fetch{notify = [self() | Notify]},
-    gen_server:cast(?GATEWAY_DISPATCHER, MyRequest),
+    gen_server2:cast(?GATEWAY_DISPATCHER, MyRequest),
     1;
 
 act_on_fetch_result({error, empty}, SubRef) ->

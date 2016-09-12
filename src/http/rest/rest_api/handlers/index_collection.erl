@@ -37,28 +37,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>, <<"POST">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, list_indexes}
@@ -67,8 +67,8 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
+-spec content_types_accepted(req(), maps:map()) ->
+    {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
         {<<"text/javascript">>, create_index}
@@ -105,7 +105,7 @@ content_types_accepted(Req, State) ->
 %%
 %% @param space_id Id of the space to query.
 %%--------------------------------------------------------------------
--spec list_indexes(req(), #{}) -> {term(), req(), #{}}.
+-spec list_indexes(req(), maps:map()) -> {term(), req(), maps:map()}.
 list_indexes(Req, State) ->
     {State1, Req1} = validator:parse_query_space_id(Req, State),
 
@@ -154,7 +154,7 @@ list_indexes(Req, State) ->
 %% If not provider an auto generated name will be assigned.
 %%
 %%--------------------------------------------------------------------
--spec create_index(req(), #{}) -> term().
+-spec create_index(req(), maps:map()) -> term().
 create_index(Req, State) ->
     {State1, Req1} = validator:parse_query_space_id(Req, State),
     {State2, Req2} = validator:parse_name(Req1, State1),
@@ -168,6 +168,8 @@ create_index(Req, State) ->
         _ ->
             ok
     end,
+    space_membership:check_with_user(UserId, SpaceId),
+
     {ok, Id} = indexes:add_index(UserId, Name, Function, SpaceId),
 
     {{true, <<"/api/v3/oneprovider/index/", Id/binary>>}, Req3, State3}.

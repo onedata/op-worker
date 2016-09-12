@@ -42,28 +42,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, list_transfers}
@@ -78,7 +78,7 @@ content_types_provided(Req, State) ->
 %%
 %% @param tid Transfer ID.
 %%--------------------------------------------------------------------
--spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
+-spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
 delete_resource(Req, State) ->
     {State2, Req2} = validator:parse_id(Req, State),
 
@@ -109,7 +109,7 @@ delete_resource(Req, State) ->
 %%
 %% @param tid Transfer ID.
 %%--------------------------------------------------------------------
--spec list_transfers(req(), #{}) -> {term(), req(), #{}}.
+-spec list_transfers(req(), maps:map()) -> {term(), req(), maps:map()}.
 list_transfers(Req, State = #{list_all := true}) ->
     {State2, Req2} = validator:parse_dir_limit(Req, State),
     {State3, Req3} = validator:parse_status(Req2, State2),

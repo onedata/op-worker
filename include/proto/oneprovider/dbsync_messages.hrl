@@ -27,7 +27,7 @@
     space_id :: binary(),
     request_id,
     excluded_providers :: [oneprovider:id()],
-    message_body :: term()
+    message_body :: undefined | term()
 }).
 
 -record(batch_update, {

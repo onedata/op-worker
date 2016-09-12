@@ -94,7 +94,8 @@ reuse_or_create_rest_session(Iden, Auth) ->
 %% Creates or reuses proxy session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(), Auth :: session:auth(), SessionType :: atom()) ->
+-spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(),
+    Auth :: session:auth(), SessionType :: atom()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
     {ok, #document{value = #user_identity{} = Iden}} = user_identity:get_or_fetch(Auth),
@@ -110,7 +111,8 @@ reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_uuid(),
-    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui, connections = []},
+    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui,
+        accessed = erlang:system_time(seconds), connections = []},
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
@@ -129,6 +131,7 @@ create_gui_session(Iden, Auth) ->
     {error, Reason :: term()}.
 create_root_session() ->
     Sess = #session{status = active, type = root, connections = [],
+        accessed = erlang:system_time(seconds),
         identity = #user_identity{user_id = ?ROOT_USER_ID}},
     case session:create(#document{key = ?ROOT_SESS_ID, value = Sess}) of
         {ok, ?ROOT_SESS_ID} ->
@@ -226,14 +229,18 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_session(SessId, SessType, Iden, Auth, NewCons, ProxyVia) ->
     Sess = #session{status = active, identity = Iden, auth = Auth,
-        connections = NewCons, type = SessType, proxy_via = ProxyVia},
+        accessed = erlang:system_time(seconds), connections = NewCons,
+        type = SessType, proxy_via = ProxyVia},
     Diff = fun
         (#session{status = inactive}) ->
             {error, {not_found, session}};
         (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
             case Iden of
                 ValidIden ->
-                    {ok, ExistingSess#session{connections = NewCons ++ Cons}};
+                    {ok, ExistingSess#session{
+                        accessed = erlang:system_time(seconds),
+                        connections = NewCons ++ Cons
+                    }};
                 _ ->
                     {error, {invalid_identity, Iden}}
             end

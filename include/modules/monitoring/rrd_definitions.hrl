@@ -12,6 +12,8 @@
 -ifndef(RRD_DEFINITIONS_HRL).
 -define(RRD_DEFINITIONS_HRL, 1).
 
+-type rras_map() :: #{atom() => rrd_utils:rra()}.
+
 -define(RRDTOOL_POOL_NAME, rrdtool_pool_name).
 -define(RRDTOOL_POOL_TRANSACTION_TIMEOUT, timer:seconds(60)).
 
@@ -57,7 +59,7 @@
 
 -record(rrd_definition, {
     datastores = [] :: [rrd_utils:datastore()],
-    rras_map = #{} :: #{atom() => rrd_utils:rra()},
+    rras_map = #{} :: rras_map(),
     options = [{step, ?STEP_IN_SECONDS}] :: rrd_utils:options(),
     unit = "" :: string()
 }).
