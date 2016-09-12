@@ -121,7 +121,7 @@ init_stream(Since, Until, Queue) ->
                     (Seq, Doc, Model) ->
                         worker_proxy:call(dbsync_worker, {Queue,
                             #change{seq = couchdb_datastore_driver:normalize_seq(Seq), doc = Doc, model = Model}})
-                end, Since, NewUntil);
+                end, Since, NewUntil, couchdb_datastore_driver:sync_enabled_bucket());
         _ ->
             {ok, already_started}
     end.
@@ -486,7 +486,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 forign_links_get(ModelConfig, Key) ->
     case ets:lookup(doc_cache, Key) of
         [] ->
-            case couchdb_datastore_driver:get(ModelConfig, <<"nosync">>, Key) of
+            case couchdb_datastore_driver:get(ModelConfig, couchdb_datastore_driver:default_bucket(), Key) of
                 {ok, Doc = #document{key = Key}} ->
                     ets:insert_new(doc_cache, {Key, Doc}),
                     {ok, Doc};
@@ -500,7 +500,7 @@ forign_links_get(ModelConfig, Key) ->
 
 forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewRevNum, _}}) ->
     ?info("REV VS ~p", [{OldRevNum, NewRevNum}]),
-    case couchdb_datastore_driver:force_save(ModelConfig, <<"nosync">>, Doc) of
+    case couchdb_datastore_driver:force_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc) of
         {ok, _} ->
             case OldRevNum of
                 _ when OldRevNum > NewRevNum ->
@@ -539,97 +539,87 @@ rev_to_num(Rev) ->
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
 apply_changes(SpaceId, Changes) ->
-    apply_changes(SpaceId, Changes, [], []).
+    apply_changes(SpaceId, Changes, []).
 apply_changes(SpaceId,
-    [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T], Done, LinksPostFuns) ->
+    [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T], Done) ->
     try
         ModelConfig = ModelName:model_init(),
 
-        {MainDocKey, HelperKeys} = case Value of
+        MainDocKey = case Value of
             #links{} ->
-                % TODO - work only on local tree (after refactoring of link_utils)
                 MDK = Value#links.doc_key,
                 file_meta:set_link_context_for_space(SpaceId),
 
-                OldLinkMap = case couchdb_datastore_driver:get_link_doc(ModelConfig, Key) of
-                                 {ok, #document{value = #links{link_map = OLM}}} -> OLM;
-                                 {error, {not_found, _}} -> #{}
-                             end,
-                HKs = maps:keys(maps:merge(Value#links.link_map, OldLinkMap)),
+                OldLinksMap = case forign_links_get(ModelConfig, Key) of
+                    {ok, #document{value = OldLinks0}} ->
+                        OldLinks0;
+                    {error, _} ->
+                        #links{link_map = #{}, model = ModelName}
+                end,
+                {AddedMap0, DeletedMap0} = links_utils:diff(OldLinksMap, Value),
+                HKs = maps:keys(maps:merge(AddedMap0, DeletedMap0)),
 
                 lists:foreach(fun(LName) ->
                     ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
                 end, HKs),
-                {MDK, HKs};
+                MDK;
              _ ->
                  ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
-                 {Key, []}
+                 Key
         end,
         MyProvId = oneprovider:get_provider_id(),
-        LinksPost =
-            datastore:run_transaction(ModelName, couchdb_datastore_driver:transaction_key(ModelConfig, MainDocKey), fun() ->
+        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:transaction_key(ModelConfig, MainDocKey), fun() ->
             case Value of
                 #links{origin = MyProvId} ->
-                    ok;
+                    [];
                 #links{origin = Origin} = Links ->
                     {OldLinks, OldRev} = case forign_links_get(ModelConfig, Key) of
-                        {ok, #document{value = OldLinks0, rev = RRev}} ->
-                            {OldLinks0, rev_to_num(RRev)};
+                        {ok, #document{value = OldLinks1, rev = RRev}} ->
+                            {OldLinks1, rev_to_num(RRev)};
                         {error, Reason0} ->
                             {#links{link_map = #{}, model = ModelName}, 0}
                     end,
                     {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = forign_links_save(ModelConfig, OldRev, Doc),
-%%                    {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = couchdb_datastore_driver:get(ModelConfig, Key),
                     {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
-                    ?info("DIFF ~p", [{Origin, MainDocKey, AddedMap, DeletedMap}]),
+%%                    ?info("DIFF ~p", [{Origin, MainDocKey, AddedMap, DeletedMap}]),
                     dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
-                    lists:foreach(fun(LName) ->
-                        caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName),
-                        ok
-                    end, maps:keys(AddedMap) ++ maps:keys(DeletedMap));
+                    maps:keys(AddedMap) ++ maps:keys(DeletedMap);
                 _ ->
-                    {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
+                    {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+                    []
             end
         end),
 
         case Value of
             #links{} ->
-                % TODO - work only on local tree (after refactoring of link_utils)
                 lists:foreach(fun(LName) ->
-                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
-                end, maps:keys(Value#links.link_map));
+                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName),
+                    ok
+                end, ChangedLinks);
             _ ->
                 ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
         end,
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
-        case LinksPost of
-            Fun when is_function(Fun) ->
-                apply_changes(SpaceId, T, [Change | Done], [LinksPost | LinksPostFuns]);
-            _ ->
-                apply_changes(SpaceId, T, [Change | Done], LinksPostFuns)
-        end
+        apply_changes(SpaceId, T, [Change | Done])
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p", [Change, Reason]),
             {error, Reason}
     end;
-apply_changes(SpaceId, [], Done, LinksPostFuns) ->
-    run_posthooks(SpaceId, lists:reverse(Done), lists:reverse(LinksPostFuns)).
+apply_changes(SpaceId, [], Done) ->
+    run_posthooks(SpaceId, lists:reverse(Done)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Apply posthooks for list of changes from remote provider.
 %% @end
 %%--------------------------------------------------------------------
--spec run_posthooks(SpaceId :: binary(), [change()], [term()]) -> ok.
-run_posthooks(_, [], []) ->
+-spec run_posthooks(SpaceId :: binary(), [change()]) -> ok.
+run_posthooks(_, []) ->
     ok;
-run_posthooks(SpaceId, Changes, [LinksPostFun | R]) ->
-    LinksPostFun(),
-    run_posthooks(SpaceId, Changes, R);
-run_posthooks(SpaceId, [Change | Done], []) ->
+run_posthooks(SpaceId, [Change | Done]) ->
     spawn(
         fun() ->
             try
@@ -641,7 +631,7 @@ run_posthooks(SpaceId, [Change | Done], []) ->
             ok
         end),
 
-    run_posthooks(SpaceId, Done, []).
+    run_posthooks(SpaceId, Done).
 
 %%--------------------------------------------------------------------
 %% @doc
