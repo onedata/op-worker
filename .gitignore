@@ -22,10 +22,8 @@ test/eunit_results
 test_distributed/cover_tmp.spec
 test_coverage
 
-deps
 doc
 logs
-ebin
 priv
 .rebar
 
@@ -39,3 +37,6 @@ docs/_build/
 # OS X
 .DS_Store
 ._*
+
+_build
+compile_commands.json

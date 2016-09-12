@@ -31,7 +31,7 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
         {{ok, Auth}, NewReq} ->

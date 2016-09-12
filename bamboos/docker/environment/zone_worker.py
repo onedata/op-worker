@@ -8,9 +8,6 @@ Brings up a set of cluster-worker nodes. They can create separate clusters.
 import os
 from . import docker, common, worker, gui, panel, location_service_bootstrap
 
-DOCKER_BINDIR_PATH = '/root/build'
-
-
 def up(image, bindir, dns_server, uid, config_path, logdir=None,
        dnsconfig_path=None, storages_dockers=None, luma_config=None):
     if dnsconfig_path is None:
