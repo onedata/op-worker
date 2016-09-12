@@ -147,7 +147,8 @@
 }).
 
 -record(share, {
-    uuid :: fslogic_worker:file_guid()
+    share_id :: share_info:id(),
+    share_file_uuid ::share_info:share_guid()
 }).
 
 -type provider_response() ::

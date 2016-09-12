@@ -23,7 +23,7 @@
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/5, set_metadata/6,
-    check_perms/4, create_share/4, remove_share/3]).
+    check_perms/4, create_share/4, remove_share/3, remove_share_by_guid/3]).
 
 %%%===================================================================
 %%% API
@@ -430,7 +430,7 @@ check_perms(Worker, SessId, FileKey, OpenMode) ->
         end).
 
 -spec create_share(node(), session:id(), logical_file_manager:file_key(), share_info:name()) ->
-    {ok, ShareGuid :: fslogic_worker:file_guid()} | {error, term()}.
+    {ok, {share_info:id(), share_info:share_guid()}} | {error, term()}.
 create_share(Worker, SessId, FileKey, Name) ->
         exec(Worker,
         fun(Host) ->
@@ -439,13 +439,23 @@ create_share(Worker, SessId, FileKey, Name) ->
             Host ! {self(), Result}
         end).
 
--spec remove_share(node(), session:id(), logical_file_manager:file_key()) ->
-    {ok, ShareGuid :: fslogic_worker:file_guid()} | {error, term()}.
+-spec remove_share(node(), session:id(), share_info:id()) ->
+    ok | {error, term()}.
 remove_share(Worker, SessId, FileKey) ->
         exec(Worker,
         fun(Host) ->
             Result =
                 logical_file_manager:remove_share(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec remove_share_by_guid(node(), session:id(), share_info:share_guid()) ->
+    ok | {error, term()}.
+remove_share_by_guid(Worker, SessId, ShareGuid) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:remove_share_by_guid(SessId, ShareGuid),
             Host ! {self(), Result}
         end).
 

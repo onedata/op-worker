@@ -34,7 +34,7 @@
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
--export([create_share/3, remove_share/2]).
+-export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
 -export([get_metadata/4, set_metadata/5]).
 
@@ -60,6 +60,7 @@
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
 -type share_id() :: binary().
+-type share_file_guid() :: binary().
 -type share_name() :: binary().
 %%--------------------------------------------------------------------
 
@@ -417,7 +418,7 @@ remove_symlink(FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(onedata_auth_api:auth(), file_key(), share_name()) ->
-    {ok, share_id()} | error_reply().
+    {ok, {share_id(), share_file_guid()}} | error_reply().
 create_share(Auth, FileKey, Name) ->
     logical_file_manager:create_share(Auth, FileKey, Name).
 
@@ -429,6 +430,16 @@ create_share(Auth, FileKey, Name) ->
 -spec remove_share(onedata_auth_api:auth(), share_id()) -> ok | error_reply().
 remove_share(Auth, ShareID) ->
     logical_file_manager:remove_share(Auth, ShareID).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file share by ShareGuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share_by_guid(onedata_auth_api:auth(), share_file_guid()) -> ok | error_reply().
+remove_share_by_guid(Auth, ShareGuid) ->
+    logical_file_manager:remove_share_by_guid(Auth, ShareGuid).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Get json metadata linked with file

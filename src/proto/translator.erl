@@ -431,8 +431,8 @@ translate_from_protobuf(#'CreateShare'{name = Name}) ->
     #create_share{name = Name};
 translate_from_protobuf(#'RemoveShare'{}) ->
     #remove_share{};
-translate_from_protobuf(#'Share'{uuid = Uuid}) ->
-    #'share'{uuid = Uuid};
+translate_from_protobuf(#'Share'{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+    #share{share_id = ShareId, share_file_uuid = ShareGuid};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -824,8 +824,8 @@ translate_to_protobuf(#create_share{name = Name}) ->
     {create_share, #'CreateShare'{name = Name}};
 translate_to_protobuf(#remove_share{}) ->
     {remove_share, #'RemoveShare'{}};
-translate_to_protobuf(#share{uuid = Uuid}) ->
-    {share, #'Share'{uuid = Uuid}};
+translate_to_protobuf(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+    {share, #'Share'{share_id = ShareId, share_file_uuid = ShareGuid}};
 
 
 %% DBSYNC
