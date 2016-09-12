@@ -139,7 +139,7 @@ get_all_indexes(UserId) ->
 %%--------------------------------------------------------------------
 -spec query_view(index_id(), list()) -> {ok, [file_meta:uuid()]}.
 query_view(Id, Options) ->
-    {ok, FileUuids} = couchdb_datastore_driver:query_view(Id, Options),
+    {ok, FileUuids} = couchdb_datastore_driver:query_view(custom_metadata, Id, Options),
     {ok, lists:map(fun(Uuid) -> fslogic_uuid:to_file_guid(Uuid) end, FileUuids)}.
 
 %%%===================================================================
@@ -259,11 +259,12 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec add_db_view(index_id(), space_info:id(), view_function()) -> ok.
 add_db_view(IndexId, SpaceId, Function) ->
-    RecordName = <<"custom_metadata">>,
-    DbViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { "
+    RecordName = custom_metadata,
+    RecordNameBin = atom_to_binary(RecordName, utf8),
+    DbViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['RECORD::'] == '", RecordNameBin/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { "
         "var key = eval.call(null, '(", Function/binary, ")'); ",
         "var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
-    ok = couchdb_datastore_driver:add_view(IndexId, DbViewFunction).
+    ok = couchdb_datastore_driver:add_view(RecordName, IndexId, DbViewFunction).
 
 %%--------------------------------------------------------------------
 %% @doc escapes characters: \ " ' \n \t \v \0 \f \r
