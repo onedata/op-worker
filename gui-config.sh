@@ -18,7 +18,7 @@
 # Directory relative to this script, to which static GUI files will be copied.
 # First put them in deps, later after release generation they will be copied
 # from there to release (see Makefile).
-TARGET_DIR='deps/gui_static'
+TARGET_DIR='_build/default/lib/gui_static'
 # Image which will be used by default to get the static files. If it cannot
 # be resolved, the script will fall back to secondary.
 PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-2508'

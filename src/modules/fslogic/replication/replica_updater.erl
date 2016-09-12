@@ -187,7 +187,7 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 %% Inavlidates given blocks in given locations. File size is also updated.
 %% @end
 %%--------------------------------------------------------------------
--spec shrink(#document{value :: #file_location{}}, [#file_block{}] | [], non_neg_integer()) ->
+-spec shrink(#document{value :: #file_location{}}, [#file_block{}] | lists:list(), non_neg_integer()) ->
     file_location:doc().
 shrink(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks, NewSize) ->
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),

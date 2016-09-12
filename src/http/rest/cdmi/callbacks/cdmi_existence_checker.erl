@@ -27,7 +27,7 @@
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
--spec container_resource_exists(cowboy_req:req(), #{}) -> {boolean(), cowboy_req:req(), #{}}.
+-spec container_resource_exists(cowboy_req:req(), maps:map()) -> {boolean(), cowboy_req:req(), maps:map()}.
 container_resource_exists(Req, State) ->
     resource_exists(Req, State, container).
 
@@ -35,7 +35,7 @@ container_resource_exists(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
--spec object_resource_exists(cowboy_req:req(), #{}) -> {boolean(), cowboy_req:req(), #{}}.
+-spec object_resource_exists(cowboy_req:req(), maps:map()) -> {boolean(), cowboy_req:req(), maps:map()}.
 object_resource_exists(Req, State) ->
     resource_exists(Req, State, object).
 
@@ -49,7 +49,7 @@ object_resource_exists(Req, State) ->
 %% Redirect this request to the same url but without trailing '/'.
 %% @end
 %%--------------------------------------------------------------------
--spec redirect_to_object(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
+-spec redirect_to_object(cowboy_req:req(), maps:map()) -> {halt, cowboy_req:req(), maps:map()}.
 redirect_to_object(Req, #{path := Path} = State) ->
     redirect_to(Req, State, binary_part(Path, {0, byte_size(Path) - 1})).
 
@@ -58,7 +58,7 @@ redirect_to_object(Req, #{path := Path} = State) ->
 %% Redirect this request to the same url but with trailing '/'.
 %% @end
 %%--------------------------------------------------------------------
--spec redirect_to_container(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
+-spec redirect_to_container(cowboy_req:req(), maps:map()) -> {halt, cowboy_req:req(), maps:map()}.
 redirect_to_container(Req, #{path := Path} = State) ->
     redirect_to(Req, State, <<Path/binary, "/">>).
 
@@ -67,7 +67,7 @@ redirect_to_container(Req, #{path := Path} = State) ->
 %% Redirect a request to the given path.
 %% @end
 %%--------------------------------------------------------------------
--spec redirect_to(cowboy_req:req(), #{}, binary()) -> {halt, cowboy_req:req(), #{}}.
+-spec redirect_to(cowboy_req:req(), maps:map(), binary()) -> {halt, cowboy_req:req(), maps:map()}.
 redirect_to(Req, State, Path) ->
     {Hostname, _} = cowboy_req:header(<<"host">>, Req),
 

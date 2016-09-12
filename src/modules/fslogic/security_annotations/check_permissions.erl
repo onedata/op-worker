@@ -84,7 +84,7 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %% Expand access definition to form allowing it to be verified by rules module.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_access_definitions([access_definition()], onedata_user:id(), share_info:id(), list(), #{}, #{}, #{}) ->
+-spec expand_access_definitions([access_definition()], onedata_user:id(), share_info:id(), list(), maps:map(), maps:map(), maps:map()) ->
     [{check_type(), undefined | datastore:document(), datastore:document(), share_info:id(), [#accesscontrolentity{}]}].
 expand_access_definitions([], _UserId, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];
@@ -153,7 +153,7 @@ resolve_file_entry({parent, Item}, Inputs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec expand_traverse_ancestors_check(file_meta:doc() | undefined, file_meta:doc() | undefined,
-    onedata_user:doc(), share_info:id(), #{}) ->
+    onedata_user:doc(), share_info:id(), maps:map()) ->
     [{check_type(), datastore:document(), datastore:document(), share_info:id(), [#accesscontrolentity{}]}].
 expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
     UserDoc = #document{key = UserId}, ShareId, AclMap) ->
@@ -211,8 +211,8 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
 %%--------------------------------------------------------------------
 -spec expand_ancestors_check(datastore:ext_key(),
     [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}],
-    datastore:ext_key(), datastore:document(), share_info:id(), #{}) ->
-    [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
+    onedata_user:id(), onedata_user:doc(), share_info:id(), maps:map()) ->
+    [{check_type(), file_meta:doc(), onedata_user:doc(), share_info:id(), [#accesscontrolentity{}]}].
 expand_ancestors_check(?ROOT_DIR_UUID, Acc, _UserId, _UserDoc, _ShareId, _AclMap) ->
     {Acc, false};
 expand_ancestors_check(Key, Acc, UserId, UserDoc, ShareId, AclMap) ->
@@ -241,7 +241,7 @@ has_acl(FileUUID) ->
 %%--------------------------------------------------------------------
 %% @doc Get acl of given file, returns undefined when acls are empty
 %%--------------------------------------------------------------------
--spec get_acl(Uuid :: file_meta:uuid(), Acls :: #{}) -> {[#accesscontrolentity{}] | undefined, #{}}.
+-spec get_acl(Uuid :: file_meta:uuid(), Acls :: maps:map()) -> {[#accesscontrolentity{}] | undefined, maps:map()}.
 get_acl(Uuid, Map) ->
     case maps:get(Uuid, Map, undefined) of
         undefined ->
@@ -260,7 +260,7 @@ get_acl(Uuid, Map) ->
 %%--------------------------------------------------------------------
 %% @doc Get file_doc matching given item definition
 %%--------------------------------------------------------------------
--spec get_file(item_definition(), #{}, onedata_user:id(), list()) -> {datastore:document(), #{}}.
+-spec get_file(item_definition(), maps:map(), onedata_user:id(), list()) -> {datastore:document(), maps:map()}.
 get_file(ItemDefinition, Map, UserId, FunctionInputs) ->
     case maps:get(ItemDefinition, Map, undefined) of
         undefined ->
@@ -273,7 +273,7 @@ get_file(ItemDefinition, Map, UserId, FunctionInputs) ->
 %%--------------------------------------------------------------------
 %% @doc Get user_doc for given user id
 %%--------------------------------------------------------------------
--spec get_user(onedata_user:id(), #{}) -> {datastore:document(), #{}}.
+-spec get_user(onedata_user:id(), maps:map()) -> {datastore:document(), maps:map()}.
 get_user(UserId, Map) ->
     case maps:get(UserId, Map, undefined) of
         undefined ->
@@ -303,8 +303,8 @@ check_rule_and_cache_result({AccessType, FileDoc, UserDoc, ShareId, _} = Def) ->
 %% Cache given rules result check as 'ok'
 %% @end
 %%--------------------------------------------------------------------
--spec cache_ok_result({term(), FileDoc :: datastore:document() | undefined,
-    UserDoc :: datastore:document(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
+-spec cache_ok_result({CheckType :: term(), file_meta:doc() | undefined,
+    onedata_user:doc(), share_info:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
 cache_ok_result({AccessType, FileDoc, UserDoc, ShareId, _}) ->
     permissions_cache:cache_permission({AccessType, get_doc_id(UserDoc), ShareId, get_doc_id(FileDoc)}, ok).
 

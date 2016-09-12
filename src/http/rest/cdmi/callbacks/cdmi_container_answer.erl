@@ -27,7 +27,7 @@
 %%--------------------------------------------------------------------
 %% @doc Prepares proplist formatted answer with field names from given list of binaries
 %%--------------------------------------------------------------------
--spec prepare([FieldName :: binary()], #{}) -> [{FieldName :: binary(), Value :: term()}].
+-spec prepare([FieldName :: binary()], maps:map()) -> [{FieldName :: binary(), Value :: term()}].
 prepare([], _State) ->
     [];
 prepare([<<"objectType">> | Tail], State) ->

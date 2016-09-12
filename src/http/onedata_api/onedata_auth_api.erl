@@ -29,7 +29,7 @@
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2, adds auth to state
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {boolean(), req(), #{auth => auth()}}.
+-spec is_authorized(req(), maps:map()) -> {boolean(), req(), #{auth => auth()}}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
 

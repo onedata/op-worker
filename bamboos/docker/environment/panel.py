@@ -57,7 +57,8 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         gid=os.getegid(),
         gen_dev_args=json.dumps({'onepanel': config}))
 
-    volumes = [(bindir, '/root/build', 'ro')]
+    bindir = os.path.abspath(bindir)
+    volumes = [(bindir, bindir, 'ro')]
     volumes.extend(extra_volumes)
 
     if logdir:
@@ -71,7 +72,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         detach=True,
         interactive=True,
         tty=True,
-        workdir='/root/build',
+        workdir=bindir,
         volumes=volumes,
         dns_list=dns_servers,
         privileged=True,

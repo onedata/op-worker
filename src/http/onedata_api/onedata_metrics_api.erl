@@ -13,8 +13,8 @@
 -include("global_definitions.hrl").
 
 -type gzip() :: binary().
--type subject_type() :: provider | space | user.
--type subject_id() :: binary().
+-type subject_type() :: provider | space | user | undefined.
+-type subject_id() :: binary() | undefined.
 -type metric_type() :: storage_quota | storage_used | data_access_kbs |
 block_access_iops | block_access_latency | remote_transfer_kbs |
 connected_users | remote_access_kbs | metada_access_ops.

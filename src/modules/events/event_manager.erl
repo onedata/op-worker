@@ -41,12 +41,12 @@
 %% event_streams            - mapping from a subscription ID to an event stream pid
 %% entry_to_provider_map    - cache that maps file to provider that shall handle the event
 -record(state, {
-    session_id :: session:id(),
-    event_manager_sup :: pid(),
-    event_stream_sup :: pid(),
+    session_id :: undefined | session:id(),
+    event_manager_sup :: undefined | pid(),
+    event_stream_sup :: undefined | pid(),
     event_streams = #{} :: streams(),
     subscriptions = #{} :: subscriptions(),
-    entry_to_provider_map = #{} :: #{}
+    entry_to_provider_map = #{} :: maps:map()
 }).
 
 %% Lifetime in seconds of #state.entry_to_provider_map entry
@@ -64,7 +64,7 @@
 -spec start_link(EvtManSup :: pid(), SessId :: session:id()) ->
     {ok, EvtMan :: pid()} | ignore | {error, Reason :: term()}.
 start_link(EvtManSup, SessId) ->
-    gen_server:start_link(?MODULE, [EvtManSup, SessId], []).
+    gen_server2:start_link(?MODULE, [EvtManSup, SessId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -146,7 +146,7 @@ do_handle_cast({flush_stream, SubId, Notify}, #state{event_streams = EvtStms,
     session_id = SessId, subscriptions = Subs} = State) ->
     case get_stream(SubId, Subs, EvtStms) of
         {ok, Stm} ->
-            gen_server:cast(Stm, {flush, Notify});
+            gen_server2:cast(Stm, {flush, Notify});
         error ->
             ?warning("Event stream flush error: stream for subscription ~p and "
             "session ~p not found", [SubId, SessId])
@@ -157,12 +157,9 @@ do_handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtSt
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     HandleLocally =
         fun
-            (#events{events = [Event]}, NewProvMap, false) -> %% Request should be handled locally only
-                {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = maps:map(
-                    fun(_, EvtStm) ->
-                        gen_server:cast(EvtStm, Event),
-                        EvtStm
-                    end, EvtStms)}};
+            (#events{events = [#event{stream_id = StmId} = Event]}, NewProvMap, false) -> %% Request should be handled locally only
+                gen_server2:cast(maps:get(StmId, EvtStms, undefined), Event),
+                {noreply, State#state{entry_to_provider_map = NewProvMap, event_streams = EvtStms}};
             (_, NewProvMap, true) -> %% Request was already handled remotely
                 {noreply, State#state{entry_to_provider_map = NewProvMap}}
         end,
@@ -178,7 +175,7 @@ do_handle_cast(#flush_events{provider_id = ProviderId, subscription_id = SubId, 
             (_, NewProvMap, false) -> %% Request should be handled locally only
                 case get_stream(SubId, Subs, EvtStms) of
                     {ok, Stm} ->
-                        gen_server:cast(Stm, {flush, NotifyFun});
+                        gen_server2:cast(Stm, {flush, NotifyFun});
                     error ->
                         ?warning("Event stream flush error: stream for subscription ~p and "
                         "session ~p not found", [SubId, SessId])
@@ -198,7 +195,7 @@ do_handle_cast(#subscription{id = SubId, event_stream = #event_stream_definition
             ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
             NewEvtStms = case maps:find(StmId, EvtStms) of
                 {ok, EvtStm} ->
-                    gen_server:cast(EvtStm, {add_subscription, Sub}),
+                    gen_server2:cast(EvtStm, {add_subscription, Sub}),
                     EvtStms;
                 error ->
                     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
@@ -215,7 +212,7 @@ do_handle_cast(#subscription_cancellation{id = SubId}, #state{
     ?debug("Removing subscription ~p from session ~p", [SubId, SessId]),
     case get_stream(SubId, Subs, EvtStms) of
         {ok, EvtStm} ->
-            gen_server:cast(EvtStm, {remove_subscription, SubId});
+            gen_server2:cast(EvtStm, {remove_subscription, SubId});
         error ->
             ?warning("Cannot remove subscription ~p from session ~p: "
             "stream doesn't exist", [SubId, SessId])
@@ -352,9 +349,9 @@ request_to_file_entry_or_provider(_) ->
 %%--------------------------------------------------------------------
 -spec handle_or_reroute(RequestMessage :: term(),
     RequestContext :: {file, fslogic_worker:file_guid_or_path()} | {provider, oneprovider:id()} | not_file_context,
-    SessId :: session:id(),
-    HandleLocallyFun :: fun((RequestMessage :: term(), NewProvMap :: #{},
-    IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
+    SessId :: (session:id() | undefined),
+    HandleLocallyFun :: fun((RequestMessage :: term(), NewProvMap :: maps:map(),
+    IsRerouted :: boolean()) -> term()), ProvMap :: maps:map()) -> term().
 handle_or_reroute(Msg, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(Msg, ProvMap, false);
 handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage,

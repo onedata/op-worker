@@ -52,7 +52,10 @@
     set_get_rdf_metadata/1,
     set_get_rdf_metadata_id/1,
     changes_stream_json_metadata_test/1,
-    create_list_index/1
+    create_list_index/1,
+    set_get_json_metadata_inherited/1,
+    set_get_xattr_inherited/1,
+    set_get_json_metadata_using_filter/1
 ]).
 
 all() ->
@@ -79,7 +82,10 @@ all() ->
         set_get_rdf_metadata,
         set_get_rdf_metadata_id,
         changes_stream_json_metadata_test,
-        create_list_index
+        create_list_index,
+        set_get_json_metadata_inherited,
+        set_get_xattr_inherited,
+        set_get_json_metadata_using_filter
     ]).
 
 %%%===================================================================
@@ -217,7 +223,10 @@ posix_mode_get(Config) ->
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
-        [[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]],
+        [[
+            {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>},
+            {<<"name">>, <<"mode">>}
+        ]],
         DecodedBody
     ).
 
@@ -239,8 +248,10 @@ posix_mode_put(Config) ->
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
-        [[{<<"name">>, <<"mode">>},
-        {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>}]],
+        [[
+            {<<"value">>, <<"0", (integer_to_binary(NewMode, 8))/binary>>},
+            {<<"name">>, <<"mode">>}
+        ]],
         DecodedBody
     ).
 
@@ -258,7 +269,10 @@ xattr_get(Config) ->
     % then
     DecodedBody = json_utils:decode(Body),
     ?assertEqual(
-        [[{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]],
+        [[
+            {<<"value">>, <<"v1">>},
+            {<<"name">>, <<"k1">>}
+        ]],
         DecodedBody
     ).
 
@@ -278,7 +292,10 @@ xattr_put(Config) ->
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(RespBody),
     ?assertEqual(
-        [[{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]],
+        [[
+            {<<"value">>, <<"v1">>},
+            {<<"name">>, <<"k1">>}
+        ]],
         DecodedBody
     ).
 
@@ -350,8 +367,9 @@ list_file(Config) ->
 
     % then
     DecodedBody = json_utils:decode(Body),
+    {ok, FileObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
     ?assertEqual(
-        [[{<<"id">>, FileGuid}, {<<"path">>, File}]],
+        [[{<<"id">>, FileObjectId}, {<<"path">>, File}]],
         DecodedBody
     ).
 
@@ -402,7 +420,8 @@ replicate_file_by_id(Config) ->
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:guid_to_uuid(FileGuid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileGuid/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    {ok, FileObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileObjectId/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode(Body0),
     [{<<"transferId">>, Tid}] = ?assertMatch([{<<"transferId">>, _}], DecodedBody0),
 
@@ -414,7 +433,7 @@ replicate_file_by_id(Config) ->
     ]),
     ?assertMatch({ok, 200, _, ExpectedTransferStatus},
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileGuid/binary>>, get, [user_1_token_header(Config)], []),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
     assertLists(
         [
@@ -574,15 +593,16 @@ set_get_json_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file">>, 8#777),
+    {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=json">>, put,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"key\": \"value\"}")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=json">>, get,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
@@ -594,7 +614,7 @@ set_get_json_metadata_id(Config) ->
 
     % then
     ?assertMatch({ok, 200, _, <<"\"value\"">>},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?filter_type=keypath&filter=key">>, get,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])).
 
 
@@ -616,15 +636,16 @@ set_get_rdf_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file">>, 8#777),
+    {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=rdf">>, put,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/rdf+xml">>}], "some_xml")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
-        do_request(WorkerP1, <<"metadata-id/", Guid/binary, "?metadata_type=rdf">>, get,
+        do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
 
@@ -648,7 +669,7 @@ create_list_index(Config) ->
     {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
     IndexList = jiffy:decode(ListBody, [return_maps]),
     ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id}], IndexList),
-    ?assertMatch({ok, 200, _, Function},
+    ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"text/javascript">>}], [])),
 
     % when
@@ -661,6 +682,112 @@ create_list_index(Config) ->
         [user_1_token_header(Config)], [])),
     IndexList2 = jiffy:decode(ListBody2, [return_maps]),
     ?assertMatch([#{}, #{}], IndexList2).
+
+set_get_json_metadata_inherited(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+
+    % when
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir">>),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
+
+    % then
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"metadata/space3/dir?metadata_type=json&inherited=true">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    DecodedBody = jiffy:decode(Body, [return_maps]),
+    ?assertMatch(
+        #{
+            <<"a">> := #{<<"a1">> := <<"b1">>, <<"a2">> := <<"b2">>},
+            <<"b">> := <<"d">>,
+            <<"e">> := <<"f">>
+        },
+        DecodedBody
+    ).
+
+set_get_xattr_inherited(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test">>),
+    {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
+
+    % when
+    XattrSpaceJson = json_utils:encode([{<<"name">>, <<"onedata_json">>}, {<<"value">>, <<"5">>}]),
+    XattrSpace = json_utils:encode([{<<"name">>, <<"k1">>}, {<<"value">>, <<"v1">>}]),
+    XattrDir = json_utils:encode([{<<"name">>, <<"k2">>}, {<<"value">>, <<"v2">>}]),
+    XattrChild = json_utils:encode([{<<"name">>, <<"k2">>}, {<<"value">>, <<"v22">>}]),
+    XattrChild2 = json_utils:encode([{<<"name">>, <<"k3">>}, {<<"value">>, <<"v3">>}]),
+
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpaceJson)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpace)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3/dir_test?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrDir)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3/dir_test/child?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrChild)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"attributes/space3/dir_test/child?extended=true">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrChild2)),
+
+    % then
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"attributes/space3/dir_test/child?inherited=true&extended=true">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    DecodedBody = jiffy:decode(Body, [return_maps]),
+    ?assertMatch(
+        [
+            #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
+            #{<<"name">> := <<"k2">>, <<"value">> := <<"v22">>},
+            #{<<"name">> := <<"k3">>, <<"value">> := <<"v3">>},
+            #{<<"name">> := <<"onedata_json">>, <<"value">> := <<"5">>}
+        ],
+        DecodedBody
+    ).
+
+set_get_json_metadata_using_filter(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    % when
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"key1\": \"value1\", \"key2\": \"value2\"}">>)),
+
+    % then
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key1">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    DecodedBody = json_utils:decode(Body),
+    ?assertMatch(<<"value1">>, DecodedBody),
+
+    %when
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key1">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"\"value11\"">>)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key2">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"key22\": \"value22\"}">>)),
+
+    %then
+    {_, _, _, ReponseBody} = ?assertMatch({ok, 200, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    ?assertMatch(
+        #{
+            <<"key1">> := <<"value11">>,
+            <<"key2">> := #{<<"key22">> := <<"value22">>}
+        },
+        json_utils:decode_map(ReponseBody)).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -49,7 +49,7 @@
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
 start_link(IpAddr, Id) ->
-    gen_server:start_link(?MODULE, {IpAddr, Id}, []).
+    gen_server2:start_link(?MODULE, {IpAddr, Id}, []).
 
 
 %%--------------------------------------------------------------------
@@ -68,7 +68,7 @@ start_link(IpAddr, Id) ->
      Reason :: term().
 init({IpAddr, Id}) ->
     process_flag(trap_exit, true),
-    gen_server:cast(?GATEWAY_DISPATCHER, {register_connection_manager, Id, IpAddr, self()}),
+    gen_server2:cast(?GATEWAY_DISPATCHER, {register_connection_manager, Id, IpAddr, self()}),
     {ok, #cmstate{id = Id, addr = IpAddr}}.
 
 
@@ -120,7 +120,7 @@ handle_cast(#gw_fetch{remote = Remote} = Request, #cmstate{addr = Addr} = State)
                     {error, Reason} ->
                         gateway:notify(fetch_error, {connection_error, Reason}, Request);
                     {ok, Pid} ->
-                        gen_server:cast(Self, {internal, Request, {new, Pid}})
+                        gen_server2:cast(Self, {internal, Request, {new, Pid}})
                 end
             end),
             {noreply, State};
@@ -145,7 +145,7 @@ handle_cast({internal, #gw_fetch{remote = Remote} = Request, {Type, CPid}}, Stat
                 end
         end,
 
-    ok = gen_server:cast(ConnectionPid, Request),
+    ok = gen_server2:cast(ConnectionPid, Request),
     {noreply, State#cmstate{connections = NewConnections}};
 
 handle_cast({connection_closed, Remote}, State) ->

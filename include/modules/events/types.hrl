@@ -23,9 +23,10 @@
 %% object     - wrapped event
 -record(event, {
     key :: event:key(),
-    stream_key :: event_stream:key(),
+    stream_id :: event_stream:id(),
+    stream_key :: undefined | event_stream:key(),
     counter = 1 :: event:counter(),
-    object :: event:object()
+    object :: undefined | event:object()
 }).
 
 %% definition of a events container
@@ -38,7 +39,7 @@
     provider_id :: oneprovider:id(),
     subscription_id :: subscription:id(),
     context :: term(),
-    notify :: fun((term()) -> ok)
+    notify :: undefined | fun((term()) -> ok)
 }).
 
 %% definition of an event associated with a read operation in the file system
@@ -57,8 +58,8 @@
 %% size      - number of bytes written
 %% blocks    - list of offset, size pairs that describes bytes segments written
 -record(write_event, {
-    file_uuid :: file_meta:uuid(),
-    file_size :: file_meta:size(),
+    file_uuid :: fslogic_worker:file_guid(),
+    file_size :: undefined | file_meta:size(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
@@ -110,7 +111,7 @@
 %% size_difference - size difference of storage usage in bytes since last update
 -record(storage_used_updated, {
     space_id :: datastore:id(),
-    user_id :: datastore:id(),
+    user_id :: undefined | datastore:id(),
     size_difference :: integer()
 }).
 
@@ -128,7 +129,7 @@
 %% block_access_read  - number of write blocks
 -record(file_operations_statistics, {
     space_id :: datastore:id(),
-    user_id :: datastore:id(),
+    user_id :: undefined | datastore:id(),
     data_access_read = 0 :: non_neg_integer() ,
     data_access_write = 0 :: non_neg_integer(),
     block_access_read = 0 :: non_neg_integer(),
@@ -141,7 +142,7 @@
 %% transfer_in - data replicated to provider in bytes
 -record(rtransfer_statistics, {
     space_id :: datastore:id(),
-    user_id :: datastore:id(),
+    user_id :: undefined | datastore:id(),
     transfer_in = 0 :: non_neg_integer()
 }).
 

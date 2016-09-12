@@ -26,17 +26,17 @@
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
+-export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/3, get_xattr/4,
+    remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
--export([create_share/3, remove_share/2]).
+-export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
--export([get_metadata/4, set_metadata/5]).
+-export([get_metadata/5, set_metadata/5]).
 
 %%--------------------------------------------------------------------
 %% IDs of entities
@@ -60,6 +60,7 @@
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
 -type share_id() :: binary().
+-type share_file_guid() :: binary().
 -type share_name() :: binary().
 %%--------------------------------------------------------------------
 
@@ -291,14 +292,14 @@ stat(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Returns file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: file_handle(), XattrName :: xattr_name()) ->
+-spec get_xattr(Handle :: file_handle(), XattrName :: xattr_name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(Handle, XattrName) ->
-    logical_file_manager:get_xattr(Handle, XattrName).
--spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) ->
+get_xattr(Handle, XattrName, Inherited) ->
+    logical_file_manager:get_xattr(Handle, XattrName, Inherited).
+-spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(Auth, FileKey, XattrName) ->
-    logical_file_manager:get_xattr(Auth, FileKey, XattrName).
+get_xattr(Auth, FileKey, XattrName, Inherited) ->
+    logical_file_manager:get_xattr(Auth, FileKey, XattrName, Inherited).
 
 
 %%--------------------------------------------------------------------
@@ -326,12 +327,12 @@ remove_xattr(Auth, FileKey, XattrName) ->
 %%--------------------------------------------------------------------
 %% @doc Returns complete list of extended attribute names of a file.
 %%--------------------------------------------------------------------
--spec list_xattr(file_handle()) -> {ok, [xattr_name()]} | error_reply().
-list_xattr(Handle) ->
-    logical_file_manager:list_xattr(Handle).
--spec list_xattr(onedata_auth_api:auth(), file_key()) -> {ok, [xattr_name()]} | error_reply().
-list_xattr(Auth, FileKey) ->
-    logical_file_manager:list_xattr(Auth, FileKey).
+-spec list_xattr(file_handle(), boolean()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Handle, Inherited) ->
+    logical_file_manager:list_xattr(Handle, Inherited).
+-spec list_xattr(onedata_auth_api:auth(), file_key(), boolean()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Auth, FileKey, Inherited) ->
+    logical_file_manager:list_xattr(Auth, FileKey, Inherited).
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
@@ -417,7 +418,7 @@ remove_symlink(FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(onedata_auth_api:auth(), file_key(), share_name()) ->
-    {ok, share_id()} | error_reply().
+    {ok, {share_id(), share_file_guid()}} | error_reply().
 create_share(Auth, FileKey, Name) ->
     logical_file_manager:create_share(Auth, FileKey, Name).
 
@@ -429,15 +430,25 @@ create_share(Auth, FileKey, Name) ->
 -spec remove_share(onedata_auth_api:auth(), share_id()) -> ok | error_reply().
 remove_share(Auth, ShareID) ->
     logical_file_manager:remove_share(Auth, ShareID).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file share by ShareGuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share_by_guid(onedata_auth_api:auth(), share_file_guid()) -> ok | error_reply().
+remove_share_by_guid(Auth, ShareGuid) ->
+    logical_file_manager:remove_share_by_guid(Auth, ShareGuid).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()]) ->
-    {ok, #{}} | error_reply().
-get_metadata(Auth, FileKey, Type, Names) ->
-    logical_file_manager:get_metadata(Auth, FileKey, Type, Names).
+-spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()], boolean()) ->
+    {ok, maps:map()} | error_reply().
+get_metadata(Auth, FileKey, Type, Names, Inherited) ->
+    logical_file_manager:get_metadata(Auth, FileKey, Type, Names, Inherited).
 
 %%--------------------------------------------------------------------
 %% @doc

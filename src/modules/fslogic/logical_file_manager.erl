@@ -71,8 +71,8 @@
 -export([set_perms/3, check_perms/3, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2, update_times/4,
+-export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
+    remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3, update_times/4,
     update_times/5]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -80,9 +80,9 @@
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
--export([create_share/3, remove_share/2]).
+-export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
--export([get_metadata/4, set_metadata/5]).
+-export([get_metadata/5, set_metadata/5]).
 
 %%%===================================================================
 %%% API
@@ -412,15 +412,15 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: handle(), XattrName :: xattr:name()) ->
+-spec get_xattr(Handle :: handle(), XattrName :: xattr:name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(Handle, XattrName) ->
-    ?run(fun() -> lfm_attrs:get_xattr(Handle, XattrName) end).
+get_xattr(Handle, XattrName, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_xattr(Handle, XattrName, Inherited) end).
 
--spec get_xattr(session:id(), file_key(), xattr:name()) ->
+-spec get_xattr(session:id(), file_key(), xattr:name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(SessId, FileKey, XattrName) ->
-    ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName) end).
+get_xattr(SessId, FileKey, XattrName, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -453,14 +453,14 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %% Returns complete list of extended attributes of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(handle()) -> {ok, [xattr:name()]} | error_reply().
-list_xattr(Handle) ->
-    ?run(fun() -> lfm_attrs:list_xattr(Handle) end).
+-spec list_xattr(handle(), boolean()) -> {ok, [xattr:name()]} | error_reply().
+list_xattr(Handle, Inherited) ->
+    ?run(fun() -> lfm_attrs:list_xattr(Handle, Inherited) end).
 
--spec list_xattr(session:id(), file_key()) ->
+-spec list_xattr(session:id(), file_key(), boolean()) ->
     {ok, [xattr:name()]} | error_reply().
-list_xattr(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey) end).
+list_xattr(SessId, FileKey, Inherited) ->
+    ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited) end).
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
@@ -554,7 +554,7 @@ remove_symlink(FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(session:id(), file_key(), share_info:name()) ->
-    {ok, lfm_shares:share_id()} | error_reply().
+    {ok, {share_info:id(), share_info:share_guid()}} | error_reply().
 create_share(SessId, FileKey, Name) ->
     ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
@@ -563,19 +563,28 @@ create_share(SessId, FileKey, Name) ->
 %% Removes file share by ShareID.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(session:id(), lfm_shares:share_id()) -> ok | error_reply().
+-spec remove_share(session:id(), share_info:id()) -> ok | error_reply().
 remove_share(SessId, ShareID) ->
     ?run(fun() -> lfm_shares:remove_share(SessId, ShareID) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file share by ShareGuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share_by_guid(session:id(), share_info:share_guid()) -> ok | error_reply().
+remove_share_by_guid(SessId, ShareGuid) ->
+    ?run(fun() -> lfm_shares:remove_share_by_guid(SessId, ShareGuid) end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), file_key(), binary(), [binary()]) ->
-    {ok, #{}} | error_reply().
-get_metadata(SessId, FileKey, Type, Names) ->
-    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names) end).
+-spec get_metadata(session:id(), file_key(), binary(), [binary()], boolean()) ->
+    {ok, maps:map()} | error_reply().
+get_metadata(SessId, FileKey, Type, Names, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names, Inherited) end).
 
 %%--------------------------------------------------------------------
 %% @doc

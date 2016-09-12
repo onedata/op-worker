@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([handle/2]).
@@ -71,7 +72,7 @@ handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
             URL = str_utils:format_bin("https://~s/download/~s",
                 [Hostname, FileId]),
             {ok, [{<<"fileUrl">>, URL}]};
-        {error, eacces} ->
+        {error, ?EACCES} ->
             gui_error:report_error(<<"Permission denied">>);
         Other ->
             ?error("Error while downloading file ~s: ~p", [Other]),
@@ -163,7 +164,7 @@ handle(<<"createFileShare">>, Props) ->
     SessionId = g_session:get_session_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
-    {ok, ShareId} = logical_file_manager:create_share(
+    {ok, {ShareId, _}} = logical_file_manager:create_share(
         SessionId, {guid, FileId}, Name
     ),
     {ok, [{<<"shareId">>, ShareId}]};

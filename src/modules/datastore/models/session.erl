@@ -25,7 +25,7 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
+-export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
@@ -34,7 +34,7 @@
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
 -type auth() :: #token_auth{} | #basic_auth{}.
--type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root.
+-type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 -type status() :: active | inactive.
 -type identity() :: #user_identity{}.
 
@@ -51,9 +51,8 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(#document{value = Sess} = Document) ->
-    Timestamp = os:timestamp(),
     datastore:save(?STORE_LEVEL, Document#document{value = Sess#session{
-        accessed = Timestamp
+        accessed = erlang:system_time(seconds)
     }}).
 
 %%--------------------------------------------------------------------
@@ -64,11 +63,15 @@ save(#document{value = Sess} = Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) when is_map(Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{accessed => os:timestamp()});
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{
+        accessed => erlang:system_time(seconds)
+    });
 update(Key, Diff) when is_function(Diff) ->
     NewDiff = fun(Sess) ->
         case Diff(Sess) of
-            {ok, NewSess} -> {ok, NewSess#session{accessed = os:timestamp()}};
+            {ok, NewSess} -> {ok, NewSess#session{
+                accessed = erlang:system_time(seconds)
+            }};
             {error, Reason} -> {error, Reason}
         end
     end,
@@ -81,9 +84,8 @@ update(Key, Diff) when is_function(Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(#document{value = Sess} = Document) ->
-    Timestamp = os:timestamp(),
     datastore:create(?STORE_LEVEL, Document#document{value = Sess#session{
-        accessed = Timestamp
+        accessed = erlang:system_time(seconds)
     }}).
 
 %%--------------------------------------------------------------------
@@ -94,23 +96,6 @@ create(#document{value = Sess} = Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
-        {ok, Doc} ->
-            session:update(Key, #{}),
-            {ok, Doc};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% Does not modify access time.
-%% @end
-%%--------------------------------------------------------------------
--spec const_get(datastore:key()) ->
-    {ok, datastore:document()} | datastore:get_error().
-const_get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -147,13 +132,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    case ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)) of
-        true ->
-            update(Key, #{}),
-            true;
-        false ->
-            false
-    end.
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -342,7 +321,7 @@ get_connections(SessId) ->
 -spec get_connections(SessId :: id(), HideOverloaded :: boolean()) ->
     {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId, HideOverloaded) ->
-    case session:const_get(SessId) of
+    case ?MODULE:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),
