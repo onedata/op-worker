@@ -441,12 +441,14 @@ handle_proxyio_request(#fslogic_ctx{session_id = SessionId, share_id = ShareId},
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
     FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID, ?PROXYIO_PARAMETER_SHARE_ID := ShareId}, SID, FID, ByteSequences);
+    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID,
+        ?PROXYIO_PARAMETER_SHARE_ID => ShareId}, SID, FID, ByteSequences);
 handle_proxyio_request(#fslogic_ctx{session_id = SessionId, share_id = ShareId}, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
     FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-    fslogic_proxyio:read(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID, ?PROXYIO_PARAMETER_SHARE_ID := ShareId}, SID, FID, Offset, Size);
+    fslogic_proxyio:read(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID,
+        ?PROXYIO_PARAMETER_SHARE_ID => ShareId}, SID, FID, Offset, Size);
 handle_proxyio_request(_CTX, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
