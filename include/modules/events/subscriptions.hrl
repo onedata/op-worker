@@ -20,10 +20,10 @@
 %%                associated with this subscription
 %% event_stream - definition of an event stream
 -record(subscription, {
-    id :: subscription:id(),
-    object :: subscription:object(),
-    stream_key :: event_stream:key(),
-    event_stream :: event_stream:definition()
+    id :: undefined | subscription:id(),
+    object :: undefined | subscription:object(),
+    stream_key :: undefined | event_stream:key(),
+    event_stream :: undefined | event_stream:definition()
 }).
 
 %% definition of a subscription concerning file changes
@@ -38,9 +38,9 @@
 %%                     emissions
 %% size_threshold    - maximal number of read bytes before emission
 -record(read_subscription, {
-    counter_threshold :: non_neg_integer(),
-    time_threshold :: non_neg_integer(),
-    size_threshold :: non_neg_integer()
+    counter_threshold :: undefined | non_neg_integer(),
+    time_threshold :: undefined | non_neg_integer(),
+    size_threshold :: undefined | non_neg_integer()
 }).
 
 %% definition of a subscription for write operations in the file system
@@ -49,9 +49,9 @@
 %%                     emissions
 %% size_threshold    - maximal number of written bytes before emission
 -record(write_subscription, {
-    counter_threshold :: non_neg_integer(),
-    time_threshold :: non_neg_integer(),
-    size_threshold :: non_neg_integer()
+    counter_threshold :: undefined | non_neg_integer(),
+    time_threshold :: undefined | non_neg_integer(),
+    size_threshold :: undefined | non_neg_integer()
 }).
 
 %% definition of a subscription for file attributes changes
@@ -61,8 +61,8 @@
 %%                     emissions
 -record(file_attr_subscription, {
     file_uuid :: file_meta:uuid(),
-    counter_threshold :: non_neg_integer(),
-    time_threshold :: non_neg_integer()
+    counter_threshold :: undefined | non_neg_integer(),
+    time_threshold :: undefined | non_neg_integer()
 }).
 
 %% definition of a subscription for file location changes
@@ -72,8 +72,8 @@
 %%                     emissions
 -record(file_location_subscription, {
     file_uuid :: file_meta:uuid(),
-    counter_threshold :: non_neg_integer(),
-    time_threshold :: non_neg_integer()
+    counter_threshold :: undefined | non_neg_integer(),
+    time_threshold :: undefined | non_neg_integer()
 }).
 
 %% definition of a subscription for permission changes
@@ -103,8 +103,8 @@
 %% time_threshold    - maximal delay in milliseconds between successive events
 %%                     emissions
 -record(file_accessed_subscription, {
-    counter_threshold :: non_neg_integer(),
-    time_threshold :: non_neg_integer()
+    counter_threshold :: undefined | non_neg_integer(),
+    time_threshold :: undefined | non_neg_integer()
 }).
 
 %% definition of an subscription cancellation

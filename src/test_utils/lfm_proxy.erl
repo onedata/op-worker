@@ -19,10 +19,10 @@
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
     read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
-    get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
+    get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/4, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
-    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/5, set_metadata/6,
+    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
     check_perms/4]).
 
 %%%===================================================================
@@ -263,10 +263,15 @@ update_times(Worker, SessId, FileKey, ATime, MTime, CTime) ->
 -spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name()) ->
     {ok, #xattr{}} | logical_file_manager:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey) ->
+    get_xattr(Worker, SessId, FileKey, XattrKey, false).
+
+-spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name(), boolean()) ->
+    {ok, #xattr{}} | logical_file_manager:error_reply().
+get_xattr(Worker, SessId, FileKey, XattrKey, Inherited) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:get_xattr(SessId, uuid_to_guid(Worker, FileKey), XattrKey),
+                logical_file_manager:get_xattr(SessId, uuid_to_guid(Worker, FileKey), XattrKey, Inherited),
             Host ! {self(), Result}
         end).
 
@@ -290,13 +295,13 @@ remove_xattr(Worker, SessId, FileKey, XattrKey) ->
             Host ! {self(), Result}
         end).
 
--spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+-spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), boolean()) ->
     {ok, [xattr:name()]} | logical_file_manager:error_reply().
-list_xattr(Worker, SessId, FileKey) ->
+list_xattr(Worker, SessId, FileKey, Inherited) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:list_xattr(SessId, uuid_to_guid(Worker, FileKey)),
+                logical_file_manager:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited),
             Host ! {self(), Result}
         end).
 
@@ -401,16 +406,16 @@ rm_recursive(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()]) -> {ok, #{}}.
-get_metadata(Worker, SessionId, FileKey, Type, Names) ->
+-spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()], boolean()) -> {ok, maps:map()}.
+get_metadata(Worker, SessionId, FileKey, Type, Names, Inherited) ->
         exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:get_metadata(SessionId, FileKey, Type, Names),
+                logical_file_manager:get_metadata(SessionId, FileKey, Type, Names, Inherited),
             Host ! {self(), Result}
         end).
 
--spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), #{}, [binary()]) -> ok.
+-spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), maps:map(), [binary()]) -> ok.
 set_metadata(Worker, SessionId, FileKey, Type, Value, Names) ->
         exec(Worker,
         fun(Host) ->

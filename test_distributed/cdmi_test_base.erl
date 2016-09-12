@@ -455,7 +455,8 @@ metadata(Config) ->
     ?assertEqual(1, length(CdmiResponse16)),
     Metadata16 = proplists:get_value(<<"metadata">>, CdmiResponse16),
     ?assertEqual(6, length(Metadata16)),
-    ?assertEqual([Ace1, Ace2, Ace3], proplists:get_value(<<"cdmi_acl">>, Metadata16)),
+    ?assertEqual([lists:sort(Ace1), lists:sort(Ace2), lists:sort(Ace3)],
+        lists:map(fun lists:sort/1, proplists:get_value(<<"cdmi_acl">>, Metadata16))),
 
     {ok, Code17, _Headers17, Response17} = do_request(WorkerP2, FileName2, get, [user_1_token_header(Config)], []),
     ?assertEqual(200, Code17),
@@ -1855,7 +1856,7 @@ add_xattrs(Config, Path, Xattrs) ->
 get_xattrs(Config, Path) ->
     [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    {ok, Xattrs} = lfm_proxy:list_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}),
+    {ok, Xattrs} = lfm_proxy:list_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, false),
     lists:filtermap(
         fun
             (<<"cdmi_", _/binary>>) ->

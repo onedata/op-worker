@@ -9,7 +9,7 @@
 %%% Handler serving metrics.
 %%% @end
 %%%--------------------------------------------------------------------
--module(metrics).
+-module(onedata_metrics).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -50,29 +50,29 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) ->
-    {[{atom() | binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) ->
+    {[{atom() | binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, get_metric}
@@ -85,20 +85,21 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc Handles GET
 %%--------------------------------------------------------------------
--spec get_metric(req(), #{}) -> {term(), req(), #{}}.
+-spec get_metric(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_metric(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_user_id(Req2, State2),
-    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3),
+    {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3), %todo use validator
     {Step, Req5} = cowboy_req:qs_val(<<"step">>, Req4),
 
-    #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := Id, user_id := UId} = State3,
+    #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := SpaceId, user_id := UId} = State3,
 
-    case space_info:get_or_fetch(Auth, Id) of
+    space_membership:check_with_auth(Auth, SpaceId),
+    case space_info:get_or_fetch(Auth, SpaceId) of
         {ok, #document{value = #space_info{providers = Providers}}} ->
             Json =
                 lists:map(fun(ProviderId) ->
-                    case onedata_metrics_api:get_metric(Auth, SubjectType, Id, SecondarySubjectType, UId,
+                    case onedata_metrics_api:get_metric(Auth, SubjectType, SpaceId, SecondarySubjectType, UId,
                         transform_metric(Metric, SubjectType, SecondarySubjectType), transform_step(Step), ProviderId, json)
                     of
                         {ok, Data} ->

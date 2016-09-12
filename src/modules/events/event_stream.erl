@@ -20,25 +20,24 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/4]).
+-export([start_link/4, execute_event_handler/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
 -export_type([id/0, key/0, ctx/0, definition/0, metadata/0, init_handler/0,
-    terminate_handler/0, event_handler/0, admission_rule/0, aggregation_rule/0,
+    terminate_handler/0, event_handler/0, aggregation_rule/0,
     transition_rule/0, emission_rule/0, emission_time/0]).
 
--type id() :: binary().
+-type id() :: atom().
 -type key() :: binary().
--type ctx() :: #{}.
+-type ctx() :: maps:map().
 -type definition() :: #event_stream_definition{}.
 -type metadata() :: term().
 -type init_handler() :: fun((#subscription{}, session:id(), session:type()) -> ctx()).
 -type terminate_handler() :: fun((ctx()) -> term()).
 -type event_handler() :: fun(([event:event()], ctx()) -> ok).
--type admission_rule() :: fun((event:event()) -> true | false).
 -type aggregation_rule() :: fun((event:event(), event:event()) -> event:event()).
 -type transition_rule() :: fun((metadata(), event:event()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
@@ -65,8 +64,9 @@
     ctx :: term(),
     metadata :: metadata(),
     events = #{} :: events(),
-    emission_ref :: undefined | reference(),
-    subscriptions = #{} :: subscriptions()
+    emission_ref :: undefined | pending | reference(),
+    subscriptions = #{} :: subscriptions(),
+    handler_ref :: undefined | {pid(), reference()}
 }).
 
 %%%===================================================================
@@ -82,6 +82,40 @@
     SessId :: session:id()) -> {ok, Pid :: pid()} | ignore |{error, Reason :: term()}.
 start_link(SessType, EvtMan, Sub, SessId) ->
     gen_server2:start_link(?MODULE, [SessType, EvtMan, Sub, SessId], []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes event handler. If another event handler is being executed, waits
+%% until it is finished.
+%% @end
+%%--------------------------------------------------------------------
+-spec execute_event_handler(Force :: boolean(), State :: #state{}) -> ok.
+execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
+    ctx = Ctx, definition = #event_stream_definition{event_handler = Handler},
+    session_id = SessId, stream_id = StmId} = State) ->
+    try
+        Start = erlang:monotonic_time(milli_seconds),
+        EvtsList = maps:values(Evts),
+        case {Force, EvtsList} of
+            {true, _} -> Handler(EvtsList, Ctx);
+            {false, []} -> ok;
+            {_, _} -> Handler(EvtsList, Ctx)
+        end,
+        Duration = erlang:monotonic_time(milli_seconds) - Start,
+        ?debug("Execution of handler on events ~p in event stream ~p and session
+        ~p took ~p milliseconds", [EvtsList, StmId, SessId, Duration])
+    catch
+        Error:Reason ->
+            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
+                [?MODULE, State, Error, Reason])
+    end;
+execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
+    MonitorRef = monitor(process, Pid),
+    receive
+        {'DOWN', MonitorRef, _, _, _} -> ok
+    end,
+    execute_event_handler(Force, State#state{handler_ref = undefined}).
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -135,15 +169,10 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(#event{} = Evt, #state{stream_id = StmId, session_id = SessId,
-    definition = StmDef} = State) ->
-    case apply_admission_rule(Evt, StmDef) of
-        true ->
-            ?debug("Handling event ~p in event stream ~p and session ~p",
-                [Evt, StmId, SessId]),
-            {noreply, process_event(Evt, State)};
-        false -> {noreply, State}
-    end;
+handle_cast(#event{} = Evt, #state{stream_id = StmId, session_id = SessId} = State) ->
+    ?debug("Handling event ~p in event stream ~p and session ~p",
+        [Evt, StmId, SessId]),
+    {noreply, process_event(Evt, State)};
 
 handle_cast({add_subscription, Sub}, #state{session_id = SessId,
     subscriptions = Subs} = State) ->
@@ -157,7 +186,7 @@ handle_cast({remove_subscription, SubId}, #state{session_id = SessId,
     end;
 
 handle_cast({flush, NotifyFun}, #state{ctx = Ctx} = State) ->
-    #state{ctx = NewCtx} = NewState = execute_event_handler(
+    #state{ctx = NewCtx} = NewState = spawn_event_handler(
         true, State#state{ctx = Ctx#{notify => NotifyFun}}
     ),
     {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
@@ -176,13 +205,21 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info({'DOWN', MonitorRef, _, _, _}, #state{handler_ref = {_, MonitorRef},
+    emission_ref = EmissionRef} = State) ->
+    NewState = State#state{handler_ref = undefined},
+    case EmissionRef of
+        pending -> {noreply, maybe_spawn_event_handler(false, NewState)};
+        _ -> {noreply, NewState}
+    end;
+
 handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
 
-handle_info({execute_event_handler, Ref}, #state{emission_ref = Ref} = State) ->
-    {noreply, execute_event_handler(false, State)};
+handle_info({periodic_emission, Ref}, #state{emission_ref = Ref} = State) ->
+    {noreply, maybe_spawn_event_handler(false, State)};
 
-handle_info({execute_event_handler, _}, State) ->
+handle_info({periodic_emission, _}, State) ->
     {noreply, State};
 
 handle_info(_Info, State) ->
@@ -203,7 +240,7 @@ handle_info(_Info, State) ->
 terminate(Reason, #state{event_manager = EvtMan, stream_id = StmId,
     definition = StmDef, ctx = Ctx} = State) ->
     ?log_terminate(Reason, State),
-    execute_event_handler(false, State),
+    spawn_event_handler(false, State),
     execute_terminate_handler(StmDef, Ctx),
     unregister_stream(EvtMan, StmId).
 
@@ -299,32 +336,31 @@ execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Executes stream event handlers on aggregated events stored in the stream.
-%% Resets periodic emission of events.
+%% Spawns event handler execution if no other event handler is currently being
+%% executed.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_event_handler(Force :: boolean(), State :: #state{}) ->
+-spec maybe_spawn_event_handler(Force :: boolean(), State :: #state{}) ->
     NewState :: #state{}.
-execute_event_handler(Force, #state{stream_id = StmId, session_id = SessId,
-    events = Evts, definition = #event_stream_definition{event_handler = Handler
-    } = StmDef, ctx = Ctx} = State) ->
-    ?debug("Executing event handler on events ~p in event stream ~p and session ~p",
-        [Evts, StmId, SessId]),
-    try
-        case {Force, maps:values(Evts)} of
-            {true, EvtsList} -> Handler(EvtsList, Ctx);
-            {false, []} -> ok;
-            {_, EvtsList} -> Handler(EvtsList, Ctx)
-        end
-    catch
-        Error:Reason ->
-            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
-                [?MODULE, State, Error, Reason])
-    end,
+maybe_spawn_event_handler(Force, #state{handler_ref = undefined} = State) ->
+    spawn_event_handler(Force, State);
+maybe_spawn_event_handler(_Force, #state{} = State) ->
+    State#state{emission_ref = pending}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Spawns event handler execution and resets stream metadata.
+%% @end
+%%--------------------------------------------------------------------
+-spec spawn_event_handler(Force :: boolean(), State :: #state{}) -> NewState :: #state{}.
+spawn_event_handler(Force, #state{definition = StmDef} = State) ->
+    HandlerRef = spawn_monitor(?MODULE, execute_event_handler, [Force, State]),
     State#state{
         events = #{},
         metadata = get_initial_metadata(StmDef),
-        emission_ref = undefined
+        emission_ref = undefined,
+        handler_ref = HandlerRef
     }.
 
 %%--------------------------------------------------------------------
@@ -350,14 +386,14 @@ process_event(Evt, #state{events = Evts, metadata = Meta,
     NewMeta = apply_transition_rule(Evt, Meta, StmDef),
     NewState = State#state{events = NewEvts, metadata = NewMeta},
     case apply_emission_rule(NewMeta, StmDef) of
-        true -> execute_event_handler(false, NewState);
+        true -> maybe_spawn_event_handler(false, NewState);
         false -> maybe_schedule_event_handler_execution(NewState)
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Schedules sending 'execute_event_handler' message to itself. Message is
+%% Schedules sending 'periodic_emission' message to itself. Message is
 %% marked with new reference stored in event stream state, so that event stream
 %% can ignore messages with reference different from the one saved in the state.
 %% @end
@@ -367,21 +403,11 @@ maybe_schedule_event_handler_execution(#state{emission_ref = undefined,
     definition = #event_stream_definition{emission_time = Time}} = State)
     when is_integer(Time) ->
     Ref = make_ref(),
-    erlang:send_after(Time, self(), {execute_event_handler, Ref}),
+    erlang:send_after(Time, self(), {periodic_emission, Ref}),
     State#state{emission_ref = Ref};
 
 maybe_schedule_event_handler_execution(State) ->
     State.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Applies admission rule.
-%% @end
-%%--------------------------------------------------------------------
--spec apply_admission_rule(Evt :: event:event(), StmDef :: definition()) -> true | false.
-apply_admission_rule(Evt, #event_stream_definition{admission_rule = Rule}) ->
-    Rule(Evt).
 
 %%--------------------------------------------------------------------
 %% @private

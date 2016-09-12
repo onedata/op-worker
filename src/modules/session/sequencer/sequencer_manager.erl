@@ -46,8 +46,8 @@
 -record(state, {
     session_id :: session:id(),
     sequencer_manager_sup :: pid(),
-    sequencer_in_stream_sup :: pid(),
-    sequencer_out_stream_sup :: pid(),
+    sequencer_in_stream_sup :: undefined | pid(),
+    sequencer_out_stream_sup :: undefined | pid(),
     sequencer_in_streams = #{} :: streams(),
     sequencer_out_streams = #{} :: streams()
 }).

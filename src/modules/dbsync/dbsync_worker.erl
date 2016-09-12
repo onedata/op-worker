@@ -42,15 +42,15 @@
 
 %% Record for storing current state of dbsync stream queue.
 -record(queue, {
-    key :: queue(),
+    key :: undefined | queue(),
     since = 0 :: non_neg_integer(),
     until = 0 :: non_neg_integer(),
-    batch_map = #{} :: #{},
+    batch_map = #{} :: maps:map(),
     removed = false :: boolean()
 }).
 
 %% Defines maximum size of changes buffer per space in bytes.
--define(CHANGES_STASH_MAX_SIZE_BYTES, 100 * 1024 * 1024).
+-define(CHANGES_STASH_MAX_SIZE_BYTES, 10 * 1024 * 1024).
 
 
 %%%===================================================================
@@ -545,18 +545,25 @@ apply_changes(SpaceId,
     try
         ModelConfig = ModelName:model_init(),
 
-        MainDocKey = case Value of
+        {MainDocKey, HelperKeys} = case Value of
             #links{} ->
                 % TODO - work only on local tree (after refactoring of link_utils)
                 MDK = Value#links.doc_key,
                 file_meta:set_link_context_for_space(SpaceId),
+
+                OldLinkMap = case couchdb_datastore_driver:get_link_doc(ModelConfig, Key) of
+                                 {ok, #document{value = #links{link_map = OLM}}} -> OLM;
+                                 {error, {not_found, _}} -> #{}
+                             end,
+                HKs = maps:keys(maps:merge(Value#links.link_map, OldLinkMap)),
+
                 lists:foreach(fun(LName) ->
                     ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
-                end, maps:keys(Value#links.link_map)),
-                MDK;
+                end, HKs),
+                {MDK, HKs};
              _ ->
                  ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
-                 Key
+                 {Key, []}
         end,
         MyProvId = oneprovider:get_provider_id(),
         LinksPost =
@@ -587,7 +594,10 @@ apply_changes(SpaceId,
 
         case Value of
             #links{} ->
-                ok;
+                % TODO - work only on local tree (after refactoring of link_utils)
+                lists:foreach(fun(LName) ->
+                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
+                end, maps:keys(Value#links.link_map));
             _ ->
                 ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
         end,
@@ -640,7 +650,12 @@ run_posthooks(SpaceId, [Change | Done], []) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
+    case dbsync_state:get(Key) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            ok;
+        _ ->
+            {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}})
+    end,
     ok.
 
 %%--------------------------------------------------------------------
@@ -673,11 +688,11 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
             NewValue ->
                 ok;
             _ ->
-                state_put(Key, NewValue)
+                dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = NewValue}})
         end
     end,
 
-    datastore:run_transaction(dbsync_state, term_to_binary(Key), DoUpdate).
+    critical_section:run([dbsync_state, term_to_binary(Key)], DoUpdate).
 
 
 %%--------------------------------------------------------------------
@@ -933,7 +948,7 @@ do_request_changes(ProviderId, Since, Until) ->
 %% Gets stashed batches from datastore
 %% @end
 %%--------------------------------------------------------------------
--spec get_stashed_batches(ProviderId :: oneprovider:id(), SpaceId :: binary()) -> Value :: #{}.
+-spec get_stashed_batches(ProviderId :: oneprovider:id(), SpaceId :: binary()) -> Value :: maps:map().
 get_stashed_batches(ProviderId, SpaceId) ->
     case dbsync_batches:get({ProviderId, SpaceId}) of
         {ok, #document{value = #dbsync_batches{batches = Value}}} ->

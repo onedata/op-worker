@@ -40,28 +40,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>, <<"PUT">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, get_file_attributes}
@@ -70,8 +70,8 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{binary(), atom()}], req(), #{}}.
+-spec content_types_accepted(req(), maps:map()) ->
+    {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/json">>, set_file_attribute}
@@ -91,31 +91,32 @@ content_types_accepted(Req, State) ->
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
 %% @param attribute Type of attribute to query for.
 %%--------------------------------------------------------------------
--spec get_file_attributes(req(), #{}) -> {term(), req(), #{}}.
+-spec get_file_attributes(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_file_attributes(Req, State) ->
-    {State2, Req2} = validator:parse_path(Req, State),
-    {State3, Req3} = validator:parse_extended(Req2, State2),
-    {State4, Req4} = validator:parse_attribute(Req3, State3),
+    {StateWithPath, ReqWithPath} = validator:parse_path(Req, State),
+    {StateWithExtended, ReqWithExtended} = validator:parse_extended(ReqWithPath, StateWithPath),
+    {StateWithInherited, ReqWithInherited} = validator:parse_inherited(ReqWithExtended, StateWithExtended),
+    {StateWithAttribute, ReqWithAttribute} = validator:parse_attribute(ReqWithInherited, StateWithInherited),
 
-    #{auth := Auth, path := Path, attribute := Attribute, extended := Extended} = State4,
+    #{auth := Auth, path := Path, attribute := Attribute, extended := Extended, inherited := Inherited} = StateWithAttribute,
 
     case {Attribute, Extended} of
         {ModeOrUndefined, false} when ModeOrUndefined =:= <<"mode">> ; ModeOrUndefined =:= undefined ->
             {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
-            Response = json_utils:encode([[{<<"name">>, <<"mode">>}, {<<"value">>, <<"0", (integer_to_binary(Mode, 8))/binary>>}]]),
-            {Response, Req4, State4};
+            Response = json_utils:encode_map([#{<<"name">> => <<"mode">>, <<"value">> => <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
+            {Response, ReqWithAttribute, StateWithAttribute};
         {undefined, true} ->
-            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}),
+            {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, Inherited),
             RawResponse = lists:map(fun(XattrName) ->
-                {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName),
-                [{<<"name">>, XattrName}, {<<"value">>, Value}]
+                {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
+                #{<<"name">> => XattrName, <<"value">> => Value}
             end, Xattrs),
-            Response = json_utils:encode(RawResponse),
-            {Response, Req4, State4};
+            Response = json_utils:encode_map(RawResponse),
+            {Response, ReqWithAttribute, StateWithAttribute};
         {XattrName, true} ->
-            {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName),
-            Response = json_utils:encode([[{<<"name">>, XattrName}, {<<"value">>, Value}]]),
-            {Response, Req4, State4}
+            {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
+            Response = json_utils:encode_map([#{<<"name">> => XattrName, <<"value">> => Value}]),
+            {Response, ReqWithAttribute, StateWithAttribute}
     end.
 
 %%--------------------------------------------------------------------
@@ -127,7 +128,7 @@ get_file_attributes(Req, State) ->
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
 %% @param attribute Attribute name and value.
 %%--------------------------------------------------------------------
--spec set_file_attribute(req(), #{}) -> {term(), req(), #{}}.
+-spec set_file_attribute(req(), maps:map()) -> {term(), req(), maps:map()}.
 set_file_attribute(Req, State) ->
     {State2, Req2} = validator:parse_path(Req, State),
     {State3, Req3} = validator:parse_extended(Req2, State2),

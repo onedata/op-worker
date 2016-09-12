@@ -36,28 +36,28 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, query_index}
@@ -70,7 +70,7 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc This method returns the list of files which match the query on a predefined index.
 %%--------------------------------------------------------------------
--spec query_index(req(), #{}) -> {term(), req(), #{}}.
+-spec query_index(req(), maps:map()) -> {term(), req(), maps:map()}.
 query_index(Req, State) ->
     {StateWithId, ReqWithId} = validator:parse_id(Req, State),
     {StateWithBbox, ReqWithBbox} = validator:parse_bbox(ReqWithId, StateWithId),
@@ -78,8 +78,8 @@ query_index(Req, State) ->
     {StateWithEndkey, ReqWithEndkey} = validator:parse_endkey(ReqWithDescending, StateWithDescending),
     {StateWithInclusiveEnd, ReqWithInclusiveEnd} = validator:parse_inclusive_end(ReqWithEndkey, StateWithEndkey),
     {StateWithKey, ReqWithKey} = validator:parse_key(ReqWithInclusiveEnd, StateWithInclusiveEnd),
-%%    {StateWithKeys, ReqWithKeys} = validator:parse_keys(ReqWithKey, StateWithKey), %todo VFS-2369 support complex keys
-    {StateWithLimit, ReqWithLimit} = validator:parse_limit(ReqWithKey, StateWithKey),
+    {StateWithKeys, ReqWithKeys} = validator:parse_keys(ReqWithKey, StateWithKey),
+    {StateWithLimit, ReqWithLimit} = validator:parse_limit(ReqWithKeys, StateWithKeys),
     {StateWithSkip, ReqWithSkip} = validator:parse_skip(ReqWithLimit, StateWithLimit),
     {StateWithStale, ReqWithStale} = validator:parse_stale(ReqWithSkip, StateWithSkip),
     {StateWithStartkey, ReqWithStartkey} = validator:parse_startkey(ReqWithStale, StateWithStale),
@@ -87,16 +87,20 @@ query_index(Req, State) ->
     #{auth := _Auth, id := Id} = StateWithStartkey,
 
     Options = prepare_options(StateWithStartkey),
-    {ok, Results} = indexes:query_view(Id, Options),
+    {ok, Guids} = indexes:query_view(Id, Options),
+    ObjectIds = lists:map(fun(Guid) ->
+        {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+        ObjectId
+    end, Guids),
 
-    {json_utils:encode(Results), ReqWithStartkey, StateWithStartkey}.
+    {json_utils:encode(ObjectIds), ReqWithStartkey, StateWithStartkey}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Convert Request parameters to couchdb view query options
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_options(#{} | list()) -> list().
+-spec prepare_options(maps:map() | list()) -> list().
 prepare_options(Map) when is_map(Map) ->
     prepare_options(maps:to_list(Map));
 prepare_options([]) ->
@@ -118,12 +122,12 @@ prepare_options([{descending, _} | _Rest]) ->
 prepare_options([{endkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{endkey, Endkey} | Rest]) ->
-    [{endkey, Endkey} | prepare_options(Rest)];
+    [{endkey, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)];
 
 prepare_options([{startkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{startkey, StartKey} | Rest]) ->
-    [{startkey, StartKey} | prepare_options(Rest)];
+    [{startkey, couchbeam_ejson:decode(StartKey)} | prepare_options(Rest)];
 
 prepare_options([{inclusive_end, true} | Rest]) ->
     [inclusive_end | prepare_options(Rest)];
@@ -135,14 +139,12 @@ prepare_options([{inclusive_end, _} | _Rest]) ->
 prepare_options([{key, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{key, Key} | Rest]) ->
-    [{key, Key} | prepare_options(Rest)];
+    [{key, couchbeam_ejson:decode(Key)} | prepare_options(Rest)];
 
 prepare_options([{keys, undefined} | Rest]) ->
     prepare_options(Rest);
-prepare_options([{keys, Keys} | Rest]) when is_list(Keys) ->
-    [{keys, Keys} | prepare_options(Rest)];
-prepare_options([{keys, Key} | Rest]) ->
-    [{keys, [Key]} | prepare_options(Rest)];
+prepare_options([{keys, Keys} | Rest]) ->
+    [{keys, couchbeam_ejson:decode(Keys)} | prepare_options(Rest)];
 
 prepare_options([{limit, undefined} | Rest]) ->
     prepare_options(Rest);
@@ -170,5 +172,7 @@ prepare_options([{stale, <<"ok">>} | Rest]) ->
     [{stale, ok} | prepare_options(Rest)];
 prepare_options([{stale, <<"update_after">>} | Rest]) ->
     [{stale, update_after} | prepare_options(Rest)];
+prepare_options([{stale, <<"false">>} | Rest]) ->
+    [{stale, false} | prepare_options(Rest)];
 prepare_options([{stale, _} | _]) ->
     throw(?ERROR_INVALID_STALE).

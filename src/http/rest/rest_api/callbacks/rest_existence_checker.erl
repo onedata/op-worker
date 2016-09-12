@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 %% @doc Checks if resource exists, adds its attributes to state.
 %%--------------------------------------------------------------------
--spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
+-spec resource_exists(req(), maps:map()) -> {boolean(), req(), maps:map()}.
 resource_exists(Req, State = #{path := Path, auth := Auth}) ->
     case logical_file_manager:stat(Auth, {path, Path}) of
         {ok, Attr = #file_attr{}} ->

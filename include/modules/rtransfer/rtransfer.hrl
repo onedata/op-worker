@@ -18,8 +18,8 @@
     offset :: non_neg_integer(),
     size :: pos_integer(),
     provider_id :: binary(),
-    notify :: rtransfer:notify_fun(),
-    on_complete :: rtransfer:on_complete_fun()
+    notify :: undefined | rtransfer:notify_fun(),
+    on_complete :: undefined | rtransfer:on_complete_fun()
 }).
 
 -endif.

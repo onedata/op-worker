@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -63,10 +64,11 @@ redirect_event_test(Config) ->
     {TargetGuid, RedirectionGuid} = create_file_with_redirection(W1, W2, Config),
 
     Self = self(),
+    rpc:call(W1, event, unsubscribe, [?FSLOGIC_SUB_ID]),
     ?assertMatch({ok, _}, rpc:call(W1, event, subscribe,
-        [#subscription{object = #write_subscription{},
+        [#subscription{
+            object = #write_subscription{},
             event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-                id = <<"some_stream_id">>,
                 event_handler = fun(Events, _) -> Self ! {events, Events} end
             }
         }]

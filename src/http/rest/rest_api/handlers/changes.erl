@@ -20,6 +20,8 @@
 -include("http/rest/http_status.hrl").
 -include("modules/dbsync/common.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
@@ -42,7 +44,7 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
     gen_changes:stop(Stream),
     Pid ! {Ref, stream_ended};
@@ -54,21 +56,21 @@ terminate(_, _, #{}) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, get_space_changes}
@@ -87,14 +89,16 @@ content_types_provided(Req, State) ->
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
 %% @param attribute Type of attribute to query for.
 %%--------------------------------------------------------------------
--spec get_space_changes(req(), #{}) -> {term(), req(), #{}}.
+-spec get_space_changes(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_space_changes(Req, State) ->
     {State2, Req2} = validator:parse_space_id(Req, State),
     {State3, Req3} = validator:parse_timeout(Req2, State2),
     {State4, Req4} = validator:parse_last_seq(Req3, State3),
 
-    State5 = init_stream(State4),
+    #{auth := Auth, space_id := SpaceId} = State4,
 
+    space_membership:check_with_auth(Auth, SpaceId),
+    State5 = init_stream(State4),
     StreamFun = fun(SendChunk) ->
         stream_loop(SendChunk, State5)
     end,
@@ -111,12 +115,13 @@ get_space_changes(Req, State) ->
 %% Init couchbeam changes stream
 %% @end
 %%--------------------------------------------------------------------
--spec init_stream(State :: #{}) -> #{}.
+-spec init_stream(State :: maps:map()) -> maps:map().
 init_stream(State = #{last_seq := Since}) ->
     ?info("[ changes ]: Starting stream ~p", [Since]),
     Ref = make_ref(),
     Pid = self(),
 
+    % todo limit to admin only (when we will have admin users)
     {ok, Stream} = couchdb_datastore_driver:changes_start_link(
         couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity),
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
@@ -126,7 +131,7 @@ init_stream(State = #{last_seq := Since}) ->
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_loop(function(), #{}) -> ok | no_return().
+-spec stream_loop(function(), maps:map()) -> ok | no_return().
 stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := SpaceId}) ->
     receive
         {Ref, stream_ended} ->
@@ -184,7 +189,8 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     Ctx = fslogic_context:new(?ROOT_SESS_ID),
     Guid =
         try
-            fslogic_uuid:to_file_guid(Uuid)
+            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:to_file_guid(Uuid)),
+            Val
         catch
             _:Error ->
                 ?error("Cannot fetch guid for changes, error: ~p", [Error]),

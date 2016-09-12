@@ -39,17 +39,18 @@
 }).
 
 -type proxyio_request() :: #remote_read{} | #remote_write{}.
--type proxyio_response() :: #remote_data{} | #remote_write_result{}.
+-type proxyio_response() :: #remote_data{} | #remote_write_result{} | undefined.
+-type proxyio_request_parameters() :: #{binary() => binary()}.
 
 -record(proxyio_request, {
-    parameters = #{} :: #{binary() => binary()},
+    parameters = #{} :: proxyio_request_parameters(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     proxyio_request :: proxyio_request()
 }).
 
 -record(proxyio_response, {
-    status :: #status{},
+    status :: undefined | #status{},
     proxyio_response :: proxyio_response()
 }).
 

@@ -39,29 +39,29 @@ rest_init(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #{}) -> ok.
+-spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
+-spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>, <<"POST">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     onedata_auth_api:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #{}) ->
-    {[{atom() | binary(), atom()}], req(), #{}}.
+-spec content_types_accepted(req(), maps:map()) ->
+    {[{atom() | binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
         {'*', replicate_file}
@@ -70,7 +70,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
+-spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/json">>, get_file_replicas}
@@ -96,9 +96,9 @@ content_types_provided(Req, State) ->
 %% @param callback This parameter allows the user to specify a REST callback URL,
 %%    which will be called when the transfer is complete\n
 %%--------------------------------------------------------------------
--spec replicate_file(req(), #{}) -> {term(), req(), #{}}.
+-spec replicate_file(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_file(Req, State = #{resource_type := id}) ->
-    {State2, Req2} = validator:parse_id(Req, State),
+    {State2, Req2} = validator:parse_objectid(Req, State),
     {State3, Req3} = validator:parse_provider_id(Req2, State2),
     {State4, Req4} = validator:parse_callback(Req3, State3),
 
@@ -118,9 +118,9 @@ replicate_file(Req, State) ->
 %%
 %% @param path File path (e.g. &#39;/My Private Space/testfiles/file1.txt&#39;)
 %%--------------------------------------------------------------------
--spec get_file_replicas(req(), #{}) -> {term(), req(), #{}}.
+-spec get_file_replicas(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_file_replicas(Req, State = #{resource_type := id}) ->
-    {State2, Req2} = validator:parse_id(Req, State),
+    {State2, Req2} = validator:parse_objectid(Req, State),
 
     get_file_replicas_internal(Req2, State2);
 get_file_replicas(Req, State) ->
@@ -135,7 +135,7 @@ get_file_replicas(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc internal version of replicate_file/2
 %%--------------------------------------------------------------------
--spec replicate_file_internal(req(), #{}) -> {term(), req(), #{}}.
+-spec replicate_file_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback := Callback} = State) ->
     File = get_file(State),
 
@@ -149,7 +149,7 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
 %%--------------------------------------------------------------------
 %% @doc internal version of get_file_replicas/2
 %%--------------------------------------------------------------------
--spec get_file_replicas_internal(req(), #{}) -> {term(), req(), #{}}.
+-spec get_file_replicas_internal(req(), maps:map()) -> {term(), req(), maps:map()}.
 get_file_replicas_internal(Req, #{auth := Auth} = State) ->
     File = get_file(State),
     {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, File),
@@ -161,7 +161,7 @@ get_file_replicas_internal(Req, #{auth := Auth} = State) ->
 %% Get file entry from state
 %% @end
 %%--------------------------------------------------------------------
--spec get_file(#{}) -> {guid, binary()} | {path, binary()}.
+-spec get_file(maps:map()) -> {guid, binary()} | {path, binary()}.
 get_file(#{id := Id}) ->
     {guid, Id};
 get_file(#{path := Path}) ->

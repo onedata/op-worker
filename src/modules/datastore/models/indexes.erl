@@ -50,20 +50,21 @@ add_index(UserId, ViewName, ViewFunction, SpaceId) ->
 -spec add_index(onedata_user:id(), view_name() | undefined, view_function(),
     space_info:id() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
+    EscapedViewFunction = escape_js_function(ViewFunction),
     critical_section:run([?MODEL_NAME, UserId], fun() ->
         case indexes:get(UserId) of
             {ok, Doc = #document{value = IndexesDoc = #indexes{value = Indexes}}} ->
                 NewMap =
                     case maps:get(IndexId, Indexes, undefined) of
                         undefined ->
-                            add_db_view(IndexId, SpaceId, ViewFunction),
-                            maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, Indexes);
+                            add_db_view(IndexId, SpaceId, EscapedViewFunction),
+                            maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction}, Indexes);
                         OldMap = #{space_id := SId} when SpaceId =:= undefined ->
-                            add_db_view(IndexId, SId, ViewFunction),
-                            maps:put(IndexId, OldMap#{function => ViewFunction, space_id => SId}, Indexes);
+                            add_db_view(IndexId, SId, EscapedViewFunction),
+                            maps:put(IndexId, OldMap#{function => EscapedViewFunction, space_id => SId}, Indexes);
                         OldMap ->
-                            add_db_view(IndexId, SpaceId, ViewFunction),
-                            maps:put(IndexId, OldMap#{function => ViewFunction}, Indexes)
+                            add_db_view(IndexId, SpaceId, EscapedViewFunction),
+                            maps:put(IndexId, OldMap#{function => EscapedViewFunction}, Indexes)
                     end,
                 case save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}) of
                     {ok, _} ->
@@ -72,8 +73,8 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
                         Error
                 end;
             {error, {not_found, indexes}} ->
-                add_db_view(IndexId, SpaceId, ViewFunction),
-                Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => ViewFunction}, #{}),
+                add_db_view(IndexId, SpaceId, EscapedViewFunction),
+                Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction}, #{}),
                 case create(#document{key = UserId, value = #indexes{value = Map}}) of
                     {ok, _} ->
                         {ok, IndexId};
@@ -120,7 +121,7 @@ change_index_function(UserId, IndexId, Function) ->
 %% Get all indexes from db, with given space id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_all_indexes(onedata_user:id()) -> {ok, #{}} | {error, any()}.
+-spec get_all_indexes(onedata_user:id()) -> {ok, maps:map()} | {error, any()}.
 get_all_indexes(UserId) ->
     case indexes:get(UserId) of
         {ok, #document{value = #indexes{value = Indexes}}} ->
@@ -252,13 +253,36 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add view to db
+%% Add view to db, Function should be a valid, escaped javascript string
+%% with one argument function.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_db_view(index_id(), space_info:id(), view_function()) -> ok.
 add_db_view(IndexId, SpaceId, Function) ->
     RecordName = <<"custom_metadata">>,
-    DbViewFunction = <<"function (doc, meta) { if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { var key = ",
-        Function/binary,
-        "; var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
+    DbViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['RECORD::'] == '", RecordName/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { "
+        "var key = eval.call(null, '(", Function/binary, ")'); ",
+        "var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
     ok = couchdb_datastore_driver:add_view(IndexId, DbViewFunction).
+
+%%--------------------------------------------------------------------
+%% @doc escapes characters: \ " ' \n \t \v \0 \f \r
+%%--------------------------------------------------------------------
+-spec escape_js_function(Function :: binary()) -> binary().
+escape_js_function(undefined) ->
+    undefined;
+escape_js_function(Function) ->
+    escape_js_function(Function, [{<<"\\\\">>, <<"\\\\\\\\">>}, {<<"'">>, <<"\\\\'">>},
+        {<<"\"">>, <<"\\\\\"">>}, {<<"\\n">>, <<"\\\\n">>}, {<<"\\t">>, <<"\\\\t">>},
+        {<<"\\v">>, <<"\\\\v">>}, {<<"\\0">>, <<"\\\\0">>}, {<<"\\f">>, <<"\\\\f">>},
+        {<<"\\r">>, <<"\\\\r">>}]).
+
+%%--------------------------------------------------------------------
+%% @doc Escapes characters given as proplists, in provided Function.
+%%--------------------------------------------------------------------
+-spec escape_js_function(Function :: binary(), [{binary(), binary()}]) -> binary().
+escape_js_function(Function, []) ->
+    Function;
+escape_js_function(Function, [{Pattern, Replacement} | Rest]) ->
+    EscapedFunction = re:replace(Function, Pattern, Replacement, [{return, binary}, global]),
+    escape_js_function(EscapedFunction, Rest).
