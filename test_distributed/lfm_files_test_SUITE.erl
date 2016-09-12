@@ -685,7 +685,7 @@ create_share_dir_test(Config) ->
     Path = <<"/space_name1/share_dir">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, Path, 8#700),
 
-    ?assertMatch({ok, <<_/binary>>}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+    ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
 
 create_share_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -693,16 +693,16 @@ create_share_file_test(Config) ->
     Path = <<"/space_name1/share_file">>,
     {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#700),
 
-    ?assertMatch({ok, <<_/binary>>}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+    ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
 
 share_getattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
-    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    {ok, {ShareId, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
 
-    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE, uuid = ShareGuid, shares = [ShareGuid]}},
+    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE, uuid = ShareGuid, shares = [ShareId]}},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})).
 
 share_list_test(Config) ->
