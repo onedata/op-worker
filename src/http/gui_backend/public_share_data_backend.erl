@@ -268,7 +268,8 @@ file_record(SessionId, FileId) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr} = FileAttr,
+                mode = PermissionsAttr,
+                shares = Shares} = FileAttr,
 
             UserRootDirUUID = get_user_root_dir_uuid(SessionId),
             ParentUUID = case get_parent(SessionId, FileId) of
@@ -295,7 +296,11 @@ file_record(SessionId, FileId) ->
                     end
             end,
             ChildrenIds = [ChId || {ChId, _} <- Children],
-            Share = share_data_backend:get_share_mapping(FileId),
+            Share = case Shares of
+                [] -> null;
+                % For now, files can only be shared once
+                [Sh] -> Sh
+            end,
             Res = [
                 {<<"id">>, FileId},
                 {<<"name">>, Name},

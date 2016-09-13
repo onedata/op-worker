@@ -185,7 +185,7 @@
 
 %% Model for caching share details fetched from OZ
 -record(share_info, {
-    name :: binary(),
+    name = undefined :: undefined | binary(),
     public_url = undefined :: undefined | binary(),
     root_file_id = undefined :: undefined | binary(),
     parent_space = undefined :: undefined | binary(),
