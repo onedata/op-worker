@@ -135,6 +135,11 @@ replicate_file(Config) ->
     ?assertMatch({ok, 200, _, ExpectedTransferStatus},
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
     timer:sleep(timer:seconds(5)), % TODO - reorganize tests to remove sleeps
+    ct:print("wut"),
+    tracer:start([WorkerP2]),
+    tracer:trace_calls(datastore, fetch_full_link),
+    tracer:trace_calls(datastore, fetch_link),
+    tracer:trace_calls(datastore, delete_links),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),
     timer:sleep(timer:seconds(10)),
     {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space3/file">>, get, [user_1_token_header(Config)], []),

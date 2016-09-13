@@ -71,7 +71,7 @@ init(_Args) ->
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
-    catch ets:new(?ETS_CACHE_NAME, [named_table, set, public]),
+        catch ets:new(?ETS_CACHE_NAME, [named_table, set, public]),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -156,7 +156,7 @@ handle({reemit, Msg}) ->
 
 handle(bcast_status) ->
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
-    catch bcast_status();
+        catch bcast_status();
 
 handle(requested_bcast_status) ->
     bcast_status();
@@ -189,7 +189,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
                         ok ->
                             queue_push(QueueKey, Change, SpaceId);
-                        _  -> skip
+                        _ -> skip
                     end;
                 {error, not_a_space} ->
                     skip;
@@ -224,8 +224,8 @@ handle({flush_queue, QueueKey}) ->
         global ->
             CTime = erlang:monotonic_time(milli_seconds),
             case dbsync_utils:temp_get(last_global_flush) of
-                FTime when  is_integer(FTime),
-                            FTime + FlushInterval / 2 > CTime ->
+                FTime when is_integer(FTime),
+                    FTime + FlushInterval / 2 > CTime ->
                     ?info("[ DBSync ] Flush loop is too fast, breaking this one."),
                     throw({too_many_flush_loops, {flush_queue, QueueKey}});
                 _ ->
@@ -562,14 +562,15 @@ apply_changes(SpaceId,
                     ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
                 end, HKs),
                 MDK;
-             _ ->
-                 ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
-                 Key
+            _ ->
+                ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
+                Key
         end,
         MyProvId = oneprovider:get_provider_id(),
-        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:transaction_key(ModelConfig, MainDocKey), fun() ->
+        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_key(ModelConfig, MainDocKey), fun() ->
             case Value of
                 #links{origin = MyProvId} ->
+                    ?warning("Received private, local links change from other provider ~p", [Change]),
                     [];
                 #links{origin = Origin} ->
                     {OldLinks, OldRev} = case forign_links_get(ModelConfig, Key) of
@@ -623,7 +624,7 @@ run_posthooks(SpaceId, [Change | Done]) ->
             try
                 dbsync_events:change_replicated(SpaceId, Change)
             catch
-                E1:E2  ->
+                E1:E2 ->
                     ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
             end,
             ok
@@ -962,11 +963,11 @@ stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUnt
                 false ->
                     #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
                     NewBatches = case NewUntil > Until of
-                                     true ->
-                                         maps:put(NewSince, Batch, Batches);
-                                     false ->
-                                         Batches
-                                 end,
+                        true ->
+                            maps:put(NewSince, Batch, Batches);
+                        false ->
+                            Batches
+                    end,
                     {ok, BatchesRecord#dbsync_batches{batches = NewBatches}}
             end
         end),
@@ -986,11 +987,11 @@ retrieve_stashed_batch(ProviderId, SpaceId, #batch{since = NewSince, until = New
         fun(#dbsync_batches{batches = Batches} = BatchesRecord) ->
             #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
             NewBatches = case NewUntil >= Until of
-                             true ->
-                                 maps:remove(NewSince, Batches);
-                             false ->
-                                 Batches
-                         end,
+                true ->
+                    maps:remove(NewSince, Batches);
+                false ->
+                    Batches
+            end,
             {ok, BatchesRecord#dbsync_batches{batches = NewBatches}}
         end),
     ok.
@@ -1050,7 +1051,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
                     lists:foreach(fun(Key) ->
                         Batch = maps:get(Key, Batches),
                         do_apply_batch_changes(ProviderId, SpaceId, Batch)
-                     end, SortedKeys);
+                    end, SortedKeys);
                 {_, To} when To < Stashed ->
                     % other proc is working - wait
                     timer:sleep(timer:seconds(5)),
@@ -1087,8 +1088,8 @@ ensure_global_stream_active() ->
     %% Check if flush loop works
     MaxFlushDelay = ?FLUSH_QUEUE_INTERVAL * 4,
     case dbsync_utils:temp_get(last_global_flush) of
-        LastFlushTime when  is_integer(LastFlushTime),
-                            LastFlushTime + MaxFlushDelay > CTime ->
+        LastFlushTime when is_integer(LastFlushTime),
+            LastFlushTime + MaxFlushDelay > CTime ->
             ok;
         LastFlushTime ->
             %% Initialize new flush loop

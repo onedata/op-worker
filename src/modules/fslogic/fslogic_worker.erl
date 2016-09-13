@@ -566,7 +566,6 @@ handle_file_accessed_events(Evts, #{session_id := SessId}) ->
     | #file_request{} | #provider_request{} | #proxyio_request{}) ->
     {file, file_meta:entry() | {guid, fslogic_worker:file_guid()}} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    ?info("request_to_file_entry_or_provider ~p", [Path]),
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     case fslogic_path:get_canonical_file_entry(Ctx, Tokens) of
         {path, P} = FileEntry ->

@@ -57,7 +57,8 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     SyncProvidersCount = max(1, round(SyncNodes / NodesOfProvider)),
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
     Workers = ?config(op_worker_nodes, Config),
-    ct:print("W: ~p", [Workers]),
+
+    ct:print("Workers: ~p", [Workers]),
     Worker1 = lists:foldl(fun(W, Acc) ->
         case is_atom(Acc) of
             true ->
@@ -205,7 +206,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
 
     VerifyDel = fun({F,  FileUUID, Locations}) ->
         Verify(fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
+            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
 %%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
             % TODO - match to chosen error (check perms may also result in ENOENT)
             ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
@@ -223,6 +224,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     end,
 
     VerifyFile({2, Level2File}),
+
     ct:print("Stage 1"),
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -302,13 +304,15 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
     VerifyDirSize(Level3Dir, length(Level4Files), 0),
     ct:print("Stage 10"),
     lists:map(fun({_, F}) ->
-        ct:print("DEL ~p", [{Worker1, F}]),
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, F}))
+        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        ct:print("DEL ~p", [{WD, F}]),
+        ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, F}))
     end, Level4Files),
     ct:print("Stage 11"),
     lists:map(fun(D) ->
-        ct:print("DelX ~p", [{Worker1, D}]),
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, D}))
+        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        ct:print("DelX ~p", [{WD, D}]),
+        ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, D}))
     end, Level3Dirs2),
     ct:print("Stage 12"),
     lists:map(fun(F) ->
@@ -796,7 +800,7 @@ get_locations(W, FileUUID) ->
 get_locations_from_map(Map) ->
     maps:fold(fun(_, V, Acc) ->
         case V of
-            {_Version, [{ID, file_location, _}]} ->
+            {_Version, [{_, _, ID, file_location}]} ->
                 [ID | Acc];
             _D ->
                 Acc

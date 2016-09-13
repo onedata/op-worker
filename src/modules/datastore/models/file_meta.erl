@@ -301,7 +301,7 @@ exists_local_link_doc(Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child(datastore:document() | {uuid, uuid()}, name()) ->
-    {ok, datastore:normalized_link_target()} | datastore:link_error() | datastore:generic_error().
+    {ok, [uuid()]} | datastore:link_error() | datastore:generic_error().
 get_child({uuid, Uuid}, Name) ->
     case get({uuid, Uuid}) of
         {ok, #document{} = Doc} ->
@@ -313,10 +313,10 @@ get_child(Doc, Name) ->
     file_meta:set_link_context(Doc),
     case datastore:fetch_full_link(?LINK_STORE_LEVEL, Doc, Name) of
         {ok, {_, Targets}} ->
-            {ok, [UUID || {UUID, _, _} <- Targets]};
+            {ok, [UUID || {_, _, UUID, _} <- Targets]};
         Other ->
             Other
-    end .
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -375,7 +375,7 @@ list_children(Entry, Offset, Count) ->
             fun
                 (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
                     Acc;
-                (LinkName, {_V, [{_Key, ?MODEL_NAME, _} | _] = Targets}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
+                (LinkName, {_V, [{_, _, _Key, ?MODEL_NAME} | _] = Targets}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
                     TargetCount = length(Targets),
                     case is_snapshot(LinkName) orelse is_hidden(LinkName) of
                         true ->
@@ -391,7 +391,7 @@ list_children(Entry, Offset, Count) ->
                         false ->
                             {Skip - TargetCount, Count1, Acc}
                     end;
-                (LinkName, {_V, [{_Key, ?MODEL_NAME, _} | _ ] = Targets}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
+                (LinkName, {_V, [{_, _, _Key, ?MODEL_NAME} | _] = Targets}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
                     TargetCount = length(Targets),
                     TargetsTagged = tag_children(LinkName, Targets),
                     SelectedTargetsTagged = lists:sublist(TargetsTagged, min(Count, TargetCount)),
@@ -423,23 +423,28 @@ list_children(Entry, Offset, Count) ->
 %%--------------------------------------------------------------------
 -spec tag_children(LinkName :: datastore:link_name(), [datastore:link_final_target()]) ->
     [{datastore:link_name(), datastore:ext_key()}].
-tag_children(LinkName, [{Key, _Model, _Scope}]) ->
+tag_children(LinkName, [{_Scope, _VH, Key, _Model}]) ->
     [{LinkName, Key}];
 
 tag_children(LinkName, Targets) ->
     MPID = oneprovider:get_provider_id(),
     Scopes = lists:map(
-        fun({_, _, Scope}) ->
+        fun({Scope, _VH, _Key, _Model}) ->
             Scope
         end, Targets),
     LongestPrefix = max(4, binary:longest_common_prefix(Scopes)),
     lists:map(
-        fun({Key, _, Scope}) ->
+        fun({Scope, VH, Key, _}) ->
             case MPID of
                 Scope ->
                     {LinkName, Key};
                 _ ->
-                    {links_utils:make_scoped_link_name(LinkName, Scope, LongestPrefix + 1), Key}
+                    case LongestPrefix >= size(Scope) of
+                        true ->
+                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, LongestPrefix + 1), Key};
+                        false ->
+                            {links_utils:make_scoped_link_name(LinkName, Scope, undefined, LongestPrefix + 1), Key}
+                    end
             end
         end, Targets).
 %%--------------------------------------------------------------------
@@ -457,7 +462,7 @@ get_locations(Entry) ->
                 set_link_context(File),
                 datastore:foreach_link(?LINK_STORE_LEVEL, File,
                     fun
-                        (<<?LOCATION_PREFIX, _/binary>>, {_V, [{Key, file_location, _}]}, AccIn) ->
+                        (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
                             [Key | AccIn];
                         (_LinkName, _LinkTarget, AccIn) ->
                             AccIn
@@ -1063,7 +1068,7 @@ location_ref(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec set_link_context(Doc :: datastore:document() | datastore:key()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
-set_link_context(#document{}) ->
+set_link_context(_) ->
     erlang:put(mother_scope, oneprovider:get_provider_id()),
     erlang:put(other_scopes, []),
     ok.
