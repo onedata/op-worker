@@ -209,10 +209,9 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
 %% each ancestor and subject document. Starts from doc parent.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_ancestors_check(datastore:ext_key(),
-    [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}],
-    onedata_user:id(), onedata_user:doc(), share_info:id(), maps:map()) ->
-    [{check_type(), file_meta:doc(), onedata_user:doc(), share_info:id(), [#accesscontrolentity{}]}].
+-spec expand_ancestors_check(file_meta:uuid(), Acc, onedata_user:id(), onedata_user:doc(), share_info:id(), maps:map()) ->
+    {Acc, CacheUsed :: boolean()} when
+    Acc :: [{acl_access_mask(), file_meta:doc(), onedata_user:doc(), share_info:id(), undefined | [#accesscontrolentity{}]}].
 expand_ancestors_check(?ROOT_DIR_UUID, Acc, _UserId, _UserDoc, _ShareId, _AclMap) ->
     {Acc, false};
 expand_ancestors_check(Key, Acc, UserId, UserDoc, ShareId, AclMap) ->
