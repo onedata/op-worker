@@ -67,14 +67,12 @@ find(<<"share-public">>, ShareId) ->
         value = #share_info{
             name = Name,
             root_file_id = RootFileId,
-            parent_space = ParentSpaceId,
             public_url = PublicURL
         }}} = share_info:get(ShareId),
     {ok, [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
         {<<"file">>, RootFileId},
-        {<<"dataSpace">>, ParentSpaceId},
         {<<"publicUrl">>, PublicURL}
     ]};
 find(<<"file-public">>, FileId) ->
@@ -117,54 +115,8 @@ find_query(_, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(_, Data) ->
-    try
-        SessionId = g_session:get_session_id(),
-        Name = proplists:get_value(<<"name">>, Data),
-        Type = proplists:get_value(<<"type">>, Data),
-        ParentGUID = proplists:get_value(<<"parent">>, Data, null),
-        {ok, ParentPath} = logical_file_manager:get_file_path(
-            SessionId, ParentGUID),
-        Path = filename:join([ParentPath, Name]),
-        FileId = case Type of
-            <<"file">> ->
-                {ok, FId} = logical_file_manager:create(SessionId, Path),
-                FId;
-            <<"dir">> ->
-                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
-                DirId
-        end,
-        {ok, #file_attr{
-            name = Name,
-            size = SizeAttr,
-            mtime = ModificationTime,
-            mode = PermissionsAttr}} =
-            logical_file_manager:stat(SessionId, {guid, FileId}),
-        Size = case Type of
-            <<"dir">> -> null;
-            _ -> SizeAttr
-        end,
-        Permissions = integer_to_binary(PermissionsAttr, 8),
-        Res = [
-            {<<"id">>, FileId},
-            {<<"name">>, Name},
-            {<<"type">>, Type},
-            {<<"permissions">>, Permissions},
-            {<<"modificationTime">>, ModificationTime},
-            {<<"size">>, Size},
-            {<<"parent">>, ParentGUID},
-            {<<"children">>, []},
-            {<<"fileAcl">>, FileId}
-        ],
-        {ok, Res}
-    catch _:_ ->
-        case proplists:get_value(<<"type">>, Data, <<"dir">>) of
-            <<"dir">> ->
-                gui_error:report_warning(<<"Failed to create new directory.">>);
-            <<"file">> ->
-                gui_error:report_warning(<<"Failed to create new file.">>)
-        end
-    end.
+create_record(_, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -175,31 +127,8 @@ create_record(_, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(_, FileId, Data) ->
-    try
-        SessionId = g_session:get_session_id(),
-        case proplists:get_value(<<"permissions">>, Data, undefined) of
-            undefined ->
-                ok;
-            NewPerms ->
-                Perms = case is_integer(NewPerms) of
-                    true ->
-                        binary_to_integer(integer_to_binary(NewPerms), 8);
-                    false ->
-                        binary_to_integer(NewPerms, 8)
-                end,
-                case Perms >= 0 andalso Perms =< 8#777 of
-                    true ->
-                        ok = logical_file_manager:set_perms(
-                            SessionId, {guid, FileId}, Perms);
-                    false ->
-                        gui_error:report_warning(<<"Cannot change permissions, "
-                        "invalid octal value.">>)
-                end
-        end
-    catch _:_ ->
-        gui_error:report_warning(<<"Cannot change permissions.">>)
-    end.
+update_record(_, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -209,15 +138,8 @@ update_record(_, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(_, FileId) ->
-    SessionId = g_session:get_session_id(),
-    case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
-        ok ->
-            ok;
-        {error, ?EACCES} ->
-            gui_error:report_warning(
-                <<"Cannot remove file or directory - access denied.">>)
-    end.
+delete_record(_, _Id) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%%===================================================================
@@ -235,19 +157,6 @@ delete_record(_, FileId) ->
 get_parent(SessionId, FileGUID) ->
     {ok, ParentGUID} = logical_file_manager:get_parent(SessionId, {guid, FileGUID}),
     ParentGUID.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns the UUID of user's root dir.
-%% @end
-%%--------------------------------------------------------------------
--spec get_user_root_dir_uuid(SessionId :: binary()) -> binary().
-get_user_root_dir_uuid(SessionId) ->
-    {ok, #file_attr{uuid = UserRootDirUUID}} = logical_file_manager:stat(
-        SessionId, {path, <<"/">>}),
-    UserRootDirUUID.
 
 
 %%--------------------------------------------------------------------
@@ -271,12 +180,15 @@ file_record(SessionId, FileId) ->
                 mode = PermissionsAttr,
                 shares = Shares} = FileAttr,
 
-            UserRootDirUUID = get_user_root_dir_uuid(SessionId),
-            ParentUUID = case get_parent(SessionId, FileId) of
-                UserRootDirUUID ->
-                    null;
-                Other ->
-                    Other
+            % Resolve parent guid of this file
+            {ok, ParentGUID} = logical_file_manager:get_parent(
+                SessionId, {guid, FileId}
+            ),
+            % If the parent guid is the same as file id, it means that it is
+            % the root file of the share -> tell ember there is no parent.
+            Parent = case ParentGUID of
+                FileId -> null;
+                GUID -> GUID
             end,
             {Type, Size} = case TypeAttr of
                 ?DIRECTORY_TYPE -> {<<"dir">>, null};
@@ -289,8 +201,8 @@ file_record(SessionId, FileId) ->
                 <<"dir">> ->
                     case logical_file_manager:ls(
                         SessionId, {guid, FileId}, 0, 1000) of
-                        {ok, Chldrn} ->
-                            Chldrn;
+                        {ok, List} ->
+                            List;
                         _ ->
                             []
                     end
@@ -298,7 +210,7 @@ file_record(SessionId, FileId) ->
             ChildrenIds = [ChId || {ChId, _} <- Children],
             Share = case Shares of
                 [] -> null;
-                % For now, files can only be shared once
+                % For now, files can only be shared once so the list is max 1 el
                 [Sh] -> Sh
             end,
             Res = [
@@ -308,7 +220,7 @@ file_record(SessionId, FileId) ->
                 {<<"permissions">>, Permissions},
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
-                {<<"parent">>, ParentUUID},
+                {<<"parent">>, Parent},
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, Share}
