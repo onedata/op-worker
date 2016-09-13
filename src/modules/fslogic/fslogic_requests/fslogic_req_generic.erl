@@ -509,6 +509,7 @@ remove_share(Ctx = #fslogic_ctx{share_id = ShareId}, {uuid, FileUuid}) ->
 
     ok = share_logic:delete(Auth, ShareId),
     {ok, _} = file_meta:remove_share(FileUuid, ShareId),
+    ok = permissions_cache:invalidate_permissions_cache(),
 
     #provider_response{status = #status{code = ?OK}}.
 
