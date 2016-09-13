@@ -318,11 +318,8 @@ error_response(proxyio_request, Status) ->
 -spec handle_fuse_request(Ctx :: fslogic_worker:ctx(), Request :: #fuse_request{} | #file_request{}) ->
     FuseResponse :: #fuse_response{}.
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    ?info("handle_fuse_request 1 ~p", [Path]),
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    ?info("handle_fuse_request 2 ~p", [Path]),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
-    ?info("handle_fuse_request 3 ~p", [Path]),
     fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);

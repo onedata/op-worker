@@ -381,7 +381,7 @@ list_children(Entry, Offset, Count) ->
                         true ->
                             {Skip, Count1, Acc};
                         false when TargetCount > Skip ->
-                            TargetsTagged = tag_childs(LinkName, Targets),
+                            TargetsTagged = tag_children(LinkName, Targets),
                             SelectedTargetsTagged = lists:sublist(TargetsTagged, Skip + 1, TargetCount - Skip),
                             ChildLinks = lists:map(
                                 fun({LName, LKey}) ->
@@ -393,7 +393,7 @@ list_children(Entry, Offset, Count) ->
                     end;
                 (LinkName, {_V, [{_Key, ?MODEL_NAME, _} | _ ] = Targets}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
                     TargetCount = length(Targets),
-                    TargetsTagged = tag_childs(LinkName, Targets),
+                    TargetsTagged = tag_children(LinkName, Targets),
                     SelectedTargetsTagged = lists:sublist(TargetsTagged, min(Count, TargetCount)),
                     case is_snapshot(LinkName) orelse is_hidden(LinkName) of
                         true ->
@@ -421,12 +421,12 @@ list_children(Entry, Offset, Count) ->
 %% Tag each given link with its scope.
 %% @end
 %%--------------------------------------------------------------------
--spec tag_childs(LinkName :: datastore:link_name(), [datastore:link_final_target()]) ->
+-spec tag_children(LinkName :: datastore:link_name(), [datastore:link_final_target()]) ->
     [{datastore:link_name(), datastore:ext_key()}].
-tag_childs(LinkName, [{Key, _Model, _Scope}]) ->
+tag_children(LinkName, [{Key, _Model, _Scope}]) ->
     [{LinkName, Key}];
 
-tag_childs(LinkName, Targets) ->
+tag_children(LinkName, Targets) ->
     MPID = oneprovider:get_provider_id(),
     Scopes = lists:map(
         fun({_, _, Scope}) ->
@@ -589,7 +589,6 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                     {ok, {Leaf, KeyPath}} ->
                         [_ | [RealParentUUID | _]] = lists:reverse([RootUUID | KeyPath]),
                         {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
-                        ?info("WTF 1 ~p", [{ParentUUID, RealParentUUID}]),
                         case ParentUUID of
                             RealParentUUID ->
                                 {ok, {Leaf, [RootUUID | KeyPath]}};

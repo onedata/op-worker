@@ -31,6 +31,7 @@
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
 -define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
+-define(ETS_CACHE_NAME, doc_cache).
 
 -type queue_id() :: binary().
 -type queue() :: global | {provider, oneprovider:id(), queue_id()}.
@@ -70,7 +71,7 @@ init(_Args) ->
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
-    catch ets:new(doc_cache, [named_table, set, public]),
+    catch ets:new(?ETS_CACHE_NAME, [named_table, set, public]),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -187,21 +188,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                 {ok, SpaceId} ->
                     case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
                         ok ->
-                            case binary:match(Key, ?LOCAL_ONLY_LINK_SCOPE) of
-                                nomatch ->
-                                    case Doc of
-                                        #document{value = #links{origin = MyProvId}} ->
-                                            queue_push(QueueKey, Change, SpaceId);
-                                        #document{value = #links{}} ->
-                                            ?info("SKIP LINK1 ~p", [Key]),
-                                            skip;
-                                        _ ->
-                                            queue_push(QueueKey, Change, SpaceId)
-                                    end;
-                                _ ->
-                                    ?info("SKIP LINK2 ~p", [Key]),
-                                    skip
-                            end;
+                            queue_push(QueueKey, Change, SpaceId);
                         _  -> skip
                     end;
                 {error, not_a_space} ->
@@ -400,7 +387,7 @@ queue_push(QueueKey, #change{seq = Until, doc = #document{key = ChangeKey}} = Ch
                 fun(#change{doc = #document{key = Key}}) ->
                     ChangeKey /= Key
                 end, Batch0#batch.changes),
-            ?info("Reduction ~p", [{length(FilteredChanges), length(Batch0#batch.changes)}]),
+            ?debug("Changes stream aggregation level: ~p", [length(FilteredChanges) / length(Batch0#batch.changes)]),
             Batch = Batch0#batch{changes = [Change | FilteredChanges], until = max(Until, Since)},
             UntilToSet = max(Batch0#batch.until, Until),
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
@@ -483,12 +470,20 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
             retrieve_stashed_batch(FromProvider, SpaceId, Batch)
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets current version of links' document.
+%% @end
+%%--------------------------------------------------------------------
+-spec forign_links_get(model_behaviour:model_config(), datastore:ext_key()) ->
+    {ok, datastore:document()} | {error, Reason :: any()}.
 forign_links_get(ModelConfig, Key) ->
-    case ets:lookup(doc_cache, Key) of
+    case ets:lookup(?ETS_CACHE_NAME, Key) of
         [] ->
             case couchdb_datastore_driver:get(ModelConfig, couchdb_datastore_driver:default_bucket(), Key) of
                 {ok, Doc = #document{key = Key}} ->
-                    ets:insert_new(doc_cache, {Key, Doc}),
+                    ets:insert_new(?ETS_CACHE_NAME, {Key, Doc}),
                     {ok, Doc};
                 Error ->
                     Error
@@ -498,33 +493,37 @@ forign_links_get(ModelConfig, Key) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves links document received from other provider and returns current version of given document.
+%% @end
+%%--------------------------------------------------------------------
+-spec forign_links_save(model_behaviour:model_config(), OldRevNum :: non_neg_integer(), datastore:document()) ->
+    {ok, datastore:document()} | {error, Reason :: any()}.
 forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewRevNum, _}}) ->
-    ?info("REV VS ~p", [{OldRevNum, NewRevNum}]),
     case couchdb_datastore_driver:force_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc) of
         {ok, _} ->
             case OldRevNum of
                 _ when OldRevNum > NewRevNum ->
                     ok;
                 _ when OldRevNum < NewRevNum ->
-                    ets:insert(doc_cache, {Key, Doc});
+                    ets:insert(?ETS_CACHE_NAME, {Key, Doc});
                 _ ->
-                    ets:delete(doc_cache, Key)
+                    ets:delete(?ETS_CACHE_NAME, Key)
 
             end,
-%%            Test = forign_links_get(ModelConfig, Key),
-%%            ets:delete(doc_cache, Key),
-            Ret = Test = forign_links_get(ModelConfig, Key),
-            case Test of
-                Ret -> ok;
-                _ ->
-                    ?info("forign_links_save ~p", [{OldRevNum, Doc, Test, Ret}])
-            end,
-            Ret;
+            forign_links_get(ModelConfig, Key);
         Error ->
-            ?error("forign_links_save error ~p", [Error]),
+            ?error("Unable to save forign links document (key ~p) due to ~p", [Key, Error]),
             Error
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Normalizes revision number to simple integer format.
+%% @end
+%%--------------------------------------------------------------------
+-spec rev_to_num(binary() | {non_neg_integer(), term()}) -> non_neg_integer().
 rev_to_num({Num, _}) ->
     Num;
 rev_to_num(Rev) ->
@@ -572,17 +571,16 @@ apply_changes(SpaceId,
             case Value of
                 #links{origin = MyProvId} ->
                     [];
-                #links{origin = Origin} = Links ->
+                #links{origin = Origin} ->
                     {OldLinks, OldRev} = case forign_links_get(ModelConfig, Key) of
                         {ok, #document{value = OldLinks1, rev = RRev}} ->
                             {OldLinks1, rev_to_num(RRev)};
-                        {error, Reason0} ->
+                        {error, _Reason0} ->
                             {#links{link_map = #{}, model = ModelName}, 0}
                     end,
                     {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = forign_links_save(ModelConfig, OldRev, Doc),
                     {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
-%%                    ?info("DIFF ~p", [{Origin, MainDocKey, AddedMap, DeletedMap}]),
-                    dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
+                    ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
                     maps:keys(AddedMap) ++ maps:keys(DeletedMap);
                 _ ->
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
@@ -1011,11 +1009,6 @@ consume_batches(_, _, CurrentUntil, _, NewBranchUntil) when CurrentUntil >= NewB
 consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUntil) ->
     Batches = get_stashed_batches(ProviderId, SpaceId),
     SortedKeys = lists:sort(maps:keys(Batches)),
-
-%%    lists:foreach(fun(Key) ->
-%%        #batch{changes = Changes} = maps:get(Key, Batches),
-%%        apply_changes(SpaceId, Changes)
-%%    end, SortedKeys),
 
     % check if we have all needed changes to start batches application
     Stashed = lists:foldl(fun(S, Acc) ->

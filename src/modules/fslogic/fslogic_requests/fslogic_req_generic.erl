@@ -119,7 +119,7 @@ chown(_, _File, _UserId) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    ?info("Get attr for file entry: ~p", [File]),
+    ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,

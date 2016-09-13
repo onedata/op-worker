@@ -49,7 +49,7 @@ change_replicated(SpaceId, Change) ->
 %%--------------------------------------------------------------------
 -spec change_replicated_internal(SpaceId :: binary(), dbsync_worker:change()) ->
     any().
-change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document{key = FileUUID,
+change_replicated_internal(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID,
     value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}) ->
     ok = replica_cleanup:clean_replica_files(FileUUID),
     file_consistency:delete(FileUUID);
@@ -80,54 +80,45 @@ change_replicated_internal(_SpaceId, _Change) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Hook that runs just after link change was replicated from remote provider.
-%% Return value and any errors are ignored.
 %% @end
 %%--------------------------------------------------------------------
 -spec links_changed(Origin :: links_utils:scope(), ModelName :: model_behaviour:model_type(),
     MainDocKey :: datastore:ext_key(), AddedMap :: #{}, DeletedMap :: #{}) ->
     ok.
 links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) ->
-    #model_config{link_store_level = LinkStoreLevel} = ModelName:model_init(),
-            try
-                MyProvID = oneprovider:get_provider_id(),
-                erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE),
-                erlang:put(other_scopes, []),
+    #model_config{link_store_level = _LinkStoreLevel} = ModelName:model_init(),
+    MyProvID = oneprovider:get_provider_id(),
+    erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE),
+    erlang:put(other_scopes, []),
 
-                maps:fold(
-                    fun(K, {Version, Targets}, AccIn) ->
-                        NewTargets = lists:filter(
-                            fun({_, _, Scope}) ->
-                                case Scope of
-                                    MyProvID ->
-                                        false;
-                                    _ ->
-                                        true
-                                end
-                            end, Targets),
-                        case NewTargets of
-                            [] -> AccIn;
-                            _ ->
-                                ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [{K, {Version, NewTargets}}])
+    maps:fold(
+        fun(K, {Version, Targets}, AccIn) ->
+            NewTargets = lists:filter(
+                fun({_, _, Scope}) ->
+                    case Scope of
+                        MyProvID ->
+                            false;
+                        _ ->
+                            true
+                    end
+                end, Targets),
+            case NewTargets of
+                [] -> AccIn;
+                _ ->
+                    ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [{K, {Version, NewTargets}}])
 
-                        end
-                    end, [], AddedMap),
+            end
+        end, [], AddedMap),
 
-                maps:fold(
-                    fun(K, V, _AccIn) ->
-                        {_, DelTargets} = V,
-                        lists:foreach(
-                            fun({_, _, S}) ->
-                                ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S, size(S))])
-                            end, DelTargets)
-                    end, [], DeletedMap),
+    maps:fold(
+        fun(K, V, _AccIn) ->
+            {_, DelTargets} = V,
+            lists:foreach(
+                fun({_, _, S}) ->
+                    ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S, size(S))])
+                end, DelTargets)
+        end, [], DeletedMap),
 
-                ok
-
-
-            catch
-                _:Reason ->
-                    ?error_stacktrace("links_changed error ~p", [Reason])
-            end,
     ok;
 links_changed(_, _, _, _, _) ->
     ok.
