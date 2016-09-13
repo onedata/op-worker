@@ -170,6 +170,7 @@ handle(<<"createFileShare">>, Props) ->
     % Push file data so GUI knows that is is shared
     {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
     gui_async:push_created(<<"file">>, FileData),
+    ?dump(FileData),
     {ok, [{<<"shareId">>, ShareId}]};
 
 

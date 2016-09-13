@@ -22,7 +22,8 @@
 -export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1, unpack_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1]).
 -export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
--export([uuid_to_share_guid/3, guid_to_share_guid/2, unpack_share_guid/1]).
+-export([uuid_to_share_guid/3, unpack_share_guid/1]).
+-export([guid_to_share_guid/2, share_guid_to_guid/1]).
 
 %%%===================================================================
 %%% API
@@ -57,7 +58,7 @@ ensure_guid(_CTX, {guid, FileGUID}) ->
 ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
     lfm_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = Path},
-        fun (#file_attr{uuid = GUID}) ->
+        fun(#file_attr{uuid = GUID}) ->
             {guid, GUID}
         end).
 
@@ -204,6 +205,16 @@ uuid_to_share_guid(FileUUID, SpaceId, ShareId) ->
 guid_to_share_guid(Guid, ShareId) ->
     {FileUUID, SpaceId} = unpack_guid(Guid),
     http_utils:base64url_encode(term_to_binary({share_guid, FileUUID, SpaceId, ShareId})).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convert Share guid to Guid.
+%% @end
+%%--------------------------------------------------------------------
+-spec share_guid_to_guid(share_info:share_guid()) -> fslogic_worker:file_guid().
+share_guid_to_guid(ShareGuid) ->
+    {FileUuid, SpaceId, _} = unpack_share_guid(ShareGuid),
+    uuid_to_guid(FileUuid, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc

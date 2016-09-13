@@ -176,10 +176,11 @@ share_record(ShareId) ->
             parent_space = ParentSpaceId,
             public_url = PublicURL
         }}} = share_logic:get(UserAuth, ShareId),
+    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
     [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
-        {<<"file">>, RootFileId},
+        {<<"file">>, FileId},
         {<<"dataSpace">>, ParentSpaceId},
         {<<"publicUrl">>, PublicURL}
     ].
