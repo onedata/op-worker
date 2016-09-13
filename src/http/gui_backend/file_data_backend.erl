@@ -67,7 +67,7 @@ find(<<"file">>, FileId) ->
     try
         file_record(SessionId, FileId)
     catch T:M ->
-        ?warning("Cannot get meta-data for file (~p). ~p:~p", [
+        ?warning("Cannot get file-meta for file (~p). ~p:~p", [
             FileId, T, M
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
