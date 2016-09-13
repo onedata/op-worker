@@ -1,50 +1,183 @@
-# op-worker
+# bamboos
+*bamboos* is a set of python scripts that are used for starting components in dockerized environment. Environment description files (JSON format) are used to configure how components should be started.
 
-*op-worker* is a component of [Onedata](http://onedata.org) distributed data management platform, which serves as a worker process of [Oneprovider] service. Oneprovider service requires at least one *op-worker* instance.  Adding more *op-worker* nodes scales the cluster allowing for processing more requests in parallel. *op-worker* instances are coordinated by [cluster-manager](https://github.com/onedata/cluster-manager) process, which should be deployed at least in one instance per entire cluster. Adding *cluster-manager* nodes increases fault tolerance of the Oneprovider service.
+# User Guide
+*bamboos* scripts can be used in two ways:
 
-*op-worker* is a specialization of generic Onedata worker process [cluster-worker](https://github.com/onedata/cluster-worker). The *cluster-worker* provides generic funcitonalities such as persistence and cluster management, while *op-worker* augments it with its specific logic.
+- **standalone scripts**
+Navigate to use it as a standalone scripts `docker` directory and use any `*_up.py` script.
 
-The main objective of *op-worker*, and *oneprovider* as a whole, is to unify access to files stored at heterogeneous data storage systems that belong to geographically distributed organizations. The *oneprovider* provides a self-scalable cluster, which manages the *onedata* system in a single data centre, i.e. it stores meta-data about actual users' data from the data centre, decides how to distribute users' files among available storage systems, and executes data management rules, which can be defined by administrators or users.
+- **python library**
+In your own script import `*.py` files located in `docker/environment` directory.
 
+Consult those scripts for usage instructions. They require a JSON describing the environment to be started. See *example_env* dir for exemplary JSON files.  
 
-# Using
+Below is an example of JSON that defines a *oneprovider* instance, *onezone* instance and pre-configured entities like users and spaces. It can be used with:
 
-*oz-worker* is an internal component of Oneprovider service and it should only be started as part of its deployment.
+ * `provider_up.py` script - starts *oneprovider*
+ * `zone_up.py` script - starts *onezone*
+ * `env_up.py` script - starts both *oneprovider* with *onezone* and pre-sets entities (users, spaces and groups)
 
-## Dependencies
-
-* docker client > 1.10
-* python >= 2.7
-
-## Documentation
-
-Comprehensive [documentation](https://beta.onedata.org/docs/index.html) explains basic concepts of onedata, provides "Getting started" and introduces to advanced topics.
-
-## Building
-To build *oz-worker* use the provided build script:
+The JSON looks like follows:
+```json
+{
+    "dirs_config":{
+        "cluster_manager":{
+            "input_dir":"_build/default/rel/cluster_manager",
+            "target_dir":"_build/default/rel/test_cluster"
+        },
+        "op_worker":{
+            "input_dir":"_build/default/rel/op_worker",
+            "target_dir":"_build/default/rel/test_cluster"
+        },
+        "oz_worker":{
+            "input_dir":"_build/default/rel/oz_worker",
+            "target_dir":"_build/default/rel/test_cluster"
+        }
+    },
+    "os_configs":{
+        "cfg1":{
+            "storages":[
+                {
+                    "type":"posix",
+                    "name":"/mnt/st1"
+                }
+            ],
+            "users":[
+                "user1"
+            ],
+            "groups":{
+                "group1":[
+                    "user1"
+                ]
+            }
+        }
+    },
+    "provider_domains":{
+        "p1":{
+            "db_driver":"couchdb",
+            "os_config":"cfg1",
+            "cluster_manager":{
+                "cm1":{
+                    "vm.args":{
+                        "setcookie":"cookie1"
+                    },
+                    "sys.config":{
+                        "cluster_manager":{
+                            "cm_nodes":[
+                                "cm1"
+                            ],
+                            "worker_num":1
+                        }
+                    }
+                }
+            },
+            "op_worker":{
+                "worker1":{
+                    "vm.args":{
+                        "setcookie":"cookie1"
+                    },
+                    "sys.config":{
+                        "op_worker":{
+                            "cm_nodes":[
+                                "cm1"
+                            ],
+                            "db_nodes":[
+                                "dbnode1"
+                            ],
+                            "verify_oz_cert":false,
+                            "oz_domain":"oz"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "zone_domains":{
+        "oz":{
+            "db_driver":"couchdb",
+            "cluster_manager":{
+                "cm":{
+                    "vm.args":{
+                        "setcookie":"cookie3"
+                    },
+                    "sys.config":{
+                        "cluster_manager":{
+                            "cm_nodes":[
+                                "cm"
+                            ],
+                            "worker_num":1
+                        }
+                    }
+                }
+            },
+            "oz_worker":{
+                "node1":{
+                    "vm.args":{
+                        "setcookie":"cookie3"
+                    },
+                    "sys.config":{
+                        "oz_worker":{
+                            "cm_nodes":[
+                                "cm"
+                            ],
+                            "db_nodes":[
+                                "127.0.0.1:49161"
+                            ],
+                            "http_domain":{
+                                "string":"127.0.0.1"
+                            },
+                            "dev_mode":true
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "global_setup":{
+        "users":{
+            "user1":{
+                "default_space":"space1"
+            }
+        },
+        "groups":{
+            "group1":{
+                "users":[
+                    "user1"
+                ]
+            }
+        },
+        "spaces":{
+            "space1":{
+                "displayed_name":"space1",
+                "users":[
+                    "user1"
+                ],
+                "groups":[
+                    "group1"
+                ],
+                "providers":{
+                    "p1":{
+                        "storage":"/mnt/st1",
+                        "supported_size":1000000000
+                    }
+                }
+            }
+        }
+    }
+}
 ```
-./make.py
-```
 
-## Configuration and Running
-*op-worker* can be started using [bamboo](https://github.com/onedata/bamboo) scripts that are included in the repository. *oneprovider* cluster needs to be connected to *onezone* in order to operate, so we should clone it and build. Run the following commands from root of *op-worker* repository:
+Section **dirs_config** allows to define where to look for binaries of a given component and where to copy them to create different instances. Unless you really know what you are doing it should not be changed.
 
-```
-git clone git@github.com:onedata/oz-worker.git
-cd oz-worker && ./make.py
-cd ..
-./bamboos/docker/env_up.py --bin-worker . --bin-oz oz-worker --bin-cm cluster_manager bamboos/example_env/single_gr_and_provider.json
-```
+Section **os_configs** defines named configurations of Operating System, i.e. users, groups and storages to be created. Later, such config can be specified in [oneprovider](https://github.com/onedata/op-worker) configuration which will create required entites on every docker hosting the *oneprovider* nodes.
 
-As *op-worker* won't work without *cluster_manager*, both those applications will be started and connected into a small cluster. The section "provider_domains" in the JSON file defines all instances of oneprovider clusters that should be started and allows for basic configuration. The *onezone* will be started also and its configuration is defined in "zone_domains" section.
+Section **provider_domains** defines a list of *oneprovider* instances. Each instance must get its unique identifier (e.g. `p1`), which will be transformed to domain name like this: `p1.1465312143.dev`. Inside provider configuration, you can specify which database driver and predefined *os_config* it should use, as well as how many nodes should be set up into a cluster. Each node can have its own configuration.
 
-After the script has finished, you should have a running, dockerized *oneprovider* instance, attached to *onezone*. Enter the graphical user interface of *onezone* on https://&lt;onezone-docker-ip&gt; (its name is in format node1.oz.&lt;timestamp&gt;.dev). In there you may log in to one of the test users and then select "go to your files" to move to the *oneprovider*'s graphical user interface. 
+Section **zone_domains** defines a list of *onezone* instances. The configuration is simillar to *oneprovider* config, excluding *os_config* which is not used in onezone.
 
+Section **global_setup** defines what entities should be initialized in *onezone*. This enables automatic creation of users, spaces, groups and provider supports. They will be all running and ready to use when script finishes.
 
-# APIs
-
-- web - web-based, graphical user interface for managing user account and accessing data, available on https://&lt;oneprovider-hostname&gt:/
-- [oneclient](https://github.com/onedata/oneclient) - FUSE client for accessing user's spaces of data,
-- [CDMI](http://www.snia.org/cdmi) - Cloud Data Management Interface in version 1.1.1 is available on https://&lt;ip&gt;:8443/cdmi/ endpoint. To authorize yourself the X-Auth-Token header should be provided to each request, with valid user token obtained from [onezone](https://github.com/onedata/onezone),
-- [REST](https://beta.onedata.org/docs/doc/advanced/rest.html) - rest api for operations such as data replication or reading metrics, available on  https://&lt;oneprovider-hostname&gt:8443/api/v3/oneprovider/ endpoint.
+# bamboos in Onedata
+**bamboos** is used for test automation by setting up testing environments. It is used in [bamboo](https://www.atlassian.com/software/bamboo) builds, as well as in standaalone tests on developer machines. In addition, it allows for easy setup of dockerized environment which is useful during manual testing and code development.
 
