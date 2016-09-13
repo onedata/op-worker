@@ -167,6 +167,9 @@ handle(<<"createFileShare">>, Props) ->
     {ok, {ShareId, _}} = logical_file_manager:create_share(
         SessionId, {guid, FileId}, Name
     ),
+    % Push file data so GUI knows that is is shared
+    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
+    gui_async:push_created(<<"file">>, FileData),
     {ok, [{<<"shareId">>, ShareId}]};
 
 
