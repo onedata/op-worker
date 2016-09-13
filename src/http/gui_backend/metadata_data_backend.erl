@@ -125,10 +125,14 @@ delete_record(<<"metadata">>, FileId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Constructs a file record from given FileId.
+%% Constructs a metadata record for given FileId.
 %% @end
 %%--------------------------------------------------------------------
 -spec metadata_record(SessionId :: binary(), FileId :: binary()) ->
     {ok, proplists:proplist()}.
 metadata_record(SessionId, FileId) ->
+    {ok, Xattr} = logical_file_manager:list_xattr(
+        SessionId, {guid, FileId}, false
+    ),
+    % Filter out internal xattrs
     gui_error:report_error(<<"Not implemented">>).

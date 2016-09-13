@@ -72,7 +72,7 @@
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3, update_times/4,
+    remove_xattr/2, remove_xattr/3, list_xattr/3, list_xattr/4, update_times/4,
     update_times/5]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -453,14 +453,15 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %% Returns complete list of extended attributes of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(handle(), boolean()) -> {ok, [xattr:name()]} | error_reply().
-list_xattr(Handle, Inherited) ->
-    ?run(fun() -> lfm_attrs:list_xattr(Handle, Inherited) end).
-
--spec list_xattr(session:id(), file_key(), boolean()) ->
+-spec list_xattr(handle(), boolean(), boolean()) ->
     {ok, [xattr:name()]} | error_reply().
-list_xattr(SessId, FileKey, Inherited) ->
-    ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited) end).
+list_xattr(Handle, Inherited, ShowInternal) ->
+    ?run(fun() -> lfm_attrs:list_xattr(Handle, Inherited, ShowInternal) end).
+
+-spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
+    {ok, [xattr:name()]} | error_reply().
+list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
+    ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal) end).
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.

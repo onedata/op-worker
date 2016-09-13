@@ -177,8 +177,7 @@ file_record(SessionId, FileId) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr,
-                shares = Shares} = FileAttr,
+                mode = PermissionsAttr} = FileAttr,
 
             % Resolve parent guid of this file
             {ok, ParentGUID} = logical_file_manager:get_parent(
@@ -208,11 +207,6 @@ file_record(SessionId, FileId) ->
                     end
             end,
             ChildrenIds = [ChId || {ChId, _} <- Children],
-            Share = case Shares of
-                [] -> null;
-                % For now, files can only be shared once so the list is max 1 el
-                [Sh] -> Sh
-            end,
             Res = [
                 {<<"id">>, FileId},
                 {<<"name">>, Name},
@@ -223,7 +217,7 @@ file_record(SessionId, FileId) ->
                 {<<"parent">>, Parent},
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
-                {<<"share">>, Share}
+                {<<"share">>, null}
             ],
             {ok, Res}
     end.

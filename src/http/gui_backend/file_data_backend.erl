@@ -42,6 +42,7 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    io:format("S = ~p~n~n", [g_session:get_session_id()]),
     ok.
 
 
@@ -365,7 +366,7 @@ file_record(SessionId, FileId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Constructs a file acl record from given FileId.
+%% Constructs a file acl record for given FileId.
 %% @end
 %%--------------------------------------------------------------------
 -spec file_acl_record(SessionId :: binary(), FileId :: binary()) ->
