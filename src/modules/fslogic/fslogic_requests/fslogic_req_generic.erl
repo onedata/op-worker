@@ -15,6 +15,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/metadata.hrl").
 -include("modules/events/types.hrl").
 -include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -28,7 +29,7 @@
 
 %% API
 -export([chmod/3, get_file_attr/2, delete/3, update_times/5,
-    get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/3,
+    get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
@@ -65,11 +66,11 @@ get_file_path(Ctx, {uuid, FileUUID}) ->
 -check_permissions([{traverse_ancestors, 2}, {{owner, 'or', ?write_attributes}, 2}]).
 update_times(CTX, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
-    UpdateMap1 = maps:filter(fun(_Key, Value) -> is_integer(Value) end, UpdateMap),
+    UpdateMap1 = maps:filter(fun(_Key, Value) ->
+        is_integer(Value) end, UpdateMap),
     fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, fslogic_context:get_user_id(CTX)),
 
     #fuse_response{status = #status{code = ?OK}}.
-
 
 
 %%--------------------------------------------------------------------
@@ -78,7 +79,7 @@ update_times(CTX, FileEntry, ATime, MTime, CTime) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
-                   #fuse_response{} | no_return().
+    #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
 chmod(CTX, File, Mode) ->
     chmod_storage_files(CTX, File, Mode),
@@ -104,7 +105,7 @@ chmod(CTX, File, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
-                   #fuse_response{} | no_return().
+    #fuse_response{} | no_return().
 -check_permissions([{?write_owner, 2}]).
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
@@ -116,7 +117,7 @@ chown(_, _File, _UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
-                           FuseResponse :: #fuse_response{} | no_return().
+    FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File) ->
     ?debug("Get attr for file entry: ~p", [File]),
@@ -228,13 +229,24 @@ remove_xattr(CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
 %% Returns complete list of extended attributes' keys of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, boolean()) ->
+-spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, boolean(), boolean()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-list_xattr(_CTX, {uuid, FileUuid}, Inherited) ->
+list_xattr(_CTX, {uuid, FileUuid}, Inherited, ShowInternal) ->
     case xattr:list(FileUuid, Inherited) of
-        {ok, List} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = List}};
+        {ok, XattrList} ->
+            FilteredXattrList = case ShowInternal of
+                true ->
+                    XattrList;
+                false ->
+                    lists:filter(fun(Key) ->
+                        not lists:any(
+                            fun(InternalPrefix) ->
+                                str_utils:binary_starts_with(Key, InternalPrefix)
+                            end, ?METADATA_INTERNAL_PREFIXES)
+                    end, XattrList)
+            end
+            #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = FilteredXattrList}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
@@ -245,7 +257,7 @@ list_xattr(_CTX, {uuid, FileUuid}, Inherited) ->
 -spec get_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
-get_acl(_CTX, {uuid, FileUuid})  ->
+get_acl(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Val}};
@@ -415,7 +427,7 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
                             replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)
                         end, ChildLinks),
                     #provider_response{status = #status{code = ?OK}};
-                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}}->
+                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}} ->
                     utils:pforeach(
                         fun(#child_link{uuid = ChildGuid}) ->
                             replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)

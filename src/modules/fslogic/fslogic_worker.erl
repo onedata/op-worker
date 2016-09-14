@@ -387,8 +387,8 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
     fslogic_req_generic:set_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Xattr);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #remove_xattr{name = XattrName}}) ->
     fslogic_req_generic:remove_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, XattrName);
-handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #list_xattr{inherited = Inherited}}) ->
-    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Inherited);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #list_xattr{inherited = Inherited, show_internal = ShowInternal}}) ->
+    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Inherited, ShowInternal);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_acl{}}) ->
     fslogic_req_generic:get_acl(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #set_acl{acl = Acl}}) ->

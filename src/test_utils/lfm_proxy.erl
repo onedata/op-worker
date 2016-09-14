@@ -19,7 +19,7 @@
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
     read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
-    get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/4, get_acl/3, set_acl/4,
+    get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
@@ -295,13 +295,13 @@ remove_xattr(Worker, SessId, FileKey, XattrKey) ->
             Host ! {self(), Result}
         end).
 
--spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), boolean()) ->
+-spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), boolean(), boolean()) ->
     {ok, [xattr:name()]} | logical_file_manager:error_reply().
-list_xattr(Worker, SessId, FileKey, Inherited) ->
+list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited),
+                logical_file_manager:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited, ShowInternal),
             Host ! {self(), Result}
         end).
 

@@ -171,7 +171,7 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
-        #list_xattr{inherited = Inherited}, %TODO!!! , show_internal = ShowInternal},
+        #list_xattr{inherited = Inherited, show_internal = ShowInternal},
         fun(#xattr_list{names = Names}) ->
             {ok, Names}
         end).

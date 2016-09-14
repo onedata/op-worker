@@ -359,8 +359,8 @@ translate_from_protobuf(#'SetXattr'{xattr = Xattr}) ->
     #set_xattr{xattr = translate_from_protobuf(Xattr)};
 translate_from_protobuf(#'RemoveXattr'{name = Name}) ->
     #remove_xattr{name = Name};
-translate_from_protobuf(#'ListXattr'{inherited = Inherited}) ->
-    #list_xattr{inherited = Inherited};
+translate_from_protobuf(#'ListXattr'{inherited = Inherited, show_internal = ShowInternal}) ->
+    #list_xattr{inherited = Inherited, show_internal = ShowInternal};
 translate_from_protobuf(#'GetParent'{}) ->
     #get_parent{};
 translate_from_protobuf(#'GetAcl'{}) ->
@@ -753,8 +753,8 @@ translate_to_protobuf(#set_xattr{xattr = Xattr}) ->
     {set_xattr, #'SetXattr'{xattr = XattrT}};
 translate_to_protobuf(#remove_xattr{name = Name}) ->
     {remove_xattr, #'RemoveXattr'{name = Name}};
-translate_to_protobuf(#list_xattr{inherited = Inherited}) ->
-    {list_xattr, #'ListXattr'{inherited = Inherited}};
+translate_to_protobuf(#list_xattr{inherited = Inherited, show_internal = ShowInternal}) ->
+    {list_xattr, #'ListXattr'{inherited = Inherited, show_internal = ShowInternal}};
 translate_to_protobuf(#get_parent{}) ->
     {get_parent, #'GetParent'{}};
 translate_to_protobuf(#get_acl{}) ->

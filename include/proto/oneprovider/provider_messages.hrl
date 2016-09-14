@@ -29,7 +29,8 @@
 }).
 
 -record(list_xattr, {
-    inherited = false :: boolean()
+    inherited = false :: boolean(),
+    show_internal = true :: boolean()
 }).
 
 -record(get_parent, {
