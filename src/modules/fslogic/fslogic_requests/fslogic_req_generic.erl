@@ -245,7 +245,7 @@ list_xattr(_CTX, {uuid, FileUuid}, Inherited, ShowInternal) ->
                                 str_utils:binary_starts_with(Key, InternalPrefix)
                             end, ?METADATA_INTERNAL_PREFIXES)
                     end, XattrList)
-            end
+            end,
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = FilteredXattrList}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
