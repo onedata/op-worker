@@ -656,7 +656,7 @@ resolves_conflicts(Config) ->
         name = <<"space xp">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, space_info, Sp1)),
-    ?assertMatch({ok, #document{key = Sp1, value = #share_info{
+    ?assertMatch({ok, #document{key = Sh1, value = #share_info{
         name = <<"share xp">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, share_info, Sh1)),

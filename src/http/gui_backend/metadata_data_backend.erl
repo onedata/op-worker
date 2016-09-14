@@ -129,7 +129,7 @@ delete_record(<<"metadata">>, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec metadata_record(SessionId :: binary(), FileId :: binary()) ->
-    {ok, proplists:proplist()}.
+    {ok, proplists:proplist()} | gui_error:error_result().
 metadata_record(SessionId, FileId) ->
     {ok, Xattr} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false

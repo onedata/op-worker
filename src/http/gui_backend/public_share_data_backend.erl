@@ -149,19 +149,6 @@ delete_record(_, _Id) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns the UUID of parent of given file. This is needed because
-%% spaces dir has two different UUIDs, should be removed when this is fixed.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(SessionId :: binary(), FileGUID :: binary()) -> binary().
-get_parent(SessionId, FileGUID) ->
-    {ok, ParentGUID} = logical_file_manager:get_parent(SessionId, {guid, FileGUID}),
-    ParentGUID.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Constructs a file record from given FileId.
 %% @end
 %%--------------------------------------------------------------------
