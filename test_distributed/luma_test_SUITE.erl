@@ -253,16 +253,18 @@ init_per_suite(Config) ->
     EnvUpResult.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(posix_user_provider_test, Config) ->
+init_per_testcase(posix_user_provider_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, file_meta),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?POSIX_SPACE_NAME}}} end),
     Config;
 
-init_per_testcase(posix_user_proxy_test, Config) ->
+init_per_testcase(posix_user_proxy_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     PosixSpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
         [?POSIX_SPACE_NAME]),
@@ -291,7 +293,8 @@ init_per_testcase(posix_user_proxy_test, Config) ->
         end),
     Config;
 
-init_per_testcase(ceph_user_provider_test, Config) ->
+init_per_testcase(ceph_user_provider_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, file_meta),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
@@ -299,7 +302,8 @@ init_per_testcase(ceph_user_provider_test, Config) ->
     Config;
 
 
-init_per_testcase(ceph_user_proxy_test, Config) ->
+init_per_testcase(ceph_user_proxy_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     %% mock LUMA server response for ceph ctx
     test_utils:mock_new(Worker, [file_meta, http_client]),
@@ -310,7 +314,8 @@ init_per_testcase(ceph_user_proxy_test, Config) ->
         {ok, #document{value = #file_meta{name = ?CEPH_SPACE_NAME}}} end),
     Config;
 
-init_per_testcase(s3_user_provider_test, Config) ->
+init_per_testcase(s3_user_provider_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     %% mock invocation of amazonaws_iam API calls
     test_utils:mock_new(Worker, amazonaws_iam),
@@ -326,7 +331,8 @@ init_per_testcase(s3_user_provider_test, Config) ->
         {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
     Config;
 
-init_per_testcase(s3_user_proxy_test, Config) ->
+init_per_testcase(s3_user_proxy_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [file_meta, http_client]),
     test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
@@ -336,7 +342,8 @@ init_per_testcase(s3_user_proxy_test, Config) ->
         {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
     Config;
 
-init_per_testcase(swift_user_proxy_test, Config) ->
+init_per_testcase(swift_user_proxy_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [file_meta, http_client]),
     test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
@@ -346,17 +353,20 @@ init_per_testcase(swift_user_proxy_test, Config) ->
         {ok, #document{value = #file_meta{name = ?SWIFT_SPACE_NAME}}} end),
     Config;
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Config.
 
 end_per_testcase(Case, Config) when
     Case =:= posix_user_provider_test;
     Case =:= ceph_user_provider_test ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, file_meta),
     end_per_testcase(all, Config);
 
-end_per_testcase(posix_user_proxy_test, Config) ->
+end_per_testcase(posix_user_proxy_test = Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, [file_meta, http_client]),
     end_per_testcase(all, Config);
@@ -365,16 +375,19 @@ end_per_testcase(Case, Config) when
     Case =:= ceph_user_proxy_test;
     Case =:= s3_user_proxy_test;
     Case =:= swift_user_proxy_test ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, [file_meta, http_client]),
     end_per_testcase(all, Config);
 
-end_per_testcase(s3_user_provider_test, Config) ->
+end_per_testcase(s3_user_provider_test = Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, [amazonaws_iam, file_meta]),
     end_per_testcase(all, Config);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertMatch(ok, rpc:call(Worker, ceph_user, delete, [?USER_ID])),
     ?assertMatch(ok, rpc:call(Worker, s3_user, delete, [?USER_ID])),

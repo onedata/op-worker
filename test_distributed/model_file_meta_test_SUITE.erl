@@ -26,7 +26,8 @@
 -define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, exec_and_check_time/3]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+    end_per_testcase/2, exec_and_check_time/3]).
 %% tests
 -export([basic_operations_test/1, rename_test/1]).
 %% test_bases
@@ -366,7 +367,14 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
+
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
+    Config.
+
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions

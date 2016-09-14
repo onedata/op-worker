@@ -142,19 +142,21 @@ init_per_suite(Config) ->
     NewConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= emit_read_event_should_execute_handler;
     Case =:= emit_write_event_should_execute_handler;
     Case =:= emit_file_attr_update_event_should_execute_handler;
     Case =:= emit_file_location_update_event_should_execute_handler ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
     init_per_testcase(default, [{subscription_id, SubId} | Config]);
 
 init_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     NewConfig = init_per_testcase(default, Config),
     SessId = ?config(session_id, NewConfig),
@@ -164,6 +166,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_event_manager ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     NewConfig = init_per_testcase(default, Config),
     SessId = ?config(session_id, NewConfig),
@@ -173,6 +176,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     SessIds = lists:map(fun(N) ->
@@ -191,7 +195,8 @@ init_per_testcase(Case, Config) when
     end),
     NewConfig;
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
@@ -214,6 +219,7 @@ end_per_testcase(Case, Config) when
     Case =:= emit_write_event_should_execute_handler;
     Case =:= emit_file_attr_update_event_should_execute_handler;
     Case =:= emit_file_location_update_event_should_execute_handler ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     end_per_testcase(default, Config);
@@ -221,12 +227,14 @@ end_per_testcase(Case, Config) when
 end_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process;
     Case =:= subscribe_should_notify_event_manager ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(session_id, Config), ?config(subscription_id, Config)),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
@@ -236,7 +244,8 @@ end_per_testcase(Case, Config) when
     initializer:clear_assume_all_files_in_space(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),

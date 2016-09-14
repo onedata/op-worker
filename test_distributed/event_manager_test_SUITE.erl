@@ -116,9 +116,10 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
+init_per_testcase(event_manager_should_start_event_stream_on_subscription = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_event_stream_sup(Worker),
     init_per_testcase(default, Config);
@@ -128,6 +129,7 @@ init_per_testcase(Case, Config) when
     Case =:= event_manager_should_unregister_event_stream;
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
@@ -137,7 +139,8 @@ init_per_testcase(Case, Config) when
     {ok, EvtMan} = start_event_manager(Worker, SessId),
     [{event_manager, EvtMan}, {session_id, SessId} | Config];
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
@@ -146,7 +149,8 @@ init_per_testcase(_, Config) ->
     {ok, EvtMan} = start_event_manager(Worker, SessId),
     [{event_manager, EvtMan}, {session_id, SessId} | Config].
 
-end_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
+end_per_testcase(event_manager_should_start_event_stream_on_subscription = Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     end_per_testcase(default, Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
@@ -156,11 +160,13 @@ end_per_testcase(Case, Config) when
     Case =:= event_manager_should_unregister_event_stream;
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     end_per_testcase(default, Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_event_manager(?config(event_manager, Config)),
     test_utils:mock_validate_and_unload(Worker, [event_manager_sup, subscription]),

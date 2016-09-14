@@ -180,15 +180,17 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Node | _] = ?config(op_worker_nodes, Config),
     CTXServer = spawn(Node, fun() -> ctx_server(Config) end),
     lists:keystore(ctx_server, 1, Config,
         {ctx_server, CTXServer}).
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     CTXServer = ?config(ctx_server, Config),
     CTXServer ! exit,
 

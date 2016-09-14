@@ -71,9 +71,10 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(stress_test, Config) ->
+init_per_testcase(stress_test = Case, Config) ->
+    ?CASE_START(Case),
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
@@ -81,10 +82,12 @@ init_per_testcase(stress_test, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Config.
 
-end_per_testcase(stress_test, Config) ->
+end_per_testcase(stress_test = Case, Config) ->
+    ?CASE_START(Case),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -93,6 +96,7 @@ end_per_testcase(stress_test, Config) ->
     hackney:stop(),
     application:stop(etls);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Config.
 

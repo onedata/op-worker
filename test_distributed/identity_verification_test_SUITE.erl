@@ -156,9 +156,10 @@ init_per_suite(RunConfig) ->
 
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     %% clear OZ state - this key is defined in appmock
@@ -175,7 +176,8 @@ init_per_testcase(_Case, Config) ->
 
     Config.
 
-end_per_testcase(_Case, _Config) ->
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case),
     ok.
 
 %%%===================================================================

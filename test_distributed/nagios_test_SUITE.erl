@@ -20,7 +20,7 @@
 -include_lib("ctool/include/global_definitions.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([nagios_test/1]).
 
 all() -> ?ALL([nagios_test]).
@@ -85,7 +85,14 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
+
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
+    Config.
+
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions

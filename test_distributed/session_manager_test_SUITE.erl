@@ -267,14 +267,16 @@ init_per_suite(Config) ->
     NewConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
+init_per_testcase(session_manager_session_creation_and_reuse_test = Case, Config) ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     Config;
 
-init_per_testcase(session_getters_test, Config) ->
+init_per_testcase(session_getters_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -282,7 +284,8 @@ init_per_testcase(session_getters_test, Config) ->
     initializer:communicator_mock(Worker),
     initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
-init_per_testcase(session_supervisor_child_crash_test, Config) ->
+init_per_testcase(session_supervisor_child_crash_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     initializer:communicator_mock(Worker),
@@ -298,6 +301,7 @@ init_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test;
     Case =:= session_manager_session_removal_test ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId1 = <<"session_id_1">>,
@@ -315,24 +319,28 @@ init_per_testcase(Case, Config) when
 
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 
-end_per_testcase(session_getters_test, Config) ->
+end_per_testcase(session_getters_test = Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:basic_session_teardown(Worker, Config),
     test_utils:mock_validate_and_unload(Worker, communicator);
 
-end_per_testcase(session_supervisor_child_crash_test, Config) ->
+end_per_testcase(session_supervisor_child_crash_test = Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, logger);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_creation_and_reuse_test;
     Case =:= session_manager_session_removal_test ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     SessIds = ?config(session_ids, Config),
     lists:foreach(fun(SessId) ->
