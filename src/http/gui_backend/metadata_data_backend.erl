@@ -132,7 +132,7 @@ delete_record(<<"metadata">>, FileId) ->
     {ok, proplists:proplist()}.
 metadata_record(SessionId, FileId) ->
     {ok, Xattr} = logical_file_manager:list_xattr(
-        SessionId, {guid, FileId}, false
+        SessionId, {guid, FileId}, false, false
     ),
     % Filter out internal xattrs
     gui_error:report_error(<<"Not implemented">>).
