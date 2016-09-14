@@ -179,7 +179,7 @@
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
     % All shares that belong to this space.
-    shares = [] :: [SpaceId :: binary()],
+    shares = [] :: [share_info:id()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 
