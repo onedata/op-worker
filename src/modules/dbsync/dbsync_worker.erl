@@ -42,10 +42,10 @@
 
 %% Record for storing current state of dbsync stream queue.
 -record(queue, {
-    key :: queue(),
+    key :: undefined | queue(),
     since = 0 :: non_neg_integer(),
     until = 0 :: non_neg_integer(),
-    batch_map = #{} :: #{},
+    batch_map = #{} :: maps:map(),
     removed = false :: boolean()
 }).
 
@@ -845,7 +845,7 @@ do_request_changes(ProviderId, Since, Until) ->
 %% Gets stashed batches from datastore
 %% @end
 %%--------------------------------------------------------------------
--spec get_stashed_batches(ProviderId :: oneprovider:id(), SpaceId :: binary()) -> Value :: #{}.
+-spec get_stashed_batches(ProviderId :: oneprovider:id(), SpaceId :: binary()) -> Value :: maps:map().
 get_stashed_batches(ProviderId, SpaceId) ->
     case dbsync_batches:get({ProviderId, SpaceId}) of
         {ok, #document{value = #dbsync_batches{batches = Value}}} ->

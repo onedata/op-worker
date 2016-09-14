@@ -41,12 +41,12 @@
 %% event_streams            - mapping from a subscription ID to an event stream pid
 %% entry_to_provider_map    - cache that maps file to provider that shall handle the event
 -record(state, {
-    session_id :: session:id(),
-    event_manager_sup :: pid(),
-    event_stream_sup :: pid(),
+    session_id :: undefined | session:id(),
+    event_manager_sup :: undefined | pid(),
+    event_stream_sup :: undefined | pid(),
     event_streams = #{} :: streams(),
     subscriptions = #{} :: subscriptions(),
-    entry_to_provider_map = #{} :: #{}
+    entry_to_provider_map = #{} :: maps:map()
 }).
 
 %% Lifetime in seconds of #state.entry_to_provider_map entry
@@ -349,9 +349,9 @@ request_to_file_entry_or_provider(_) ->
 %%--------------------------------------------------------------------
 -spec handle_or_reroute(RequestMessage :: term(),
     RequestContext :: {file, fslogic_worker:file_guid_or_path()} | {provider, oneprovider:id()} | not_file_context,
-    SessId :: session:id(),
-    HandleLocallyFun :: fun((RequestMessage :: term(), NewProvMap :: #{},
-    IsRerouted :: boolean()) -> term()), ProvMap :: #{}) -> term().
+    SessId :: (session:id() | undefined),
+    HandleLocallyFun :: fun((RequestMessage :: term(), NewProvMap :: maps:map(),
+    IsRerouted :: boolean()) -> term()), ProvMap :: maps:map()) -> term().
 handle_or_reroute(Msg, _, undefined, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(Msg, ProvMap, false);
 handle_or_reroute(#flush_events{context = Context, notify = NotifyFun} = RequestMessage,

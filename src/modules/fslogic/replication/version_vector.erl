@@ -22,7 +22,7 @@
     replica_id_is_greater/2]).
 
 -type replica_id() :: {oneprovider:id(), file_location:id()}.
--type version_vector() :: #{}.
+-type version_vector() :: maps:map().
 -type comparsion_result() :: lesser | greater | identical | concurrent.
 
 %%%===================================================================

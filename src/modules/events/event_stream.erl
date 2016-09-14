@@ -32,7 +32,7 @@
 
 -type id() :: atom().
 -type key() :: binary().
--type ctx() :: #{}.
+-type ctx() :: maps:map().
 -type definition() :: #event_stream_definition{}.
 -type metadata() :: term().
 -type init_handler() :: fun((#subscription{}, session:id(), session:type()) -> ctx()).

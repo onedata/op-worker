@@ -145,7 +145,7 @@
 -type provider_response() ::
     #xattr{} | #xattr_list{} | #transfer_encoding{} | #cdmi_completion_status{} |
     #mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{} |
-    #metadata{}.
+    #metadata{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -153,7 +153,7 @@
 }).
 
 -record(provider_response, {
-    status :: #status{},
+    status :: undefined | #status{},
     provider_response :: provider_response()
 }).
 

@@ -153,14 +153,15 @@ def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
 ./env_configurator.escript \'{0}\' {1} {2}
 echo $?'''
         command = command.format(json.dumps(env_configurator_input), True, True)
+        env_configurator_dir = os.path.abspath(env_configurator_dir)
         docker_output = docker.run(
             image='onedata/builder',
             interactive=True,
             tty=True,
             rm=True,
-            workdir='/root/build',
+            workdir=env_configurator_dir,
             name=common.format_hostname('env_configurator', uid),
-            volumes=[(env_configurator_dir, '/root/build', 'ro')],
+            volumes=[(env_configurator_dir, env_configurator_dir, 'ro')],
             dns_list=[dns_server],
             command=command,
             output=True

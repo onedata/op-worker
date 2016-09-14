@@ -184,7 +184,7 @@ aggregate_monitoring_events(#event{object = #rtransfer_statistics{} = O1} = E1,
 %% Processes monitoring related events.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_monitoring_events(Events :: [event:event()], Ctx :: #{}) ->
+-spec handle_monitoring_events(Events :: [event:event()], Ctx :: maps:map()) ->
     [ok | {error, Reason :: term()}].
 handle_monitoring_events(Events, _Ctx) ->
     lists:map(fun handle_monitoring_event/1, Events).
