@@ -197,7 +197,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             ok;
         {error, {403,<<>>,<<>>}} ->
             gui_error:report_warning(
-                <<"You do not have privileges to modify privileges.">>);
+                <<"You do not have privileges to modify space privileges.">>);
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot change user privileges due to unknown error.">>)
@@ -230,7 +230,7 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
             ok;
         {error, {403,<<>>,<<>>}} ->
             gui_error:report_warning(
-                <<"You do not have privileges to modify privileges.">>);
+                <<"You do not have privileges to modify space privileges.">>);
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot change group privileges due to unknown error.">>)
