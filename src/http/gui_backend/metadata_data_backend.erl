@@ -140,7 +140,9 @@ update_record(<<"meta">>, FileId, Data) ->
         undefined ->
             ok;
         JSON ->
+            ?dump(JSON),
             JSONMap = json_utils:decode_map(json_utils:encode(JSON)),
+            ?dump(JSONMap),
             ok = logical_file_manager:set_metadata(
                 SessionId, {guid, FileId}, <<"json">>, JSONMap, []
             )
@@ -209,8 +211,8 @@ metadata_record(SessionId, FileId) ->
     {ok, JSON} = logical_file_manager:get_metadata(
         SessionId, {guid, FileId}, <<"json">>, [], false
     ),
-    JSONVal = case JSON of
-        #{} -> null;
+    JSONVal = case map_size(JSON) of
+        0 -> null;
         _ -> json_utils:decode(json_utils:encode_map(JSON))
     end,
     {ok, RDF} = logical_file_manager:get_metadata(
