@@ -159,13 +159,20 @@ handle(<<"createFileShare">>, Props) ->
     SessionId = g_session:get_session_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
-    {ok, {ShareId, _}} = logical_file_manager:create_share(
-        SessionId, {guid, FileId}, Name
-    ),
-    % Push file data so GUI knows that is is shared
-    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
-    gui_async:push_created(<<"file">>, FileData),
-    {ok, [{<<"shareId">>, ShareId}]};
+    case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
+        {ok, {ShareId, _}} ->
+            % Push file data so GUI knows that is is shared
+            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
+            gui_async:push_created(<<"file">>, FileData),
+            {ok, [{<<"shareId">>, ShareId}]};
+        {error, ?EACCES} ->
+            gui_error:report_warning(<<"You do not have permissions to "
+            "manage shares in this space.">>);
+        _ ->
+            gui_error:report_warning(
+                <<"Cannot create share due to unknown error.">>)
+    end;
+
 
 
 %%--------------------------------------------------------------------

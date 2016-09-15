@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 
@@ -131,8 +132,10 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
             case share_logic:set_name(UserAuth, ShareId, NewName) of
                 ok ->
                     ok;
-                {error, E} ->
-                    ?dump(E), % TODO RAPORT O BLEDZIE
+                {error, {403, <<>>, <<>>}} ->
+                    gui_error:report_warning(<<"You do not have permissions to "
+                    "manage shares in this space.">>);
+                _ ->
                     gui_error:report_warning(
                         <<"Cannot change share name due to unknown error.">>)
             end
@@ -151,7 +154,10 @@ delete_record(<<"share">>, ShareId) ->
     case logical_file_manager:remove_share(SessionId, ShareId) of
         ok ->
             ok;
-        {error, _} ->
+        {error, ?EACCES} ->
+            gui_error:report_warning(<<"You do not have permissions to "
+            "manage shares in this space.">>);
+        _ ->
             gui_error:report_warning(
                 <<"Cannot remove share due to unknown error.">>)
     end.

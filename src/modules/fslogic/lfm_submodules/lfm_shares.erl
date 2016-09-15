@@ -13,6 +13,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/oz/oz_shares.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 
 %% API
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
@@ -33,7 +34,8 @@ create_share(SessId, FileKey, Name) ->
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
-        fun(#share{share_id = ShareId, share_file_uuid = ShareGuid}) -> {ok, {ShareId, ShareGuid}} end).
+        fun(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+            {ok, {ShareId, ShareGuid}} end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -44,7 +46,7 @@ create_share(SessId, FileKey, Name) ->
     ok | logical_file_manager:error_reply().
 remove_share(SessId, ShareID) ->
     case share_logic:get(provider, ShareID) of
-        {ok, #share_details{root_file_id = ShareGuid}} ->
+        {ok, #document{value = #share_info{root_file_id = ShareGuid}}} ->
             remove_share_by_guid(SessId, ShareGuid);
         Error ->
             Error
