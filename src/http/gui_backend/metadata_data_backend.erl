@@ -54,7 +54,7 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file-metadata">>, FileId) ->
+find(<<"meta">>, FileId) ->
     SessionId = g_session:get_session_id(),
     try
         metadata_record(SessionId, FileId)
@@ -73,7 +73,7 @@ find(<<"file-metadata">>, FileId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"file-metadata">>) ->
+find_all(<<"meta">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -84,7 +84,7 @@ find_all(<<"file-metadata">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"file-metadata">>, _Data) ->
+find_query(<<"meta">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -95,9 +95,9 @@ find_query(<<"file-metadata">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"file-metadata">>, Data) ->
+create_record(<<"meta">>, Data) ->
     FileId = proplists:get_value(<<"file">>, Data),
-    ok = update_record(<<"file-metadata">>, FileId, Data),
+    ok = update_record(<<"meta">>, FileId, Data),
     metadata_record(g_session:get_session_id(), FileId).
 
 
@@ -109,7 +109,7 @@ create_record(<<"file-metadata">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"file-metadata">>, FileId, Data) ->
+update_record(<<"meta">>, FileId, Data) ->
     SessionId = g_session:get_session_id(),
     case proplists:get_value(<<"basic">>, Data) of
         undefined ->
@@ -163,7 +163,7 @@ update_record(<<"file-metadata">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file-metadata">>, FileId) ->
+delete_record(<<"meta">>, FileId) ->
     SessionId = g_session:get_session_id(),
     {ok, XattrKeys} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false
