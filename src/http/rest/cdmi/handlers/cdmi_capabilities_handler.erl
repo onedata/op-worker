@@ -1,14 +1,14 @@
-%% ===================================================================
-%% @author Piotr Ociepka
-%% @copyright (C): 2015 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc This is a cdmi handler module providing access to cdmi_capabilities
-%% which are used to discover operation that can be performed.
-%% @end
-%% ===================================================================
+%%%--------------------------------------------------------------------
+%%% @author Piotr Ociepka
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc This is a cdmi handler module providing access to cdmi_capabilities
+%%% which are used to discover operation that can be performed.
+%%% @end
+%%%--------------------------------------------------------------------
 -module(cdmi_capabilities_handler).
 
 -include("http/http_common.hrl").
@@ -64,14 +64,11 @@ content_types_provided(Req, State) ->
 %% Handles GET requests for cdmi capability.
 %% @end
 %% ====================================================================
--spec get_cdmi_capability(req(), maps:map()) -> {term(), req(), maps:map()}.
+-spec get_cdmi_capability(req(), maps:map()) -> {binary(), req(), maps:map()}.
 get_cdmi_capability(Req, #{options := Opts} = State) ->
-    RawCapabilities = case Opts of
-                          [] ->
-                              prepare_capability_ans(?default_get_capability_opts);
-                          X -> prepare_capability_ans(X)
-                      end,
-    Capabilities = json_utils:encode(RawCapabilities),
+    NonEmptyOpts = utils:ensure_defined(Opts, [], ?default_get_capability_opts),
+    RawCapabilities = prepare_capability_ans(NonEmptyOpts),
+    Capabilities = json_utils:encode_map(RawCapabilities),
     {Capabilities, Req, State}.
 
 %% ====================================================================
@@ -81,26 +78,25 @@ get_cdmi_capability(Req, #{options := Opts} = State) ->
 %% ====================================================================
 %% @doc Return proplist contains CDMI answer
 %% ====================================================================
--spec prepare_capability_ans([Opt :: binary()]) ->
-    [{Capability :: binary(), Value :: term()}].
+-spec prepare_capability_ans([Opt :: binary()]) -> maps:map().
 prepare_capability_ans([]) ->
-    [];
+    #{};
 prepare_capability_ans([<<"objectType">> | Tail]) ->
-    [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
+    (prepare_capability_ans(Tail))#{<<"objectType">> => <<"application/cdmi-capability">>};
 prepare_capability_ans([<<"objectID">> | Tail]) ->
-    [{<<"objectID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
+    (prepare_capability_ans(Tail))#{<<"objectID">> => ?root_capability_id};
 prepare_capability_ans([<<"objectName">> | Tail]) ->
-    [{<<"objectName">>, ?root_capability_path} | prepare_capability_ans(Tail)];
+    (prepare_capability_ans(Tail))#{<<"objectName">> => ?root_capability_path};
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
     prepare_capability_ans(Tail);
 prepare_capability_ans([<<"parentID">> | Tail]) ->
     prepare_capability_ans(Tail);
 prepare_capability_ans([<<"capabilities">> | Tail]) ->
-    [{<<"capabilities">>, ?root_capability_list} | prepare_capability_ans(Tail)];
+    (prepare_capability_ans(Tail))#{<<"capabilities">> => ?root_capability_list};
 prepare_capability_ans([<<"childrenrange">> | Tail]) ->
-    [{<<"childrenrange">>, <<"0-1">>} | prepare_capability_ans(Tail)]; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
+    (prepare_capability_ans(Tail))#{<<"childrenrange">> => <<"0-1">>}; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
 prepare_capability_ans([<<"children">> | Tail]) ->
-    [{<<"children">>, [
+    (prepare_capability_ans(Tail))#{<<"children">> => [
         filepath_utils:ensure_ends_with_slash(filename:basename(?container_capability_path)),
         filepath_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))
-    ]} | prepare_capability_ans(Tail)].
+    ]}.

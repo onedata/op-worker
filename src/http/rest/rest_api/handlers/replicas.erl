@@ -142,7 +142,7 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
     {ok, _} = onedata_file_api:stat(Auth, File),
     {ok, TransferId} = transfer:start(Auth, File, ProviderId, Callback),
 
-    Response = json_utils:encode([{<<"transferId">>, TransferId}]),
+    Response = json_utils:encode_map(#{<<"transferId">> => TransferId}),
     {ok, Req2} = cowboy_req:reply(?HTTP_OK, [], Response, Req),
     {halt, Req2, State}.
 
@@ -153,7 +153,7 @@ replicate_file_internal(Req, #{auth := Auth, provider_id := ProviderId, callback
 get_file_replicas_internal(Req, #{auth := Auth} = State) ->
     File = get_file(State),
     {ok, Distribution} = onedata_file_api:get_file_distribution(Auth, File),
-    Response = json_utils:encode(Distribution),
+    Response = json_utils:encode_map(Distribution),
     {Response, Req, State}.
 
 %%--------------------------------------------------------------------

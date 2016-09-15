@@ -46,20 +46,20 @@ acl_conversion_test() ->
     ?assert(is_binary(AceName2)),
 
     % when
-    Acl = fslogic_acl:from_json_fromat_to_acl(
+    Acl = fslogic_acl:from_json_format_to_acl(
         [
-            [
-                {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
-                {<<"identifier">>, AceName1},
-                {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-                {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask bor ?write_mask)}
-            ],
-            [
-                {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
-                {<<"identifier">>, AceName2},
-                {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?identifier_group_mask)},
-                {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
-            ]
+            #{
+                <<"acetype">> => fslogic_acl:bitmask_to_binary(?allow_mask),
+                <<"identifier">> => AceName1,
+                <<"aceflags">> => fslogic_acl:bitmask_to_binary(?no_flags_mask),
+                <<"acemask">> => fslogic_acl:bitmask_to_binary(?read_mask bor ?write_mask)
+            },
+            #{
+                <<"acetype">> => fslogic_acl:bitmask_to_binary(?deny_mask),
+                <<"identifier">> => AceName2,
+                <<"aceflags">> => fslogic_acl:bitmask_to_binary(?identifier_group_mask),
+                <<"acemask">> => fslogic_acl:bitmask_to_binary(?write_mask)
+            }
         ]
     ),
 

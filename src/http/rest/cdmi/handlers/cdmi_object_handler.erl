@@ -171,25 +171,12 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
     Answer = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
 
-    case proplists:get_value(<<"value">>, Answer) of
+    case maps:get(<<"value">>, Answer, undefined) of
         {range, Range} ->
             % prepare response
-            BodyWithoutValue = proplists:delete(<<"value">>, Answer),
+            BodyWithoutValue = maps:remove(<<"value">>, Answer),
             ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {guid, FileGUID}),
-            JsonBodyWithoutValue =
-                case proplists:get_value(<<"metadata">>, BodyWithoutValue) of
-                    undefined ->
-                        json_utils:encode_map(maps:from_list(BodyWithoutValue));
-                    Metadata ->
-                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
-                            undefined ->
-                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(BodyWithoutValue)));
-                            Acl ->
-                                AclMap = lists:map(fun maps:from_list/1, Acl),
-                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
-                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(BodyWithoutValue)))
-                        end
-                end,
+            JsonBodyWithoutValue = json_utils:encode_map(BodyWithoutValue),
             JsonBodyPrefix =
                 case BodyWithoutValue of
                     [] -> <<"{\"value\":\"">>;
@@ -205,20 +192,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
             % reply
             {{stream, StreamSize, StreamFun}, Req, State};
         undefined ->
-            Response =
-                case proplists:get_value(<<"metadata">>, Answer) of
-                    undefined ->
-                        json_utils:encode_map(maps:from_list(Answer));
-                    Metadata ->
-                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
-                            undefined ->
-                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
-                            Acl ->
-                                AclMap = lists:map(fun maps:from_list/1, Acl),
-                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
-                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
-                        end
-                end,
+            Response = json_utils:encode_map(Answer),
             {Response, Req, State}
     end.
 
@@ -295,13 +269,13 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 
     % prepare necessary data
     {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
-    RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
-    RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
-    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
-    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
-    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    RequestedMimetype = maps:get(<<"mimetype">>, Body, undefined),
+    RequestedValueTransferEncoding = maps:get(<<"valuetransferencoding">>, Body, undefined),
+    RequestedCopyURI = maps:get(<<"copy">>, Body, undefined),
+    RequestedMoveURI = maps:get(<<"move">>, Body, undefined),
+    RequestedUserMetadata = maps:get(<<"metadata">>, Body, undefined),
     URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
-    Value = proplists:get_value(<<"value">>, Body),
+    Value = maps:get(<<"value">>, Body, undefined),
     Range = get_range(Opts),
     RawValue = cdmi_encoder:decode(Value, RequestedValueTransferEncoding, Range),
     RawValueSize = byte_size(RawValue),
@@ -342,20 +316,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_user_metadata(Auth, {guid, FileGUID}, RequestedUserMetadata),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {guid, FileGUID}, CdmiPartialFlag),
             Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{attributes => NewAttrs}),
-            Response =
-                case proplists:get_value(<<"metadata">>, Answer) of
-                    undefined ->
-                        json_utils:encode_map(maps:from_list(Answer));
-                    Metadata ->
-                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
-                            undefined ->
-                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
-                            Acl ->
-                                AclMap = lists:map(fun maps:from_list/1, Acl),
-                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
-                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
-                        end
-                end,
+            Response = json_utils:encode_map(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
             {true, Req2, State};
