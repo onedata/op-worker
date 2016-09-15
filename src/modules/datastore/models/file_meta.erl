@@ -228,12 +228,13 @@ get(Key) ->
 -spec delete(uuid() | entry()) -> ok | datastore:generic_error().
 delete({uuid, Key}) ->
     delete(Key);
-delete(#document{value = #file_meta{name = FileName}, key = Key} = Doc) ->
+delete(#document{value = #file_meta{name = FileName, version = Version}, key = Key} = Doc) ->
     ?run(begin
         set_link_context(Doc),
         case datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent) of
             {ok, {ParentKey, ?MODEL_NAME}} ->
-                ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME, FileName);
+                ok = delete_child_link_in_parent(ParentKey, FileName, Key),
+                ok = delete_child_link_in_parent(ParentKey, snapshot_name(FileName, Version), Key);
             _ ->
                 ok
         end,
@@ -788,6 +789,30 @@ set_link_context_for_space(SpaceId) ->
 %%% Internal functions
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove the child's links in given parent that corresponds to given child's Name and UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_child_link_in_parent(ParentUUID :: uuid(), ChildName :: name(), ChildUUID :: uuid()) ->
+    ok | {error, Reason :: any()}.
+delete_child_link_in_parent(ParentUUID, ChildName, ChildUUID) ->
+    case datastore:fetch_full_link(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, ChildName) of
+        {ok, {_, ParentTargets}} ->
+            lists:foreach(
+                fun({Scope0, VHash0, Key0, _}) ->
+                    case Key0 of
+                        ChildUUID ->
+                            ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME,
+                                [links_utils:make_scoped_link_name(ChildName, Scope0, VHash0, size(Scope0))]);
+                        _ -> ok
+                    end
+                end, ParentTargets);
+        Error -> Error
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Internal helper function for rename/2.
@@ -839,17 +864,16 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
 %% child links.
 %% @end
 %%--------------------------------------------------------------------
--spec update_links_in_parents(OldParentUUID :: uuid(), NewParentUUID :: uuid(),
-    OldName :: name(), NewName :: name(), Version :: non_neg_integer(),
-    Subject :: entry()) -> ok.
+-spec update_links_in_parents(OldParentUUID :: uuid(), NewParentUUID :: uuid(), OldName :: name(),
+    NewName :: name(), Version :: non_neg_integer(), Subject :: entry()) -> ok.
 update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, Version, Subject) ->
     {ok, #document{key = SubjectUUID} = SubjectDoc} = get(Subject),
     case get_current_snapshot(SubjectDoc) =:= SubjectDoc of
         true ->
             {ok, Scope1} = get_scope({uuid, OldParentUUID}),
             set_link_context(Scope1),
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
+            ok = delete_child_link_in_parent(OldParentUUID, OldName, SubjectUUID),
+            ok = delete_child_link_in_parent(OldParentUUID, snapshot_name(OldName, Version), SubjectUUID),
             {ok, Scope2} = get_scope({uuid, NewParentUUID}),
             set_link_context(Scope2),
             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME,
@@ -859,7 +883,7 @@ update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, Version,
         false ->
             {ok, Scope1} = get_scope({uuid, OldParentUUID}),
             set_link_context(Scope1),
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
+            ok = delete_child_link_in_parent(OldParentUUID, OldName, SubjectUUID),
             {ok, Scope2} = get_scope({uuid, NewParentUUID}),
             set_link_context(Scope2),
             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME,
