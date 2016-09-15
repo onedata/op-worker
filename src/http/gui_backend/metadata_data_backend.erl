@@ -140,9 +140,7 @@ update_record(<<"meta">>, FileId, Data) ->
         undefined ->
             ok;
         JSON ->
-            ?dump(JSON),
             JSONMap = json_utils:decode_map(json_utils:encode(JSON)),
-            ?dump(JSONMap),
             ok = logical_file_manager:set_metadata(
                 SessionId, {guid, FileId}, <<"json">>, JSONMap, []
             )
