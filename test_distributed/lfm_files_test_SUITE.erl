@@ -66,7 +66,7 @@ all() ->
     ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(REPEATS, 10).
+-define(REPEATS, 5).
 -define(SUCCESS_RATE, 100).
 
 -define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call,
@@ -272,7 +272,7 @@ ls_test(Config) ->
         ]},
         {config, [{name, large_dir},
             {parameters, [
-                [{name, dir_size_multiplier}, {value, 50}]
+                [{name, dir_size_multiplier}, {value, 10}]
             ]},
             {description, ""}
         ]}
@@ -284,12 +284,16 @@ ls_test_base(Config) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
+    MainDir = generator:gen_name(),
+    MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath, 8#755)),
+
     VerifyLS = fun(Offset0, Limit0, ElementsList) ->
         Offset = Offset0 * DSM,
         Limit = Limit0 * DSM,
-        LSAns = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, Offset, Limit),
-        LSAns2 = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, 0, Offset),
-        LSAns3 = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, Offset + Limit, length(ElementsList)),
+        LSAns = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
+        LSAns2 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Offset),
+        LSAns3 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset + Limit, length(ElementsList)),
         ?assertMatch({ok, _}, LSAns),
         ?assertMatch({ok, _}, LSAns2),
         ?assertMatch({ok, _}, LSAns3),
@@ -304,10 +308,10 @@ ls_test_base(Config) ->
             lists:sort(lists:map(fun({_, Name}) -> Name  end, ListedElements ++ ListedElements2 ++ ListedElements3)))
     end,
 
-    Files = lists:sort(lists:map(fun(I) ->
-        list_to_binary(integer_to_list(I) ++ "ls_test_file") end, lists:seq(1, 30*DSM))),
+    Files = lists:sort(lists:map(fun(_) ->
+        generator:gen_name() end, lists:seq(1, 30*DSM))),
     lists:foreach(fun(F) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<"/space_name1/", F/binary>>, 8#755))
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>, 8#755))
     end, Files),
 
     VerifyLS(0,30, Files),
@@ -321,10 +325,10 @@ ls_test_base(Config) ->
     VerifyLS(30,10, Files),
     VerifyLS(35,5, Files),
 
-    Dirs = lists:map(fun(I) ->
-        list_to_binary(integer_to_list(I) ++ "ls_test_dir") end, lists:seq(1, 30*DSM)),
+    Dirs = lists:map(fun(_) ->
+        generator:gen_name() end, lists:seq(1, 30*DSM)),
     lists:foreach(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<"/space_name1/", D/binary>>, 8#755))
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<MainDirPath/binary, D/binary>>, 8#755))
     end, Dirs),
     FandD = lists:sort(Files ++ Dirs),
 

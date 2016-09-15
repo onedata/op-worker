@@ -69,10 +69,12 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
 
     verify_stats(Config, Dir, true),
     verify_stats(Config, Level2Dir, true),
+    ct:print("Dirs created"),
 
     FileBeg = <<"1234567890abcd">>,
     create_file(Config, FileBeg, {2, Level2File}),
     verify_file(Config, FileBeg, {2, Level2File}),
+    ct:print("File verified"),
 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -85,13 +87,15 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
 %%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
             verify_stats(Config, Level3TmpDir, true)
-        end, Workers)
+        end, Workers),
+        ct:print("Tree verification from node ~p done", [W])
     end, Workers),
 
     lists:foreach(fun(W) ->
         Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
         create_file_on_worker(Config, FileBeg, 4, Level2TmpFile, W),
-        verify_file(Config, FileBeg, {4, Level2TmpFile})
+        verify_file(Config, FileBeg, {4, Level2TmpFile}),
+        ct:print("File from node ~p verified", [W])
     end, Workers),
 
     verify(Config, fun(W) ->
@@ -135,27 +139,33 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     lists:map(fun(D) ->
         ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
     end, Level3Dirs),
+    ct:print("Dirs created"),
 
     lists:map(fun(D) ->
+        ct:print("Verify dir ~p", [D]),
         verify_stats(Config, D, true)
     end, Level3Dirs),
 
     lists:map(fun(D) ->
         ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
     end, Level3Dirs2),
+    ct:print("Dirs created - second batch"),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir, 8#755)),
     lists:map(fun(F) ->
         create_file(Config, FileBeg, F)
     end, Level4Files),
+    ct:print("Files created"),
 
     verify_dir_size(Config, Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
 
     Level3Dirs2Uuids = lists:map(fun(D) ->
+        ct:print("Verify dir ~p", [D]),
         verify_stats(Config, D, true)
     end, Level3Dirs2),
 
     Level4FilesVerified = lists:map(fun(F) ->
+        ct:print("Verify file ~p", [F]),
         verify_file(Config, FileBeg, F)
     end, Level4Files),
     verify_dir_size(Config, Level3Dir, length(Level4Files), 0),
@@ -166,15 +176,20 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     lists:map(fun(D) ->
         ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, D}))
     end, Level3Dirs2),
+    ct:print("Dirs and files deleted"),
 
     lists:map(fun(F) ->
+        ct:print("Verify file del ~p", [F]),
         verify_del(Config, F)
     end, Level4FilesVerified),
     lists:map(fun({D, Uuid}) ->
+        ct:print("Verify dir del ~p", [D]),
         verify_del(Config, {D, Uuid, []})
     end, lists:zip(Level3Dirs2, Level3Dirs2Uuids)),
     verify_dir_size(Config, Level3Dir, 0, length(Level4Files)),
+    ct:print("Level 3 dir size verified"),
     verify_dir_size(Config, Level2Dir, length(Level3Dirs) + 1, length(Level3Dirs2)),
+    ct:print("Level 2 dir size verified"),
 
     verify(Config, fun(W) ->
         ?assertEqual(ok, lfm_proxy:close_all(W))
@@ -197,11 +212,12 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
     verify_stats(Config, Dir, true),
+    ct:print("Dir verified"),
 
     FileBeg = <<"1234567890abcd">>,
     create_file(Config, FileBeg, {2, Level2File}),
     verify_file(Config, FileBeg, {2, Level2File}),
-
+    ct:print("File verified"),
 
     lists:foldl(fun(W, Acc) ->
         OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
@@ -220,6 +236,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
             {ok, Handle2} = OpenAns2,
             ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts)
         end),
+        ct:print("Changes of file from node ~p verified", [W]),
         NewAcc
     end, <<>>, Workers),
 
@@ -231,6 +248,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
             Master ! {mkdir_ans, Level2TmpDir, MkAns}
         end)
     end, Workers),
+    ct:print("Parallel dirs creation processed spawned"),
 
     Level2TmpDirs = lists:foldl(fun(_, Acc) ->
         MkAnsCheck =
@@ -244,6 +262,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         {Level2TmpDir, _} = MkAnsCheck,
 %%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
         verify_stats(Config, Level2TmpDir, true),
+        ct:print("Dir verified"),
         [Level2TmpDir | Acc]
     end, [], Workers),
 
@@ -256,6 +275,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
             end)
         end, Workers)
     end, Level2TmpDirs),
+    ct:print("Parallel dirs creation processed spawned"),
 
     lists:foreach(fun(_) ->
         lists:foreach(fun(_) ->
@@ -269,7 +289,8 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
             ?assertMatch({_, {ok, _}}, MkAnsCheck),
             {Level3TmpDir, _} = MkAnsCheck,
 %%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
-            verify_stats(Config, Level3TmpDir, true)
+            verify_stats(Config, Level3TmpDir, true),
+            ct:print("Dir verified")
         end, Workers)
     end, Level2TmpDirs),
 
@@ -605,6 +626,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         ]
     ],
     lists:foreach(fun(Num) ->
+        ct:print("Consistency config number ~p", [Num]),
         DoTest(lists:nth(Num, TestConfigs))
     end, ConfigsNum),
 
