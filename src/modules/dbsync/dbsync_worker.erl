@@ -172,7 +172,6 @@ handle({clear_temp, Key}) ->
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc, model = Model} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
-    MyProvId = oneprovider:get_provider_id(),
     Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
