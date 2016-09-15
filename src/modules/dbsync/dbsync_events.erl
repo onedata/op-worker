@@ -79,7 +79,7 @@ change_replicated_internal(_SpaceId, _Change) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Hook that runs just after link change was replicated from remote provider.
+%% Hook that runs while link change is replicated from remote provider to apply it to local link trees.
 %% @end
 %%--------------------------------------------------------------------
 -spec links_changed(Origin :: links_utils:scope(), ModelName :: model_behaviour:model_type(),

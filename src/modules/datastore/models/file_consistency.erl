@@ -166,8 +166,8 @@ notify_waiting(Doc = #document{key = FileUuid,
                 false;
             [{link_to_child, WaitName, ChildUuid}] ->
                 case catch file_meta:get_child({uuid, FileUuid}, WaitName) of
-                    {ok, ChildUUIDs} ->
-                        case lists:member(ChildUuid, ChildUUIDs) of
+                    {ok, ChildrenUUIDs} ->
+                        case lists:member(ChildUuid, ChildrenUUIDs) of
                             true ->
                                 Pid ! file_is_now_consistent,
                                 case is_process_alive(Pid) of
@@ -255,8 +255,8 @@ check_missing_components(FileUuid, SpaceId, [parent_links | RestMissing], Found)
     end;
 check_missing_components(FileUuid, SpaceId, [{link_to_child, WaitName, ChildUuid} | RestMissing], Found) ->
     case catch file_meta:get_child({uuid, FileUuid}, WaitName)  of
-        {ok, ChildUUIDs} ->
-            case lists:member(ChildUuid, ChildUUIDs) of
+        {ok, ChildrenUUIDs} ->
+            case lists:member(ChildUuid, ChildrenUUIDs) of
                 true ->
                     check_missing_components(FileUuid, SpaceId, RestMissing, [{link_to_child, WaitName, ChildUuid} | Found]);
                 false ->

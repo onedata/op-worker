@@ -567,7 +567,7 @@ apply_changes(SpaceId,
                 Key
         end,
         MyProvId = oneprovider:get_provider_id(),
-        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_key(ModelConfig, MainDocKey), fun() ->
+        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_link_key(ModelConfig, MainDocKey), fun() ->
             case Value of
                 #links{origin = MyProvId} ->
                     ?warning("Received private, local links change from other provider ~p", [Change]),
@@ -1099,7 +1099,7 @@ ensure_global_stream_active() ->
 
     case is_valid_stream(state_get(changes_stream)) of
         true ->
-            MaxIdleTime = timer:seconds(15),
+            MaxIdleTime = timer:minutes(1),
             case dbsync_utils:temp_get(last_change) of
                 undefined ->
                     dbsync_utils:temp_put(last_change, CTime, 0);

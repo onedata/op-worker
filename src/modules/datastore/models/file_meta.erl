@@ -50,8 +50,6 @@
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 -export([hidden_file_name/1]).
 
--export([bucket_override/1]).
-
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
@@ -1093,6 +1091,3 @@ is_hidden(FileName) ->
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
         _ -> false
     end.
-
-bucket_override(_) ->
-    <<"default">>.
