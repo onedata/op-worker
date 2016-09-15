@@ -101,7 +101,8 @@ data_backend(true, <<"system-group">>) -> system_data_backend;
 % File browsing is allowed for anyone when viewing public shares. It requires
 % read-only access to shares and files.
 data_backend(_, <<"share-public">>) -> public_share_data_backend;
-data_backend(_, <<"file-public">>) -> public_share_data_backend.
+data_backend(_, <<"file-public">>) -> public_share_data_backend;
+data_backend(_, <<"file-metadata-public">>) -> public_share_data_backend.
 
 
 %%--------------------------------------------------------------------

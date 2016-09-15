@@ -83,6 +83,15 @@ find(<<"file-public">>, FileId) ->
             FileId, T, M
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
+    end;
+find(<<"file-metadata-public">>, FileId) ->
+    try
+        metadata_data_backend:metadata_record(?GUEST_SESS_ID, FileId)
+    catch T:M ->
+        ?warning("Cannot get metadata for file (~p). ~p:~p", [
+            FileId, T, M
+        ]),
+        gui_error:internal_server_error()
     end.
 
 
