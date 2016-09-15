@@ -348,7 +348,7 @@ file_record(SessionId, FileId) ->
                 [ShareId] -> ShareId
             end,
             {ok, Xattrs} = logical_file_manager:list_xattr(
-                SessionId, {guid, FileId}, true
+                SessionId, {guid, FileId}, false, true
             ),
             Metadata = case Xattrs of
                 [] ->

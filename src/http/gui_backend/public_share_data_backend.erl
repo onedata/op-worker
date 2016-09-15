@@ -204,7 +204,7 @@ file_record(SessionId, FileId) ->
             end,
             ChildrenIds = [ChId || {ChId, _} <- Children],
             {ok, Xattrs} = logical_file_manager:list_xattr(
-                SessionId, {guid, FileId}, true
+                SessionId, {guid, FileId}, false, true
             ),
             Metadata = case Xattrs of
                 [] ->
