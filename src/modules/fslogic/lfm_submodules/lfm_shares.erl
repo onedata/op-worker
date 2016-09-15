@@ -43,7 +43,7 @@ create_share(SessId, FileKey, Name) ->
 -spec remove_share(session:id(), share_info:id()) ->
     ok | logical_file_manager:error_reply().
 remove_share(SessId, ShareID) ->
-    case oz_shares:get_details(provider, ShareID) of
+    case share_logic:get(provider, ShareID) of
         {ok, #share_details{root_file_id = ShareGuid}} ->
             remove_share_by_guid(SessId, ShareGuid);
         Error ->
