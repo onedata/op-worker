@@ -284,7 +284,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
 
             ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-            SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, VerAns),
+            SList = lists:filter(fun(S) -> S == 2*DSize + 1 end, VerAns),
             {length(ZerosList), length(SList)}
         end,
         ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
