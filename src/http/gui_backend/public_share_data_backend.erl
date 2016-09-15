@@ -213,7 +213,8 @@ file_record(SessionId, FileId) ->
                 {<<"parent">>, Parent},
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
-                {<<"share">>, null}
+                {<<"share">>, null},
+                {<<"metadata">>, FileId}
             ],
             {ok, Res}
     end.
