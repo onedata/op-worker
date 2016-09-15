@@ -131,7 +131,8 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
             case share_logic:set_name(UserAuth, ShareId, NewName) of
                 ok ->
                     ok;
-                {error, _} ->
+                {error, E} ->
+                    ?dump(E), % TODO RAPORT O BLEDZIE
                     gui_error:report_warning(
                         <<"Cannot change share name due to unknown error.">>)
             end

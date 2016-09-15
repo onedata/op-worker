@@ -23,7 +23,7 @@
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1]).
 -export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
 -export([uuid_to_share_guid/3, unpack_share_guid/1]).
--export([guid_to_share_guid/2, share_guid_to_guid/1]).
+-export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1]).
 
 %%%===================================================================
 %%% API
@@ -234,6 +234,18 @@ unpack_share_guid(ShareGUID) ->
     catch
         _:_ ->
             {ShareGUID, undefined, undefined}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate checking if given Id is a share guid.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_share_guid(binary()) -> boolean().
+is_share_guid(Id) ->
+    case unpack_share_guid(Id) of
+        {_, _, undefined} -> false;
+        _ -> true
     end.
 
 %%%===================================================================

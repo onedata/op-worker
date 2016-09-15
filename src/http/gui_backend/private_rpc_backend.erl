@@ -61,21 +61,16 @@ handle(<<"fileUploadFailure">>, Props) ->
 % Checks if file can be downloaded (i.e. can be read by the user) and if so,
 % returns download URL.
 handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
-    % TODO VFS-2426 Read permissions should be checked using
-    % logical_file_manager:check_perms, however it is not implemented yet.
-    % For now, just try to open the file for reading.
     SessionId = g_session:get_session_id(),
-    case logical_file_manager:open(SessionId, {guid, FileId}, read) of
-        {ok, FileHandle} ->
-            logical_file_manager:release(FileHandle),
+    case logical_file_manager:check_perms(SessionId, {guid, FileId}, read) of
+        {ok, true} ->
             Hostname = g_ctx:get_requested_hostname(),
             URL = str_utils:format_bin("https://~s/download/~s",
                 [Hostname, FileId]),
             {ok, [{<<"fileUrl">>, URL}]};
-        {error, ?EACCES} ->
+        {ok, false} ->
             gui_error:report_error(<<"Permission denied">>);
-        Other ->
-            ?error("Error while downloading file ~s: ~p", [Other]),
+        _ ->
             gui_error:internal_server_error()
     end;
 
@@ -170,7 +165,6 @@ handle(<<"createFileShare">>, Props) ->
     % Push file data so GUI knows that is is shared
     {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
     gui_async:push_created(<<"file">>, FileData),
-    ?dump(FileData),
     {ok, [{<<"shareId">>, ShareId}]};
 
 
@@ -257,4 +251,7 @@ handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite provider token due to unknown error.">>)
-    end.
+    end;
+
+handle(_, _) ->
+    gui_error:report_error(<<"Not implemented">>).
