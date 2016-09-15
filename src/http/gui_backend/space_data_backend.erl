@@ -161,6 +161,9 @@ update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
             case space_logic:set_name(UserAuth, SpaceId, NewName) of
                 ok ->
                     ok;
+                {error, {403,<<>>,<<>>}} ->
+                    gui_error:report_warning(
+                        <<"You do not have privileges to modify this space.">>);
                 {error, _} ->
                     gui_error:report_warning(
                         <<"Cannot change space name due to unknown error.">>)
@@ -192,6 +195,9 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
+        {error, {403,<<>>,<<>>}} ->
+            gui_error:report_warning(
+                <<"You do not have privileges to modify privileges.">>);
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot change user privileges due to unknown error.">>)
@@ -222,9 +228,12 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
+        {error, {403,<<>>,<<>>}} ->
+            gui_error:report_warning(
+                <<"You do not have privileges to modify privileges.">>);
         {error, _} ->
             gui_error:report_warning(
-                <<"Cannot change user privileges due to unknown error.">>)
+                <<"Cannot change group privileges due to unknown error.">>)
     end.
 
 
@@ -240,6 +249,9 @@ delete_record(<<"space">>, SpaceId) ->
     case space_logic:delete(UserAuth, SpaceId) of
         ok ->
             ok;
+        {error, {403,<<>>,<<>>}} ->
+            gui_error:report_warning(
+                <<"You do not have privileges to modify this space.">>);
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot remove space due to unknown error.">>)
