@@ -347,6 +347,17 @@ file_record(SessionId, FileId) ->
                 [] -> null;
                 [ShareId] -> ShareId
             end,
+            {ok, Xattrs} = logical_file_manager:list_xattr(
+                SessionId, {guid, FileId}, true
+            ),
+            Metadata = case Xattrs of
+                [] ->
+                    null;
+                [<<"cdmi_acl">>] ->
+                    null;
+                _ ->
+                    FileId
+            end,
             Res = [
                 {<<"id">>, FileId},
                 {<<"name">>, Name},
@@ -358,7 +369,7 @@ file_record(SessionId, FileId) ->
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, Share},
-                {<<"metadata">>, FileId}
+                {<<"metadata">>, Metadata}
             ],
             {ok, Res}
     end.
