@@ -11,13 +11,12 @@
 -module(lfm_shares).
 
 -include_lib("ctool/include/posix/errors.hrl").
-
--type share_id() :: binary().
-
--export_type([share_id/0]).
+-include_lib("ctool/include/oz/oz_shares.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 
 %% API
--export([create_share/2, get_share/1, remove_share/1]).
+-export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 
 %%%===================================================================
 %%% API
@@ -25,36 +24,42 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a share for given file. File can be shared with anyone or
-%% only specified group of users.
-%%
+%% Creates a share for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(FileKey :: logical_file_manager:file_key(), ShareWith :: all | [{user, onedata_user:id()} | {group, onedata_group:id()}]) ->
-    {ok, ShareID :: share_id()} | logical_file_manager:error_reply().
-create_share(_Path, _ShareWith) ->
-    {ok, <<"">>}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns shared file by share_id.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) ->
-    {ok, {file_meta:uuid(), file_meta:name()}} | logical_file_manager:error_reply().
-get_share(_ShareID) ->
-    {ok, {<<"">>, <<"">>}}.
-
+-spec create_share(session:id(), logical_file_manager:file_key(), share_info:name()) ->
+    {ok, {share_info:id(), share_info:share_guid()}} | logical_file_manager:error_reply().
+create_share(SessId, FileKey, Name) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, GUID,
+        #create_share{name = Name},
+        fun(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+            {ok, {ShareId, ShareGuid}} end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes file share by ShareID.
-%%
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(ShareID :: share_id()) ->
+-spec remove_share(session:id(), share_info:id()) ->
     ok | logical_file_manager:error_reply().
-remove_share(_ShareID) ->
-    ok.
+remove_share(SessId, ShareID) ->
+    case share_logic:get(provider, ShareID) of
+        {ok, #document{value = #share_info{root_file_id = ShareGuid}}} ->
+            remove_share_by_guid(SessId, ShareGuid);
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file share by ShareGuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share_by_guid(session:id(), share_info:share_guid()) ->
+    ok | logical_file_manager:error_reply().
+remove_share_by_guid(SessId, ShareGuid) ->
+    lfm_utils:call_fslogic(SessId, provider_request, ShareGuid,
+        #remove_share{},
+        fun(_) -> ok end).

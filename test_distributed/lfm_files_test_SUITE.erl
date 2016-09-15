@@ -40,7 +40,16 @@
     rm_recursive_test/1,
     file_gap_test/1,
     ls_test/1,
-    ls_with_stats_test/1, ls_with_stats_test_base/1
+    ls_with_stats_test/1, ls_with_stats_test_base/1,
+    create_share_dir_test/1,
+    create_share_file_test/1,
+    share_getattr_test/1,
+    share_list_test/1,
+    share_read_test/1,
+    share_child_getattr_test/1,
+    share_child_list_test/1,
+    share_child_read_test/1,
+    share_permission_denied_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -55,7 +64,16 @@
     rm_recursive_test,
     file_gap_test,
     ls_test,
-    ls_with_stats_test
+    ls_with_stats_test,
+    create_share_dir_test,
+    create_share_file_test,
+    share_getattr_test,
+    share_list_test,
+    share_read_test,
+    share_child_getattr_test,
+    share_child_list_test,
+    share_child_read_test,
+    share_permission_denied_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -637,7 +655,6 @@ rm_recursive_test(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileIGuid})),
     ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, FileJGuid})).
 
-
 file_gap_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
@@ -662,6 +679,105 @@ file_gap_test(Config) ->
     ?assertEqual({ok, <<0, 0, 0, $a, $b, $c, 0, 0, $d, $e, $f, $g>>},
         lfm_proxy:read(W, Handle, 0, 12)).
 
+create_share_dir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    Path = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, Path, 8#700),
+
+    ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+
+create_share_file_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    Path = <<"/space_name1/share_file">>,
+    {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#700),
+
+    ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+
+share_getattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
+    {ok, {ShareId, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+
+    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE, uuid = ShareGuid, shares = [ShareId]}},
+        lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})).
+
+share_list_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    {ok, _Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/1">>, 8#700),
+    {ok, _Guid2} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/2">>, 8#700),
+    {ok, _Guid3} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/3">>, 8#700),
+
+    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 10)),
+    ?assertMatch([{<<_/binary>>, <<"1">>}, {<<_/binary>>, <<"2">>}, {<<_/binary>>, <<"3">>}], Result).
+
+share_read_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    Path = <<"/space_name1/share_file">>,
+    {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#707),
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, Guid}, write),
+    {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+
+    {ok, ShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareGuid}, read)),
+    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)).
+
+share_child_getattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, _} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/file">>, 8#700),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+
+    ?assertMatch({ok, #file_attr{mode = 8#700, name = <<"file">>, type = ?REGULAR_FILE_TYPE, shares = []}},
+        lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})).
+
+share_child_list_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    {ok, _Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/1">>, 8#707),
+    {ok, _Guid2} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/1/2">>, 8#707),
+    {ok, _Guid3} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/1/3">>, 8#707),
+    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+
+    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareChildGuid}, 0, 10)),
+    ?assertMatch([{<<_/binary>>, <<"2">>}, {<<_/binary>>, <<"3">>}], Result).
+
+share_child_read_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    Path = <<"/space_name1/share_dir/file">>,
+    {ok, FileGuid} = lfm_proxy:create(W, SessId, Path, 8#707),
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, write),
+    {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
+    {ok, [{ShareFileGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+
+    {ok, ShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read)),
+    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)).
+
+share_permission_denied_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+
+    ?assertEqual({error, ?EACCES}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -675,12 +791,39 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
+init_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test orelse
+    ShareTest =:= create_share_file_test orelse
+    ShareTest =:= share_getattr_test orelse
+    ShareTest =:= share_list_test orelse
+    ShareTest =:= share_read_test orelse
+    ShareTest =:= share_child_getattr_test orelse
+    ShareTest =:= share_child_list_test orelse
+    ShareTest =:= share_child_read_test orelse
+    ShareTest =:= share_permission_denied_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, oz_shares),
+    test_utils:mock_expect(Workers, oz_shares, create, fun(_Auth, ShareId, _SpaceId, _Parameters) -> {ok, ShareId} end),
+    init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
+end_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test orelse
+        ShareTest =:= create_share_file_test orelse
+        ShareTest =:= share_getattr_test orelse
+        ShareTest =:= share_list_test orelse
+        ShareTest =:= share_read_test orelse
+        ShareTest =:= share_child_getattr_test orelse
+        ShareTest =:= share_child_list_test orelse
+        ShareTest =:= share_child_read_test orelse
+        ShareTest =:= share_permission_denied_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, oz_shares),
+    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),

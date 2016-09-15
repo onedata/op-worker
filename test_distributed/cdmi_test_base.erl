@@ -1856,7 +1856,7 @@ add_xattrs(Config, Path, Xattrs) ->
 get_xattrs(Config, Path) ->
     [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    {ok, Xattrs} = lfm_proxy:list_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, false),
+    {ok, Xattrs} = lfm_proxy:list_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, false, true),
     lists:filtermap(
         fun
             (<<"cdmi_", _/binary>>) ->

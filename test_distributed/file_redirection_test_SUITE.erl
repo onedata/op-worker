@@ -143,7 +143,7 @@ create_file_with_redirection(FileWorker, RedirectionWorker, Config) ->
     {_, TargetGuid} = ?assertMatch({ok, _}, lfm_proxy:create(FileWorker, SessId1, filename(1, TestDir, "/target_file"), 8#770)),
 
     RedirectionUuid = <<"redirection_uuid">>,
-    RedirectionGuid = fslogic_uuid:to_file_guid(RedirectionUuid, <<"space_id2">>),
+    RedirectionGuid = fslogic_uuid:uuid_to_guid(RedirectionUuid, <<"space_id2">>),
     ?assertMatch({ok, _}, rpc:call(RedirectionWorker, file_meta, create_phantom_file, [RedirectionUuid, <<"space_id2">>, TargetGuid])),
     {TargetGuid, RedirectionGuid}.
 

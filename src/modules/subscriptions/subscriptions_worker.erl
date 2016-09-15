@@ -73,7 +73,7 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: healthcheck | start_provider_connection |refresh_subscription |
+    Request :: healthcheck | start_provider_connection | refresh_subscription |
     {process_updates, Updates} | {'EXIT', pid(), ExitReason :: term()},
     Updates :: [#sub_update{}],
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |

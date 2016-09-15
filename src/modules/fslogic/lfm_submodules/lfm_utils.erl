@@ -118,7 +118,7 @@ rm_children(#fslogic_ctx{session_id = SessId} = CTX, GUID, Offset, Chunk, Answer
             {FirstError, ErrorCount} = lists:foldl(fun
                 (ok, {Ans, ErrorCount}) -> {Ans, ErrorCount};
                 (Error, {ok, ErrorCount}) -> {Error, ErrorCount + 1};
-                (Error, {OldError, ErrorCount}) -> {OldError, ErrorCount + 1}
+                (_Error, {OldError, ErrorCount}) -> {OldError, ErrorCount + 1}
             end, {Answer, 0}, Answers),
 
             case length(Children) of

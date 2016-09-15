@@ -15,6 +15,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/metadata.hrl").
 -include("modules/events/types.hrl").
 -include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -28,13 +29,13 @@
 
 %% API
 -export([chmod/3, get_file_attr/2, delete/3, update_times/5,
-    get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/3,
+    get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
     get_file_path/2, chmod_storage_files/3, replicate_file/3,
-    get_metadata/5, set_metadata/5, check_perms/3]).
-
+    get_metadata/5, set_metadata/5, check_perms/3, create_share/3,
+    remove_share/2]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -44,9 +45,9 @@
 %% @doc Translates given file's UUID to absolute path.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(fslogic_worker:ctx(), file_meta:uuid()) ->
+-spec get_file_path(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     #provider_response{} | no_return().
-get_file_path(Ctx, FileUUID) ->
+get_file_path(Ctx, {uuid, FileUUID}) ->
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
@@ -65,11 +66,11 @@ get_file_path(Ctx, FileUUID) ->
 -check_permissions([{traverse_ancestors, 2}, {{owner, 'or', ?write_attributes}, 2}]).
 update_times(CTX, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
-    UpdateMap1 = maps:filter(fun(_Key, Value) -> is_integer(Value) end, UpdateMap),
+    UpdateMap1 = maps:filter(fun(_Key, Value) ->
+        is_integer(Value) end, UpdateMap),
     fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, fslogic_context:get_user_id(CTX)),
 
     #fuse_response{status = #status{code = ?OK}}.
-
 
 
 %%--------------------------------------------------------------------
@@ -78,18 +79,18 @@ update_times(CTX, FileEntry, ATime, MTime, CTime) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
-                   #fuse_response{} | no_return().
+    #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
-chmod(CTX, FileEntry, Mode) ->
-    chmod_storage_files(CTX, FileEntry, Mode),
+chmod(CTX, File, Mode) ->
+    chmod_storage_files(CTX, File, Mode),
 
     % remove acl
-    {ok, FileUuid} = file_meta:to_uuid(FileEntry),
+    {ok, FileUuid} = file_meta:to_uuid(File),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
-    {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
+    {ok, _} = file_meta:update(File, #{mode => Mode}),
     ok = permissions_cache:invalidate_permissions_cache(),
 
-    fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
+    fslogic_times:update_ctime(File, fslogic_context:get_user_id(CTX)),
     spawn(
         fun() ->
             fslogic_event:emit_permission_changed(FileUuid)
@@ -104,7 +105,7 @@ chmod(CTX, FileEntry, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
-                   #fuse_response{} | no_return().
+    #fuse_response{} | no_return().
 -check_permissions([{?write_owner, 2}]).
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
@@ -116,14 +117,14 @@ chown(_, _File, _UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
-                           FuseResponse :: #fuse_response{} | no_return().
+    FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
+get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File) ->
     ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
+            ctime = CTime, uid = UserID, name = Name, shares = Shares}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(FileDoc),
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
@@ -136,7 +137,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 % TODO (VFS-2024) - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
                 _:_ -> {?ROOT_POSIX_CTX, undefined}
             end,
-            FinalUID = case  session:get(SessId) of
+            FinalUID = case session:get(SessId) of
                 {ok, #document{value = #session{identity = #user_identity{user_id = UserID}}}} ->
                     UID;
                 _ ->
@@ -144,9 +145,10 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
-                uuid = fslogic_uuid:to_file_guid(UUID, SpaceId),
+                uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                ctime = CTime, uid = FinalUID, size = Size, name = Name
+                ctime = CTime, uid = FinalUID, size = Size, name = Name,
+                shares = Shares
             }};
         {error, {not_found, _}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -227,13 +229,24 @@ remove_xattr(CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
 %% Returns complete list of extended attributes' keys of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, boolean()) ->
+-spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, boolean(), boolean()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-list_xattr(_CTX, {uuid, FileUuid}, Inherited) ->
+list_xattr(_CTX, {uuid, FileUuid}, Inherited, ShowInternal) ->
     case xattr:list(FileUuid, Inherited) of
-        {ok, List} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = List}};
+        {ok, XattrList} ->
+            FilteredXattrList = case ShowInternal of
+                true ->
+                    XattrList;
+                false ->
+                    lists:filter(fun(Key) ->
+                        not lists:any(
+                            fun(InternalPrefix) ->
+                                str_utils:binary_starts_with(Key, InternalPrefix)
+                            end, ?METADATA_INTERNAL_PREFIXES)
+                    end, XattrList)
+            end,
+            #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = FilteredXattrList}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
@@ -244,7 +257,7 @@ list_xattr(_CTX, {uuid, FileUuid}, Inherited) ->
 -spec get_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
-get_acl(_CTX, {uuid, FileUuid})  ->
+get_acl(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Val}};
@@ -411,13 +424,13 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
                     when length(ChildLinks) < Chunk ->
                     utils:pforeach(
                         fun(#child_link{uuid = ChildGuid}) ->
-                            replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ChildGuid)}, Block)
+                            replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)
                         end, ChildLinks),
                     #provider_response{status = #status{code = ?OK}};
-                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}}->
+                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}} ->
                     utils:pforeach(
                         fun(#child_link{uuid = ChildGuid}) ->
-                            replicate_file(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ChildGuid)}, Block)
+                            replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)
                         end, ChildLinks),
                     replicate_file(Ctx, {uuid, Uuid}, Block, Offset + Chunk);
                 Other ->
@@ -478,6 +491,39 @@ check_perms(Ctx, Uuid, write) ->
     check_perms_write(Ctx, Uuid);
 check_perms(Ctx, Uuid, rdwr) ->
     check_perms_rdwr(Ctx, Uuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Share file under given uuid
+%% @end
+%%--------------------------------------------------------------------
+-spec create_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, share_info:name()) -> #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}]).
+create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}, Name) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    {ok, Auth} = session:get_auth(SessId),
+    ShareId = datastore_utils:gen_uuid(),
+    ShareGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
+    {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
+    {ok, _} = file_meta:add_share(FileUuid, ShareId),
+    #provider_response{status = #status{code = ?OK}, provider_response = #share{share_id = ShareId, share_file_uuid = ShareGuid}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Share file under given uuid
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) -> #provider_response{}.
+-check_permissions([{traverse_ancestors, 2}]).
+remove_share(Ctx = #fslogic_ctx{share_id = ShareId}, {uuid, FileUuid}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    {ok, Auth} = session:get_auth(SessId),
+
+    ok = share_logic:delete(Auth, ShareId),
+    {ok, _} = file_meta:remove_share(FileUuid, ShareId),
+    ok = permissions_cache:invalidate_permissions_cache(),
+
+    #provider_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -568,8 +614,8 @@ delete_impl(CTX, File, Silent) ->
 %%--------------------------------------------------------------------
 -spec chmod_storage_files(fslogic_worker:ctx(), file_meta:entry(), file_meta:posix_permissions()) ->
     ok | no_return().
-chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
-    case file_meta:get(FileEntry) of
+chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, File, Mode) ->
+    case file_meta:get(File) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
             Results = lists:map(
@@ -577,7 +623,7 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
                     {ok, Storage} = storage:get(SID),
                     SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
                     {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
-                end, fslogic_utils:get_local_storage_file_locations(FileEntry)),
+                end, fslogic_utils:get_local_storage_file_locations(File)),
 
             case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
                 [] -> ok;

@@ -22,7 +22,7 @@
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
 -export([reuse_or_create_session/5]).
--export([create_gui_session/2, create_root_session/0]).
+-export([create_gui_session/2, create_root_session/0, create_guest_session/0]).
 -export([remove_session/1]).
 -export([get_provider_session_id/2, session_id_to_provider_id/1, is_provider_session_id/1]).
 -export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
@@ -137,6 +137,24 @@ create_root_session() ->
         {ok, ?ROOT_SESS_ID} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [?ROOT_SESS_ID, root]),
             {ok, ?ROOT_SESS_ID};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates guest session and starts session supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_guest_session() -> {ok, SessId :: session:id()} |
+    {error, Reason :: term()}.
+create_guest_session() ->
+    Sess = #session{status = active, type = guest, connections = [],
+        identity = #user_identity{user_id = ?GUEST_USER_ID}},
+    case session:create(#document{key = ?GUEST_SESS_ID, value = Sess}) of
+        {ok, ?GUEST_SESS_ID} ->
+            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [?GUEST_SESS_ID, guest]),
+            {ok, ?GUEST_SESS_ID};
         {error, Reason} ->
             {error, Reason}
     end.

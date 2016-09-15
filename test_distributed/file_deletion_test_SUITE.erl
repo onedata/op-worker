@@ -326,4 +326,4 @@ create_test_file(Config, Worker, SessId) ->
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0"])),
 
     {ok, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#770)),
-    fslogic_uuid:file_guid_to_uuid(GUID).
+    fslogic_uuid:guid_to_uuid(GUID).

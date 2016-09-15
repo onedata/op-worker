@@ -23,7 +23,7 @@
 
 %% API
 -export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3, update_times/4,
+    remove_xattr/2, remove_xattr/3, list_xattr/3, list_xattr/4, update_times/4,
     update_times/5]).
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
@@ -158,19 +158,20 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(logical_file_manager:handle(), boolean()) ->
+-spec list_xattr(logical_file_manager:handle(), boolean(), boolean()) ->
     {ok, [xattr:name()]} | logical_file_manager:error_reply().
 list_xattr(#lfm_handle{file_guid = FileGUID,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Inherited) ->
-    list_xattr(SessId, {guid, FileGUID}, Inherited).
+    fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Inherited, ShowInternal) ->
+    list_xattr(SessId, {guid, FileGUID}, Inherited, ShowInternal).
 
--spec list_xattr(session:id(), FileUuid :: logical_file_manager:file_key(), boolean()) ->
+-spec list_xattr(session:id(), FileUuid :: logical_file_manager:file_key(),
+    boolean(), boolean()) ->
     {ok, [xattr:name()]} | logical_file_manager:error_reply().
-list_xattr(SessId, FileKey, Inherited) ->
+list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
-        #list_xattr{inherited = Inherited},
+        #list_xattr{inherited = Inherited, show_internal = ShowInternal},
         fun(#xattr_list{names = Names}) ->
             {ok, Names}
         end).

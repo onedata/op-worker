@@ -104,6 +104,8 @@ should_update(HistoryRevs, UpdateRevs) ->
     Record2 :: subscriptions:record() | {error, term()}.
 get_revisions(space_info, Record) ->
     Record#space_info.revision_history;
+get_revisions(share_info, Record) ->
+    Record#share_info.revision_history;
 get_revisions(onedata_user, Record) ->
     Record#onedata_user.revision_history;
 get_revisions(onedata_group, Record) ->
@@ -123,6 +125,8 @@ get_revisions(_Model, _Record) ->
     Revs :: [term()]) -> Record2 :: subscriptions:record().
 set_revisions(space_info, Record, Revisions) ->
     Record#space_info{revision_history = Revisions};
+set_revisions(share_info, Record, Revisions) ->
+    Record#share_info{revision_history = Revisions};
 set_revisions(onedata_user, Record = #onedata_user{public_only = true}, _) ->
     %% records with public data only do not have revisions
     %% thus always are overridden by "full" records

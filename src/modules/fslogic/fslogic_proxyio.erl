@@ -64,7 +64,7 @@ write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
 read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 
     UUID = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
-    lfm_utils:call_fslogic(SessionId, file_request, fslogic_uuid:to_file_guid(UUID),
+    lfm_utils:call_fslogic(SessionId, file_request, fslogic_uuid:uuid_to_guid(UUID),
         #synchronize_block{block = #file_block{offset = Offset, size = Size}},
         fun(_) -> ok end),
 
@@ -106,11 +106,12 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
     case maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined) of
         undefined ->
             FileUuid = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
+            ShareId = maps:get(?PROXYIO_PARAMETER_SHARE_ID, Parameters),
             {ok, #document{key = SpaceUUID}} =
                 fslogic_spaces:get_space({uuid, FileUuid}, UserId),
             {ok, Storage} = storage:get(StorageId),
             SFMHandle =
-                storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
+                storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId, ShareId),
             storage_file_manager:open(SFMHandle, OpenMode);
         HandleId ->
             session:get_handle(SessionId, HandleId)

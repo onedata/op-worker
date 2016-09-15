@@ -160,7 +160,7 @@ session_manager_supervision_tree_structure_test(Config) ->
 
     ok.
 
-%% Check whether session manager can remove session dispite of node on which
+%% Check whether session manager can remove session despite of node on which
 %% request is processed.
 session_manager_session_removal_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -312,6 +312,8 @@ init_per_testcase(Case, Config) when
         reuse_or_create_fuse_session, [SessId2, Iden2, Self])),
     ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
         remove_session, [?ROOT_SESS_ID])),
+    ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
+        remove_session, [?GUEST_SESS_ID])),
 
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 

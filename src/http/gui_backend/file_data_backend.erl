@@ -67,7 +67,7 @@ find(<<"file">>, FileId) ->
     try
         file_record(SessionId, FileId)
     catch T:M ->
-        ?warning("Cannot get meta-data for file (~p). ~p:~p", [
+        ?warning("Cannot get file-meta for file (~p). ~p:~p", [
             FileId, T, M
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
@@ -314,7 +314,8 @@ file_record(SessionId, FileId) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr} = FileAttr,
+                mode = PermissionsAttr,
+                shares = Shares} = FileAttr,
 
             UserRootDirUUID = get_user_root_dir_uuid(SessionId),
             ParentUUID = case get_parent(SessionId, FileId) of
@@ -334,13 +335,18 @@ file_record(SessionId, FileId) ->
                 <<"dir">> ->
                     case logical_file_manager:ls(
                         SessionId, {guid, FileId}, 0, 1000) of
-                        {ok, Chldrn} ->
-                            Chldrn;
+                        {ok, List} ->
+                            List;
                         _ ->
                             []
                     end
             end,
             ChildrenIds = [ChId || {ChId, _} <- Children],
+            % Currently only one share per file is allowed
+            Share = case Shares of
+                [] -> null;
+                [ShareId] -> ShareId
+            end,
             Res = [
                 {<<"id">>, FileId},
                 {<<"name">>, Name},
@@ -350,7 +356,8 @@ file_record(SessionId, FileId) ->
                 {<<"size">>, Size},
                 {<<"parent">>, ParentUUID},
                 {<<"children">>, ChildrenIds},
-                {<<"fileAcl">>, FileId}
+                {<<"fileAcl">>, FileId},
+                {<<"share">>, Share}
             ],
             {ok, Res}
     end.
@@ -358,7 +365,7 @@ file_record(SessionId, FileId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Constructs a file acl record from given FileId.
+%% Constructs a file acl record for given FileId.
 %% @end
 %%--------------------------------------------------------------------
 -spec file_acl_record(SessionId :: binary(), FileId :: binary()) ->

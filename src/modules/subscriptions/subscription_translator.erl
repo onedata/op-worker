@@ -100,7 +100,15 @@ props_to_value(space_info, Props) ->
         name = proplists:get_value(<<"name">>, Props),
         providers_supports = proplists:get_value(<<"providers_supports">>, Props),
         groups = process_ids_with_privileges(proplists:get_value(<<"groups">>, Props, [])),
-        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, []))
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
+        shares = proplists:get_value(<<"shares">>, Props)
+    };
+props_to_value(share_info, Props) ->
+    #share_info{
+        name = proplists:get_value(<<"name">>, Props),
+        public_url = proplists:get_value(<<"public_url">>, Props),
+        root_file_id = proplists:get_value(<<"root_file_id">>, Props),
+        parent_space = proplists:get_value(<<"parent_space">>, Props)
     };
 props_to_value(provider_info, Props) ->
     #provider_info{
@@ -121,6 +129,8 @@ type_to_model(<<"provider">>) ->
     provider_info;
 type_to_model(<<"space">>) ->
     space_info;
+type_to_model(<<"share">>) ->
+    share_info;
 type_to_model(<<"group">>) ->
     onedata_group;
 type_to_model(<<"user">>) ->

@@ -175,14 +175,15 @@ create(SessId, Path, Mode) ->
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    CTX2 = #fslogic_ctx{share_id = ShareId} = fslogic_context:set_space_and_share_id(CTX, {guid, FileGUID}),
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
         #get_file_location{flags = OpenType},
         fun(#file_location{provider_id = ProviderId, uuid = FileGUID,
             file_id = FileId, storage_id = StorageId} = Location) ->
-            {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+            {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID,
-                FileUUID, StorageId, FileId, ProviderId),
+                FileUUID, StorageId, FileId, ShareId, ProviderId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
@@ -190,7 +191,7 @@ open(SessId, FileKey, OpenType) ->
                         provider_id = ProviderId,
                         sfm_handles = maps:from_list([{default,
                             {{StorageId, FileId}, NewSFMHandle}}]),
-                        fslogic_ctx = CTX, file_guid = FileGUID,
+                        fslogic_ctx = CTX2, file_guid = FileGUID,
                         open_mode = OpenType}};
                 {error, Reason} ->
                     {error, Reason}
@@ -220,7 +221,8 @@ release(#lfm_handle{file_guid = FileGUID, fslogic_ctx = CTX,
 %%--------------------------------------------------------------------
 -spec fsync(FileHandle :: logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
-fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = ?ROOT_SESS_ID}}) ->
+fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SpecialSession}})
+    when SpecialSession =:= ?ROOT_SESS_ID orelse SpecialSession =:= ?GUEST_SESS_ID ->
     lists:foreach(fun({_, SFMHandle}) ->
         ok = storage_file_manager:fsync(SFMHandle)
     end, maps:values(SFMHandles));
@@ -228,7 +230,7 @@ fsync(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID, sfm_handles = 
     lists:foreach(fun({_, SFMHandle}) ->
             ok = storage_file_manager:fsync(SFMHandle)
         end, maps:values(SFMHandles)),
-    RecvRef = event:flush(ProviderId, fslogic_uuid:file_guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
+    RecvRef = event:flush(ProviderId, fslogic_uuid:guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
     receive
         {RecvRef, Response} ->
             Response
@@ -403,15 +405,15 @@ get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: logical_file_manager:handle()} |  no_return().
 get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
+    fslogic_ctx = #fslogic_ctx{session_id = SessId, share_id = ShareId}} = Handle,
     Key, SFMHandles, OpenType) ->
     {{StorageId, FileId}, SFMHandle} =
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
                 {SID, FID} = Key,
-                {FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+                {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
                 SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ProviderId),
+                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ShareId, ProviderId),
 
                 case storage_file_manager:open(SFMHandle0, OpenType) of
                     {ok, NewSFMHandle} ->

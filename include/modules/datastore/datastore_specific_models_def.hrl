@@ -78,7 +78,8 @@
     needs_root_privileges :: undefined | boolean(),
     is_local = false :: boolean(),
     provider_id :: undefined | oneprovider:id(),
-    file_size :: undefined | non_neg_integer() %% Available only if file is_local
+    file_size :: undefined | non_neg_integer(), %% Available only if file is_local
+    share_id :: undefined | share_info:id()
 }).
 
 %% Local, cached version of OZ user
@@ -125,7 +126,8 @@
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     %% symlink_value for symlinks, file_guid for phantom files (redirection)
-    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid()
+    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
+    shares = [] :: [share_info:id()]
 }).
 
 
@@ -176,6 +178,17 @@
     providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
+    % All shares that belong to this space.
+    shares = [] :: [share_info:id()],
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+%% Model for caching share details fetched from OZ
+-record(share_info, {
+    name = undefined :: undefined | binary(),
+    public_url = undefined :: undefined | binary(),
+    root_file_id = undefined :: undefined | binary(),
+    parent_space = undefined :: undefined | binary(),
     revision_history = [] :: [subscriptions:rev()]
 }).
 

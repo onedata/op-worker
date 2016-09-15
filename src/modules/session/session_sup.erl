@@ -60,6 +60,10 @@ init([SessId, SessType]) ->
             {ok, {SupFlags, [
                 event_manager_sup_spec(SessId, SessType)
             ]}};
+        guest ->
+            {ok, {SupFlags, [
+                event_manager_sup_spec(SessId, SessType)
+            ]}};
         _ ->
             case lists:member(SessType, SequencerEnabled) of
                 true ->
