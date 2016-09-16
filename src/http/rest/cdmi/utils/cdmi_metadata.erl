@@ -79,7 +79,7 @@ update_user_metadata(Auth, FileKey, UserMetadata) ->
 update_user_metadata(_Auth, _FileKey, undefined, []) ->
     ok;
 update_user_metadata(Auth, FileKey, undefined, URIMetadataNames) ->
-    update_user_metadata(Auth, FileKey, [], URIMetadataNames);
+    update_user_metadata(Auth, FileKey, #{}, URIMetadataNames);
 update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
     BodyMetadata = filter_user_metadata_map(UserMetadata),
     BodyMetadataNames = maps:keys(BodyMetadata),
@@ -87,7 +87,8 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
         fun
             (?ACL_XATTR_NAME) ->
                 ok = onedata_file_api:remove_acl(Auth, FileKey);
-            (Name) -> ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
+            (Name) ->
+                ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
         end,
     ReplaceAttributeFunction =
         fun
@@ -108,7 +109,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
         _ ->
             UriMetadataNames = filter_user_metadata_keylist(AllURIMetadataNames),
             lists:foreach(DeleteAttributeFunction, UriMetadataNames -- BodyMetadataNames),
-            lists:foreach(ReplaceAttributeFunction, maps:from_list(filter_URI_Names(BodyMetadata, UriMetadataNames)))
+            lists:foreach(ReplaceAttributeFunction, filter_URI_Names(BodyMetadata, UriMetadataNames))
     end.
 
 %%--------------------------------------------------------------------
@@ -126,7 +127,7 @@ prepare_metadata(Auth, FileKey, Attrs) ->
     #file_attr{}) -> maps:map().
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
-    UserMetadata = maps:filter(fun({Name, _Value}) ->
+    UserMetadata = maps:filter(fun(Name, _Value) ->
         str_utils:binary_starts_with(Name, Prefix) end, get_user_metadata(Auth, FileKey)),
     maps:merge(StorageSystemMetadata, UserMetadata).
 
@@ -220,11 +221,11 @@ set_cdmi_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
 %% @doc Filters out metadata with user_metadata_forbidden_prefix.
 %%--------------------------------------------------------------------
 -spec filter_user_metadata_map(maps:map()) -> maps:map().
-filter_user_metadata_map(UserMetadata) when is_list(UserMetadata) ->
-    lists:filter(
+filter_user_metadata_map(UserMetadata) when is_map(UserMetadata) ->
+    maps:filter(
         fun
-            ({?ACL_XATTR_NAME, _Value}) -> true;
-            ({Name, _Value}) ->
+            (?ACL_XATTR_NAME, _Value) -> true;
+            (Name, _Value) ->
                 not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
         end,
         UserMetadata);
@@ -251,7 +252,7 @@ filter_user_metadata_keylist(_) ->
 %%--------------------------------------------------------------------
 -spec filter_URI_Names(maps:map(), [CdmiName :: binary()]) -> maps:map().
 filter_URI_Names(UserMetadata, URIMetadataNames) ->
-    maps:filter(fun({Name, _}) ->
+    maps:filter(fun(Name, _) ->
         lists:member(Name, URIMetadataNames) end, UserMetadata).
 
 %%--------------------------------------------------------------------
@@ -259,7 +260,8 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
 %%--------------------------------------------------------------------
 -spec prepare_cdmi_metadata(MetadataNames :: [binary()], onedata_file_api:file_key(),
     onedata_auth_api:auth(), #file_attr{}, Prefix :: binary()) -> maps:map().
-prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) -> [];
+prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) ->
+    #{};
 prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
     case str_utils:binary_starts_with(Name, Prefix) of
         true ->
