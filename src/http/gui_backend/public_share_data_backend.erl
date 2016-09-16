@@ -84,7 +84,7 @@ find(<<"file-public">>, FileId) ->
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
     end;
-find(<<"meta-public">>, FileId) ->
+find(<<"file-property-public">>, FileId) ->
     try
         metadata_data_backend:metadata_record(?GUEST_SESS_ID, FileId)
     catch T:M ->
@@ -225,7 +225,7 @@ file_record(SessionId, FileId) ->
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, null},
-                {<<"meta">>, Metadata}
+                {<<"fileProperty">>, Metadata}
             ],
             {ok, Res}
     end.

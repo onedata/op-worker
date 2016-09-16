@@ -54,7 +54,7 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"meta">>, FileId) ->
+find(<<"file-property">>, FileId) ->
     SessionId = g_session:get_session_id(),
     try
         metadata_record(SessionId, FileId)
@@ -73,7 +73,7 @@ find(<<"meta">>, FileId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"meta">>) ->
+find_all(<<"file-property">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -84,7 +84,7 @@ find_all(<<"meta">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"meta">>, _Data) ->
+find_query(<<"file-property">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -95,9 +95,9 @@ find_query(<<"meta">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"meta">>, Data) ->
+create_record(<<"file-property">>, Data) ->
     FileId = proplists:get_value(<<"file">>, Data),
-    ok = update_record(<<"meta">>, FileId, Data),
+    ok = update_record(<<"file-property">>, FileId, Data),
     metadata_record(g_session:get_session_id(), FileId).
 
 
@@ -109,7 +109,7 @@ create_record(<<"meta">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"meta">>, FileId, Data) ->
+update_record(<<"file-property">>, FileId, Data) ->
     SessionId = g_session:get_session_id(),
     case proplists:get_value(<<"basic">>, Data) of
         undefined ->
@@ -163,7 +163,7 @@ update_record(<<"meta">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"meta">>, FileId) ->
+delete_record(<<"file-property">>, FileId) ->
     SessionId = g_session:get_session_id(),
     {ok, XattrKeys} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false
@@ -209,7 +209,7 @@ metadata_record(SessionId, FileId) ->
     {ok, JSON} = logical_file_manager:get_metadata(
         SessionId, {guid, FileId}, <<"json">>, [], false
     ),
-    JSONVal = case map_size(JSON) of
+    JSONVal = case is_map(JSON) andalso map_size(JSON) of
         0 -> null;
         _ -> json_utils:decode(json_utils:encode_map(JSON))
     end,
