@@ -123,7 +123,7 @@ init_stream(State = #{last_seq := Since}) ->
 
     % todo limit to admin only (when we will have admin users)
     {ok, Stream} = couchdb_datastore_driver:changes_start_link(
-        couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity),
+        couchbeam_callbacks:notify_function(Pid, Ref), Since, infinity, couchdb_datastore_driver:sync_enabled_bucket()),
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
 
 %%--------------------------------------------------------------------

@@ -77,6 +77,8 @@ get(Key) ->
             case create(#document{key = Key, value = #space_quota{current_size = 0}}) of
                 {ok, _} ->
                     get(Key);
+                {error, already_exists} ->
+                    get(Key);
                 Other0 ->
                     Other0
             end;
