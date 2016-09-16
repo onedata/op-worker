@@ -111,7 +111,9 @@ gen_file_uuid(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec gen_file_uuid() -> file_meta:uuid().
 gen_file_uuid() ->
-    http_utils:base64url_encode(crypto:rand_bytes(16)).
+    PID = oneprovider:get_provider_id(),
+    Rand = crypto:rand_bytes(16),
+    http_utils:base64url_encode(<<PID/binary, "##", Rand/binary>>).
 
 %%--------------------------------------------------------------------
 %% @doc

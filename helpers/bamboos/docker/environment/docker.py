@@ -13,7 +13,7 @@ import sys
 
 
 # noinspection PyDefaultArgument
-def run(image, docker_host=None, detach=False, dns_list=[], add_host={},
+def run(image, docker_host=None, detach=False, dns_list=[], add_host={}, ports={},
         envs={}, hostname=None, interactive=False, link={}, tty=False, rm=False,
         reflect=[], volumes=[], name=None, workdir=None, user=None, group=None,
         group_add=[], privileged=False, run_params=[], command=None,
@@ -36,6 +36,9 @@ def run(image, docker_host=None, detach=False, dns_list=[], add_host={},
 
     for key in envs:
         cmd.extend(['-e', '{0}={1}'.format(key, envs[key])])
+
+    for key in ports:
+        cmd.extend(['-p', '{0}={1}'.format(key, ports[key])])
 
     if hostname:
         cmd.extend(['-h', hostname])

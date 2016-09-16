@@ -18,7 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
--export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
+-export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1, gen_storage_file_id/2, gen_storage_file_id/3]).
 -export([get_local_file_location/1, get_local_file_locations/1,
     get_local_storage_file_locations/1]).
 
@@ -59,8 +59,18 @@ get_parent(File) ->
     helpers:file() | no_return().
 gen_storage_file_id(Entry) ->
     {ok, Path} = fslogic_path:gen_storage_path(Entry),
-    {ok, #document{value = #file_meta{version = Version}}} = file_meta:get(Entry),
-    file_meta:snapshot_name(Path, Version).
+    gen_storage_file_id(Entry, Path).
+
+-spec gen_storage_file_id(Entry :: fslogic_worker:file(), Path :: file_meta:path()) ->
+    helpers:file() | no_return().
+gen_storage_file_id(Entry, Path) ->
+    {ok, #document{key = Key, value = #file_meta{version = Version}}} = file_meta:get(Entry),
+    gen_storage_file_id(Key, Path, Version).
+
+-spec gen_storage_file_id(Key :: file_meta:uuid(), Path :: file_meta:path(), Version :: non_neg_integer()) ->
+    helpers:file() | no_return().
+gen_storage_file_id(Key, Path, Version) when is_integer(Version) ->
+    file_meta:snapshot_name(<<Path/binary, "#<UUID>", Key/binary>>, Version).
 
 
 -spec get_local_file_location(fslogic_worker:ext_file()) ->

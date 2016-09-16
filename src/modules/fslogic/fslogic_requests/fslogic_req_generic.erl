@@ -124,7 +124,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
             ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
-            Size = fslogic_blocks:get_file_size(FileDoc),
+
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
@@ -136,6 +136,9 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 % TODO (VFS-2024) - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
                 _:_ -> {?ROOT_POSIX_CTX, undefined}
             end,
+
+            Size = fslogic_blocks:get_file_size(FileDoc),
+
             FinalUID = case  session:get(SessId) of
                 {ok, #document{value = #session{identity = #user_identity{user_id = UserID}}}} ->
                     UID;
@@ -584,6 +587,7 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
                 Errors ->
                     [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p", [FID, SID, Mode, Reason])
                         || {{SID, FID}, {error, Reason}} <- Errors],
+
                     throw(?EAGAIN)
             end;
         _ -> ok
