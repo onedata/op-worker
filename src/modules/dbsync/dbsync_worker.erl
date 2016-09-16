@@ -500,6 +500,14 @@ forign_links_get(ModelConfig, Key) ->
 -spec forign_links_save(model_behaviour:model_config(), OldRevNum :: non_neg_integer(), datastore:document()) ->
     {ok, datastore:document()} | {error, Reason :: any()}.
 forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewRevNum, _}}) ->
+    MaxCacheSize = ?CHANGES_STASH_MAX_SIZE_BYTES,
+    case ets:info(?ETS_CACHE_NAME, memory) of
+        V when V > MaxCacheSize ->
+            ets:delete_all_objects(?ETS_CACHE_NAME);
+        _ -> ok
+    end,
+
+
     case couchdb_datastore_driver:force_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc) of
         {ok, _} ->
             case OldRevNum of
