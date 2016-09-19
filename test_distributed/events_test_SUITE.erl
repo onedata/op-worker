@@ -149,16 +149,14 @@ init_per_testcase(Case, Config) when
     Case =:= emit_write_event_should_execute_handler;
     Case =:= emit_file_attr_update_event_should_execute_handler;
     Case =:= emit_file_location_update_event_should_execute_handler ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
-    init_per_testcase(default, [{subscription_id, SubId} | Config]);
+    init_per_testcase(?DEFAULT_CASE(Case), [{subscription_id, SubId} | Config]);
 
 init_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    NewConfig = init_per_testcase(default, Config),
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
     {ok, SubId} = subscribe(Worker, SessId, ?READ_EVENT_STREAM,
         notify_event_handler(), fun(_) -> false end, infinity),
@@ -166,9 +164,8 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_event_manager ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    NewConfig = init_per_testcase(default, Config),
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
     {ok, SubId} = subscribe(Worker, SessId, ?READ_EVENT_STREAM,
         forward_events_event_handler(), fun(_) -> true end, infinity),
@@ -219,18 +216,16 @@ end_per_testcase(Case, Config) when
     Case =:= emit_write_event_should_execute_handler;
     Case =:= emit_file_attr_update_event_should_execute_handler;
     Case =:= emit_file_location_update_event_should_execute_handler ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
-    end_per_testcase(default, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process;
     Case =:= subscribe_should_notify_event_manager ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(session_id, Config), ?config(subscription_id, Config)),
-    end_per_testcase(default, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->

@@ -494,15 +494,6 @@ write_to_file(Worker, SessionId, Path, Offset, Data) ->
     lfm_proxy:close(Worker, FileHandle),
     Result.
 
-%%get_file_content(Worker, SessionId, Path) ->
-%%    {ok, FileHandle} = open_file(Worker, SessionId, Path, read),
-%%    Result = case lfm_proxy:read(Worker, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
-%%                 {error, Error} -> {error, Error};
-%%                 {ok, Content} -> Content
-%%             end,
-%%    lfm_proxy:close(Worker, FileHandle),
-%%    Result.
-
 mkdir(Worker, SessionId, Path) ->
     lfm_proxy:mkdir(Worker, SessionId, Path).
 

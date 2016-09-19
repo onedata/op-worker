@@ -360,31 +360,27 @@ init_per_testcase(Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= posix_user_provider_test;
     Case =:= ceph_user_provider_test ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, file_meta),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(posix_user_proxy_test = Case, Config) ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, [file_meta, http_client]),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= ceph_user_proxy_test;
     Case =:= s3_user_proxy_test;
     Case =:= swift_user_proxy_test ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, [file_meta, http_client]),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(s3_user_provider_test = Case, Config) ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, [amazonaws_iam, file_meta]),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) ->
     ?CASE_STOP(Case),

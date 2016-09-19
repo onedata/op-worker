@@ -176,10 +176,9 @@ end_per_suite(Config) ->
     ?TEST_STOP(Config).
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
-    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    init_per_testcase(default, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(Case, Config) ->
     ?CASE_START(Case),
     application:start(etls),
@@ -189,10 +188,9 @@ init_per_testcase(Case, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    end_per_testcase(default, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) ->
     ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),

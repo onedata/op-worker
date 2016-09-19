@@ -279,21 +279,19 @@ init_per_testcase(Case, Config) when
 end_per_testcase(Case, Config) when
     Case =:= counting_file_open_and_release_test;
     Case =:= invalidating_session_open_files_test ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_validate_and_unload(Worker, file_deletion_worker),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_2])),
 
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= init_should_clear_open_files_test;
     Case =:= open_file_deletion_request_test;
     Case =:= deletion_of_not_open_file_test;
     Case =:= deletion_of_open_file_test->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     lfm_proxy:teardown(Config),
@@ -305,7 +303,7 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate_and_unload(Worker, [storage_file_manager,
         fslogic_rename]),
     test_utils:mock_unload(worker_proxy),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) ->
     ?CASE_STOP(Case),

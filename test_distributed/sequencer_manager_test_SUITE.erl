@@ -169,10 +169,9 @@ init_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_unregister_sequencer_in_stream;
     Case =:= sequencer_manager_should_create_sequencer_stream_on_open_stream;
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_sequencer_stream_sup(Worker),
-    init_per_testcase(default, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -188,9 +187,8 @@ end_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_unregister_sequencer_in_stream;
     Case =:= sequencer_manager_should_create_sequencer_stream_on_open_stream;
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(default, Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, sequencer_stream_sup);
 
 end_per_testcase(Case, Config) ->

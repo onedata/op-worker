@@ -856,10 +856,9 @@ end_per_testcase(ShareTest, Config) when
         ShareTest =:= share_child_list_test orelse
         ShareTest =:= share_child_read_test orelse
         ShareTest =:= share_permission_denied_test ->
-    ?CASE_STOP(ShareTest),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, oz_shares),
-    end_per_testcase(default, Config);
+    end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
 end_per_testcase(Case, Config) ->
     ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),

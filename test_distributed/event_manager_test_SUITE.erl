@@ -119,10 +119,9 @@ end_per_suite(Config) ->
     ?TEST_STOP(Config).
 
 init_per_testcase(event_manager_should_start_event_stream_on_subscription = Case, Config) ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_event_stream_sup(Worker),
-    init_per_testcase(default, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) when
     Case =:= event_manager_should_start_event_streams_on_init;
@@ -150,9 +149,8 @@ init_per_testcase(Case, Config) ->
     [{event_manager, EvtMan}, {session_id, SessId} | Config].
 
 end_per_testcase(event_manager_should_start_event_stream_on_subscription = Case, Config) ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(default, Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
 end_per_testcase(Case, Config) when
@@ -160,9 +158,8 @@ end_per_testcase(Case, Config) when
     Case =:= event_manager_should_unregister_event_stream;
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(default, Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
 end_per_testcase(Case, Config) ->

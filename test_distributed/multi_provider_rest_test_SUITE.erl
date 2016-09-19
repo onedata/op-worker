@@ -819,10 +819,9 @@ init_per_testcase(Case, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(metric_get = Case, Config) ->
-    ?CASE_STOP(Case),
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) ->
     ?CASE_STOP(Case),

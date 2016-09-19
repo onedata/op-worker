@@ -82,10 +82,6 @@ all() ->
 
 -define(TIMEOUT, timer:seconds(5)).
 
-%%user_1_token_header() ->
-%%    {ok, Srlzd} = token_utils:serialize62(macaroon:create("a", "b", "c")),
-%%    {<<"X-Auth-Token">>, Srlzd}.
-
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
 -define(OBJECT_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-object">>}).
@@ -93,7 +89,6 @@ all() ->
 -define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
 -define(INFINITY, 9999).
-
 
 %%%===================================================================
 %%% Test functions
@@ -170,19 +165,15 @@ accept_header_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-%%    [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
-%%    Config0 = proplists:delete(op_worker_nodes, ConfigWithNodes),
-%%    [{op_worker_nodes, [Worker, Worker]} | Config0].
-    ConfigWithNodes.
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
     ?TEST_STOP(Config).
 
-init_per_testcase(choose_adequate_handler_test, Config) ->
+init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    init_per_testcase(default, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(Case, Config) ->
     ?CASE_START(Case),
     application:start(etls),
@@ -190,10 +181,10 @@ init_per_testcase(Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(choose_adequate_handler_test, Config) ->
+end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    end_per_testcase(default, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) ->
     ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),

@@ -220,15 +220,13 @@ end_per_suite(Config) ->
     ?TEST_STOP(Config).
 
 init_per_testcase(monitoring_test = Case, Config) ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, space_quota),
     test_utils:mock_expect(Worker, space_quota, get, fun(_) ->
         {ok, #document{value = #space_quota{current_size = 100}}} end),
-    init_per_testcase(all, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(rrdtool_pool_test = Case, Config) ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Id) ->
         ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
@@ -238,7 +236,7 @@ init_per_testcase(rrdtool_pool_test = Case, Config) ->
             }
         }]))
     end, lists:seq(1, ?EXPECTED_SIZE)),
-    init_per_testcase(all, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) ->
     ?CASE_START(Case),
@@ -249,18 +247,16 @@ init_per_testcase(Case, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(monitoring_test = Case, Config) ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, space_quota),
-    end_per_testcase(all, Worker);
+    end_per_testcase(?DEFAULT_CASE(Case), Worker);
 
 end_per_testcase(rrdtool_pool_test = Case, Config) ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Id) ->
         ?assertMatch(ok, rpc:call(Worker, space_quota, delete, [integer_to_binary(Id)]))
     end, lists:seq(1, ?EXPECTED_SIZE)),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) ->
     ?CASE_STOP(Case),
