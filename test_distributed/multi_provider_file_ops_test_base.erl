@@ -783,7 +783,7 @@ verify_stats(Config, File, IsDir) ->
         end,
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
         {FileUUID, rpc:call(W, file_meta, get, [FileUUID])}
     end),
 
@@ -859,7 +859,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
 
         {W, get_locations(W, FileUUID)}
     end),
@@ -903,7 +903,7 @@ verify_dir_size(Config, DirToCheck, DSize, Deleted) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
         {W, FileUUID}
     end),
 
