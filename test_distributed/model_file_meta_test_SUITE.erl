@@ -26,13 +26,14 @@
 -define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, exec_and_check_time/3]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+    end_per_testcase/2, exec_and_check_time/3]).
 %% tests
 -export([basic_operations_test/1, rename_test/1]).
 %% test_bases
 -export([basic_operations_test_base/1]).
 %% auxiliary function
--export([basic_operations_test_core/1]).
+-export([basic_operations_test_core/2]).
 
 all() ->
     ?ALL([basic_operations_test, rename_test], [basic_operations_test]).
@@ -48,12 +49,21 @@ basic_operations_test(Config) ->
     ?PERFORMANCE(Config, [
             {repeats, ?REPEATS},
             {success_rate, ?SUCCESS_RATE},
+            {parameters, [
+                [{name, last_level}, {value, 10}, {description, "Depth of last level"}]
+            ]},
             {description, "Performs operations on file meta model"},
-            {config, [{name, basic_config}, {description, "Basic config for test"}]}
+            {config, [{name, basic_config},
+                {parameters, [
+                    [{name, last_level}, {value, 50}]
+                ]},
+                {description, "Basic config for test"}
+            ]}
         ]
     ).
 basic_operations_test_base(Config) ->
-    basic_operations_test_core(Config).
+    LastLevel = ?config(last_level, Config),
+    basic_operations_test_core(Config, LastLevel).
 
 rename_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
@@ -143,7 +153,7 @@ rename_test(Config) ->
 %%% Functions cores (to be reused in stress tests)
 %%%===================================================================
 
-basic_operations_test_core(Config) ->
+basic_operations_test_core(Config, LastLevel) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
 
     % Clear for stress test (if previous run crashed)
@@ -156,7 +166,7 @@ basic_operations_test_core(Config) ->
         end,
     BigDirDel(0),
 
-    delete_deep_tree(Worker2),
+    delete_deep_tree(Worker2, LastLevel),
     [?call(Worker1, delete, [{path, D}]) || D <- ["/Space 1", "/Space 1/dir1", "/Space 1/dir1/file1",
         "/Space 1/dir2", "/Space 1/dir2/file1", "/Space 1/dir2/file2", "/Space 1/dir2/file3"]],
 
@@ -176,7 +186,7 @@ basic_operations_test_core(Config) ->
     ?assertMatch({ok, _}, {A22, U22}),
     ?assertMatch({ok, _}, {A23, U23}),
 
-    {Level20Path, CreateLevel20} = create_deep_tree(Worker2),
+    {Level20Path, CreateLevel20} = create_deep_tree(Worker2, LastLevel),
 
     BigDir =
         fun Loop(File) when File < 99 ->
@@ -283,7 +293,7 @@ basic_operations_test_core(Config) ->
 
     BigDirDel(0),
 
-    delete_deep_tree(Worker2),
+    delete_deep_tree(Worker2, LastLevel),
     [?call(Worker1, delete, [{uuid, D}]) || D <- [U2, U3, U4, U20, U21, U22, U23]],
 
     [
@@ -357,7 +367,14 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
+
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
+    Config.
+
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions
@@ -378,8 +395,8 @@ exec_and_check_time(Mod, M, A) ->
     AfterProcessing = os:timestamp(),
     {Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}.
 
-create_deep_tree(Worker) ->
-    create_deep_tree(Worker, "/Space 1", 18).
+create_deep_tree(Worker, Level) ->
+    create_deep_tree(Worker, "/Space 1", Level - 2).
 
 create_deep_tree(Worker, Prefix, 1) ->
     {{A, U}, Time} = ?call_with_time(Worker, create, [{path, list_to_binary(Prefix)}, #file_meta{name = <<"1">>}]),
@@ -392,8 +409,8 @@ create_deep_tree(Worker, Prefix, Num) ->
     ?assertMatch({ok, _}, {A, U}),
     create_deep_tree(Worker, Prefix ++ "/" ++ StringNum, Num - 1).
 
-delete_deep_tree(Worker) ->
-    delete_deep_tree(Worker, "/Space 1", 18).
+delete_deep_tree(Worker, Level) ->
+    delete_deep_tree(Worker, "/Space 1", Level - 2).
 
 delete_deep_tree(Worker, Prefix, 1) ->
     ?call(Worker, delete, [{path, list_to_binary(Prefix)}]);

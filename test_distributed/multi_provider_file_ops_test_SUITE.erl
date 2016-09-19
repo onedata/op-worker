@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Michał Wrzeszcz
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -10,45 +10,109 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_file_ops_test_SUITE).
--author("Michał Wrzeszcz").
+-author("Michal Wrzeszcz").
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, proxy_test1/1, proxy_test2/1, file_consistency_test/1,
-    concurrent_create_test/1
+    db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
+    proxy_basic_opts_test1/1, proxy_many_ops_test1/1, proxy_distributed_modification_test1/1,
+    proxy_basic_opts_test2/1, proxy_many_ops_test2/1, proxy_distributed_modification_test2/1,
+    db_sync_many_ops_test_base/1, proxy_many_ops_test1_base/1, proxy_many_ops_test2_base/1,
+    file_consistency_test/1, file_consistency_test_base/1, concurrent_create_test/1
+]).
+
+-define(TEST_CASES, [
+    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
+    proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
+    proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
+    file_consistency_test, concurrent_create_test
+]).
+
+-define(PERFORMANCE_TEST_CASES, [
+    db_sync_many_ops_test, proxy_many_ops_test1, proxy_many_ops_test2, file_consistency_test
 ]).
 
 all() ->
-    ?ALL([
-        proxy_test1, proxy_test2, db_sync_test, file_consistency_test, concurrent_create_test
-    ]).
+    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-db_sync_test(Config) ->
-    % TODO change timeout after VFS-2197
-    multi_provider_file_ops_test_base:synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
+-define(performance_description(Desc),
+    [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, dirs_num}, {value, 5}, {description, "Numbers of directories used during test."}],
+            [{name, files_num}, {value, 5}, {description, "Numbers of files used during test."}]
+        ]},
+        {description, Desc},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, dirs_num}, {value, 50}],
+                [{name, files_num}, {value, 100}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
 
-proxy_test1(Config) ->
-    multi_provider_file_ops_test_base:synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
+db_sync_basic_opts_test(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 10).
 
+db_sync_many_ops_test(Config) ->
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+db_sync_many_ops_test_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 10, DirsNum, FilesNum).
 
-proxy_test2(Config) ->
-    multi_provider_file_ops_test_base:synchronization_test_base(Config, <<"user3">>, {0,4,1,2}, 0, 10, 100).
+db_sync_distributed_modification_test(Config) ->
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 10).
+
+proxy_basic_opts_test1(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
+
+proxy_many_ops_test1(Config) ->
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+proxy_many_ops_test1_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,4,1,2}, 0, DirsNum, FilesNum).
+
+proxy_distributed_modification_test1(Config) ->
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
+
+proxy_basic_opts_test2(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
+
+proxy_many_ops_test2(Config) ->
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+proxy_many_ops_test2_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,4,1,2}, 0, DirsNum, FilesNum).
+
+proxy_distributed_modification_test2(Config) ->
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
 
 concurrent_create_test(Config) ->
     FileCount = 3,
     Workers = ?config(op_worker_nodes, Config),
     ProvIDs0 = lists:map(fun(Worker) ->
         rpc:call(Worker, oneprovider, get_provider_id, [])
-    end, Workers),
+                         end, Workers),
 
     ProvIdCount = length(lists:usort(ProvIDs0)),
 
@@ -59,8 +123,8 @@ concurrent_create_test(Config) ->
         end, #{}, ProvIDs),
 
     W = fun(N) ->
-            [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
-            Worker
+        [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
+        Worker
         end,
 
     User = <<"user1">>,
@@ -77,46 +141,46 @@ concurrent_create_test(Config) ->
     DirName = fun(N) ->
         NameSuffix = integer_to_binary(N),
         <<DirBaseName/binary, NameSuffix/binary>>
-        end,
+              end,
 
     AllFiles = lists:map(
         fun(N) ->
 
             Files = lists:foldl(fun
-                (10, retry) ->
-                    throw(unable_to_make_concurrent_create);
-                (_, L) when is_list(L) ->
-                    L;
-                (_, _) ->
-                    lists:foreach(
-                        fun(WId) ->
-                            lfm_proxy:unlink(W(WId), SessId(W(WId)), {path, DirName(N)})
-                        end, lists:seq(1, ProvIdCount)),
+                                    (10, retry) ->
+                                        throw(unable_to_make_concurrent_create);
+                                    (_, L) when is_list(L) ->
+                                        L;
+                                    (_, _) ->
+                                        lists:foreach(
+                                            fun(WId) ->
+                                                lfm_proxy:unlink(W(WId), SessId(W(WId)), {path, DirName(N)})
+                                            end, lists:seq(1, ProvIdCount)),
 
-                    lists:foreach(
-                        fun(WId) ->
-                            spawn(fun() ->
-                                TestMaster ! {WId, lfm_proxy:mkdir(W(WId), SessId(W(WId)), DirName(N), 8#755)}
-                            end)
-                        end, lists:seq(1, ProvIdCount)),
+                                        lists:foreach(
+                                            fun(WId) ->
+                                                spawn(fun() ->
+                                                    TestMaster ! {WId, lfm_proxy:mkdir(W(WId), SessId(W(WId)), DirName(N), 8#755)}
+                                                      end)
+                                            end, lists:seq(1, ProvIdCount)),
 
-                    try
-                        lists:map(
-                            fun(WId) ->
-                                receive
-                                    {WId, {ok, GUID}} ->
-                                        {WId, GUID};
-                                    {WId, {error, _}} ->
-                                        throw(not_concurrent)
-                                end
-                            end, lists:seq(1, ProvIdCount))
-                    catch
-                        not_concurrent ->
-                            retry
-                    end
+                                        try
+                                            lists:map(
+                                                fun(WId) ->
+                                                    receive
+                                                        {WId, {ok, GUID}} ->
+                                                            {WId, GUID};
+                                                        {WId, {error, _}} ->
+                                                            throw(not_concurrent)
+                                                    end
+                                                end, lists:seq(1, ProvIdCount))
+                                        catch
+                                            not_concurrent ->
+                                                retry
+                                        end
 
 
-            end, start, lists:seq(1, 10)),
+                                end, start, lists:seq(1, 10)),
             {N, Files}
         end, lists:seq(1, FileCount)),
 
@@ -155,31 +219,47 @@ concurrent_create_test(Config) ->
     ok.
 
 file_consistency_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_cases}, {value, [1,2,12,13]}, {description, "Number of test cases to be executed"}]
+        ]},
+        {description, "Tests file consistency"},
+        {config, [{name, all_cases},
+            {parameters, [
+                [{name, test_cases}, {value, [1,2,3,4,5,6,7,8,9,10,11,12,13,14]}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+file_consistency_test_base(Config) ->
+    ConfigsNum = ?config(test_cases, Config),
+
     Workers = ?config(op_worker_nodes, Config),
     {Worker1, Worker2} = lists:foldl(fun(W, {Acc1, Acc2}) ->
         NAcc1 = case is_atom(Acc1) of
-            true ->
-                Acc1;
-            _ ->
-                case string:str(atom_to_list(W), "p1") of
-                    0 -> Acc1;
-                    _ -> W
-                end
-        end,
+                    true ->
+                        Acc1;
+                    _ ->
+                        case string:str(atom_to_list(W), "p1") of
+                            0 -> Acc1;
+                            _ -> W
+                        end
+                end,
         NAcc2 = case is_atom(Acc2) of
-            true ->
-                Acc2;
-            _ ->
-                case string:str(atom_to_list(W), "p2") of
-                    0 -> Acc2;
-                    _ -> W
-                end
-        end,
+                    true ->
+                        Acc2;
+                    _ ->
+                        case string:str(atom_to_list(W), "p2") of
+                            0 -> Acc2;
+                            _ -> W
+                        end
+                end,
         {NAcc1, NAcc2}
     end, {[], []}, Workers),
 
-    multi_provider_file_ops_test_base:file_consistency_test_base(Config, Worker1, Worker2, Worker1).
-
+    multi_provider_file_ops_test_base:file_consistency_test_skeleton(Config, Worker1, Worker2, Worker1, ConfigsNum).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -189,9 +269,10 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     ct:timetrap({minutes, 60}),
     application:start(etls),
     hackney:start(),
@@ -200,7 +281,8 @@ init_per_testcase(_, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),

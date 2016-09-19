@@ -123,9 +123,10 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
     initializer:remove_pending_messages(),
@@ -133,7 +134,8 @@ init_per_testcase(_, Config) ->
     {ok, Pid} = start_session_watcher(Worker, SessId),
     [{session_watcher, Pid}, {session_id, SessId} | Config].
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Pid = ?config(session_watcher, Config),

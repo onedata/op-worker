@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, file_meta_basic_operations_test/1, file_meta_basic_operations_test_base/1, stress_test_base/1,
     many_files_creation_test/1, many_files_creation_test_base/1]).
 
@@ -68,7 +68,7 @@ file_meta_basic_operations_test(Config) ->
       ]
     ).
 file_meta_basic_operations_test_base(Config) ->
-  model_file_meta_test_SUITE:basic_operations_test_core(Config).
+  model_file_meta_test_SUITE:basic_operations_test_core(Config, 50).
 
 %%%===================================================================
 
@@ -208,7 +208,14 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [oneprovider]),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
+
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
+    Config.
+
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions
