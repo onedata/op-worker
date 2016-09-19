@@ -113,6 +113,7 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
+    Workers = ?config(op_worker_nodes, Config),
     FileBeg = <<"1234567890abcd">>,
 
     Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
@@ -157,7 +158,7 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     end, Level4Files),
     ct:print("Files created"),
 
-    verify_dir_size(Config, Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
+    verify_dir_size(Config, Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1),
 
     Level3Dirs2Uuids = lists:map(fun(D) ->
         ct:print("Verify dir ~p", [D]),
@@ -168,13 +169,15 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
         ct:print("Verify file ~p", [F]),
         verify_file(Config, FileBeg, F)
     end, Level4Files),
-    verify_dir_size(Config, Level3Dir, length(Level4Files), 0),
+    verify_dir_size(Config, Level3Dir, length(Level4Files)),
 
     lists:map(fun({_, F}) ->
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, F}))
+        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, F}))
     end, Level4Files),
     lists:map(fun(D) ->
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, D}))
+        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, D}))
     end, Level3Dirs2),
     ct:print("Dirs and files deleted"),
 
@@ -186,9 +189,9 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
         ct:print("Verify dir del ~p", [D]),
         verify_del(Config, {D, Uuid, []})
     end, lists:zip(Level3Dirs2, Level3Dirs2Uuids)),
-    verify_dir_size(Config, Level3Dir, 0, length(Level4Files)),
+    verify_dir_size(Config, Level3Dir, 0),
     ct:print("Level 3 dir size verified"),
-    verify_dir_size(Config, Level2Dir, length(Level3Dirs) + 1, length(Level3Dirs2)),
+    verify_dir_size(Config, Level2Dir, length(Level3Dirs) + 1),
     ct:print("Level 2 dir size verified"),
 
     verify(Config, fun(W) ->
@@ -674,7 +677,7 @@ get_locations(W, FileUUID) ->
 get_locations_from_map(Map) ->
     maps:fold(fun(_, V, Acc) ->
         case V of
-            {ID, file_location} ->
+            {_Version, [{_, _, ID, file_location}]} ->
                 [ID | Acc];
             _ ->
                 Acc
@@ -704,7 +707,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
-    FileId = file_meta:snapshot_name(Path, FDoc#file_meta.version),
+    FileId = fslogic_utils:gen_storage_file_id(FileUuid, Path, FDoc#file_meta.version),
     Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
         space_id = SpaceId},
@@ -816,7 +819,8 @@ create_file(Config, FileBeg, {Offset, File}) ->
 verify_file(Config, FileBeg, {Offset, File}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
-    {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider} = ?config(nodes_number, Config),
+    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, NodesOfProvider} = ?config(nodes_number, Config),
+    SyncProvidersCount = max(1, round(SyncNodes / NodesOfProvider)),
 
     Offset2 = Offset rem 5 + 1,
     Size = 2*Offset2,
@@ -847,9 +851,10 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     AssertLocations = fun() ->
         VerAns = VerifyLocation(),
 %%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+        Flattened = lists:flatten(VerAns),
 
-        ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-        LocationsList = lists:filter(fun(S) -> S == (SyncNodes / NodesOfProvider + ProxyNodesWritten0) end, VerAns),
+        ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
+        LocationsList = lists:filter(fun(S) -> S == SyncProvidersCount end, Flattened),
 %%            ct:print("Locations1 ~p", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
         {length(ZerosList), length(LocationsList)}
     end,
@@ -886,7 +891,7 @@ verify_del(Config, {F,  _FileUUID, _Locations}) ->
 %%            end, proplists:get_value(W, Locations, []))
     end).
 
-verify_dir_size(Config, DirToCheck, DSize, Deleted) ->
+verify_dir_size(Config, DirToCheck, DSize) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
     {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} = ?config(nodes_number, Config),
@@ -914,7 +919,7 @@ verify_dir_size(Config, DirToCheck, DSize, Deleted) ->
 %%            ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-        SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, VerAns),
+        SList = lists:filter(fun(S) -> S == 2*DSize + 1 end, VerAns),
         {length(ZerosList), length(SList)}
     end,
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
