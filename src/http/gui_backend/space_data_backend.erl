@@ -315,11 +315,9 @@ space_user_permission_record(AssocId) ->
             users = UsersAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
-    % @TODO remove to binary when Zbyszek has integrated his fix
     UserPerms = [str_utils:to_binary(P) || P <- UserPermsAtoms],
     PermsMapped = lists:map(
         fun(SpacePerm) ->
-            % @TODO remove to binary when Zbyszek has integrated his fix
             HasPerm = lists:member(str_utils:to_binary(SpacePerm), UserPerms),
             {perm_db_to_gui(SpacePerm), HasPerm}
         end, privileges:space_privileges()),
@@ -347,11 +345,9 @@ space_group_permission_record(AssocId) ->
             groups = GroupsAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     GroupPermsAtoms = proplists:get_value(GroupId, GroupsAndPerms),
-    % @TODO remove to binary when Zbyszek has integrated his fix
     GroupPerms = [str_utils:to_binary(P) || P <- GroupPermsAtoms],
     PermsMapped = lists:map(
         fun(Perm) ->
-            % @TODO remove to binary when Zbyszek has integrated his fix
             HasPerm = lists:member(str_utils:to_binary(Perm), GroupPerms),
             {perm_db_to_gui(Perm), HasPerm}
         end, privileges:space_privileges()),
@@ -379,7 +375,8 @@ perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
 perm_db_to_gui(space_remove_group) -> <<"permRemoveGroup">>;
 perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
 perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>;
-perm_db_to_gui(space_manage_shares) -> <<"permManageShares">>.
+perm_db_to_gui(space_manage_shares) -> <<"permManageShares">>;
+perm_db_to_gui(space_write_files) -> <<"permWriteFiles">>.
 
 
 %%--------------------------------------------------------------------
@@ -399,4 +396,5 @@ perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;
 perm_gui_to_db(<<"permRemoveGroup">>) -> space_remove_group;
 perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
 perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider;
-perm_gui_to_db(<<"permManageShares">>) -> space_manage_shares.
+perm_gui_to_db(<<"permManageShares">>) -> space_manage_shares;
+perm_gui_to_db(<<"permWriteFiles">>) -> space_write_files.
