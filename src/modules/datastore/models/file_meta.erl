@@ -138,7 +138,7 @@ create(#document{} = Parent, #file_meta{} = File) ->
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V} = FM} = FileDoc0) ->
     ?run(begin
         {ok, Scope} = get_scope(Parent),
-        FM1 = FM#file_meta{scope = Scope#document.key},
+        FM1 = FM#file_meta{scope = Scope#document.key, provider_id = oneprovider:get_provider_id()},
         FileDoc =
             case FileDoc0 of
                 #document{key = undefined} = Doc ->
@@ -237,7 +237,7 @@ delete(#document{value = #file_meta{name = FileName, version = Version}, key = K
             {ok, {ParentKey, ?MODEL_NAME}} ->
                 ok = delete_child_link_in_parent(ParentKey, FileName, Key),
                 ok = delete_child_link_in_parent(ParentKey, snapshot_name(FileName, Version), Key);
-            _ ->
+            _ ->f
                 ok
         end,
         case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, location_ref(oneprovider:get_provider_id())) of
