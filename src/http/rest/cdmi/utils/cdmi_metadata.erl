@@ -45,7 +45,7 @@
 -spec get_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
     [{Name :: binary(), Value :: binary()}].
 get_user_metadata(Auth, FileKey) ->
-    {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey, false),
+    {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey, false, true),
     Metadata = lists:map(
         fun
             (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>) -> undefined;
@@ -125,7 +125,7 @@ prepare_metadata(Auth, FileKey, Attrs) ->
   #file_attr{}) -> [{CdmiName :: binary(), Value :: binary()}].
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
-    UserMetadata = lists:filter(fun({Name, _Value}) -> binary_with_prefix(Name, Prefix) end, get_user_metadata(Auth, FileKey)),
+    UserMetadata = lists:filter(fun({Name, _Value}) -> str_utils:binary_starts_with(Name, Prefix) end, get_user_metadata(Auth, FileKey)),
     StorageSystemMetadata ++ UserMetadata.
 
 %%--------------------------------------------------------------------
@@ -222,20 +222,13 @@ filter_user_metadata(UserMetadata) when is_list(UserMetadata) ->
     lists:filter(
         fun
             ({?ACL_XATTR_NAME, _Value}) -> true;
-            ({Name, _Value}) -> not binary_with_prefix(Name, ?USER_METADATA_FORBIDDEN_PREFIX);
+            ({Name, _Value}) -> not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX);
             (?ACL_XATTR_NAME) -> true;
-            (Name) -> not binary_with_prefix(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
+            (Name) -> not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
         end,
         UserMetadata);
 filter_user_metadata(_) ->
     throw(?ERROR_INVALID_METADATA).
-
-%%--------------------------------------------------------------------
-%% @doc Predicate that tells whether binary starts with given prefix.
-%%--------------------------------------------------------------------
--spec binary_with_prefix(Name :: binary(), Prefix :: binary()) -> true | false.
-binary_with_prefix(Name, Prefix) ->
-    binary:longest_common_prefix([Name, Prefix]) =:= size(Prefix).
 
 %%--------------------------------------------------------------------
 %% @doc Returns first list from unzip result.
@@ -260,7 +253,7 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
   onedata_auth_api:auth(), #file_attr{}, Prefix :: binary()) -> list().
 prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) -> [];
 prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
-    case binary_with_prefix(Name, Prefix) of
+    case str_utils:binary_starts_with(Name, Prefix) of
         true ->
             case Name of
                 <<"cdmi_size">> -> %todo clarify what should be written to cdmi_size for directories

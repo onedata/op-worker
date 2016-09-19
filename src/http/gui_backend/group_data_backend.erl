@@ -143,6 +143,9 @@ update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
             case group_logic:set_name(UserAuth, GroupId, NewName) of
                 ok ->
                     ok;
+                {error, {403,<<>>,<<>>}} ->
+                    gui_error:report_warning(
+                        <<"You do not have privileges to modify this group.">>);
                 {error, _} ->
                     gui_error:report_warning(
                         <<"Cannot change group name due to unknown error.">>)
@@ -173,6 +176,9 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
+        {error, {403,<<>>,<<>>}} ->
+            gui_error:report_warning(
+                <<"You do not have privileges to modify group privileges.">>);
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot change user privileges due to unknown error.">>)
@@ -202,9 +208,12 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
+        {error, {403,<<>>,<<>>}} ->
+            gui_error:report_warning(
+                <<"You do not have privileges to modify group privileges.">>);
         {error, _} ->
             gui_error:report_warning(
-                <<"Cannot change user privileges due to unknown error.">>)
+                <<"Cannot change group privileges due to unknown error.">>)
     end.
 
 
@@ -220,6 +229,9 @@ delete_record(<<"group">>, GroupId) ->
     case group_logic:delete(UserAuth, GroupId) of
         ok ->
             ok;
+        {error, {403,<<>>,<<>>}} ->
+            gui_error:report_warning(
+                <<"You do not have privileges to modify this group.">>);
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot remove group due to unknown error.">>)

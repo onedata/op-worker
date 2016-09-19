@@ -48,7 +48,7 @@ change_replicated(SpaceId, Change) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec change_replicated_internal(SpaceId :: binary(), dbsync_worker:change()) ->
-    any().
+    any() | no_return().
 change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document{key = FileUUID,
     value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}) ->
     ok = replica_cleanup:clean_replica_files(FileUUID),

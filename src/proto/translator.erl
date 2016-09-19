@@ -282,7 +282,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         mtime = FileAttr#'FileAttr'.mtime,
         ctime = FileAttr#'FileAttr'.ctime,
         type = FileAttr#'FileAttr'.type,
-        size = FileAttr#'FileAttr'.size
+        size = FileAttr#'FileAttr'.size,
+        shares = FileAttr#'FileAttr'.shares
     };
 translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
     #file_children{child_links = lists:map(
@@ -358,8 +359,8 @@ translate_from_protobuf(#'SetXattr'{xattr = Xattr}) ->
     #set_xattr{xattr = translate_from_protobuf(Xattr)};
 translate_from_protobuf(#'RemoveXattr'{name = Name}) ->
     #remove_xattr{name = Name};
-translate_from_protobuf(#'ListXattr'{inherited = Inherited}) ->
-    #list_xattr{inherited = Inherited};
+translate_from_protobuf(#'ListXattr'{inherited = Inherited, show_internal = ShowInternal}) ->
+    #list_xattr{inherited = Inherited, show_internal = ShowInternal};
 translate_from_protobuf(#'GetParent'{}) ->
     #get_parent{};
 translate_from_protobuf(#'GetAcl'{}) ->
@@ -426,7 +427,12 @@ translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
     #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
 translate_from_protobuf(#'CheckPerms'{flags = Flags}) ->
     #check_perms{flags = open_flags_translate_from_protobuf(Flags)};
-
+translate_from_protobuf(#'CreateShare'{name = Name}) ->
+    #create_share{name = Name};
+translate_from_protobuf(#'RemoveShare'{}) ->
+    #remove_share{};
+translate_from_protobuf(#'Share'{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+    #share{share_id = ShareId, share_file_uuid = ShareGuid};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -669,7 +675,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         mtime = FileAttr#file_attr.mtime,
         ctime = FileAttr#file_attr.ctime,
         type = FileAttr#file_attr.type,
-        size = FileAttr#file_attr.size
+        size = FileAttr#file_attr.size,
+        shares = FileAttr#file_attr.shares
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
@@ -746,8 +753,8 @@ translate_to_protobuf(#set_xattr{xattr = Xattr}) ->
     {set_xattr, #'SetXattr'{xattr = XattrT}};
 translate_to_protobuf(#remove_xattr{name = Name}) ->
     {remove_xattr, #'RemoveXattr'{name = Name}};
-translate_to_protobuf(#list_xattr{inherited = Inherited}) ->
-    {list_xattr, #'ListXattr'{inherited = Inherited}};
+translate_to_protobuf(#list_xattr{inherited = Inherited, show_internal = ShowInternal}) ->
+    {list_xattr, #'ListXattr'{inherited = Inherited, show_internal = ShowInternal}};
 translate_to_protobuf(#get_parent{}) ->
     {get_parent, #'GetParent'{}};
 translate_to_protobuf(#get_acl{}) ->
@@ -813,6 +820,12 @@ translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
     {metadata, #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)}};
 translate_to_protobuf(#check_perms{flags = Flags}) ->
     {check_perms, #'CheckPerms'{flags = open_flags_translate_to_protobuf(Flags)}};
+translate_to_protobuf(#create_share{name = Name}) ->
+    {create_share, #'CreateShare'{name = Name}};
+translate_to_protobuf(#remove_share{}) ->
+    {remove_share, #'RemoveShare'{}};
+translate_to_protobuf(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+    {share, #'Share'{share_id = ShareId, share_file_uuid = ShareGuid}};
 
 
 %% DBSYNC

@@ -19,11 +19,11 @@
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
     read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, update_times/6,
-    get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/4, get_acl/3, set_acl/4,
+    get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
-    check_perms/4]).
+    check_perms/4, create_share/4, remove_share/3, remove_share_by_guid/3]).
 
 %%%===================================================================
 %%% API
@@ -295,13 +295,13 @@ remove_xattr(Worker, SessId, FileKey, XattrKey) ->
             Host ! {self(), Result}
         end).
 
--spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), boolean()) ->
+-spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), boolean(), boolean()) ->
     {ok, [xattr:name()]} | logical_file_manager:error_reply().
-list_xattr(Worker, SessId, FileKey, Inherited) ->
+list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited),
+                logical_file_manager:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited, ShowInternal),
             Host ! {self(), Result}
         end).
 
@@ -407,32 +407,64 @@ rm_recursive(Worker, SessId, FileKey) ->
         end).
 
 -spec get_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), [binary()], boolean()) -> {ok, maps:map()}.
-get_metadata(Worker, SessionId, FileKey, Type, Names, Inherited) ->
+get_metadata(Worker, SessId, FileKey, Type, Names, Inherited) ->
         exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:get_metadata(SessionId, FileKey, Type, Names, Inherited),
+                logical_file_manager:get_metadata(SessId, FileKey, Type, Names, Inherited),
             Host ! {self(), Result}
         end).
 
 -spec set_metadata(node(), session:id(), logical_file_manager:file_key(), binary(), maps:map(), [binary()]) -> ok.
-set_metadata(Worker, SessionId, FileKey, Type, Value, Names) ->
+set_metadata(Worker, SessId, FileKey, Type, Value, Names) ->
         exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:set_metadata(SessionId, FileKey, Type, Value, Names),
+                logical_file_manager:set_metadata(SessId, FileKey, Type, Value, Names),
             Host ! {self(), Result}
         end).
 
 -spec check_perms(node(), session:id(), logical_file_manager:file_key(), helpers:open_mode()) ->
     {ok, boolean()} | {error, term()}.
-check_perms(Worker, SessionId, FileKey, OpenMode) ->
+check_perms(Worker, SessId, FileKey, OpenMode) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:check_perms(SessionId, FileKey, OpenMode),
+                logical_file_manager:check_perms(SessId, FileKey, OpenMode),
             Host ! {self(), Result}
         end).
+
+-spec create_share(node(), session:id(), logical_file_manager:file_key(), share_info:name()) ->
+    {ok, {share_info:id(), share_info:share_guid()}} | {error, term()}.
+create_share(Worker, SessId, FileKey, Name) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:create_share(SessId, FileKey, Name),
+            Host ! {self(), Result}
+        end).
+
+-spec remove_share(node(), session:id(), share_info:id()) ->
+    ok | {error, term()}.
+remove_share(Worker, SessId, FileKey) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:remove_share(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec remove_share_by_guid(node(), session:id(), share_info:share_guid()) ->
+    ok | {error, term()}.
+remove_share_by_guid(Worker, SessId, ShareGuid) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:remove_share_by_guid(SessId, ShareGuid),
+            Host ! {self(), Result}
+        end).
+
+%todo refactor this module
 
 %%%===================================================================
 %%% Internal functions
@@ -459,6 +491,6 @@ exec(Worker, Fun) ->
 uuid_to_guid(W, {uuid, UUID}) ->
     {guid, uuid_to_guid(W, UUID)};
 uuid_to_guid(W, UUID) when is_binary(UUID) ->
-    rpc:call(W, fslogic_uuid, to_file_guid, [UUID]);
+    rpc:call(W, fslogic_uuid, uuid_to_guid, [UUID]);
 uuid_to_guid(_, Other) ->
     Other.

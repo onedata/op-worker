@@ -37,6 +37,7 @@ models() -> [
     file_location,
     provider_info,
     space_info,
+    share_info,
     space_storage,
     ceph_user,
     s3_user,

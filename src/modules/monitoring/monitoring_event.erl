@@ -37,6 +37,7 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
     event:emit(#event{object = EventBase#storage_used_updated{user_id = undefined}}),
     case UserId of
         ?ROOT_USER_ID -> ok;
+        ?GUEST_USER_ID -> ok; % todo store guest statistics
         _ ->
             event:emit(#event{object = EventBase#storage_used_updated{user_id = UserId}})
     end.
@@ -64,6 +65,7 @@ emit_file_operations_statistics(SpaceId, UserId, DataAccessRead, DataAccessWrite
     BlockAccessRead, BlockAccessWrite) ->
     case UserId of
         ?ROOT_USER_ID -> ok;
+        ?GUEST_USER_ID -> ok;
         _ ->
             EventBase = #file_operations_statistics{
                 space_id = SpaceId,
@@ -112,6 +114,7 @@ emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
     },
     event:emit(#event{object = EventBase#rtransfer_statistics{user_id = undefined}}),
     case UserId of
+        ?GUEST_USER_ID -> ok;
         ?ROOT_USER_ID -> ok;
         _ ->
             event:emit(#event{object = EventBase#rtransfer_statistics{user_id = UserId}})

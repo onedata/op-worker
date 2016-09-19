@@ -119,6 +119,9 @@ auth_to_rest_client(#basic_auth{credentials = Credentials}) ->
 auth_to_rest_client(?ROOT_SESS_ID) ->
     provider;
 
+auth_to_rest_client(?GUEST_SESS_ID) ->
+    provider;
+
 auth_to_rest_client(SessId) when is_binary(SessId) ->
     {ok, #document{
         value = #session{

@@ -72,7 +72,7 @@
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/2, list_xattr/3, update_times/4,
+    remove_xattr/2, remove_xattr/3, list_xattr/3, list_xattr/4, update_times/4,
     update_times/5]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -80,7 +80,7 @@
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
--export([create_share/2, get_share/1, remove_share/1]).
+-export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5]).
 
@@ -311,7 +311,6 @@ get_file_distribution(SessId, FileKey) ->
 replicate_file(SessId, FileKey, ProviderId) ->
     ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Changes the permissions of a file.
@@ -323,7 +322,6 @@ replicate_file(SessId, FileKey, ProviderId) ->
 set_perms(SessId, FileKey, NewPerms) ->
     ?run(fun() -> lfm_perms:set_perms(SessId, FileKey, NewPerms) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if current user has given permissions for given file.
@@ -333,7 +331,6 @@ set_perms(SessId, FileKey, NewPerms) ->
     {ok, boolean()} | error_reply().
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -350,7 +347,6 @@ get_acl(Handle) ->
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates file's Access Control List.
@@ -366,7 +362,6 @@ set_acl(Handle, EntityList) ->
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Remove file's Access Control List.
@@ -381,7 +376,6 @@ remove_acl(Handle) ->
 remove_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:remove_acl(SessId, FileKey) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file attributes.
@@ -395,7 +389,6 @@ stat(Handle) ->
 -spec stat(session:id(), file_key()) -> {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -414,7 +407,6 @@ update_times(Handle, ATime, MTime, CTime) ->
 update_times(SessId, FileKey, ATime, MTime, CTime) ->
     ?run(fun() -> lfm_attrs:update_times(SessId, FileKey, ATime, MTime, CTime) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's extended attribute by key.
@@ -430,7 +422,6 @@ get_xattr(Handle, XattrName, Inherited) ->
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
     ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates file's extended attribute by key.
@@ -443,7 +434,6 @@ set_xattr(Handle, Xattr) ->
 -spec set_xattr(session:id(), file_key(), #xattr{}) -> ok | error_reply().
 set_xattr(SessId, FileKey, Xattr) ->
     ?run(fun() -> lfm_attrs:set_xattr(SessId, FileKey, Xattr) end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -463,14 +453,15 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %% Returns complete list of extended attributes of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(handle(), boolean()) -> {ok, [xattr:name()]} | error_reply().
-list_xattr(Handle, Inherited) ->
-    ?run(fun() -> lfm_attrs:list_xattr(Handle, Inherited) end).
-
--spec list_xattr(session:id(), file_key(), boolean()) ->
+-spec list_xattr(handle(), boolean(), boolean()) ->
     {ok, [xattr:name()]} | error_reply().
-list_xattr(SessId, FileKey, Inherited) ->
-    ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited) end).
+list_xattr(Handle, Inherited, ShowInternal) ->
+    ?run(fun() -> lfm_attrs:list_xattr(Handle, Inherited, ShowInternal) end).
+
+-spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
+    {ok, [xattr:name()]} | error_reply().
+list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
+    ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal) end).
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
@@ -538,7 +529,6 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 create_symlink(Path, TargetFileKey) ->
     ?run(fun() -> lfm_links:create_symlink(Path, TargetFileKey) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns the symbolic link's target file.
@@ -549,7 +539,6 @@ create_symlink(Path, TargetFileKey) ->
 read_symlink(FileKey) ->
     ?run(fun() -> lfm_links:read_symlink(FileKey) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a symbolic link.
@@ -559,40 +548,34 @@ read_symlink(FileKey) ->
 remove_symlink(FileKey) ->
     ?run(fun() -> lfm_links:remove_symlink(FileKey) end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a share for given file. File can be shared with anyone or
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(FileKey :: file_key(),
-    ShareWith :: all | [{user, onedata_user:id()} | {group, onedata_group:id()}]) ->
-    {ok, lfm_shares:share_id()} | error_reply().
-create_share(Path, ShareWith) ->
-    ?run(fun() -> lfm_shares:create_share(Path, ShareWith) end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns shared file by share_id.
-%% @end
-%%--------------------------------------------------------------------
--spec get_share(lfm_shares:share_id()) ->
-    {ok, {file_meta:uuid(), file_meta:name()}} | error_reply().
-get_share(ShareID) ->
-    ?run(fun() -> lfm_shares:get_share(ShareID) end).
-
+-spec create_share(session:id(), file_key(), share_info:name()) ->
+    {ok, {share_info:id(), share_info:share_guid()}} | error_reply().
+create_share(SessId, FileKey, Name) ->
+    ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes file share by ShareID.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(lfm_shares:share_id()) -> ok | error_reply().
-remove_share(ShareID) ->
-    ?run(fun() -> lfm_shares:remove_share(ShareID) end).
+-spec remove_share(session:id(), share_info:id()) -> ok | error_reply().
+remove_share(SessId, ShareID) ->
+    ?run(fun() -> lfm_shares:remove_share(SessId, ShareID) end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file share by ShareGuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share_by_guid(session:id(), share_info:share_guid()) -> ok | error_reply().
+remove_share_by_guid(SessId, ShareGuid) ->
+    ?run(fun() -> lfm_shares:remove_share_by_guid(SessId, ShareGuid) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -603,7 +586,6 @@ remove_share(ShareID) ->
     {ok, maps:map()} | error_reply().
 get_metadata(SessId, FileKey, Type, Names, Inherited) ->
     ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names, Inherited) end).
-
 
 %%--------------------------------------------------------------------
 %% @doc

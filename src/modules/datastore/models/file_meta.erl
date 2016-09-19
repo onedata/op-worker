@@ -49,7 +49,9 @@
     exists_local_link_doc/1, get_child/2]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 -export([hidden_file_name/1]).
+-export([add_share/2, remove_share/2]).
 
+-type doc() :: datastore:document().
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
@@ -64,7 +66,7 @@
 -type file_meta() :: model_record().
 -type posix_permissions() :: non_neg_integer().
 
--export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
+-export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
     size/0, mode/0, time/0, symlink_value/0, posix_permissions/0, file_meta/0]).
 
 %%%===================================================================
@@ -660,7 +662,7 @@ get_space_dir(SpaceId) ->
 to_uuid({uuid, UUID}) ->
     {ok, UUID};
 to_uuid({guid, FileGUID}) ->
-    {ok, fslogic_uuid:file_guid_to_uuid(FileGUID)};
+    {ok, fslogic_uuid:guid_to_uuid(FileGUID)};
 to_uuid(#document{key = UUID}) ->
     {ok, UUID};
 to_uuid({path, Path}) ->
@@ -746,6 +748,30 @@ set_link_context_default() ->
     erlang:put(mother_scope, MyProvID),
     erlang:put(other_scopes, []),
     ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add shareId to file meta
+%% @end
+%%--------------------------------------------------------------------
+-spec add_share(uuid(), share_info:id()) -> {ok, uuid()}  | datastore:generic_error().
+add_share(FileUuid, ShareId) ->
+    update({uuid, FileUuid},
+        fun(FileMeta = #file_meta{shares = Shares}) ->
+            {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove shareId from file meta
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share(uuid(), share_info:id()) -> {ok, uuid()} | datastore:generic_error().
+remove_share(FileUuid, ShareId) ->
+    update({uuid, FileUuid},
+        fun(FileMeta = #file_meta{shares = Shares}) ->
+            {ok, FileMeta#file_meta{shares = Shares -- [ShareId]}}
+        end).
 
 %%%===================================================================
 %%% Internal functions

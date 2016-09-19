@@ -78,7 +78,7 @@ get(Key) ->
             {ok, D#document{value = S#space_info{providers = ProviderIds}}};
         {ok, Doc} ->
             {ok, Doc}
-    end .
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -160,7 +160,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec get(SpaceId :: binary(), UserId :: onedata_user:id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get(SpaceId, ?ROOT_USER_ID) ->
+get(SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
     case space_info:get(SpaceId) of
         {ok, Doc} -> {ok, Doc};
         {error, Reason} -> {error, Reason}
@@ -200,8 +200,8 @@ get_or_fetch(SessionId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_or_fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
     UserId :: onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) ->
-    case get(SpaceId, ?ROOT_USER_ID) of
+get_or_fetch(Auth, SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
+    case get(SpaceId, SpecialUser) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Auth, SpaceId);
         {error, Reason} -> {error, Reason}
@@ -237,8 +237,12 @@ get_or_fetch(Auth, SpaceId, UserId) ->
 -spec fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Auth, SpaceId) ->
-    {ok, #space_details{name = Name, providers_supports = Supports}} =
-        oz_spaces:get_details(Auth, SpaceId),
+    {ok, #space_details{
+        name = Name,
+        providers_supports = Supports,
+        shares = Shares
+    }} = oz_spaces:get_details(Auth, SpaceId),
+
     {ok, GroupIds} = oz_spaces:get_groups(Auth, SpaceId),
     {ok, UserIds} = oz_spaces:get_users(Auth, SpaceId),
 
@@ -256,11 +260,12 @@ fetch(Auth, SpaceId) ->
     end, UserIds),
 
     Doc = #document{key = SpaceId, value = #space_info{
+        name = Name,
         users = UsersWithPrivileges,
         groups = GroupsWithPrivileges,
         providers_supports = Supports,
-        name = Name,
-        providers = ProviderIds
+        providers = ProviderIds,
+        shares = Shares
     }},
 
     case create(Doc) of

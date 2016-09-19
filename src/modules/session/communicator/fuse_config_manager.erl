@@ -64,7 +64,7 @@ get_configuration() ->
     #fuse_response{}.
 create_storage_test_file(SessId, #create_storage_test_file{storage_id = StorageId, file_uuid = FileGUID}) ->
     {ok, UserId} = session:get_user_id(SessId),
-    FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}, UserId),
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, HelperInit} = fslogic_storage:select_helper(StorageDoc),

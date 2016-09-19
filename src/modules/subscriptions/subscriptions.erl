@@ -24,8 +24,8 @@
 
 -type(seq() :: non_neg_integer()).
 -type(rev() :: term()).
--type(model() :: onedata_group | onedata_user | space_info | provider_info).
--type(record() :: #space_info{} | #onedata_user{} | #onedata_group{} | #provider_info{}).
+-type(model() :: onedata_group | onedata_user | space_info | share_info | provider_info).
+-type(record() :: #space_info{} | #onedata_user{} | #onedata_group{} | #share_info{} | #provider_info{}).
 -export_type([seq/0, rev/0, model/0, record/0]).
 
 %%--------------------------------------------------------------------
@@ -80,6 +80,8 @@ get_users() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec put_user(UserID :: onedata_user:id()) -> ok.
+put_user(?GUEST_USER_ID) ->
+    ok;
 put_user(?ROOT_USER_ID) ->
     ok;
 put_user(UserID) ->
@@ -167,6 +169,8 @@ get_users_with_session() ->
     {ok, Docs} = session:all_with_user(),
     lists:filtermap(fun
         (#document{value = #session{identity = #user_identity{user_id = ?ROOT_USER_ID}}}) ->
+            false;
+        (#document{value = #session{identity = #user_identity{user_id = ?GUEST_USER_ID}}}) ->
             false;
         (#document{value = #session{identity = #user_identity{user_id = UserID}}}) ->
             {true, UserID};

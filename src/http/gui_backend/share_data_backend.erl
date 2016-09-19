@@ -1,17 +1,16 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @author Jakub Liput
-%%% @copyright (C) 2015-2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the data-space model used in Ember application.
+%%% the share model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(data_space_data_backend).
+-module(share_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 
@@ -19,11 +18,15 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+
+%% API
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([share_record/1]).
 
 %%%===================================================================
 %%% API functions
@@ -56,32 +59,8 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space">>, SpaceId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
-    {ok, #document{
-        value = #space_info{
-            name = Name,
-            providers_supports = Providers
-        }}} = space_logic:get(UserAuth, SpaceId, UserId),
-    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
-    % If current provider is not supported, return null rootDir which will
-    % cause the client to render a "space not supported" message.
-    RootDir = case Providers of
-        [] ->
-            null;
-        _ ->
-            fslogic_uuid:uuid_to_guid(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
-    end,
-    Res = [
-        {<<"id">>, SpaceId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"rootDir">>, RootDir},
-        {<<"space">>, SpaceId}
-    ],
-    {ok, Res}.
-
+find(<<"share">>, ShareId) ->
+    {ok, share_record(ShareId)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,15 +69,24 @@ find(<<"data-space">>, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"data-space">>) ->
+find_all(<<"share">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
+    % TODO check privileges
+    ShareIds = lists:foldl(
+        fun(SpaceId, Acc) ->
+            {ok, #document{
+                value = #space_info{
+                    shares = Shares
+                }}} = space_info:get(SpaceId),
+            Shares ++ Acc
+        end, [], SpaceIds),
     Res = lists:map(
-        fun(SpaceId) ->
-            {ok, Data} = find(<<"data-space">>, SpaceId),
-            Data
-        end, SpaceIds),
+        fun(ShareId) ->
+            {ok, ShareData} = find(<<"share">>, ShareId),
+            ShareData
+        end, ShareIds),
     {ok, Res}.
 
 
@@ -109,7 +97,7 @@ find_all(<<"data-space">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"data-space">>, _Data) ->
+find_query(<<"share">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -120,7 +108,7 @@ find_query(<<"data-space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"data-space">>, _Data) ->
+create_record(<<"share">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -132,8 +120,26 @@ create_record(<<"data-space">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"data-space">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    case Name of
+        undefined ->
+            ok;
+        <<"">> ->
+            gui_error:report_warning(
+                <<"Cannot set share name to empty string.">>);
+        NewName ->
+            case share_logic:set_name(UserAuth, ShareId, NewName) of
+                ok ->
+                    ok;
+                {error, {403, <<>>, <<>>}} ->
+                    gui_error:report_warning(<<"You do not have permissions to "
+                    "manage shares in this space.">>);
+                _ ->
+                    gui_error:report_warning(
+                        <<"Cannot change share name due to unknown error.">>)
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -143,5 +149,45 @@ update_record(<<"data-space">>, _Id, _Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"data-space">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>).
+delete_record(<<"share">>, ShareId) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:remove_share(SessionId, ShareId) of
+        ok ->
+            ok;
+        {error, ?EACCES} ->
+            gui_error:report_warning(<<"You do not have permissions to "
+            "manage shares in this space.">>);
+        _ ->
+            gui_error:report_warning(
+                <<"Cannot remove share due to unknown error.">>)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant share record based on share id.
+%% @end
+%%--------------------------------------------------------------------
+-spec share_record(ShareId :: binary()) -> proplists:proplist().
+share_record(ShareId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{
+        value = #share_info{
+            name = Name,
+            root_file_id = RootFileId,
+            parent_space = ParentSpaceId,
+            public_url = PublicURL
+        }}} = share_logic:get(UserAuth, ShareId),
+    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
+    [
+        {<<"id">>, ShareId},
+        {<<"name">>, Name},
+        {<<"file">>, FileId},
+        {<<"dataSpace">>, ParentSpaceId},
+        {<<"publicUrl">>, PublicURL}
+    ].
