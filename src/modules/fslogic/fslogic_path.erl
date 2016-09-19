@@ -270,13 +270,18 @@ check_path(Uuid, Name, ChildUuid) ->
     case file_meta:get({uuid, Uuid}) of
         {ok, #document{value = #file_meta{name = NewName}} = Doc} ->
             case file_meta:get_child(Doc, Name) of
-                {ok, {ChildUuid, file_meta}} ->
-                    case file_meta:get_parent_uuid(Doc) of
-                        {ok, ?ROOT_DIR_UUID} ->
-                            ok;
-                        {ok, ParentUuid} ->
-                            check_path(ParentUuid, NewName, Uuid);
-                        _ ->
+                {ok, UUIDs} ->
+                    case lists:member(ChildUuid, UUIDs) of
+                        true ->
+                            case file_meta:get_parent_uuid(Doc) of
+                                {ok, ?ROOT_DIR_UUID} ->
+                                    ok;
+                                {ok, ParentUuid} ->
+                                    check_path(ParentUuid, NewName, Uuid);
+                                _ ->
+                                    {path_error, {Uuid, Name, ChildUuid}}
+                            end;
+                        false ->
                             {path_error, {Uuid, Name, ChildUuid}}
                     end;
                 _ ->
