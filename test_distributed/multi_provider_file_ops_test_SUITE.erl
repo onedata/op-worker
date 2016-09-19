@@ -29,14 +29,14 @@
     proxy_basic_opts_test1/1, proxy_many_ops_test1/1, proxy_distributed_modification_test1/1,
     proxy_basic_opts_test2/1, proxy_many_ops_test2/1, proxy_distributed_modification_test2/1,
     db_sync_many_ops_test_base/1, proxy_many_ops_test1_base/1, proxy_many_ops_test2_base/1,
-    file_consistency_test/1, file_consistency_test_base/1
+    file_consistency_test/1, file_consistency_test_base/1, concurrent_create_test/1
 ]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
     proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
     proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
-    file_consistency_test
+    file_consistency_test, concurrent_create_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -106,6 +106,117 @@ proxy_many_ops_test2_base(Config) ->
 
 proxy_distributed_modification_test2(Config) ->
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
+
+oncurrent_create_test(Config) ->
+    FileCount = 3,
+    Workers = ?config(op_worker_nodes, Config),
+    ProvIDs0 = lists:map(fun(Worker) ->
+        rpc:call(Worker, oneprovider, get_provider_id, [])
+                         end, Workers),
+
+    ProvIdCount = length(lists:usort(ProvIDs0)),
+
+    ProvIDs = lists:zip(Workers, ProvIDs0),
+    ProvMap = lists:foldl(
+        fun({Worker, ProvId}, Acc) ->
+            maps:put(ProvId, [Worker | maps:get(ProvId, Acc, [])], Acc)
+        end, #{}, ProvIDs),
+
+    W = fun(N) ->
+        [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
+        Worker
+        end,
+
+    User = <<"user1">>,
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
+
+    ct:print("WMap: ~p", [{W(1), W(2), ProvMap}]),
+
+    DirBaseName = <<SpaceName/binary, "/concurrent_create_test_">>,
+
+    TestMaster = self(),
+
+    DirName = fun(N) ->
+        NameSuffix = integer_to_binary(N),
+        <<DirBaseName/binary, NameSuffix/binary>>
+              end,
+
+    AllFiles = lists:map(
+        fun(N) ->
+
+            Files = lists:foldl(fun
+                                    (10, retry) ->
+                                        throw(unable_to_make_concurrent_create);
+                                    (_, L) when is_list(L) ->
+                                        L;
+                                    (_, _) ->
+                                        lists:foreach(
+                                            fun(WId) ->
+                                                lfm_proxy:unlink(W(WId), SessId(W(WId)), {path, DirName(N)})
+                                            end, lists:seq(1, ProvIdCount)),
+
+                                        lists:foreach(
+                                            fun(WId) ->
+                                                spawn(fun() ->
+                                                    TestMaster ! {WId, lfm_proxy:mkdir(W(WId), SessId(W(WId)), DirName(N), 8#755)}
+                                                      end)
+                                            end, lists:seq(1, ProvIdCount)),
+
+                                        try
+                                            lists:map(
+                                                fun(WId) ->
+                                                    receive
+                                                        {WId, {ok, GUID}} ->
+                                                            {WId, GUID};
+                                                        {WId, {error, _}} ->
+                                                            throw(not_concurrent)
+                                                    end
+                                                end, lists:seq(1, ProvIdCount))
+                                        catch
+                                            not_concurrent ->
+                                                retry
+                                        end
+
+
+                                end, start, lists:seq(1, 10)),
+            {N, Files}
+        end, lists:seq(1, FileCount)),
+
+    ct:print("AllFiles ~p", [AllFiles]),
+
+    timer:sleep(10000),
+
+    lists:foreach(
+        fun(WId) ->
+            {ok, ChildList} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, SpaceName}, 0, 1000),
+            ExpectedChildCount = ProvIdCount * FileCount,
+            {FetchedIds, FetchedNames} = lists:unzip(ChildList),
+            {_, IdsPerWorker} = lists:unzip(AllFiles),
+            Ids = [GUID || {_, GUID} <- lists:flatten(IdsPerWorker)],
+            ExpectedIds = lists:usort(Ids),
+
+            ct:print("Check ~p", [{lists:usort(Ids), lists:usort(FetchedIds)}]),
+
+            ?assertMatch(ExpectedChildCount, length(ChildList)),
+            ?assertMatch(ExpectedChildCount, length(lists:usort(FetchedNames))),
+            ?assertMatch(ExpectedIds, lists:usort(FetchedIds)),
+
+            lists:foreach(
+                fun(FileNo) ->
+                    LocalIdsPerWorker = proplists:get_value(FileNo, AllFiles),
+                    LocalGUID = proplists:get_value(WId, lists:flatten(LocalIdsPerWorker)),
+                    LocalName = proplists:get_value(LocalGUID, ChildList),
+                    ExpectedName = filename:basename(DirName(FileNo)),
+                    ct:print("Local name test ~p", [{FileNo, LocalGUID, ExpectedName, LocalName}]),
+
+                    ?assertMatch(ExpectedName, LocalName)
+                end, lists:seq(1, FileCount))
+
+        end, lists:seq(1, ProvIdCount)),
+
+    ok.
 
 file_consistency_test(Config) ->
     ?PERFORMANCE(Config, [

@@ -134,17 +134,21 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         ctime = CTime,
         uid = UserId
     },
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
-    {ok, _} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
+
+    [$/ | FileToCompareFID] = binary_to_list(?rpc(fslogic_utils, gen_storage_file_id, [{uuid, FileToCompareUUID}])),
+    [$/ | FileFID] = binary_to_list(?rpc(fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}])),
 
     %when
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
 
     %then
-    Uid = ?rpc(luma_utils, gen_storage_uid, [UserId]),
-    {ok, CorrectFileInfo} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
-    {ok, FileInfo} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
+    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [UserId]),
+    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
+    {ok, FileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileFID])]),
     ?assertEqual(Uid, FileInfo#file_info.uid),
     ?assertNotEqual(0, FileInfo#file_info.uid),
     ?assertEqual(CorrectFileInfo#file_info.uid, FileInfo#file_info.uid),
@@ -176,9 +180,14 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         ctime = CTime,
         uid = ExternalUser
     },
-    {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
-    {ok, FileUuid2} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
-    {ok, _} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid2} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
+    {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
+    FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
+
+    [$/ | FileToCompareFID] = binary_to_list(rpc:call(W1, fslogic_utils, gen_storage_file_id, [{uuid, FileToCompareUUID}])),
+    [$/ | File1FID] = binary_to_list(rpc:call(W1, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}])),
+    [$/ | File2FID] = binary_to_list(rpc:call(W1, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid2}])),
 
     %when
     ?rpc(dbsync_events, change_replicated,
@@ -188,11 +197,13 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ?rpc(onedata_user, create, [#document{key = ExternalUser, value = #onedata_user{name = <<"User">>, spaces = [{SpaceId, SpaceName}]}}]),
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
 
+
+
     %then
-    Uid = ?rpc(luma_utils, gen_storage_uid, [ExternalUser]),
-    {ok, CorrectFileInfo} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"file_to_compare::1">>])]),
-    {ok, FileInfo1} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file::1">>])]),
-    {ok, FileInfo2} = ?rpc(file, read_file_info, [filename:join([StorageDir, SpaceId, <<"test_file2::1">>])]),
+    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [ExternalUser]),
+    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
+    {ok, FileInfo1} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File1FID])]),
+    {ok, FileInfo2} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File2FID])]),
     ?assertEqual(Uid, FileInfo1#file_info.uid),
     ?assertEqual(Uid, FileInfo2#file_info.uid),
     ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo1#file_info.uid),
@@ -1051,7 +1062,7 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     ModelConfig = ?rpc(file_meta, model_init, []),
     FM_SL = ModelConfig#model_config.store_level,
     {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FM_SL, file_meta, Dir1Uuid]),
-    ok = ?rpc(datastore, delete, [FM_SL, file_meta, Dir1Uuid]),
+    ok = ?rpc(datastore, delete, [FM_SL, file_meta, Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
     timer:sleep(1000), % wait for posthook that deletes file_consistency record
 
     %when
