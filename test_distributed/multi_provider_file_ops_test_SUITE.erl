@@ -107,7 +107,7 @@ proxy_many_ops_test2_base(Config) ->
 proxy_distributed_modification_test2(Config) ->
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
 
-oncurrent_create_test(Config) ->
+concurrent_create_test(Config) ->
     FileCount = 3,
     Workers = ?config(op_worker_nodes, Config),
     ProvIDs0 = lists:map(fun(Worker) ->
