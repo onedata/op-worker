@@ -166,15 +166,20 @@ notify_waiting(Doc = #document{key = FileUuid,
                 false;
             [{link_to_child, WaitName, ChildUuid}] ->
                 case catch file_meta:get_child({uuid, FileUuid}, WaitName) of
-                    {ok, {ChildUuid, file_meta}} ->
-                        Pid ! file_is_now_consistent,
-                        case is_process_alive(Pid) of
+                    {ok, ChildrenUUIDs} ->
+                        case lists:member(ChildUuid, ChildrenUUIDs) of
                             true ->
-                                ok;
-                            _ ->
-                                spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
-                        end,
-                        false;
+                                Pid ! file_is_now_consistent,
+                                case is_process_alive(Pid) of
+                                    true ->
+                                        ok;
+                                    _ ->
+                                        spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                                end,
+                                false;
+                            false ->
+                                true
+                        end;
                     _ ->
                         true
                 end;
@@ -249,9 +254,14 @@ check_missing_components(FileUuid, SpaceId, [parent_links | RestMissing], Found)
             check_missing_components(FileUuid, SpaceId, RestMissing, [{parent_links_partial, NewArgs} | Found])
     end;
 check_missing_components(FileUuid, SpaceId, [{link_to_child, WaitName, ChildUuid} | RestMissing], Found) ->
-    case catch file_meta:get_child({uuid, FileUuid}, WaitName) of
-        {ok, {ChildUuid, file_meta}} ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, [{link_to_child, WaitName, ChildUuid} | Found]);
+    case catch file_meta:get_child({uuid, FileUuid}, WaitName)  of
+        {ok, ChildrenUUIDs} ->
+            case lists:member(ChildUuid, ChildrenUUIDs) of
+                true ->
+                    check_missing_components(FileUuid, SpaceId, RestMissing, [{link_to_child, WaitName, ChildUuid} | Found]);
+                false ->
+                    check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+            end;
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;

@@ -31,6 +31,7 @@
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
 -define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
+-define(ETS_CACHE_NAME, doc_cache).
 
 -type queue_id() :: binary().
 -type queue() :: global | {provider, oneprovider:id(), queue_id()}.
@@ -70,6 +71,7 @@ init(_Args) ->
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
+        catch ets:new(?ETS_CACHE_NAME, [named_table, set, public]),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -120,7 +122,7 @@ init_stream(Since, Until, Queue) ->
                     (Seq, Doc, Model) ->
                         worker_proxy:call(dbsync_worker, {Queue,
                             #change{seq = couchdb_datastore_driver:normalize_seq(Seq), doc = Doc, model = Model}})
-                end, Since, NewUntil);
+                end, Since, NewUntil, couchdb_datastore_driver:sync_enabled_bucket());
         _ ->
             {ok, already_started}
     end.
@@ -154,7 +156,7 @@ handle({reemit, Msg}) ->
 
 handle(bcast_status) ->
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
-    catch bcast_status();
+        catch bcast_status();
 
 handle(requested_bcast_status) ->
     bcast_status();
@@ -184,8 +186,9 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
                     queue_push(QueueKey, {init_batch, Seq}, SpaceId);
                 {ok, SpaceId} ->
                     case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
-                        ok -> queue_push(QueueKey, Change, SpaceId);
-                        _  -> skip
+                        ok ->
+                            queue_push(QueueKey, Change, SpaceId);
+                        _ -> skip
                     end;
                 {error, not_a_space} ->
                     skip;
@@ -220,8 +223,8 @@ handle({flush_queue, QueueKey}) ->
         global ->
             CTime = erlang:monotonic_time(milli_seconds),
             case dbsync_utils:temp_get(last_global_flush) of
-                FTime when  is_integer(FTime),
-                            FTime + FlushInterval / 2 > CTime ->
+                FTime when is_integer(FTime),
+                    FTime + FlushInterval / 2 > CTime ->
                     ?info("[ DBSync ] Flush loop is too fast, breaking this one."),
                     throw({too_many_flush_loops, {flush_queue, QueueKey}});
                 _ ->
@@ -367,7 +370,7 @@ queue_push(QueueKey, {init_batch, Seq}, SpaceId) ->
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
                 until = queue_calculate_until(UntilToSet, Queue1)}
         end);
-queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
+queue_push(QueueKey, #change{seq = Until, doc = #document{key = ChangeKey}} = Change, SpaceId) ->
     state_update({queue, QueueKey},
         fun(Queue) ->
             Queue1 =
@@ -379,7 +382,12 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
             BatchMap = Queue1#queue.batch_map,
             Since = Queue1#queue.since,
             Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
-            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = max(Until, Since)},
+            FilteredChanges = lists:filter(
+                fun(#change{doc = #document{key = Key}}) ->
+                    ChangeKey /= Key
+                end, Batch0#batch.changes),
+            ?debug("Changes stream aggregation level: ~p", [length(FilteredChanges) / length(Batch0#batch.changes)]),
+            Batch = Batch0#batch{changes = [Change | FilteredChanges], until = max(Until, Since)},
             UntilToSet = max(Batch0#batch.until, Until),
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
                 until = queue_calculate_until(UntilToSet, Queue1)}
@@ -461,6 +469,74 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
             retrieve_stashed_batch(FromProvider, SpaceId, Batch)
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets current version of links' document.
+%% @end
+%%--------------------------------------------------------------------
+-spec forign_links_get(model_behaviour:model_config(), datastore:ext_key()) ->
+    {ok, datastore:document()} | {error, Reason :: any()}.
+forign_links_get(ModelConfig, Key) ->
+    case ets:lookup(?ETS_CACHE_NAME, Key) of
+        [] ->
+            case couchdb_datastore_driver:get(ModelConfig, couchdb_datastore_driver:default_bucket(), Key) of
+                {ok, Doc = #document{key = Key}} ->
+                    ets:insert_new(?ETS_CACHE_NAME, {Key, Doc}),
+                    {ok, Doc};
+                Error ->
+                    Error
+            end;
+        [{_, Doc}] ->
+            {ok, Doc}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves links document received from other provider and returns current version of given document.
+%% @end
+%%--------------------------------------------------------------------
+-spec forign_links_save(model_behaviour:model_config(), OldRevNum :: non_neg_integer(), datastore:document()) ->
+    {ok, datastore:document()} | {error, Reason :: any()}.
+forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewRevNum, _}}) ->
+    MaxCacheSize = ?CHANGES_STASH_MAX_SIZE_BYTES,
+    case ets:info(?ETS_CACHE_NAME, memory) of
+        V when V > MaxCacheSize ->
+            ets:delete_all_objects(?ETS_CACHE_NAME);
+        _ -> ok
+    end,
+
+
+    case couchdb_datastore_driver:force_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc) of
+        {ok, _} ->
+            case OldRevNum of
+                _ when OldRevNum > NewRevNum ->
+                    ok;
+                _ when OldRevNum < NewRevNum ->
+                    ets:insert(?ETS_CACHE_NAME, {Key, Doc});
+                _ ->
+                    ets:delete(?ETS_CACHE_NAME, Key)
+
+            end,
+            forign_links_get(ModelConfig, Key);
+        Error ->
+            ?error("Unable to save forign links document (key ~p) due to ~p", [Key, Error]),
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Normalizes revision number to simple integer format.
+%% @end
+%%--------------------------------------------------------------------
+-spec rev_to_num(binary() | {non_neg_integer(), term()}) -> non_neg_integer().
+rev_to_num({Num, _}) ->
+    Num;
+rev_to_num(Rev) ->
+    [Num, _] = binary:split(Rev, <<"-">>),
+    binary_to_integer(Num).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Apply list of changes from remote provider.
@@ -475,34 +551,57 @@ apply_changes(SpaceId,
     try
         ModelConfig = ModelName:model_init(),
 
-        {MainDocKey, HelperKeys} = case Value of
+        MainDocKey = case Value of
             #links{} ->
-                % TODO - work only on local tree (after refactoring of link_utils)
                 MDK = Value#links.doc_key,
                 file_meta:set_link_context_for_space(SpaceId),
 
-                OldLinkMap = case couchdb_datastore_driver:get_link_doc(ModelConfig, Key) of
-                                 {ok, #document{value = #links{link_map = OLM}}} -> OLM;
-                                 {error, {not_found, _}} -> #{}
-                             end,
-                HKs = maps:keys(maps:merge(Value#links.link_map, OldLinkMap)),
+                OldLinksMap = case forign_links_get(ModelConfig, Key) of
+                    {ok, #document{value = OldLinks0}} ->
+                        OldLinks0;
+                    {error, _} ->
+                        #links{link_map = #{}, model = ModelName}
+                end,
+                {AddedMap0, DeletedMap0} = links_utils:diff(OldLinksMap, Value),
+                HKs = maps:keys(maps:merge(AddedMap0, DeletedMap0)),
 
                 lists:foreach(fun(LName) ->
                     ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
                 end, HKs),
-                {MDK, HKs};
-             _ ->
-                 ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
-                 {Key, []}
+                MDK;
+            _ ->
+                ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
+                Key
         end,
-        {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+        MyProvId = oneprovider:get_provider_id(),
+        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_link_key(ModelConfig, MainDocKey), fun() ->
+            case Value of
+                #links{origin = MyProvId} ->
+                    ?warning("Received private, local links change from other provider ~p", [Change]),
+                    [];
+                #links{origin = Origin} ->
+                    {OldLinks, OldRev} = case forign_links_get(ModelConfig, Key) of
+                        {ok, #document{value = OldLinks1, rev = RRev}} ->
+                            {OldLinks1, rev_to_num(RRev)};
+                        {error, _Reason0} ->
+                            {#links{link_map = #{}, model = ModelName}, 0}
+                    end,
+                    {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = forign_links_save(ModelConfig, OldRev, Doc),
+                    {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
+                    ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
+                    maps:keys(AddedMap) ++ maps:keys(DeletedMap);
+                _ ->
+                    {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+                    []
+            end
+        end),
 
         case Value of
             #links{} ->
-                % TODO - work only on local tree (after refactoring of link_utils)
                 lists:foreach(fun(LName) ->
-                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName)
-                end, HelperKeys);
+                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName),
+                    ok
+                end, ChangedLinks);
             _ ->
                 ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
         end,
@@ -532,7 +631,7 @@ run_posthooks(SpaceId, [Change | Done]) ->
             try
                 dbsync_events:change_replicated(SpaceId, Change)
             catch
-                E1:E2  ->
+                E1:E2 ->
                     ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
             end,
             ok
@@ -871,11 +970,11 @@ stash_batch(ProviderId, SpaceId, Batch = #batch{since = NewSince, until = NewUnt
                 false ->
                     #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
                     NewBatches = case NewUntil > Until of
-                                     true ->
-                                         maps:put(NewSince, Batch, Batches);
-                                     false ->
-                                         Batches
-                                 end,
+                        true ->
+                            maps:put(NewSince, Batch, Batches);
+                        false ->
+                            Batches
+                    end,
                     {ok, BatchesRecord#dbsync_batches{batches = NewBatches}}
             end
         end),
@@ -895,11 +994,11 @@ retrieve_stashed_batch(ProviderId, SpaceId, #batch{since = NewSince, until = New
         fun(#dbsync_batches{batches = Batches} = BatchesRecord) ->
             #batch{until = Until} = maps:get(NewSince, Batches, #batch{until = 0}),
             NewBatches = case NewUntil >= Until of
-                             true ->
-                                 maps:remove(NewSince, Batches);
-                             false ->
-                                 Batches
-                         end,
+                true ->
+                    maps:remove(NewSince, Batches);
+                false ->
+                    Batches
+            end,
             {ok, BatchesRecord#dbsync_batches{batches = NewBatches}}
         end),
     ok.
@@ -959,7 +1058,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
                     lists:foreach(fun(Key) ->
                         Batch = maps:get(Key, Batches),
                         do_apply_batch_changes(ProviderId, SpaceId, Batch)
-                     end, SortedKeys);
+                    end, SortedKeys);
                 {_, To} when To < Stashed ->
                     % other proc is working - wait
                     timer:sleep(timer:seconds(5)),
@@ -996,8 +1095,8 @@ ensure_global_stream_active() ->
     %% Check if flush loop works
     MaxFlushDelay = ?FLUSH_QUEUE_INTERVAL * 4,
     case dbsync_utils:temp_get(last_global_flush) of
-        LastFlushTime when  is_integer(LastFlushTime),
-                            LastFlushTime + MaxFlushDelay > CTime ->
+        LastFlushTime when is_integer(LastFlushTime),
+            LastFlushTime + MaxFlushDelay > CTime ->
             ok;
         LastFlushTime ->
             %% Initialize new flush loop
@@ -1007,7 +1106,7 @@ ensure_global_stream_active() ->
 
     case is_valid_stream(state_get(changes_stream)) of
         true ->
-            MaxIdleTime = timer:seconds(10),
+            MaxIdleTime = timer:minutes(1),
             case dbsync_utils:temp_get(last_change) of
                 undefined ->
                     dbsync_utils:temp_put(last_change, CTime, 0);

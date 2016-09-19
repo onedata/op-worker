@@ -4,6 +4,19 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc6
+
+* VFS-2180 Improve links conflict resolution
+* VFS-2582 Using GUI fix for blank notifications
+* VFS-2180 Adapt code to cluster_worker's API change
+* VFS-2180 Improve dbsync implementation
+* VFS-2180 Use gen_server2 instead of erlang's gen_server module
+* VFS-2390 Fix handlers specification in REST API
+* VFS-2390 Update rebar to version 3
+* Update memory management
+* VFS-2180 Allow for concurrent file creation
+
+
 ### 3.0.0-rc5
 
 * VFS-2534 Use erlang:system_time/1 instead of os:timestamp/0

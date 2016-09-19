@@ -410,7 +410,7 @@ list_dir_range(Config) ->
 replicate_file_by_id(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    File = <<"/space3/file">>,
+    File = <<"/space3/replicate_file_by_id">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
@@ -427,7 +427,7 @@ replicate_file_by_id(Config) ->
 
     % then
     ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"path\":\"/space3/file\",\"status\":\"completed\",\"targetProviderId\":\"">>,
+        <<"{\"path\":\"/space3/replicate_file_by_id\",\"status\":\"completed\",\"targetProviderId\":\"">>,
         domain(WorkerP2),
         <<"\"}">>
     ]),
@@ -435,6 +435,7 @@ replicate_file_by_id(Config) ->
         do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
     {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode(Body),
+    ct:print("~p", [DecodedBody]),
     assertLists(
         [
             [{<<"providerId">>, domain(WorkerP1)}, {<<"blocks">>, [[0,4]]}],

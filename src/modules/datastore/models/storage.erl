@@ -153,7 +153,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
     datastore:foreach_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME,
-        fun(_LinkName, {Key, storage}, AccIn) ->
+        fun(_LinkName, {_V, [{_, _, Key, storage}]}, AccIn) ->
             {ok, Doc} = get(Key),
             [Doc | AccIn]
         end, []).
