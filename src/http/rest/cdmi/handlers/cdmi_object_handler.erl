@@ -179,7 +179,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{
             JsonBodyWithoutValue = json_utils:encode_map(BodyWithoutValue),
             JsonBodyPrefix =
                 case BodyWithoutValue of
-                    #{} -> <<"{\"value\":\"">>;
+                    #{} = Map when map_size(Map) =:= 0 -> <<"{\"value\":\"">>;
                     _ ->
                         <<(erlang:binary_part(JsonBodyWithoutValue, 0, byte_size(JsonBodyWithoutValue) - 1))/binary, ",\"value\":\"">>
                 end,

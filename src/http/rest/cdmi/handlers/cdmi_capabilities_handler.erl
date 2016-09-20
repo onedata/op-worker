@@ -92,7 +92,7 @@ prepare_capability_ans([<<"parentURI">> | Tail]) ->
 prepare_capability_ans([<<"parentID">> | Tail]) ->
     prepare_capability_ans(Tail);
 prepare_capability_ans([<<"capabilities">> | Tail]) ->
-    (prepare_capability_ans(Tail))#{<<"capabilities">> => ?root_capability_list};
+    (prepare_capability_ans(Tail))#{<<"capabilities">> => ?root_capability_map};
 prepare_capability_ans([<<"childrenrange">> | Tail]) ->
     (prepare_capability_ans(Tail))#{<<"childrenrange">> => <<"0-1">>}; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
 prepare_capability_ans([<<"children">> | Tail]) ->

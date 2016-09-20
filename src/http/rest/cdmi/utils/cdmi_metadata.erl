@@ -109,7 +109,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
         _ ->
             UriMetadataNames = filter_user_metadata_keylist(AllURIMetadataNames),
             lists:foreach(DeleteAttributeFunction, UriMetadataNames -- BodyMetadataNames),
-            lists:foreach(ReplaceAttributeFunction, filter_URI_Names(BodyMetadata, UriMetadataNames))
+            lists:foreach(ReplaceAttributeFunction, maps:to_list(filter_URI_Names(BodyMetadata, UriMetadataNames)))
     end.
 
 %%--------------------------------------------------------------------

@@ -99,7 +99,12 @@ get_ranges(Req, Size) ->
 -spec parse_body(cowboy_req:req()) -> {ok, maps:map(), cowboy_req:req()}.
 parse_body(Req) ->
     {ok, RawBody, Req1} = cowboy_req:body(Req),
-    Body = json_utils:decode_map(RawBody),
+    Body = case RawBody of
+        <<>> ->
+            #{};
+        _ ->
+            json_utils:decode_map(RawBody)
+    end,
     ok = validate_body(Body),
     {ok, Body, Req1}.
 

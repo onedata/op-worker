@@ -246,8 +246,8 @@ get_acl(Uuid, Map) ->
         undefined ->
             case xattr:get_by_name(Uuid, ?ACL_XATTR_NAME) of
                 {ok, Value} ->
-                    AclProplist = json_utils:decode(Value),
-                    Acl = fslogic_acl:from_json_format_to_acl(AclProplist),
+                    AclMap = json_utils:decode_map(Value),
+                    Acl = fslogic_acl:from_json_format_to_acl(AclMap),
                     {Acl, maps:put(Uuid, Acl, Map)};
                 {error, {not_found, custom_metadata}} ->
                     {undefined, maps:put(Uuid, undefined, Map)}
