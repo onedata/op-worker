@@ -155,7 +155,6 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                         case create(FileDoc) of
                             {ok, UUID} ->
                                 SavedDoc = FileDoc#document{key = UUID},
-
                                 set_link_context(Scope),
                                 ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
                                 ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
@@ -197,9 +196,9 @@ fix_parent_links(Parent, Entry) ->
     {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
     {ok, Scope} = get_scope(Parent),
     set_link_context(Scope),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}]),
+    ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
+    ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
+    ok = datastore:set_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}]),
     ok = set_scope(FileDoc, Scope#document.key).
 
 %%--------------------------------------------------------------------
@@ -231,12 +230,13 @@ get(Key) ->
 -spec delete(uuid() | entry()) -> ok | datastore:generic_error().
 delete({uuid, Key}) ->
     delete(Key);
-delete(#document{value = #file_meta{name = FileName}, key = Key} = Doc) ->
+delete(#document{value = #file_meta{name = FileName, version = Version}, key = Key} = Doc) ->
     ?run(begin
         set_link_context(Doc),
         case datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent) of
             {ok, {ParentKey, ?MODEL_NAME}} ->
-                ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME, FileName);
+                ok = delete_child_link_in_parent(ParentKey, FileName, Key),
+                ok = delete_child_link_in_parent(ParentKey, snapshot_name(FileName, Version), Key);
             _ ->
                 ok
         end,
@@ -298,11 +298,11 @@ exists_local_link_doc(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns document of child.
+%% Returns child UUIDs
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child(datastore:document() | {uuid, uuid()}, name()) ->
-    {ok, datastore:normalized_link_target()} | datastore:link_error() | datastore:generic_error().
+    {ok, [uuid()]} | datastore:link_error() | datastore:generic_error().
 get_child({uuid, Uuid}, Name) ->
     case get({uuid, Uuid}) of
         {ok, #document{} = Doc} ->
@@ -312,7 +312,12 @@ get_child({uuid, Uuid}, Name) ->
     end;
 get_child(Doc, Name) ->
     file_meta:set_link_context(Doc),
-    datastore:fetch_link(?LINK_STORE_LEVEL, Doc, Name).
+    case datastore:fetch_full_link(?LINK_STORE_LEVEL, Doc, Name) of
+        {ok, {_, Targets}} ->
+            {ok, [UUID || {_, _, UUID, _} <- Targets]};
+        Other ->
+            Other
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -322,7 +327,7 @@ get_child(Doc, Name) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes).
+        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -371,19 +376,35 @@ list_children(Entry, Offset, Count) ->
             fun
                 (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
                     Acc;
-                (LinkName, {_Key, ?MODEL_NAME}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
+                (LinkName, {_V, [{_, _, _Key, ?MODEL_NAME} | _] = Targets}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
+                    TargetCount = length(Targets),
                     case is_snapshot(LinkName) orelse is_hidden(LinkName) of
                         true ->
                             {Skip, Count1, Acc};
+                        false when TargetCount > Skip ->
+                            TargetsTagged = tag_children(LinkName, Targets),
+                            SelectedTargetsTagged = lists:sublist(TargetsTagged, Skip + 1, TargetCount - Skip),
+                            ChildLinks = lists:map(
+                                fun({LName, LKey}) ->
+                                    #child_link{name = LName, uuid = LKey}
+                                end, SelectedTargetsTagged),
+                            {0, Count1 + (TargetCount - Skip), ChildLinks ++ Acc};
                         false ->
-                            {Skip - 1, Count1, Acc}
+                            {Skip - TargetCount, Count1, Acc}
                     end;
-                (LinkName, {Key, ?MODEL_NAME}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
+                (LinkName, {_V, [{_, _, _Key, ?MODEL_NAME} | _] = Targets}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
+                    TargetCount = length(Targets),
+                    TargetsTagged = tag_children(LinkName, Targets),
+                    SelectedTargetsTagged = lists:sublist(TargetsTagged, min(Count, TargetCount)),
                     case is_snapshot(LinkName) orelse is_hidden(LinkName) of
                         true ->
                             {0, Count1, Acc};
                         false ->
-                            {0, Count1 - 1, [#child_link{uuid = Key, name = LinkName} | Acc]}
+                            ChildLinks = lists:map(
+                                fun({LName, LKey}) ->
+                                    #child_link{name = LName, uuid = LKey}
+                                end, SelectedTargetsTagged),
+                            {0, Count1 - length(ChildLinks), ChildLinks ++ Acc}
                     end;
                 (_LinkName, _LinkTarget, AccIn) ->
                     AccIn
@@ -396,7 +417,37 @@ list_children(Entry, Offset, Count) ->
         end
     end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Tag each given link with its scope.
+%% @end
+%%--------------------------------------------------------------------
+-spec tag_children(LinkName :: datastore:link_name(), [datastore:link_final_target()]) ->
+    [{datastore:link_name(), datastore:ext_key()}].
+tag_children(LinkName, [{_Scope, _VH, Key, _Model}]) ->
+    [{LinkName, Key}];
 
+tag_children(LinkName, Targets) ->
+    MPID = oneprovider:get_provider_id(),
+    Scopes = lists:map(
+        fun({Scope, _VH, _Key, _Model}) ->
+            Scope
+        end, Targets),
+    LongestPrefix = max(4, binary:longest_common_prefix(Scopes)),
+    lists:map(
+        fun({Scope, VH, Key, _}) ->
+            case MPID of
+                Scope ->
+                    {LinkName, Key};
+                _ ->
+                    case LongestPrefix >= size(Scope) of
+                        true ->
+                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, LongestPrefix + 1), Key};
+                        false ->
+                            {links_utils:make_scoped_link_name(LinkName, Scope, undefined, LongestPrefix + 1), Key}
+                    end
+            end
+        end, Targets).
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's locations attached with attach_location/3.
@@ -412,7 +463,7 @@ get_locations(Entry) ->
                 set_link_context(File),
                 datastore:foreach_link(?LINK_STORE_LEVEL, File,
                     fun
-                        (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
+                        (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
                             [Key | AccIn];
                         (_LinkName, _LinkTarget, AccIn) ->
                             AccIn
@@ -733,19 +784,6 @@ get_guid_from_phantom_file(OldUUID) ->
 set_link_context_for_space(SpaceId) ->
     MyProvID = oneprovider:get_provider_id(),
     erlang:put(mother_scope, MyProvID),
-    OtherScopes = lists:delete(MyProvID, dbsync_utils:get_providers_for_space(SpaceId)),
-    erlang:put(other_scopes, OtherScopes),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets default link's scopes.
-%% @end
-%%--------------------------------------------------------------------
--spec set_link_context_default() -> ok.
-set_link_context_default() ->
-    MyProvID = oneprovider:get_provider_id(),
-    erlang:put(mother_scope, MyProvID),
     erlang:put(other_scopes, []),
     ok.
 
@@ -777,6 +815,30 @@ remove_share(FileUuid, ShareId) ->
 %%% Internal functions
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove the child's links in given parent that corresponds to given child's Name and UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_child_link_in_parent(ParentUUID :: uuid(), ChildName :: name(), ChildUUID :: uuid()) ->
+    ok | {error, Reason :: any()}.
+delete_child_link_in_parent(ParentUUID, ChildName, ChildUUID) ->
+    case datastore:fetch_full_link(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, ChildName) of
+        {ok, {_, ParentTargets}} ->
+            lists:foreach(
+                fun({Scope0, VHash0, Key0, _}) ->
+                    case Key0 of
+                        ChildUUID ->
+                            ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME,
+                                [links_utils:make_scoped_link_name(ChildName, Scope0, VHash0, size(Scope0))]);
+                        _ -> ok
+                    end
+                end, ParentTargets);
+        Error -> Error
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Internal helper function for rename/2.
@@ -804,19 +866,14 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
                 rename3(Subject, OldParentUUID, {name, NewName});
             false ->
                 %% Sort keys to avoid deadlock with rename from target to source
-                {Key1, Key2} = case OldParentUUID < NewParentUUID of
-                    true ->
-                        {OldParentUUID, NewParentUUID};
-                    false ->
-                        {NewParentUUID, OldParentUUID}
-                end,
+                [Key1, Key2] = lists:sort([OldParentUUID, NewParentUUID]),
 
                 critical_section:run([?MODEL_NAME, Key1], fun() ->
                     critical_section:run([?MODEL_NAME, Key2], fun() ->
                         {ok, #document{key = NewScopeUUID} = NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName, scope => NewScopeUUID}),
                         set_link_context(NewScope),
-                        ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
+                        ok = datastore:set_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
                         ok = update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, V, {uuid, FileUUID}),
 
                         ok = update_scopes(Subject, NewScope)
@@ -833,17 +890,16 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
 %% child links.
 %% @end
 %%--------------------------------------------------------------------
--spec update_links_in_parents(OldParentUUID :: uuid(), NewParentUUID :: uuid(),
-    OldName :: name(), NewName :: name(), Version :: non_neg_integer(),
-    Subject :: entry()) -> ok.
+-spec update_links_in_parents(OldParentUUID :: uuid(), NewParentUUID :: uuid(), OldName :: name(),
+    NewName :: name(), Version :: non_neg_integer(), Subject :: entry()) -> ok.
 update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, Version, Subject) ->
     {ok, #document{key = SubjectUUID} = SubjectDoc} = get(Subject),
     case get_current_snapshot(SubjectDoc) =:= SubjectDoc of
         true ->
             {ok, Scope1} = get_scope({uuid, OldParentUUID}),
             set_link_context(Scope1),
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
+            ok = delete_child_link_in_parent(OldParentUUID, OldName, SubjectUUID),
+            ok = delete_child_link_in_parent(OldParentUUID, snapshot_name(OldName, Version), SubjectUUID),
             {ok, Scope2} = get_scope({uuid, NewParentUUID}),
             set_link_context(Scope2),
             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME,
@@ -853,7 +909,7 @@ update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, Version,
         false ->
             {ok, Scope1} = get_scope({uuid, OldParentUUID}),
             set_link_context(Scope1),
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, Version)),
+            ok = delete_child_link_in_parent(OldParentUUID, OldName, SubjectUUID),
             {ok, Scope2} = get_scope({uuid, NewParentUUID}),
             set_link_context(Scope2),
             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUUID, ?MODEL_NAME,
@@ -863,7 +919,7 @@ update_links_in_parents(OldParentUUID, NewParentUUID, OldName, NewName, Version,
 %%--------------------------------------------------------------------
 %% @doc
 %% Force set "scope" document for given file_meta:entry() and all its children recursively but only if
-%% given file_meta:entry() has differen "scope" document.
+%% given file_meta:entry() has different "scope" document.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_scopes(Entry :: entry(), NewScope :: datastore:document()) -> ok | datastore:generic_error().
@@ -1024,8 +1080,12 @@ get_current_snapshot(Entry) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_snapshot(FileName :: name()) -> boolean().
-is_snapshot(FileName) ->
+is_snapshot(FileName0) ->
     try
+        FileName = case binary:split(FileName0, <<"##">>) of
+            [FileName1, _] -> FileName1;
+            [FileName1] -> FileName1
+        end,
         case binary:split(FileName, <<?SNAPSHOT_SEPARATOR>>) of
             [FN, VR] ->
                 _ = binary_to_integer(VR),
@@ -1056,29 +1116,9 @@ location_ref(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec set_link_context(Doc :: datastore:document() | datastore:key()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
-set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, scope = MotherScope}}) ->
-    ROOT_DIR_UUID = ?ROOT_DIR_UUID,
-    case MotherScope of
-        ROOT_DIR_UUID ->
-            set_link_context(ScopeUUID);
-        _ ->
-            erlang:put(mother_scope, oneprovider:get_provider_id()),
-            erlang:put(other_scopes, [])
-    end,
-    ok;
-set_link_context(#document{value = #file_meta{is_scope = false, scope = ScopeUUID}}) ->
-    set_link_context(ScopeUUID);
-set_link_context(ScopeUUID) ->
-    try
-        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-        set_link_context_for_space(SpaceId)
-    catch
-        throw:{not_a_space, _} ->
-            set_link_context_default();
-        E1:E2 ->
-            ?error_stacktrace("Cannot set other_scopes for uuid ~p, error: ~p:~p", [ScopeUUID, E1, E2]),
-            set_link_context_default()
-    end,
+set_link_context(_) ->
+    erlang:put(mother_scope, oneprovider:get_provider_id()),
+    erlang:put(other_scopes, []),
     ok.
 
 %%--------------------------------------------------------------------

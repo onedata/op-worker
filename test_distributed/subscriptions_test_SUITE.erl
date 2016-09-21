@@ -684,9 +684,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Nodes = ?config(op_worker_nodes, Config),
     Self = self(),
 
@@ -722,7 +723,8 @@ clear_sessions(Nodes) ->
         ok = rpc:call(hd(Nodes), session, delete, [Key])
     end, FilteredDocs).
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, subscription_wss),
 

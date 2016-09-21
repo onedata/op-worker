@@ -103,7 +103,7 @@ write_bigger_then_quota_should_fail(Config) ->
     ok.
 
 write_smaller_then_quota_should_not_fail(Config) ->
-    #env{p1 = P1, p2 = P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
+    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = _File2} =
         gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
@@ -128,7 +128,7 @@ write_smaller_then_quota_should_not_fail(Config) ->
     ok.
 
 truncate_bigger_then_quota_should_fail(Config) ->
-    #env{p1 = P1, p2 = P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
+    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
@@ -176,7 +176,7 @@ truncate_smaller_then_quota_should_not_fail(Config) ->
     ok.
 
 incremental_write_bigger_then_quota_should_fail(Config) ->
-    #env{p1 = P1, p2 = P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
+    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
@@ -250,7 +250,7 @@ incremental_write_smaller_then_quota_should_not_fail(Config) ->
     ok.
 
 unlink_should_unlock_space(Config) ->
-    #env{p1 = P1, p2 = P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3} =
+    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3} =
         gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
@@ -283,7 +283,7 @@ unlink_should_unlock_space(Config) ->
     ok.
 
 rename_should_unlock_space(Config) ->
-    #env{p1 = P1, p2 = P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3, dir1 = Dir1} =
+    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3, dir1 = Dir1} =
         gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
@@ -345,7 +345,7 @@ rename_should_unlock_space(Config) ->
 
 
 rename_bigger_then_quota_should_fail(Config) ->
-    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = User2, file1 = File1, file2 = File2, file3 = File3} =
+    #env{p1 = P1, p2 = _P2, user1 = User1, user2 = _User2, file1 = File1, file2 = File2, file3 = File3} =
         gen_test_env(Config),
 
     {ok, _} = create_file(P1, User1,    f(<<"space1">>, File1)),
@@ -449,9 +449,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
 
@@ -461,7 +462,8 @@ init_per_testcase(_, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(
         fun({SpaceId, _}) ->
@@ -489,15 +491,6 @@ write_to_file(Worker, SessionId, Path, Offset, Data) ->
     Result = lfm_proxy:write(Worker, FileHandle, Offset, Data),
     lfm_proxy:fsync(Worker, FileHandle),
     timer:sleep(500), %% @todo: remove after fixing fsync
-    lfm_proxy:close(Worker, FileHandle),
-    Result.
-
-get_file_content(Worker, SessionId, Path) ->
-    {ok, FileHandle} = open_file(Worker, SessionId, Path, read),
-    Result = case lfm_proxy:read(Worker, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
-                 {error, Error} -> {error, Error};
-                 {ok, Content} -> Content
-             end,
     lfm_proxy:close(Worker, FileHandle),
     Result.
 

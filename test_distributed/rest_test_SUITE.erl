@@ -148,18 +148,20 @@ init_per_suite(Config) ->
     NewConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= internal_error_when_handler_crashes;
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     application:start(etls),
     hackney:start(),
     test_utils:mock_new(Workers, files),
     Config;
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     application:start(etls),
     hackney:start(),
     mock_oz_spaces(Config),
@@ -170,11 +172,13 @@ end_per_testcase(Case, Config) when
     Case =:= internal_error_when_handler_crashes;
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, files),
     hackney:stop(),
     application:stop(etls);
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     unmock_oz_spaces(Config),
     unmock_oz_certificates(Config),
     hackney:stop(),
