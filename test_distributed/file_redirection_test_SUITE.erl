@@ -116,9 +116,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 init_per_testcase(CaseName, Config) ->
+    ?CASE_START(CaseName),
     initializer:enable_grpca_based_communication(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
@@ -126,7 +127,8 @@ init_per_testcase(CaseName, Config) ->
     CaseNameBinary = list_to_binary(atom_to_list(CaseName)),
     [{test_dir, <<CaseNameBinary/binary, "_dir">>} | NewConfig].
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     initializer:unload_quota_mocks(Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

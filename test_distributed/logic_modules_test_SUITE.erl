@@ -85,13 +85,14 @@ init_per_suite(Config) ->
     NewConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Config.
 
-end_per_testcase(_Case, _Config) ->
-    ok.
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions

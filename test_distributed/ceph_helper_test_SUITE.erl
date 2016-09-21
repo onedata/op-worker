@@ -17,7 +17,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([set_user_ctx_test/1, write_test/1, multipart_write_test/1,
@@ -86,7 +86,7 @@ set_user_ctx_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
         {success_rate, 100},
-        {parameters, [?OP_NUM(set_user_ctx, 100)]},
+        {parameters, [?OP_NUM(set_user_ctx, 10)]},
         {description, "Multiple user context changes."},
         ?PERF_CFG(small, [?OP_NUM(set_user_ctx, 100)]),
         ?PERF_CFG(medium, [?OP_NUM(set_user_ctx, 200)]),
@@ -103,7 +103,7 @@ write_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)]},
+        {parameters, [?THR_NUM(1), ?OP_NUM(write, 5), ?OP_SIZE(write, 1)]},
         {description, "Multiple parallel write operations."},
         ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
         ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
@@ -139,7 +139,7 @@ truncate_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(truncate, 10)]},
+        {parameters, [?THR_NUM(1), ?OP_NUM(truncate, 5)]},
         {description, "Multiple parallel truncate operations."},
         ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(truncate, 10)]),
         ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(truncate, 100)]),
@@ -158,7 +158,7 @@ write_read_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(10), ?OP_SIZE(1)]},
+        {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel write followed by read operations."},
         ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(10), ?OP_SIZE(1)]),
         ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(10), ?OP_SIZE(1)]),
@@ -199,7 +199,7 @@ write_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(10), ?OP_SIZE(1)]},
+        {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel write followed by unlink operations."},
         ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(10), ?OP_SIZE(1)]),
         ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(10), ?OP_SIZE(1)]),
@@ -220,7 +220,7 @@ write_read_truncate_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(10), ?OP_SIZE(1)]},
+        {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel sequence of write, read, truncate
         and unlink operations."},
         ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(10), ?OP_SIZE(1)]),
@@ -248,7 +248,14 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
+
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
+    Config.
+
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions

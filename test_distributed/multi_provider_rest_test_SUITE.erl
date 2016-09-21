@@ -362,7 +362,7 @@ list_file(Config) ->
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"files/space3/file1">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -377,7 +377,7 @@ list_dir(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"files">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -395,7 +395,7 @@ list_dir_range(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"files?offset=1&limit=1">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -524,7 +524,7 @@ list_spaces(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"spaces">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -542,7 +542,7 @@ get_space(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
 
     % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"spaces/space3">>, get, [user_1_token_header(Config)], [])),
 
     % then
@@ -574,7 +574,7 @@ set_get_json_metadata(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"key\": \"value\"}")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode(Body),
@@ -602,7 +602,7 @@ set_get_json_metadata_id(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], "{\"key\": \"value\"}")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=json">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode(Body),
@@ -628,7 +628,7 @@ set_get_rdf_metadata(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/rdf+xml">>}], "some_xml")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=rdf">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
@@ -645,7 +645,7 @@ set_get_rdf_metadata_id(Config) ->
             [user_1_token_header(Config), {<<"content-type">>,<<"application/rdf+xml">>}], "some_xml")),
 
     % then
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, Body},
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"metadata-id/", ObjectId/binary, "?metadata_type=rdf">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
@@ -800,9 +800,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(metric_get, Config) ->
+init_per_testcase(metric_get = Case, Config) ->
+    ?CASE_START(Case),
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
@@ -810,19 +811,21 @@ init_per_testcase(metric_get, Config) ->
     end),
     init_per_testcase(all, Config);
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(metric_get, Config) ->
+end_per_testcase(metric_get = Case, Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),

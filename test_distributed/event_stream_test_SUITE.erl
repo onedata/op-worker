@@ -147,13 +147,14 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Config.
 
-end_per_testcase(_, Config) ->
-    Config.
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions

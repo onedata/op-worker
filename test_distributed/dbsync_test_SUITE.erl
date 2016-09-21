@@ -374,9 +374,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Workers, [dbsync_proto, dbsync_utils]),
@@ -414,7 +415,8 @@ init_per_testcase(_, Config) ->
 
     [{all, Config}, {p1, lfm_proxy:init(ConfigWithSessionInfoP1)}, {p2, lfm_proxy:init(ConfigWithSessionInfoP2)}].
 
-end_per_testcase(_, MultiConfig) ->
+end_per_testcase(Case, MultiConfig) ->
+    ?CASE_STOP(Case),
     timer:sleep(timer:seconds(10)),
     Workers = ?config(op_worker_nodes, ?config(all, MultiConfig)),
     lfm_proxy:teardown(?config(p1, MultiConfig)),

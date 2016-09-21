@@ -54,8 +54,6 @@
     external_file_location_notification_should_wait_for_grandparent_file_meta/1
 ]).
 
-
--performance({test_cases, []}).
 all() ->
     ?ALL([
         dbsync_trigger_should_create_local_file_location,
@@ -138,7 +136,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
-    FileToCompareUUID = fslogic_uuid:file_guid_to_uuid(FileToCompareGUID),
+    FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
 
     [$/ | FileToCompareFID] = binary_to_list(?rpc(fslogic_utils, gen_storage_file_id, [{uuid, FileToCompareUUID}])),
     [$/ | FileFID] = binary_to_list(?rpc(fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}])),
@@ -185,7 +183,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     {ok, FileUuid2} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
     {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
-    FileToCompareUUID = fslogic_uuid:file_guid_to_uuid(FileToCompareGUID),
+    FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
 
     [$/ | FileToCompareFID] = binary_to_list(rpc:call(W1, fslogic_utils, gen_storage_file_id, [{uuid, FileToCompareUUID}])),
     [$/ | File1FID] = binary_to_list(rpc:call(W1, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}])),
@@ -1097,17 +1095,18 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

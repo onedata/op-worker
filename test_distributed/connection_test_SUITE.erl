@@ -143,7 +143,7 @@ protobuf_msg_test(Config) ->
 multi_message_test(Config) ->
     ?PERFORMANCE(Config, [
             {repeats, 5},
-            {success_rate, 80},
+            {success_rate, 90},
             {parameters, [
                 [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
                 [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
@@ -278,7 +278,7 @@ client_communicate_async_test(Config) ->
 multi_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
             {repeats, 5},
-            {success_rate, 80},
+            {success_rate, 90},
             {parameters, [
                 [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
                 [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
@@ -396,7 +396,11 @@ multi_connection_test(Config) ->
             ]},
             {description, "Opens 'connections_num' connections to the server, checks "
             "their state, and closes them."},
-            {config, [{name, multi_connection}]}
+            {config, [{name, multi_connection},
+                {parameters, [
+                    [{name, connections_num}, {value, 1000}]
+                ]}
+            ]}
         ]
     ).
 multi_connection_test_base(Config) ->
@@ -574,9 +578,10 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(cert_connection_test, Config) ->
+init_per_testcase(cert_connection_test = Case, Config) ->
+    ?CASE_START(Case),
     initializer:remove_pending_messages(),
     Workers = ?config(op_worker_nodes, Config),
     application:ensure_started(etls),
@@ -590,6 +595,7 @@ init_per_testcase(Case, Config) when
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test;
     Case =:= python_client_test ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     application:ensure_started(etls),
@@ -597,14 +603,16 @@ init_per_testcase(Case, Config) when
     mock_identity(Workers),
     Config;
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     mock_identity(Workers),
     application:ensure_started(etls),
     Config.
 
-end_per_testcase(cert_connection_test, Config) ->
+end_per_testcase(cert_connection_test = Case, Config) ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [user_identity, serializator]);
 
@@ -613,16 +621,19 @@ end_per_testcase(Case, Config) when
     Case =:= multi_message_test;
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
-end_per_testcase(python_client_test, Config) ->
+end_per_testcase(python_client_test = Case, Config) ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
     test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, user_identity).
 

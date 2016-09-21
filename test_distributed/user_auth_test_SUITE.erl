@@ -71,14 +71,16 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     application:start(etls),
     mock_oz_spaces(Config),
     Config.
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     unmock_oz_spaces(Config),
     application:stop(etls).
 
