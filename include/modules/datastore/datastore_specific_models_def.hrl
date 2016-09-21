@@ -122,7 +122,7 @@
     ctime :: undefined | file_meta:time(),
     uid :: undefined | onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: undefined | file_meta:size(),
-    version = 1, %% Snapshot version
+    version = 0, %% Snapshot version
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file

@@ -144,27 +144,48 @@ create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
 -spec create_storage_file(binary(), file_meta:uuid(), session:id(), file_meta:posix_permissions()) ->
     {FileId :: binary(), StorageId :: storage:id()}.
 create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    FileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
+
+    {ok, Path} = fslogic_path:gen_storage_path({uuid, FileUuid}),
+    FileId0 = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, Path, 0),
+    LeafLess = fslogic_path:dirname(FileId0),
+
+    ?debug("create_storage_file (dirs) ~p ~p", [Storage, LeafLess]),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
+    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok -> ok;
+        {error, eexist} ->
+            ok
+    end,
+
+    FileCreatorFun = fun FileCreator(ToCreate, Version) ->
+        ?debug("create_storage_file (file) ~p ~p", [Storage, ToCreate]),
+        SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, ToCreate),
+        case storage_file_manager:create(SFMHandle1, Mode) of
+            ok -> {ok, ToCreate};
+            {error, eexist} ->
+                NextVersion = Version + 1,
+                NextFileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, Path, NextVersion),
+                case NextFileId of
+                    ToCreate ->
+                        ?error("Unable to generate different conflicted fileId: ~p vs ~p",
+                            [{ToCreate, Version}, {NextFileId, NextVersion}]),
+                        {error, create_loop_detected};
+                    _ ->
+                        FileCreator(NextFileId, NextVersion)
+                end
+        end
+    end,
+
+    {ok, FileId} = FileCreatorFun(FileId0, 0),
+
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
         space_id = SpaceId},
     {ok, LocId} = file_location:create(#document{value = Location}),
     file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
 
-    LeafLess = fslogic_path:dirname(FileId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
-    ?debug("create_storage_file (dirs) ~p ~p", [Storage, LeafLess]),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok -> ok;
-        {error, eexist} ->
-            ok
-    end,
-    ?debug("create_storage_file (file) ~p ~p", [Storage, FileId]),
-    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
-    storage_file_manager:unlink(SFMHandle1),
-    ok = storage_file_manager:create(SFMHandle1, Mode),
     {StorageId, FileId}.
 
 %%--------------------------------------------------------------------
@@ -178,20 +199,20 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
 -spec rename_or_delete(file_location:doc(),
     {{helpers:file(), binary()}, non_neg_integer()} | undefined) ->
     {renamed, file_location:doc(), file_meta:uuid(), onedata_user:id(), space_info:id()}
-    | skipped | deleted .
+    | skipped | deleted.
 rename_or_delete(_, undefined) ->
     skipped;
 rename_or_delete(#document{value = #file_location{last_rename = {_, LocalNum}}},
     {_, ExternalNum}) when LocalNum >= ExternalNum ->
     skipped;
 rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
-    blocks = OldBlocks}}, {{TargetFileId, TargetSpaceId}, _} = LastRename) ->
+    blocks = OldBlocks}}, {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename) ->
     {ok, Auth} = session:get_auth(?ROOT_SESS_ID),
     {ok, #document{value = #space_info{providers = Providers}}} = space_info:get_or_fetch(Auth, TargetSpaceId, ?ROOT_USER_ID),
     TargetSpaceProviders = ordsets:from_list(Providers),
     case ordsets:is_element(oneprovider:get_provider_id(), TargetSpaceProviders) of
         true ->
-            ok = fslogic_rename:rename_storage_file(?ROOT_SESS_ID, Loc, TargetFileId, TargetSpaceId),
+            {ok, TargetFileId} = fslogic_rename:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId, 0),
 
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
             NewBlocks = lists:map(fun(Block) ->
