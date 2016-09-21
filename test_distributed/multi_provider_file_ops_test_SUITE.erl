@@ -69,17 +69,17 @@ all() ->
     ]).
 
 db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 10).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 10, DirsNum, FilesNum).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 60, DirsNum, FilesNum).
 
 db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 10).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 proxy_basic_opts_test1(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
