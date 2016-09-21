@@ -515,9 +515,10 @@ init_per_suite(Config) ->
     NewConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
+init_per_testcase(subscribe_should_work_for_multiple_sessions = Case, Config) ->
+    ?CASE_START(Case),
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
@@ -541,7 +542,8 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     end),
     NewConfig;
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -566,13 +568,15 @@ init_per_testcase(_, Config) ->
     end),
     NewConfig.
 
-end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
+end_per_testcase(subscribe_should_work_for_multiple_sessions = Case, Config) ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, space_info),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),

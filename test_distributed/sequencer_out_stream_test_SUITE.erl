@@ -152,9 +152,10 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     mock_communicator(Worker),
@@ -162,7 +163,8 @@ init_per_testcase(_, Config) ->
     {ok, SeqStm} = start_sequencer_out_stream(Worker),
     [{sequencer_out_stream, SeqStm} | Config].
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_out_stream(?config(sequencer_out_stream, Config)),
     test_utils:mock_validate_and_unload(Worker, [communicator, session]).

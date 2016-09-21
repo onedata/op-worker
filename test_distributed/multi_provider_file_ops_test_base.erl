@@ -23,9 +23,10 @@
 
 %% API
 %% export for tests
--export([synchronization_test_base/6, file_consistency_test_base/4]).
-
--export([get_links/1]).
+-export([
+    basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4,
+    file_consistency_test_skeleton/5, get_links/1
+]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4]).
@@ -44,269 +45,182 @@
 
 
 %%%===================================================================
-%%% Test functions
+%%% Test skeletons
 %%%===================================================================
 
-synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
-    synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
+basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
 
-synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
-    Attempts, DirsNum, FilesNum) ->
+%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
-    %%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
-
-    ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
-    Worker1 = lists:foldl(fun(W, Acc) ->
-        case is_atom(Acc) of
-            true ->
-                Acc;
-            _ ->
-                case string:str(atom_to_list(W), "p1") of
-                    0 -> Acc;
-                    _ -> W
-                end
-        end
-    end, [], Workers),
-    timer:sleep(10000), % TODO - connection must appear after mock setup
 
-    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-
-    Verify = fun(TestFun) ->
-        lists:foldl(fun(W, Acc) ->
-            [TestFun(W) | Acc]
-        end, [], Workers)
-    end,
-
-    Dir = <<SpaceName/binary, "/", (generator:gen_name())/binary>>,
+    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-
-    Level3Dirs = lists:map(fun(_) ->
-        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1, DirsNum)),
-    Level3Dirs2 = lists:map(fun(_) ->
-        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1, DirsNum)),
-
-    Level3Dir = <<Level2Dir/binary, "/", (generator:gen_name())/binary>>,
-    Level4Files = lists:map(fun(Num) ->
-        {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
-    end, lists:seq(1, FilesNum)),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
 
-    VerifyStats = fun(File, IsDir) ->
-        VerAns = Verify(fun(W) ->
-            %%            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
-            case IsDir of
-                true ->
-                    ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-                        lfm_proxy:stat(W, SessId(W), {path, File}), Attempts);
-                _ ->
-                    ?match({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
-                        lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
-            end,
-            StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
-            {ok, #file_attr{uuid = FileGUID}} = StatAns,
-            FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-            {FileUUID, rpc:call(W, file_meta, get, [FileUUID])}
-        end),
-
-        NotFoundList = lists:filter(fun({_, {error, {not_found, _}}}) -> true; (_) -> false end, VerAns),
-        OKList = lists:filter(fun({_, {ok, _}}) -> true; (_) -> false end, VerAns),
-
-        ?assertEqual(ProxyNodes - ProxyNodesWritten, length(NotFoundList)),
-        ?assertEqual(SyncNodes + ProxyNodesWritten, length(OKList)),
-        [{FileUUIDAns, _} | _] = VerAns,
-        FileUUIDAns
-    end,
-    VerifyStats(Dir, true),
-    VerifyStats(Level2Dir, true),
+    verify_stats(Config, Dir, true),
+    verify_stats(Config, Level2Dir, true),
+    ct:print("Dirs created"),
 
     FileBeg = <<"1234567890abcd">>,
-    CreateFileOnWorker = fun(Offset, File, WriteWorker) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker, SessId(WriteWorker), File, 8#755)),
-        OpenAns = lfm_proxy:open(WriteWorker, SessId(WriteWorker), {path, File}, rdwr),
-        ?assertMatch({ok, _}, OpenAns),
-        {ok, Handle} = OpenAns,
-        FileBegSize = size(FileBeg),
-        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(WriteWorker, Handle, 0, FileBeg)),
-        Size = size(File),
-        Offset2 = Offset rem 5 + 1,
-        ?assertMatch({ok, Size}, lfm_proxy:write(WriteWorker, Handle, Offset2, File)),
-        ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId(WriteWorker), {path, File}, 2 * Offset2))
-    end,
-    CreateFile = fun({Offset, File}) ->
-        CreateFileOnWorker(Offset, File, Worker1)
-    end,
-    CreateFile({2, Level2File}),
-
-    VerifyFile = fun({Offset, File}) ->
-        Offset2 = Offset rem 5 + 1,
-        Size = 2 * Offset2,
-        FileUUID = VerifyStats(File, false),
-
-        Beg = binary:part(FileBeg, 0, Offset2),
-        End = binary:part(File, 0, Offset2),
-        FileCheck = <<Beg/binary, End/binary>>,
-
-        VerifyLocation = fun() ->
-            Verify(fun(W) ->
-                verify_locations(W, FileUUID)
-            end)
-        end,
-
-        %%        VerAns0 = VerifyLocation(),
-        %%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
-
-        Verify(fun(W) ->
-            %%            ct:print("Verify file ~p", [{File, W}]),
-            OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
-            ?assertMatch({ok, _}, OpenAns),
-            {ok, Handle} = OpenAns,
-            ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts)
-        end),
-
-        ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
-        AssertLocations = fun() ->
-            VerAns = VerifyLocation(),
-            %%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
-
-            ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-            LocationsList = lists:filter(fun(S) -> S == (SyncNodes / NodesOfProvider + ProxyNodesWritten0) end, VerAns),
-            %%            ct:print("Locations1 ~p", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
-            {length(ZerosList), length(LocationsList)}
-        end,
-        ?match(ToMatch, AssertLocations(), Attempts),
-
-        LocToAns = Verify(fun(W) ->
-            StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
-            ?assertMatch({ok, #file_attr{}}, StatAns),
-            {ok, #file_attr{uuid = FileGUID}} = StatAns,
-            FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-
-            {W, get_locations(W, FileUUID)}
-        end),
-        {File, FileUUID, LocToAns}
-    end,
-
-    VerifyDel = fun({F, FileUUID, Locations}) ->
-        Verify(fun(W) ->
-            %%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
-            %%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
-            % TODO - match to chosen error (check perms may also result in ENOENT)
-            ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
-        %,
-        %%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
-        %%            lists:foreach(fun(ProvID) ->
-        %%                ?match(#{},
-        %%                    get_links(W, FileUUID, ProvID), Attempts)
-        %%            end, ProvIDs),
-        %%            lists:foreach(fun(Location) ->
-        %%                ?match({error, {not_found, _}},
-        %%                    rpc:call(W, file_meta, get, [Location]), Attempts)
-        %%            end, proplists:get_value(W, Locations, []))
-        end)
-    end,
-
-    VerifyFile({2, Level2File}),
+    create_file(Config, FileBeg, {2, Level2File}),
+    verify_file(Config, FileBeg, {2, Level2File}),
+    ct:print("File verified"),
 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-        %%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
+%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
-        VerifyStats(Level2TmpDir, true),
+        verify_stats(Config, Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-            %%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
+%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
-            VerifyStats(Level3TmpDir, true)
-        end, Workers)
+            verify_stats(Config, Level3TmpDir, true)
+        end, Workers),
+        ct:print("Tree verification from node ~p done", [W])
     end, Workers),
-
-    lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
-    end, Level3Dirs),
-
-    lists:map(fun(D) ->
-        VerifyStats(D, true)
-    end, Level3Dirs),
-
-    lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
-    end, Level3Dirs2),
-
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir, 8#755)),
-    lists:map(fun(F) ->
-        CreateFile(F)
-    end, Level4Files),
-
-    VerifyDirSize = fun(DirToCheck, DSize, Deleted) ->
-        VerAns0 = Verify(fun(W) ->
-            CountChilden = fun() ->
-                LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 200),
-                ?assertMatch({ok, _}, LSAns),
-                {ok, ListedDirs} = LSAns,
-                length(ListedDirs)
-            end,
-            ?match(DSize, CountChilden(), Attempts),
-
-            StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
-            ?assertMatch({ok, #file_attr{}}, StatAns),
-            {ok, #file_attr{uuid = FileGUID}} = StatAns,
-            FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-            {W, FileUUID}
-        end),
-
-        AssertLinks = fun() ->
-            VerAns = lists:map(fun({W, Uuid}) ->
-                count_links(W, Uuid)
-            end, VerAns0),
-            %%            ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
-
-            ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-            SList = lists:filter(fun(S) -> S == 2 * DSize + Deleted + 1 end, VerAns),
-            {length(ZerosList), length(SList)}
-        end,
-        ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
-        ?match(ToMatch, AssertLinks(), Attempts)
-    end,
-    VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
-
-    Level3Dirs2Uuids = lists:map(fun(D) ->
-        VerifyStats(D, true)
-    end, Level3Dirs2),
-
-    Level4FilesVerified = lists:map(fun(F) ->
-        VerifyFile(F)
-    end, Level4Files),
-    VerifyDirSize(Level3Dir, length(Level4Files), 0),
-
-    lists:map(fun({_, F}) ->
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, F}))
-    end, Level4Files),
-    lists:map(fun(D) ->
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, D}))
-    end, Level3Dirs2),
-
-    lists:map(fun(F) ->
-        VerifyDel(F)
-    end, Level4FilesVerified),
-    lists:map(fun({D, Uuid}) ->
-        VerifyDel({D, Uuid, []})
-    end, lists:zip(Level3Dirs2, Level3Dirs2Uuids)),
-    VerifyDirSize(Level3Dir, 0, length(Level4Files)),
-    VerifyDirSize(Level2Dir, length(Level3Dirs) + 1, length(Level3Dirs2)),
 
     lists:foreach(fun(W) ->
         Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-        CreateFileOnWorker(4, Level2TmpFile, W),
-        VerifyFile({4, Level2TmpFile})
+        create_file_on_worker(Config, FileBeg, 4, Level2TmpFile, W),
+        verify_file(Config, FileBeg, {4, Level2TmpFile}),
+        ct:print("File from node ~p verified", [W])
     end, Workers),
+
+    verify(Config, fun(W) ->
+        ?assertEqual(ok, lfm_proxy:close_all(W))
+    end),
+
+    ok.
+
+many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
+    many_ops_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
+many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
+    Attempts, DirsNum, FilesNum) ->
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    FileBeg = <<"1234567890abcd">>,
+
+    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+
+    Level3Dirs = lists:map(fun(_) ->
+        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
+    end, lists:seq(1,DirsNum)),
+    Level3Dirs2 = lists:map(fun(_) ->
+        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
+    end, lists:seq(1,DirsNum)),
+
+    Level3Dir = <<Level2Dir/binary, "/", (generator:gen_name())/binary>>,
+    Level4Files = lists:map(fun(Num) ->
+        {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
+    end, lists:seq(1,FilesNum)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
+
+    verify_stats(Config, Dir, true),
+    verify_stats(Config, Level2Dir, true),
+
+    lists:map(fun(D) ->
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
+    end, Level3Dirs),
+    ct:print("Dirs created"),
+
+    lists:map(fun(D) ->
+        ct:print("Verify dir ~p", [D]),
+        verify_stats(Config, D, true)
+    end, Level3Dirs),
+
+    lists:map(fun(D) ->
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
+    end, Level3Dirs2),
+    ct:print("Dirs created - second batch"),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir, 8#755)),
+    lists:map(fun(F) ->
+        create_file(Config, FileBeg, F)
+    end, Level4Files),
+    ct:print("Files created"),
+
+    verify_dir_size(Config, Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1),
+
+    Level3Dirs2Uuids = lists:map(fun(D) ->
+        ct:print("Verify dir ~p", [D]),
+        verify_stats(Config, D, true)
+    end, Level3Dirs2),
+
+    Level4FilesVerified = lists:map(fun(F) ->
+        ct:print("Verify file ~p", [F]),
+        verify_file(Config, FileBeg, F)
+    end, Level4Files),
+    verify_dir_size(Config, Level3Dir, length(Level4Files)),
+
+    lists:map(fun({_, F}) ->
+        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, F}))
+    end, Level4Files),
+    lists:map(fun(D) ->
+        WD = lists:nth(crypto:rand_uniform(1,length(Workers) + 1), Workers),
+        ?assertMatch(ok, lfm_proxy:unlink(WD, SessId(WD), {path, D}))
+    end, Level3Dirs2),
+    ct:print("Dirs and files deleted"),
+
+    lists:map(fun(F) ->
+        ct:print("Verify file del ~p", [F]),
+        verify_del(Config, F)
+    end, Level4FilesVerified),
+    lists:map(fun({D, Uuid}) ->
+        ct:print("Verify dir del ~p", [D]),
+        verify_del(Config, {D, Uuid, []})
+    end, lists:zip(Level3Dirs2, Level3Dirs2Uuids)),
+    verify_dir_size(Config, Level3Dir, 0),
+    ct:print("Level 3 dir size verified"),
+    verify_dir_size(Config, Level2Dir, length(Level3Dirs) + 1),
+    ct:print("Level 2 dir size verified"),
+
+    verify(Config, fun(W) ->
+        ?assertEqual(ok, lfm_proxy:close_all(W))
+    end),
+
+    ok.
+
+distributed_modification_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
+    distributed_modification_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
+distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+
+    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    Workers = ?config(op_worker_nodes, Config),
+
+    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    verify_stats(Config, Dir, true),
+    ct:print("Dir verified"),
+
+    FileBeg = <<"1234567890abcd">>,
+    create_file(Config, FileBeg, {2, Level2File}),
+    verify_file(Config, FileBeg, {2, Level2File}),
+    ct:print("File verified"),
 
     lists:foldl(fun(W, Acc) ->
         OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
@@ -318,13 +232,14 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
         ?assertMatch({ok, WriteSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
-        Verify(fun(W2) ->
-            %%            ct:print("Verify write ~p", [{Level2File, W2}]),
+        verify(Config, fun(W2) ->
+%%            ct:print("Verify write ~p", [{Level2File, W2}]),
             OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,
             ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts)
         end),
+        ct:print("Changes of file from node ~p verified", [W]),
         NewAcc
     end, <<>>, Workers),
 
@@ -336,19 +251,21 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             Master ! {mkdir_ans, Level2TmpDir, MkAns}
         end)
     end, Workers),
+    ct:print("Parallel dirs creation processed spawned"),
 
     Level2TmpDirs = lists:foldl(fun(_, Acc) ->
         MkAnsCheck =
             receive
                 {mkdir_ans, ReceivedLevel2TmpDir, MkAns} ->
                     {ReceivedLevel2TmpDir, MkAns}
-            after timer:seconds(2 * Attempts + 2) ->
+            after timer:seconds(2*Attempts+2) ->
                 {error, timeout}
             end,
         ?assertMatch({_, {ok, _}}, MkAnsCheck),
         {Level2TmpDir, _} = MkAnsCheck,
-        %%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
-        VerifyStats(Level2TmpDir, true),
+%%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
+        verify_stats(Config, Level2TmpDir, true),
+        ct:print("Dir verified"),
         [Level2TmpDir | Acc]
     end, [], Workers),
 
@@ -361,6 +278,7 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
             end)
         end, Workers)
     end, Level2TmpDirs),
+    ct:print("Parallel dirs creation processed spawned"),
 
     lists:foreach(fun(_) ->
         lists:foreach(fun(_) ->
@@ -368,23 +286,24 @@ synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritte
                 receive
                     {mkdir_ans, ReceivedLevel2TmpDirLevel3TmpDir, MkAns} ->
                         {ReceivedLevel2TmpDirLevel3TmpDir, MkAns}
-                after timer:seconds(2 * Attempts + 2) ->
+                after timer:seconds(2*Attempts+2) ->
                     {error, timeout}
                 end,
             ?assertMatch({_, {ok, _}}, MkAnsCheck),
             {Level3TmpDir, _} = MkAnsCheck,
-            %%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
-            VerifyStats(Level3TmpDir, true)
+%%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
+            verify_stats(Config, Level3TmpDir, true),
+            ct:print("Dir verified")
         end, Workers)
     end, Level2TmpDirs),
 
-    Verify(fun(W) ->
+    verify(Config, fun(W) ->
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
 
     ok.
 
-file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
+file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     timer:sleep(10000), % TODO - connection must appear after mock setup
     Attempts = 15,
     User = <<"user1">>,
@@ -395,10 +314,10 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
     SpaceKey = SpaceDoc#document.key,
-    %%    ct:print("Space key ~p", [SpaceKey]),
+%%    ct:print("Space key ~p", [SpaceKey]),
 
     DoTest = fun(TaskList) ->
-        %%        ct:print("Do test"),
+%%        ct:print("Do test"),
 
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
@@ -412,7 +331,7 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
                 scope = SpaceKey
             }
             },
-            %%            ct:print("Doc ~p ~p", [Uuid, Name]),
+%%            ct:print("Doc ~p ~p", [Uuid, Name]),
             {Doc, Name}
         end,
 
@@ -423,10 +342,10 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
         {Doc4, Name4} = GenerateDoc(?REGULAR_FILE_TYPE),
         Loc4ID = datastore_utils:gen_uuid(),
 
-        D1Path = <<SpaceName/binary, "/", Name1/binary>>,
-        D2Path = <<D1Path/binary, "/", Name2/binary>>,
-        D3Path = <<D2Path/binary, "/", Name3/binary>>,
-        D4Path = <<D2Path/binary, "/", Name4/binary>>,
+        D1Path = <<SpaceName/binary, "/",  Name1/binary>>,
+        D2Path = <<D1Path/binary, "/",  Name2/binary>>,
+        D3Path = <<D2Path/binary, "/",  Name3/binary>>,
+        D4Path = <<D2Path/binary, "/",  Name4/binary>>,
 
         Doc1Args = [Doc1, SpaceDoc, non, D1Path],
         Doc2Args = [Doc2, Doc1, non, D2Path],
@@ -468,262 +387,253 @@ file_consistency_test_base(Config, Worker1, Worker2, Worker3) ->
     {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
     SleepTime = round(CacheDelay / 1000 + 5),
 
-    T1 = [
-        {create_doc, 1},
-        {sleep, SleepTime},
-        {set_parent_link, 1},
-        {sleep, SleepTime},
-        {set_link_to_parent, 1},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {sleep, SleepTime},
-        {set_parent_link, 2},
-        {sleep, SleepTime},
-        {set_link_to_parent, 2},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T1),
+    TestConfigs = [
+        _T1 = [
+            {create_doc, 1},
+            {sleep, SleepTime},
+            {set_parent_link, 1},
+            {sleep, SleepTime},
+            {set_link_to_parent, 1},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {sleep, SleepTime},
+            {set_parent_link, 2},
+            {sleep, SleepTime},
+            {set_link_to_parent, 2},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_location, 3}
+        ],
 
-    T2 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T2),
+        _T2 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3}
+        ],
 
-    T3 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2}
-    ],
-    DoTest(T3),
+        _T3 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2}
+        ],
 
-    T4 = [
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {sleep, SleepTime},
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1}
-    ],
-    DoTest(T4),
+        _T4 = [
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {sleep, SleepTime},
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1}
+        ],
 
-    T5 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T5),
+        _T5 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {set_link_to_location, 3}
+        ],
 
-    T6 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {set_link_to_location, 3}
-    ],
-    DoTest(T6),
+        _T6 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {set_link_to_location, 3}
+        ],
 
-    T7 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {create_location, 3}
-    ],
-    DoTest(T7),
+        _T7 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {create_location, 3}
+        ],
 
-    T8 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_doc, 3}
-    ],
-    DoTest(T8),
+        _T8 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_doc, 3}
+        ],
 
-    T9 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3}
-    ],
-    DoTest(T9),
+        _T9 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3}
+        ],
 
-    T10 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {create_location, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3}
-    ],
-    DoTest(T10),
+        _T10 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {create_location, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3}
+        ],
 
-    T11 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_location, 3}
-    ],
-    DoTest(T11),
+        _T11 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_location, 3}
+        ],
 
-    T12 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {sleep, SleepTime},
-        {create_doc, 3}
-    ],
-    DoTest(T12),
+        _T12 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {sleep, SleepTime},
+            {create_doc, 3}
+        ],
 
-    T13 = [
-        {set_link_to_location, 3},
-        {sleep, SleepTime},
-        {create_location, 3},
-        {sleep, SleepTime},
-        {set_link_to_parent, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {sleep, SleepTime},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {set_parent_link, 2},
-        {sleep, SleepTime},
-        {set_link_to_parent, 2},
-        {sleep, SleepTime},
-        {create_doc, 2},
-        {sleep, SleepTime},
-        {set_parent_link, 1},
-        {sleep, SleepTime},
-        {set_link_to_parent, 1},
-        {sleep, SleepTime},
-        {create_doc, 1}
-    ],
-    DoTest(T13),
+        _T13 = [
+            {set_link_to_location, 3},
+            {sleep, SleepTime},
+            {create_location, 3},
+            {sleep, SleepTime},
+            {set_link_to_parent, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {sleep, SleepTime},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {set_parent_link, 2},
+            {sleep, SleepTime},
+            {set_link_to_parent, 2},
+            {sleep, SleepTime},
+            {create_doc, 2},
+            {sleep, SleepTime},
+            {set_parent_link, 1},
+            {sleep, SleepTime},
+            {set_link_to_parent, 1},
+            {sleep, SleepTime},
+            {create_doc, 1}
+        ],
 
-    T14 = [
-        {create_doc, 1},
-        {set_parent_link, 1},
-        {set_link_to_parent, 1},
-        {create_doc, 2},
-        {set_parent_link, 2},
-        {set_link_to_parent, 2},
-        {create_doc, 3},
-        {sleep, SleepTime},
-        {create_doc, 4, Worker3},
-        {set_parent_link, 4, Worker3},
-        {set_link_to_parent, 4, Worker3},
-        {create_location, 4, Worker3},
-        {set_link_to_location, 4, Worker3},
-        {sleep, SleepTime},
-        {set_parent_link, 3},
-        {set_link_to_parent, 3},
-        {create_location, 3},
-        {set_link_to_location, 3}
+        _T14 = [
+            {create_doc, 1},
+            {set_parent_link, 1},
+            {set_link_to_parent, 1},
+            {create_doc, 2},
+            {set_parent_link, 2},
+            {set_link_to_parent, 2},
+            {create_doc, 3},
+            {sleep, SleepTime},
+            {create_doc, 4, Worker3},
+            {set_parent_link, 4, Worker3},
+            {set_link_to_parent, 4, Worker3},
+            {create_location, 4, Worker3},
+            {set_link_to_location, 4, Worker3},
+            {sleep, SleepTime},
+            {set_parent_link, 3},
+            {set_link_to_parent, 3},
+            {create_location, 3},
+            {set_link_to_location, 3}
+        ]
     ],
-    DoTest(T14),
+    lists:foreach(fun(Num) ->
+        ct:print("Consistency config number ~p", [Num]),
+        DoTest(lists:nth(Num, TestConfigs))
+    end, ConfigsNum),
 
     ok.
-
 
 %%%===================================================================
 %%% Internal functions
@@ -767,7 +677,7 @@ get_locations(W, FileUUID) ->
 get_locations_from_map(Map) ->
     maps:fold(fun(_, V, Acc) ->
         case V of
-            {ID, file_location} ->
+            {_Version, [{_, _, ID, file_location}]} ->
                 [ID | Acc];
             _ ->
                 Acc
@@ -797,7 +707,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
-    FileId = file_meta:snapshot_name(Path, FDoc#file_meta.version),
+    FileId = fslogic_utils:gen_storage_file_id(FileUuid, Path, FDoc#file_meta.version),
     Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
         space_id = SpaceId},
@@ -832,3 +742,185 @@ set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
     LSL = MC#model_config.link_store_level,
     ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
     ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).
+
+extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
+    ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
+    Workers = ?config(op_worker_nodes, Config),
+    Worker1 = lists:foldl(fun(W, Acc) ->
+        case is_atom(Acc) of
+            true ->
+                Acc;
+            _ ->
+                case string:str(atom_to_list(W), "p1") of
+                    0 -> Acc;
+                    _ -> W
+                end
+        end
+    end, [], Workers),
+
+    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{worker1, Worker1}, {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
+        {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
+
+verify(Config, TestFun) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:foldl(fun(W, Acc) ->
+        [TestFun(W) | Acc]
+    end, [], Workers).
+
+verify_stats(Config, File, IsDir) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} = ?config(nodes_number, Config),
+
+    VerAns = verify(Config, fun(W) ->
+%%        ct:print("VerifyStats ~p", [{File, IsDir, W}]),
+        case IsDir of
+            true ->
+                ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
+                    lfm_proxy:stat(W, SessId(W), {path, File}), Attempts);
+            _ ->
+                ?match({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
+                    lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
+        end,
+        StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
+        {ok, #file_attr{uuid = FileGUID}} = StatAns,
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+        {FileUUID, rpc:call(W, file_meta, get, [FileUUID])}
+    end),
+
+    NotFoundList = lists:filter(fun({_, {error, {not_found, _}}}) -> true; (_) -> false end, VerAns),
+    OKList = lists:filter(fun({_, {ok, _}}) -> true; (_) -> false end, VerAns),
+
+    ?assertEqual(ProxyNodes - ProxyNodesWritten, length(NotFoundList)),
+    ?assertEqual(SyncNodes + ProxyNodesWritten, length(OKList)),
+    [{FileUUIDAns, _} | _] = VerAns,
+    FileUUIDAns.
+
+create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
+    SessId = ?config(session, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker, SessId(WriteWorker), File, 8#755)),
+    OpenAns = lfm_proxy:open(WriteWorker, SessId(WriteWorker), {path, File}, rdwr),
+    ?assertMatch({ok, _}, OpenAns),
+    {ok, Handle} = OpenAns,
+    FileBegSize = size(FileBeg),
+    ?assertMatch({ok, FileBegSize}, lfm_proxy:write(WriteWorker, Handle, 0, FileBeg)),
+    Size = size(File),
+    Offset2 = Offset rem 5 + 1,
+    ?assertMatch({ok, Size}, lfm_proxy:write(WriteWorker, Handle, Offset2, File)),
+    ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId(WriteWorker), {path, File}, 2*Offset2)).
+
+create_file(Config, FileBeg, {Offset, File}) ->
+    Worker1 = ?config(worker1, Config),
+    create_file_on_worker(Config, FileBeg, Offset, File, Worker1).
+
+verify_file(Config, FileBeg, {Offset, File}) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, NodesOfProvider} = ?config(nodes_number, Config),
+    SyncProvidersCount = max(1, round(SyncNodes / NodesOfProvider)),
+
+    Offset2 = Offset rem 5 + 1,
+    Size = 2*Offset2,
+    FileUUID = verify_stats(Config, File, false),
+
+    Beg = binary:part(FileBeg, 0, Offset2),
+    End = binary:part(File, 0, Offset2),
+    FileCheck = <<Beg/binary, End/binary>>,
+
+    VerifyLocation = fun() ->
+        verify(Config, fun(W) ->
+            verify_locations(W, FileUUID)
+        end)
+    end,
+
+%%        VerAns0 = VerifyLocation(),
+%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+
+    verify(Config, fun(W) ->
+%%            ct:print("Verify file ~p", [{File, W}]),
+        OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
+        ?assertMatch({ok, _}, OpenAns),
+        {ok, Handle} = OpenAns,
+        ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts)
+    end),
+
+    ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
+    AssertLocations = fun() ->
+        VerAns = VerifyLocation(),
+%%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+        Flattened = lists:flatten(VerAns),
+
+        ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
+        LocationsList = lists:filter(fun(S) -> S == SyncProvidersCount end, Flattened),
+%%            ct:print("Locations1 ~p", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
+        {length(ZerosList), length(LocationsList)}
+    end,
+    ?match(ToMatch, AssertLocations(), Attempts),
+
+    LocToAns = verify(Config, fun(W) ->
+        StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
+        ?assertMatch({ok, #file_attr{}}, StatAns),
+        {ok, #file_attr{uuid = FileGUID}} = StatAns,
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+
+        {W, get_locations(W, FileUUID)}
+    end),
+    {File, FileUUID, LocToAns}.
+
+verify_del(Config, {F,  _FileUUID, _Locations}) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+
+    verify(Config, fun(W) ->
+%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
+%%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
+        % TODO - match to chosen error (check perms may also result in ENOENT)
+        ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
+    %,
+%%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
+%%            lists:foreach(fun(ProvID) ->
+%%                ?match(#{},
+%%                    get_links(W, FileUUID, ProvID), Attempts)
+%%            end, ProvIDs),
+%%            lists:foreach(fun(Location) ->
+%%                ?match({error, {not_found, _}},
+%%                    rpc:call(W, file_meta, get, [Location]), Attempts)
+%%            end, proplists:get_value(W, Locations, []))
+    end).
+
+verify_dir_size(Config, DirToCheck, DSize) ->
+    SessId = ?config(session, Config),
+    Attempts = ?config(attempts, Config),
+    {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} = ?config(nodes_number, Config),
+
+    VerAns0 = verify(Config, fun(W) ->
+        CountChilden = fun() ->
+            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 200),
+            ?assertMatch({ok, _}, LSAns),
+            {ok, ListedDirs} = LSAns,
+            length(ListedDirs)
+        end,
+        ?match(DSize, CountChilden(), Attempts),
+
+        StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
+        ?assertMatch({ok, #file_attr{}}, StatAns),
+        {ok, #file_attr{uuid = FileGUID}} = StatAns,
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+        {W, FileUUID}
+    end),
+
+    AssertLinks = fun() ->
+        VerAns = lists:map(fun({W, Uuid}) ->
+            count_links(W, Uuid)
+        end, VerAns0),
+%%            ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+
+        ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
+        SList = lists:filter(fun(S) -> S == 2*DSize + 1 end, VerAns),
+        {length(ZerosList), length(SList)}
+    end,
+    ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
+    ?match(ToMatch, AssertLinks(), Attempts).

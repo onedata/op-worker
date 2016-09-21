@@ -439,8 +439,9 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ?CASE_START(Case),
     application:start(etls),
     hackney:start(),
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
@@ -448,12 +449,13 @@ init_per_testcase(_, Config) ->
     start_applier(Worker2, ?REMOTE_APPLIER),
     NewConfig.
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun stop_applier/1, Workers),
     hackney:stop(),
     application:stop(etls),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 %%%===================================================================
 %%% Internal functions

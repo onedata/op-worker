@@ -41,7 +41,8 @@ gen_status_message({403,<<>>,<<>>}) ->
 gen_status_message(Error) when is_atom(Error) ->
     case ordsets:is_element(Error, ?ERROR_CODES) of
         true -> #status{code = Error};
-        false -> #status{code = ?EAGAIN, description = describe_error(Error)}
+        false ->
+            #status{code = ?EAGAIN, description = describe_error(Error)}
     end;
 gen_status_message({ErrorCode, ErrorDescription}) when
     is_atom(ErrorCode) and is_binary(ErrorDescription) ->
