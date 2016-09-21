@@ -294,4 +294,4 @@ test_throw_400(_, _) ->
 
 -spec test_throw_400_with_description(term(), term()) -> no_return().
 test_throw_400_with_description(_, _) ->
-    throw({400, [{<<"error">>, <<"badrequest">>}]}).
+    throw({400, #{<<"error">> => <<"badrequest">>}}).

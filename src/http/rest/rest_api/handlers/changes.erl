@@ -247,7 +247,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
             <<"name">> => Name,
             <<"seq">> => Seq
         },
-    jiffy:encode(Response).
+    json_utils:encode_map(Response).
 
 %%--------------------------------------------------------------------
 %% @todo fix types in cowboy_req
