@@ -237,7 +237,7 @@ delete(#document{value = #file_meta{name = FileName, version = Version}, key = K
             {ok, {ParentKey, ?MODEL_NAME}} ->
                 ok = delete_child_link_in_parent(ParentKey, FileName, Key),
                 ok = delete_child_link_in_parent(ParentKey, snapshot_name(FileName, Version), Key);
-            _ ->f
+            _ ->
                 ok
         end,
         case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, location_ref(oneprovider:get_provider_id())) of
