@@ -59,13 +59,39 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"space">>, SpaceId) ->
-    {ok, space_record(SpaceId)};
+    UserId = g_session:get_user_id(),
+    % Make sure that user is allowed to view requested space - he must have
+    % view privileges in this space.
+    Authorized = space_logic:has_effective_privilege(
+        SpaceId, UserId, [space_view_data]
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            {ok, space_record(SpaceId)}
+    end;
 
-find(<<"space-user-permission">>, AssocId) ->
-    {ok, space_user_permission_record(AssocId)};
-
-find(<<"space-group-permission">>, AssocId) ->
-    {ok, space_group_permission_record(AssocId)}.
+% PermissionsRecord matches <<"space-(user|group)-permission">>
+find(PermissionsRecord, AssocId) ->
+    {_, SpaceId} = op_gui_utils:association_to_ids(AssocId),
+    UserId = g_session:get_user_id(),
+    % Make sure that user is allowed to view requested privileges - he must have
+    % view privileges in this space.
+    Authorized = space_logic:has_effective_privilege(
+        SpaceId, UserId, [space_view_data]
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            case PermissionsRecord of
+                <<"space-user-permission">> ->
+                    {ok, space_user_permission_record(AssocId)};
+                <<"space-group-permission">> ->
+                    {ok, space_group_permission_record(AssocId)}
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -161,7 +187,7 @@ update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
             case space_logic:set_name(UserAuth, SpaceId, NewName) of
                 ok ->
                     ok;
-                {error, {403,<<>>,<<>>}} ->
+                {error, {403, <<>>, <<>>}} ->
                     gui_error:report_warning(
                         <<"You do not have privileges to modify this space.">>);
                 {error, _} ->
@@ -195,7 +221,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify space privileges.">>);
         {error, _} ->
@@ -228,7 +254,7 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify space privileges.">>);
         {error, _} ->
@@ -249,7 +275,7 @@ delete_record(<<"space">>, SpaceId) ->
     case space_logic:delete(UserAuth, SpaceId) of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify this space.">>);
         {error, _} ->
