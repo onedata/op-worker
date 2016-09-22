@@ -68,7 +68,7 @@ find(<<"share-public">>, ShareId) ->
             name = Name,
             root_file_id = RootFileId,
             public_url = PublicURL
-        }}} = share_info:get(ShareId),
+        }}} = share_logic:get(provider, ShareId),
     {ok, [
         {<<"id">>, ShareId},
         {<<"name">>, Name},

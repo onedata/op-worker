@@ -241,7 +241,8 @@ has_effective_privilege(SpaceId, UserId, Privilege) ->
 %% @doc
 %% Retrieves effective user privileges taking into account any groups
 %% he is a member of that also are members of the Space.
-%% Throws exception when call to the datastore fails, or space/user doesn't exist.
+%% Throws exception when call to the datastore fails,
+%% or space/user doesn't exist.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_privileges(SpaceId :: space_info:id(),
@@ -274,4 +275,3 @@ get_effective_privileges(SpaceId, UserId) ->
         end,
 
     {ok, ordsets:union([UserPrivileges | PrivilegesSets])}.
-

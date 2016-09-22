@@ -58,14 +58,39 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"group">>, GroupId) ->
-    {ok, group_record(GroupId)};
+    UserId = g_session:get_user_id(),
+    % Make sure that user is allowed to view requested group - he must have
+    % view privileges in this group.
+    Authorized = group_logic:has_effective_privilege(
+        GroupId, UserId, [group_view_data]
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            {ok, group_record(GroupId)}
+    end;
 
-find(<<"group-user-permission">>, AssocId) ->
-    {ok, group_user_permission_record(AssocId)};
-
-find(<<"group-group-permission">>, AssocId) ->
-    {ok, group_group_permission_record(AssocId)}.
-
+% PermissionsRecord matches <<"group-(user|group)-permission">>
+find(PermissionsRecord, AssocId) ->
+    {_, GroupId} = op_gui_utils:association_to_ids(AssocId),
+    UserId = g_session:get_user_id(),
+    % Make sure that user is allowed to view requested privileges - he must have
+    % view privileges in this group.
+    Authorized = group_logic:has_effective_privilege(
+        GroupId, UserId, [group_view_data]
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            case PermissionsRecord of
+                <<"group-user-permission">> ->
+                    {ok, group_user_permission_record(AssocId)};
+                <<"group-group-permission">> ->
+                    {ok, group_group_permission_record(AssocId)}
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

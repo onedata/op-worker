@@ -74,7 +74,7 @@
   1},
  {<<"gui">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/gui.git",
-       {ref,"793fbd3d1c3517805fb6519d33b3305227d1c055"}},
+       {ref,"ff280050c7b1cbdf8e9a722e04ee0224455ac16c"}},
   0},
  {<<"hackney">>,{pkg,<<"hackney">>,<<"1.6.0">>},2},
  {<<"idna">>,{pkg,<<"idna">>,<<"1.2.0">>},3},

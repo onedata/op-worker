@@ -26,7 +26,6 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([share_record/1]).
 
 %%%===================================================================
 %%% API functions
@@ -60,7 +59,30 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"share">>, ShareId) ->
-    {ok, share_record(ShareId)}.
+    UserId = g_session:get_user_id(),
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{
+        value = #share_info{
+            name = Name,
+            root_file_id = RootFileId,
+            parent_space = ParentSpaceId,
+            public_url = PublicURL
+        }}} = share_logic:get(UserAuth, ShareId),
+    % Make sure that user is allowed to view requested space - he must have
+    % view privileges in this space.
+    case space_logic:has_effective_user(ParentSpaceId, UserId) of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
+            {ok, [
+                {<<"id">>, ShareId},
+                {<<"name">>, Name},
+                {<<"file">>, FileId},
+                {<<"dataSpace">>, ParentSpaceId},
+                {<<"publicUrl">>, PublicURL}
+            ]}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -161,33 +183,3 @@ delete_record(<<"share">>, ShareId) ->
             gui_error:report_warning(
                 <<"Cannot remove share due to unknown error.">>)
     end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a client-compliant share record based on share id.
-%% @end
-%%--------------------------------------------------------------------
--spec share_record(ShareId :: binary()) -> proplists:proplist().
-share_record(ShareId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{
-        value = #share_info{
-            name = Name,
-            root_file_id = RootFileId,
-            parent_space = ParentSpaceId,
-            public_url = PublicURL
-        }}} = share_logic:get(UserAuth, ShareId),
-    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
-    [
-        {<<"id">>, ShareId},
-        {<<"name">>, Name},
-        {<<"file">>, FileId},
-        {<<"dataSpace">>, ParentSpaceId},
-        {<<"publicUrl">>, PublicURL}
-    ].
