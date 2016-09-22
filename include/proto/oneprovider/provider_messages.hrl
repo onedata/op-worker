@@ -96,6 +96,10 @@
     names = [] :: custom_metadata:names()
 }).
 
+-record(remove_metadata, {
+    type :: custom_metadata:type()
+}).
+
 -record(check_perms, {
     flags :: fslogic_worker:open_flags()
 }).
@@ -113,7 +117,7 @@
 #get_transfer_encoding{} | #set_transfer_encoding{} |
 #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
-#get_file_distribution{} | #replicate_file{} | #get_metadata{} |
+#get_file_distribution{} | #replicate_file{} | #get_metadata{} | #remove_metadata{} |
 #set_metadata{} | #check_perms{} | #create_share{} | #remove_share{}.
 
 -record(xattr_list, {

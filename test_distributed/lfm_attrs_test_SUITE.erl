@@ -190,9 +190,24 @@ has_custom_metadata_test(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
+    % json
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
     ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID}, json, #{}, [])),
-    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})).
+    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
+    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, {guid, GUID}, json)),
+
+    % rdf
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID}, rdf, <<"<xml>">>, [])),
+    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
+    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, {guid, GUID}, rdf)),
+
+    % xattr
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, GUID}, #xattr{name = <<"name">>, value = <<"value">>})),
+    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
+    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, GUID}, <<"name">>)),
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

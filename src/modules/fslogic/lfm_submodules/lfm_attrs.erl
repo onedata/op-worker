@@ -29,7 +29,7 @@
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
     set_mimetype/3]).
--export([get_metadata/5, set_metadata/5, has_custom_metadata/2]).
+-export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 
 %%%===================================================================
 %%% API
@@ -311,3 +311,17 @@ has_custom_metadata(SessId, FileKey) ->
         Error ->
             Error
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type()) ->
+    ok | logical_file_manager:error_reply().
+remove_metadata(SessId, FileKey, Type) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
+        #remove_metadata{type = Type},
+        fun(_) -> ok end).

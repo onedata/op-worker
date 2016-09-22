@@ -34,8 +34,8 @@
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
     get_file_path/2, chmod_storage_files/3, replicate_file/3,
-    get_metadata/5, set_metadata/5, check_perms/3, create_share/3,
-    remove_share/2]).
+    get_metadata/5, set_metadata/5, remove_metadata/3,
+    check_perms/3, create_share/3, remove_share/2]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -472,13 +472,28 @@ get_metadata(_CTX, {uuid, FileUuid}, rdf, _, _) ->
 %% Set metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), #{}, [binary()]) -> ok.
+-spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(),
+    custom_metadata:value(), custom_metadata:filter()) -> ok.
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_metadata(_CTX, {uuid, FileUuid}, json, Value, Names) ->
     {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
     #provider_response{status = #status{code = ?OK}};
 set_metadata(_CTX, {uuid, FileUuid}, rdf, Value, _) ->
     {ok, _} = custom_metadata:set_rdf_metadata(FileUuid, Value),
+    #provider_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type()) -> ok.
+-check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
+remove_metadata(_CTX, {uuid, FileUuid}, json) ->
+    ok = custom_metadata:remove_json_metadata(FileUuid),
+    #provider_response{status = #status{code = ?OK}};
+remove_metadata(_CTX, {uuid, FileUuid}, rdf) ->
+    ok = custom_metadata:remove_rdf_metadata(FileUuid),
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------

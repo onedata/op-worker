@@ -82,7 +82,7 @@
 %% Functions concerning file shares
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
--export([get_metadata/5, set_metadata/5, has_custom_metadata/2]).
+-export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 
 %%%===================================================================
 %%% API
@@ -579,7 +579,7 @@ remove_share_by_guid(SessId, ShareGuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get json metadata linked with file
+%% Get metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
@@ -589,7 +589,7 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Set json metadata linked with file
+%% Set metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(session:id(), file_key(), custom_metadata:type(),
@@ -605,3 +605,13 @@ set_metadata(SessId, FileKey, Type, Value, Names) ->
 -spec has_custom_metadata(session:id(), file_key()) -> {ok, boolean()} | error_reply().
 has_custom_metadata(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:has_custom_metadata(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_metadata(session:id(), file_key(), custom_metadata:type()) ->
+    ok | error_reply().
+remove_metadata(SessId, FileKey, Type) ->
+    ?run(fun() -> lfm_attrs:remove_metadata(SessId, FileKey, Type) end).

@@ -21,9 +21,11 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_json_metadata/1, get_json_metadata/3, set_json_metadata/2, set_json_metadata/3,
-    get_xattr_metadata/3, list_xattr_metadata/2, remove_xattr_metadata/2, set_xattr_metadata/3,
-    exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2]).
+-export([get_json_metadata/1, get_json_metadata/3, set_json_metadata/2,
+    set_json_metadata/3, remove_json_metadata/1]).
+-export([get_rdf_metadata/1, set_rdf_metadata/2, remove_rdf_metadata/1]).
+-export([get_xattr_metadata/3, list_xattr_metadata/2, exists_xattr_metadata/2,
+    remove_xattr_metadata/2, set_xattr_metadata/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -141,6 +143,14 @@ set_json_metadata(FileUuid, JsonToInsert, Names) ->
     end).
 
 %%--------------------------------------------------------------------
+%% @doc Removes file's json metadata
+%% @equiv remove_xattr_metadata(FileUuid, ?JSON_METADATA_KEY).
+%%--------------------------------------------------------------------
+-spec remove_json_metadata(file_meta:uuid()) -> ok | datastore:generic_error().
+remove_json_metadata(FileUuid) ->
+    remove_xattr_metadata(FileUuid, ?JSON_METADATA_KEY).
+
+%%--------------------------------------------------------------------
 %% @doc Gets file's rdf metadata
 %% @equiv get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
 %%--------------------------------------------------------------------
@@ -156,6 +166,14 @@ get_rdf_metadata(FileUuid) ->
     {ok, file_meta:uuid()} | datastore:generic_error().
 set_rdf_metadata(FileUuid, Value) ->
     set_xattr_metadata(FileUuid, ?RDF_METADATA_KEY, Value).
+
+%%--------------------------------------------------------------------
+%% @doc Removes file's rdf metadata
+%% @equiv remove_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
+%%--------------------------------------------------------------------
+-spec remove_rdf_metadata(file_meta:uuid()) -> ok | datastore:generic_error().
+remove_rdf_metadata(FileUuid) ->
+    remove_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
 
 %%--------------------------------------------------------------------
 %% @doc Get extended attribute metadata

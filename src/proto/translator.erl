@@ -393,6 +393,8 @@ translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names, inherited = 
     #get_metadata{type = binary_to_existing_atom(Type, utf8), names = Names, inherited = Inherited};
 translate_from_protobuf(#'WriteMetadata'{metadata = Metadata, names = Names}) ->
     #set_metadata{metadata = translate_from_protobuf(Metadata), names = Names};
+translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
+    #remove_metadata{type = binary_to_existing_atom(Type, utf8)};
 
 translate_from_protobuf(#'ProviderResponse'{status = Status, provider_response = {_, ProviderResponse}}) ->
     #provider_response{
@@ -791,6 +793,8 @@ translate_to_protobuf(#get_metadata{type = Type, names = Names, inherited = Inhe
 translate_to_protobuf(#set_metadata{metadata = Metadata, names = Names}) ->
     {_, MetadataProto} = translate_to_protobuf(Metadata),
     {write_metadata, #'WriteMetadata'{metadata = MetadataProto, names = Names}};
+translate_to_protobuf(#remove_metadata{type = Type}) ->
+    {remove_metadata, #'RemoveMetadata'{type = atom_to_binary(Type, utf8)}};
 
 translate_to_protobuf(#provider_response{status = Status, provider_response = ProviderResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),
