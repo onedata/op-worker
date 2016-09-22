@@ -28,14 +28,30 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     create_or_update/2, 'after'/5, before/4]).
 
--type type() :: binary().
+% Metadata types
+-type type() :: json | rdf.
 -type name() :: binary().
+-type value() :: rdf() | json().
 -type names() :: [name()].
 -type metadata() :: #metadata{}.
 -type rdf() :: binary().
 -type view_id() :: binary().
+-type filter() :: [binary()].
 
--export_type([type/0, name/0, names/0, metadata/0, rdf/0, view_id/0]).
+% JSON type
+-type json() :: json_object() | json_array().
+-type json_array() :: [json_term()].
+-type json_object() :: #{json_key() => json_term()}.
+-type json_key() :: binary() | atom().
+-type json_term() :: json_array()
+| json_object()
+| json_string()
+| json_number()
+| true | false | null.
+-type json_string() :: binary().
+-type json_number() :: float() | integer().
+
+-export_type([type/0, name/0, value/0, names/0, metadata/0, rdf/0, view_id/0, filter/0]).
 
 -define(JSON_PREFIX, <<"onedata_json">>).
 -define(RDF_PREFIX, <<"onedata_rdf">>).
@@ -65,13 +81,14 @@ get_json_metadata(FileUuid) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_json_metadata(file_meta:uuid(), [binary()], boolean()) ->
+-spec get_json_metadata(file_meta:uuid(), filter(), Inherited :: boolean()) ->
     {ok, maps:map()} | datastore:get_error().
 get_json_metadata(FileUuid, Names, false) ->
     case get(FileUuid) of
-        {ok, #document{value = #custom_metadata{value = Meta}}} ->
-            Json = maps:get(?JSON_PREFIX, Meta, #{}),
+        {ok, #document{value = #custom_metadata{value = #{?JSON_PREFIX := Json}}}} ->
             {ok, custom_meta_manipulation:find(Json, Names)};
+        {ok, #document{value = #custom_metadata{}}} ->
+            {error, {not_found,custom_metadata}};
         Error ->
             Error
     end;

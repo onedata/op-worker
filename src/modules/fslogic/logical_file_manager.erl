@@ -582,8 +582,8 @@ remove_share_by_guid(SessId, ShareGuid) ->
 %% Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), file_key(), binary(), [binary()], boolean()) ->
-    {ok, maps:map()} | error_reply().
+-spec get_metadata(session:id(), file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
+    {ok, custom_metadata:value()} | error_reply().
 get_metadata(SessId, FileKey, Type, Names, Inherited) ->
     ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names, Inherited) end).
 
@@ -592,7 +592,7 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
 %% Set json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), file_key(), binary(), term(), [binary()]) ->
-    ok | error_reply().
+-spec set_metadata(session:id(), file_key(), custom_metadata:type(),
+    custom_metadata:value(), custom_metadata:filter()) -> ok | error_reply().
 set_metadata(SessId, FileKey, Type, Value, Names) ->
     ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Names) end).

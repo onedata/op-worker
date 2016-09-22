@@ -16,16 +16,15 @@
 -include("http/rest/rest_api/rest_errors.hrl").
 
 -define(ALLOWED_ATTRIBUTES, [<<"mode">>, undefined]).
+-define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
+
 -define(DEFAULT_EXTENDED, <<"false">>).
 -define(DEFAULT_INHERITED, <<"false">>).
-
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
-
 -define(DEFAULT_LAST_SEQ, <<"now">>).
+-define(DEFAULT_OFFSET, <<"0">>).
 
 -define(MAX_LIMIT, 1000).
-
--define(DEFAULT_OFFSET, <<"0">>).
 
 %% API
 -export([malformed_request/2, parse_path/2,
@@ -333,7 +332,17 @@ parse_status(Req, State) ->
     {parse_result(), cowboy_req:req()}.
 parse_metadata_type(Req, State) ->
     {MetadataType, NewReq} = cowboy_req:qs_val(<<"metadata_type">>, Req),
-    {State#{metadata_type => MetadataType}, NewReq}.
+    case lists:member(MetadataType, ?ALLOWED_METADATA_TYPES) of
+        true ->
+            case MetadataType of
+                undefined ->
+                    {State#{metadata_type => undefined}, NewReq};
+                _ ->
+                    {State#{metadata_type => binary_to_existing_atom(MetadataType, utf8)}, NewReq}
+            end;
+        false ->
+            throw(?ERROR_INVALID_METADATA_TYPE)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

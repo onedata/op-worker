@@ -26,8 +26,16 @@
     end_per_testcase/2]).
 
 %% tests
--export([empty_xattr_test/1, crud_xattr_test/1, list_xattr_test/1, remove_file_test/1,
-    modify_cdmi_attrs/1, create_and_get_view/1]).
+-export([
+    empty_xattr_test/1,
+    crud_xattr_test/1,
+    list_xattr_test/1,
+    remove_file_test/1,
+    modify_cdmi_attrs/1,
+    create_and_get_view/1,
+    get_empty_json/1,
+    get_empty_rdf/1
+]).
 
 all() ->
     ?ALL([
@@ -36,7 +44,9 @@ all() ->
         list_xattr_test,
         remove_file_test,
         modify_cdmi_attrs,
-        create_and_get_view
+        create_and_get_view,
+        get_empty_json,
+        get_empty_rdf
     ]).
 
 %%%====================================================================
@@ -140,9 +150,9 @@ create_and_get_view(Config) ->
     {ok, GUID1} = lfm_proxy:create(Worker, SessId, Path1, 8#600),
     {ok, GUID2} = lfm_proxy:create(Worker, SessId, Path2, 8#600),
     {ok, GUID3} = lfm_proxy:create(Worker, SessId, Path3, 8#600),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID1}, <<"json">>, MetaBlue, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID2}, <<"json">>, MetaRed, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID3}, <<"json">>, MetaBlue, [])),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID1}, json, MetaBlue, [])),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID2}, json, MetaRed, [])),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID3}, json, MetaBlue, [])),
     {ok, ViewId} = rpc:call(Worker, indexes, add_index, [<<"user1">>, <<"name">>, ViewFunction, <<"space_id1">>]),
     ?assertMatch({ok, #{name := <<"name">>, space_id := <<"space_id1">>, function := _}},
         rpc:call(Worker, indexes, get_index, [<<"user1">>, ViewId])),
@@ -155,6 +165,22 @@ create_and_get_view(Config) ->
     ?assert(lists:member(GUID3, GuidsBlue)),
     ?assertEqual([GUID2], GuidsRed),
     ?assertEqual([], GuidsOrange).
+
+get_empty_json(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Path = <<"/space_name1/t6_file">>,
+    {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, GUID}, json, [], false)).
+
+get_empty_rdf(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Path = <<"/space_name1/t6_file">>,
+    {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, GUID}, rdf, [], false)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

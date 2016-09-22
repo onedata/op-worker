@@ -500,7 +500,7 @@ changes_stream_json_metadata_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(5000),
-        lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, <<"json">>, Json, [])
+        lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, json, Json, [])
     end),
     {ok, 200, _, Body} = do_request(WorkerP1, <<"changes/metadata/space1?timeout=10000">>,
         get, [user_1_token_header(Config)], []),

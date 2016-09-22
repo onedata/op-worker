@@ -62,6 +62,9 @@
 -type share_id() :: binary().
 -type share_file_guid() :: binary().
 -type share_name() :: binary().
+-type metadata_type() :: custom_metadata:type().
+-type metadata_filter() :: custom_metadata:filter().
+-type metadata_value() :: custom_metadata:value().
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
@@ -445,8 +448,8 @@ remove_share_by_guid(Auth, ShareGuid) ->
 %% Get json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(onedata_auth_api:auth(), file_key(), binary(), [binary()], boolean()) ->
-    {ok, maps:map()} | error_reply().
+-spec get_metadata(onedata_auth_api:auth(), file_key(), metadata_type(), metadata_filter(), boolean()) ->
+    {ok, custom_metadata:value()} | error_reply().
 get_metadata(Auth, FileKey, Type, Names, Inherited) ->
     logical_file_manager:get_metadata(Auth, FileKey, Type, Names, Inherited).
 
@@ -455,7 +458,7 @@ get_metadata(Auth, FileKey, Type, Names, Inherited) ->
 %% Set json metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(onedata_auth_api:auth(), file_key(), binary(), term(), [binary()]) ->
+-spec set_metadata(onedata_auth_api:auth(), file_key(), metadata_type(), metadata_value(), metadata_filter()) ->
     ok | error_reply().
 set_metadata(Auth, FileKey, Type, Value, Names) ->
     logical_file_manager:set_metadata(Auth, FileKey, Type, Value, Names).
