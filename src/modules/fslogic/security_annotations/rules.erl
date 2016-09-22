@@ -202,17 +202,11 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
             _ ->
                 {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
                 {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
-                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-                case catch lists:keymember(SpaceId, 1, Spaces) of
+                case catch lists:keymember(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), 1, Spaces) of
                     true ->
                         group;
                     _ ->
-                        case ShareId of
-                            undefined ->
-                                throw(?EACCES);
-                            _ ->
-                                other
-                        end
+                        other
                 end
         end,
     ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as ~p.", [UserId, ReqBit, FileDoc, Mode, CheckType]),
