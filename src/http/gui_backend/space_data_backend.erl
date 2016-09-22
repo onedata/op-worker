@@ -60,12 +60,8 @@ terminate() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"space">>, SpaceId) ->
     UserId = g_session:get_user_id(),
-    % Make sure that user is allowed to view requested space - he must have
-    % view privileges in this space.
-    Authorized = space_logic:has_effective_privilege(
-        SpaceId, UserId, [space_view_data]
-    ),
-    case Authorized of
+    % Check if the user belongs to this space
+    case space_logic:has_effective_user(SpaceId, UserId) of
         false ->
             gui_error:unauthorized();
         true ->
@@ -79,7 +75,7 @@ find(PermissionsRecord, AssocId) ->
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
     Authorized = space_logic:has_effective_privilege(
-        SpaceId, UserId, [space_view_data]
+        SpaceId, UserId, space_view_data
     ),
     case Authorized of
         false ->
@@ -296,33 +292,50 @@ delete_record(<<"space">>, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
-    CurrentUser = g_session:get_user_id(),
+    UserId = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #space_info{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
+        }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
 
-    UserPermissions = lists:map(
-        fun({UsId, _UsPerms}) ->
-            op_gui_utils:ids_to_association(UsId, SpaceId)
-        end, UsersAndPerms),
+    % Make sure that user is allowed to view requested space -
+    % he must have view privileges in this space.
+    Authorized = space_logic:has_effective_privilege(
+        SpaceId, UserId, space_view_data
+    ),
+    case Authorized of
+        false ->
+            [
+                {<<"id">>, SpaceId},
+                {<<"name">>, Name},
+                {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
+                {<<"hasViewPrivilege">>, false},
+                {<<"userPermissions">>, []},
+                {<<"groupPermissions">>, []}
+            ];
+        true ->
+            UserPermissions = lists:map(
+                fun({UsId, _UsPerms}) ->
+                    op_gui_utils:ids_to_association(UsId, SpaceId)
+                end, UsersAndPerms),
 
-    GroupPermissions = lists:map(
-        fun({GroupId, _GroupPerms}) ->
-            op_gui_utils:ids_to_association(GroupId, SpaceId)
-        end, GroupsAndPerms),
-
-    DefaultSpaceId = user_logic:get_default_space(UserAuth, CurrentUser),
-    [
-        {<<"id">>, SpaceId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"userPermissions">>, UserPermissions},
-        {<<"groupPermissions">>, GroupPermissions}
-    ].
+            GroupPermissions = lists:map(
+                fun({GroupId, _GroupPerms}) ->
+                    op_gui_utils:ids_to_association(GroupId, SpaceId)
+                end, GroupsAndPerms),
+            [
+                {<<"id">>, SpaceId},
+                {<<"name">>, Name},
+                {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
+                {<<"hasViewPrivilege">>, true},
+                {<<"userPermissions">>, UserPermissions},
+                {<<"groupPermissions">>, GroupPermissions}
+            ]
+    end.
 
 
 %%--------------------------------------------------------------------

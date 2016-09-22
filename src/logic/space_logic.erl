@@ -191,7 +191,7 @@ has_effective_user(SpaceId, UserId) ->
             false;
         {ok, #document{value = UserInfo}} ->
             #onedata_user{spaces = SpaceNames} = UserInfo,
-            maps:is_key(SpaceId, SpaceNames)
+            proplists:is_defined(SpaceId, SpaceNames)
     end.
 %%    case space_info:get(SpaceId) of
 %%        {error, {not_found, _}} ->

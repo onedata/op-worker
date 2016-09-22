@@ -59,12 +59,8 @@ terminate() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"group">>, GroupId) ->
     UserId = g_session:get_user_id(),
-    % Make sure that user is allowed to view requested group - he must have
-    % view privileges in this group.
-    Authorized = group_logic:has_effective_privilege(
-        GroupId, UserId, [group_view_data]
-    ),
-    case Authorized of
+    % Check if the user belongs to this group
+    case group_logic:has_effective_user(GroupId, UserId) of
         false ->
             gui_error:unauthorized();
         true ->
@@ -78,7 +74,7 @@ find(PermissionsRecord, AssocId) ->
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
     Authorized = group_logic:has_effective_privilege(
-        GroupId, UserId, [group_view_data]
+        GroupId, UserId, group_view_data
     ),
     case Authorized of
         false ->
@@ -168,7 +164,7 @@ update_record(<<"group">>, GroupId, [{<<"name">>, Name}]) ->
             case group_logic:set_name(UserAuth, GroupId, NewName) of
                 ok ->
                     ok;
-                {error, {403,<<>>,<<>>}} ->
+                {error, {403, <<>>, <<>>}} ->
                     gui_error:report_warning(
                         <<"You do not have privileges to modify this group.">>);
                 {error, _} ->
@@ -201,7 +197,7 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify group privileges.">>);
         {error, _} ->
@@ -233,7 +229,7 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify group privileges.">>);
         {error, _} ->
@@ -254,7 +250,7 @@ delete_record(<<"group">>, GroupId) ->
     case group_logic:delete(UserAuth, GroupId) of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify this group.">>);
         {error, _} ->
@@ -274,7 +270,8 @@ delete_record(<<"group">>, GroupId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary()) -> proplists:proplist().
-group_record(CurrentGroupId) ->
+group_record(GroupId) ->
+    UserId = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #onedata_group{
@@ -282,25 +279,44 @@ group_record(CurrentGroupId) ->
             users = UsersAndPerms,
             nested_groups = GroupsAndPerms,
             parent_groups = ParentGroups
-        }}} = group_logic:get(UserAuth, CurrentGroupId),
+        }}} = group_logic:get(UserAuth, GroupId),
 
-    {ChildGroups, _} = lists:unzip(GroupsAndPerms),
-    UserPermissions = lists:map(
-        fun({UsId, _UsPerms}) ->
-            op_gui_utils:ids_to_association(UsId, CurrentGroupId)
-        end, UsersAndPerms),
-    GroupPermissions = lists:map(
-        fun({ChildGroupId, _GroupPerms}) ->
-            op_gui_utils:ids_to_association(ChildGroupId, CurrentGroupId)
-        end, GroupsAndPerms),
-    [
-        {<<"id">>, CurrentGroupId},
-        {<<"name">>, Name},
-        {<<"userPermissions">>, UserPermissions},
-        {<<"groupPermissions">>, GroupPermissions},
-        {<<"parentGroups">>, ParentGroups},
-        {<<"childGroups">>, ChildGroups}
-    ].
+    % Make sure that user is allowed to view requested group - he must have
+    % view privileges in this group.
+    Authorized = group_logic:has_effective_privilege(
+        GroupId, UserId, group_view_data
+    ),
+    case Authorized of
+        false ->
+            [
+                {<<"id">>, GroupId},
+                {<<"name">>, Name},
+                {<<"hasViewPrivilege">>, false},
+                {<<"userPermissions">>, []},
+                {<<"groupPermissions">>, []},
+                {<<"parentGroups">>, []},
+                {<<"childGroups">>, []}
+            ];
+        true ->
+            {ChildGroups, _} = lists:unzip(GroupsAndPerms),
+            UserPermissions = lists:map(
+                fun({UsId, _UsPerms}) ->
+                    op_gui_utils:ids_to_association(UsId, GroupId)
+                end, UsersAndPerms),
+            GroupPermissions = lists:map(
+                fun({ChildGroupId, _GroupPerms}) ->
+                    op_gui_utils:ids_to_association(ChildGroupId, GroupId)
+                end, GroupsAndPerms),
+            [
+                {<<"id">>, GroupId},
+                {<<"name">>, Name},
+                {<<"hasViewPrivilege">>, true},
+                {<<"userPermissions">>, UserPermissions},
+                {<<"groupPermissions">>, GroupPermissions},
+                {<<"parentGroups">>, ParentGroups},
+                {<<"childGroups">>, ChildGroups}
+            ]
+    end.
 
 
 %%--------------------------------------------------------------------
