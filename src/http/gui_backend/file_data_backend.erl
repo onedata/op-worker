@@ -105,7 +105,7 @@ find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = g_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(SessionId, {guid, FileId}),
     Res = lists:map(
-        fun([{<<"providerId">>, ProviderId}, {<<"blocks">>, Blocks}]) ->
+        fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks}) ->
             BlocksList =
                 case Blocks of
                     [] ->

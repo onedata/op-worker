@@ -67,7 +67,7 @@ handle(Req, State, _Type, {Status, BodyBinary})
     {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, _Type, {Status, Body}) when is_integer(Status) ->
-    BodyBinary = json_utils:encode(Body),
+    BodyBinary = json_utils:encode_map(Body),
     {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, Type, Error) ->

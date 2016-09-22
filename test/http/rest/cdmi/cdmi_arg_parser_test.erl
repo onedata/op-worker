@@ -16,9 +16,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("http/rest/cdmi/cdmi_errors.hrl").
 
--define(version, cdmi_arg_parser:get_supported_version).
-
-
 get_supported_version_test() ->
   Binary00 = <<"">>,
   Binary01 = <<"  ">>,
@@ -39,28 +36,28 @@ get_supported_version_test() ->
   Binary41 = <<"aaa,aa,">>,
   Binary42 = <<"aaa,aa ">>,
 
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary00)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary01)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary02)),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary00))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary01))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary02))),
 
-  ?assertEqual(<<"1.1.1">>, ?version(Binary10)),
-  ?assertEqual(<<"1.1.1">>, ?version(Binary11)),
+  ?assertEqual(<<"1.1.1">>, cdmi_arg_parser:get_supported_version(Binary10)),
+  ?assertEqual(<<"1.1.1">>, cdmi_arg_parser:get_supported_version(Binary11)),
 
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary20)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary21)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary22)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary23)),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary20))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary21))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary22))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary23))),
 
 
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary30)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary31)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary32)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary33)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary34)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary35)),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary30))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary31))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary32))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary33))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary34))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary35))),
 
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary40)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary41)),
-  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary42)).
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary40))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary41))),
+  ?assertEqual(?ERROR_UNSUPPORTED_VERSION, (catch cdmi_arg_parser:get_supported_version(Binary42))).
 
 -endif.

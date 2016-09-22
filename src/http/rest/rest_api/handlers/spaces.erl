@@ -86,7 +86,7 @@ list_spaces(Req, State = #{auth := Auth}) ->
     {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get_or_fetch(Auth, UserId),
     RawResponse =
         lists:map(fun({SpaceId, SpaceName}) ->
-            [{<<"name">>, SpaceName}, {<<"spaceId">>, SpaceId}]
+            #{<<"name">> => SpaceName, <<"spaceId">> => SpaceId}
         end, Spaces),
-    Response = json_utils:encode(RawResponse),
+    Response = json_utils:encode_map(RawResponse),
     {Response, Req, State}.

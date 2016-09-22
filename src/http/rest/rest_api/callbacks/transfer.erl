@@ -69,7 +69,7 @@ get_status(TransferId)  ->
 %% Gets transfer info
 %% @end
 %%--------------------------------------------------------------------
--spec get(TransferId :: id()) -> list().
+-spec get(TransferId :: id()) -> maps:map().
 get(TransferId)  ->
     gen_server2:call(id_to_pid(TransferId), get_info).
 
@@ -134,11 +134,11 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(get_info, _From, State = #state{status = Status, path = Path, target_provider_id = TargetProviderId}) ->
-    Response = [
-        {<<"path">>, Path},
-        {<<"status">>, atom_to_binary(Status, utf8)},
-        {<<"targetProviderId">>, TargetProviderId}
-    ],
+    Response = #{
+        <<"path">> => Path,
+        <<"status">> => atom_to_binary(Status, utf8),
+        <<"targetProviderId">> => TargetProviderId
+    },
     {reply, Response, State};
 handle_call(get_status, _From, State) ->
     {reply, State#state.status, State};
