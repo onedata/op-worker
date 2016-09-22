@@ -34,7 +34,8 @@
     modify_cdmi_attrs/1,
     create_and_get_view/1,
     get_empty_json/1,
-    get_empty_rdf/1
+    get_empty_rdf/1,
+    has_custom_metadata_test/1
 ]).
 
 all() ->
@@ -46,7 +47,8 @@ all() ->
         modify_cdmi_attrs,
         create_and_get_view,
         get_empty_json,
-        get_empty_rdf
+        get_empty_rdf,
+        has_custom_metadata_test
     ]).
 
 %%%====================================================================
@@ -181,6 +183,16 @@ get_empty_rdf(Config) ->
     {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, {guid, GUID}, rdf, [], false)).
+
+has_custom_metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Path = <<"/space_name1/t6_file">>,
+    {ok, GUID} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
+    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, {guid, GUID}, json, #{}, [])),
+    ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

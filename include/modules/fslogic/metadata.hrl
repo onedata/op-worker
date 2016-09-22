@@ -10,4 +10,11 @@
 %%%-------------------------------------------------------------------
 -author("Lukasz Opiola").
 
--define(METADATA_INTERNAL_PREFIXES, [<<"onedata_">>, <<"cdmi_">>]).
+-define(ONEDATA_PREFIX, <<"onedata_">>).
+-define(ONEDATA_PREFIX_STR, "onedata_").
+-define(CDMI_PREFIX, <<"cdmi_">>).
+-define(CDMI_PREFIX_STR, "cdmi_").
+
+-define(JSON_METADATA_KEY, <<?ONEDATA_PREFIX_STR, "json">>).
+-define(RDF_METADATA_KEY, <<?ONEDATA_PREFIX_STR, "rdf">>).
+-define(METADATA_INTERNAL_PREFIXES, [?ONEDATA_PREFIX, ?CDMI_PREFIX]).

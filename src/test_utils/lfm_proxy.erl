@@ -22,7 +22,7 @@
     get_xattr/4, get_xattr/5, set_xattr/4, remove_xattr/4, list_xattr/5, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
-    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
+    set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6, has_custom_metadata/3,
     check_perms/4, create_share/4, remove_share/3, remove_share_by_guid/3]).
 
 %%%===================================================================
@@ -425,6 +425,16 @@ set_metadata(Worker, SessId, FileKey, Type, Value, Names) ->
         fun(Host) ->
             Result =
                 logical_file_manager:set_metadata(SessId, FileKey, Type, Value, Names),
+            Host ! {self(), Result}
+        end).
+
+-spec has_custom_metadata(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, boolean()}.
+has_custom_metadata(Worker, SessId, FileKey) ->
+        exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:has_custom_metadata(SessId, FileKey),
             Host ! {self(), Result}
         end).
 

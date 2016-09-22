@@ -36,7 +36,7 @@
 %% Functions concerning file shares
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
--export([get_metadata/5, set_metadata/5]).
+-export([get_metadata/5, set_metadata/5, has_custom_metadata/2]).
 
 %%--------------------------------------------------------------------
 %% IDs of entities
@@ -462,3 +462,13 @@ get_metadata(Auth, FileKey, Type, Names, Inherited) ->
     ok | error_reply().
 set_metadata(Auth, FileKey, Type, Value, Names) ->
     logical_file_manager:set_metadata(Auth, FileKey, Type, Value, Names).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if file has custom metadata defined
+%% @end
+%%--------------------------------------------------------------------
+-spec has_custom_metadata(onedata_auth_api:auth(), file_key()) ->
+    {ok, boolean()} | error_reply().
+has_custom_metadata(Auth, FileKey) ->
+    logical_file_manager:has_custom_metadata(Auth, FileKey).

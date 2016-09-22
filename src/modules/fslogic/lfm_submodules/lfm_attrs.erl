@@ -12,6 +12,7 @@
 
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -28,7 +29,7 @@
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
     set_mimetype/3]).
--export([get_metadata/5, set_metadata/5]).
+-export([get_metadata/5, set_metadata/5, has_custom_metadata/2]).
 
 %%%===================================================================
 %%% API
@@ -283,3 +284,30 @@ set_metadata(SessId, FileKey, Type, Value, Names) ->
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
         #set_metadata{names = Names, metadata = #metadata{type = Type, value = Value}},
         fun(_) -> ok end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if file has custom metadata defined
+%% @end
+%%--------------------------------------------------------------------
+-spec has_custom_metadata(session:id(), logical_file_manager:file_key()) ->
+{ok, boolean()} | logical_file_manager:error_reply().
+has_custom_metadata(SessId, FileKey) ->
+    case list_xattr(SessId, FileKey, false, true) of
+        {ok, List} ->
+            FilteredList = lists:filter(fun
+                (?JSON_METADATA_KEY) ->
+                    true;
+                (?RDF_METADATA_KEY) ->
+                    true;
+                (<<?CDMI_PREFIX_STR, _/binary>>) ->
+                    false;
+                (<<?ONEDATA_PREFIX_STR, _/binary>>) ->
+                    false;
+                (_) ->
+                    true
+            end, List),
+            {ok, FilteredList =/= []};
+        Error ->
+            Error
+    end.

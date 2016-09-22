@@ -82,7 +82,7 @@
 %% Functions concerning file shares
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
--export([get_metadata/5, set_metadata/5]).
+-export([get_metadata/5, set_metadata/5, has_custom_metadata/2]).
 
 %%%===================================================================
 %%% API
@@ -596,3 +596,12 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
     custom_metadata:value(), custom_metadata:filter()) -> ok | error_reply().
 set_metadata(SessId, FileKey, Type, Value, Names) ->
     ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Names) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if file has custom metadata defined
+%% @end
+%%--------------------------------------------------------------------
+-spec has_custom_metadata(session:id(), file_key()) -> {ok, boolean()} | error_reply().
+has_custom_metadata(SessId, FileKey) ->
+    ?run(fun() -> lfm_attrs:has_custom_metadata(SessId, FileKey) end).
