@@ -744,8 +744,8 @@ pushing_space_group_write_priv_locks_space_for_user(Config) ->
     end,
 
     FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
-    {SessionID, Node, S1, U1, P1, Priv1, G1} = check_file_operations_test_base0(Config, ?FUNCTION),
-    UpdateFun1(Node, S1, U1, P1, Priv1, G1),
+    {SessionID, Node, S1, U1, P1, Priv1, G0} = check_file_operations_test_base0(Config, ?FUNCTION),
+    UpdateFun1(Node, S1, U1, P1, Priv1, G0),
 
     ?assertMatch({error, eacces}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)).
 
@@ -765,8 +765,8 @@ pushing_space_user_write_priv_locks_space_for_user(Config) ->
     end,
 
     FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
-    {SessionID, Node, S1, U1, P1, Priv1, G1} = check_file_operations_test_base0(Config, ?FUNCTION),
-    UpdateFun1(Node, S1, U1, P1, Priv1, G1),
+    {SessionID, Node, S1, U1, P1, Priv1, G0} = check_file_operations_test_base0(Config, ?FUNCTION),
+    UpdateFun1(Node, S1, U1, P1, Priv1, G0),
 
     ?assertMatch({error, eacces}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)).
 

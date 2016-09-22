@@ -259,13 +259,15 @@ validate_scope_access(_FileDoc, _UserId, _ShareId) ->
 %%--------------------------------------------------------------------
 -spec validate_scope_privs(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(),
     UserDoc :: datastore:document(), ShareId :: share_info:id()) -> ok | no_return().
-validate_scope_privs(write, FileDoc, #document{key = UserId, value = #onedata_user{group_ids = UserGroups}}, _ShareId) ->
+validate_scope_privs(write, FileDoc, #document{key = UserId, value = #onedata_user{effective_group_ids = UserGroups}}, _ShareId) ->
     {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
     {ok, #document{value = #space_info{users = Users, groups = Groups}}} =
         space_info:get(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), UserId),
 
+    SpeceWritePriv = space_write_files,
+
     UserPrivs = proplists:get_value(UserId, Users, []),
-    case lists:member(space_write_files, UserPrivs) of
+    case lists:member(SpeceWritePriv, UserPrivs) of
         true -> ok;
         false ->
             SpaceGroupsSet = sets:from_list(proplists:get_keys(Groups)),
@@ -274,7 +276,7 @@ validate_scope_privs(write, FileDoc, #document{key = UserId, value = #onedata_us
 
             ValidGroups = lists:foldl(fun(GroupId, AccIn) ->
                 GroupPrivs = proplists:get_value(GroupId, Groups, []),
-                case lists:member(GroupId, GroupPrivs) of
+                case lists:member(SpeceWritePriv, GroupPrivs) of
                     true ->
                         [GroupId | AccIn];
                     false ->
