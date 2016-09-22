@@ -88,7 +88,7 @@ get_ranges(Req, Size) ->
         undefined -> {undefined, Req1};
         _ ->
             case parse_byte_range(RawRange, Size) of
-                invalid ->throw(?ERROR_INVALID_RANGE);
+                invalid -> throw(?ERROR_INVALID_RANGE);
                 Ranges -> {Ranges, Req1}
             end
     end.
@@ -96,10 +96,15 @@ get_ranges(Req, Size) ->
 %%--------------------------------------------------------------------
 %% @doc Reads whole body and decodes it as json.
 %%--------------------------------------------------------------------
--spec parse_body(cowboy_req:req()) -> {ok, list(), cowboy_req:req()}.
+-spec parse_body(cowboy_req:req()) -> {ok, maps:map(), cowboy_req:req()}.
 parse_body(Req) ->
     {ok, RawBody, Req1} = cowboy_req:body(Req),
-    Body = json_utils:decode(RawBody),
+    Body = case RawBody of
+        <<>> ->
+            #{};
+        _ ->
+            json_utils:decode_map(RawBody)
+    end,
     ok = validate_body(Body),
     {ok, Body, Req1}.
 
@@ -143,9 +148,9 @@ parse_byte_range([First | Rest], Size) ->
 %%--------------------------------------------------------------------
 -spec parse_content(binary()) -> {Mimetype :: binary(), Encoding :: binary() | undefined}.
 parse_content(Content) ->
-    case binary:split(Content,<<";">>) of
+    case binary:split(Content, <<";">>) of
         [RawMimetype, RawEncoding] ->
-            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
+            case binary:split(utils:trim_spaces(RawEncoding), <<"=">>) of
                 [<<"charset">>, <<"utf-8">>] ->
                     {utils:trim_spaces(RawMimetype), <<"utf-8">>};
                 _ ->
@@ -160,7 +165,7 @@ parse_content(Content) ->
 %%%===================================================================
 
 -type result_state() :: #{options => list(), cdmi_version => binary(),
-    path => onedata_file_api:file_path()}.
+path => onedata_file_api:file_path()}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -285,7 +290,7 @@ parse_opts(RawOpts) ->
                                 {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
                         end
                 end;
-            (Other) ->
+            (_Other) ->
                 throw(?ERROR_MALFORMED_QS)
         end,
         Opts
@@ -294,18 +299,14 @@ parse_opts(RawOpts) ->
 %%--------------------------------------------------------------------
 %% @doc Validates correctness of request's body.
 %%--------------------------------------------------------------------
--spec validate_body(list()) -> ok | no_return().
+-spec validate_body(maps:map()) -> ok | no_return().
 validate_body(Body) ->
-    Keys = proplists:get_keys(Body),
+    Keys = maps:keys(Body),
     KeySet = sets:from_list(Keys),
     ExclusiveRequiredKeysSet = sets:from_list(?KEYS_REQUIRED_TO_BE_EXCLUSIVE),
-    case length(Keys) =:= length(Body) of
-        true ->
-            case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
-                N when N > 1 -> throw(?ERROR_CONFLICTING_BODY_FIELDS);
-                _ -> ok
-            end;
-        false -> throw(?ERROR_DUPLICATED_BODY_FIELDS)
+    case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
+        N when N > 1 -> throw(?ERROR_CONFLICTING_BODY_FIELDS);
+        _ -> ok
     end.
 
 %%--------------------------------------------------------------------

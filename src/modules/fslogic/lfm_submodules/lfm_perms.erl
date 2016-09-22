@@ -79,7 +79,7 @@ get_acl(SessId, FileKey) ->
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, GUID, #get_acl{},
         fun(#acl{value = Json}) ->
-            Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)), %todo store perms as integers
+            Acl = fslogic_acl:from_json_format_to_acl(json_utils:decode_map(Json)), %todo store perms as integers
             {ok, Acl}
         end).
 
@@ -98,7 +98,7 @@ set_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = Se
 set_acl(SessId, FileKey, Acl) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
+    Json = json_utils:encode_map(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
     lfm_utils:call_fslogic(SessId, provider_request, GUID,
         #set_acl{acl = #acl{value = Json}},
         fun(_) -> ok end).

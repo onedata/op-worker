@@ -93,15 +93,15 @@ get_space(Req, State) ->
     ProvidersRawResponse = lists:map(fun(ProviderId) ->
         {ok, #document{value = #provider_info{client_name = ProviderName}}} =
             provider_info:get_or_fetch(ProviderId),
-        [
-            {<<"providerId">>, ProviderId},
-            {<<"providerName">>, ProviderName}
-        ]
+        #{
+            <<"providerId">> => ProviderId,
+            <<"providerName">> => ProviderName
+        }
     end, Providers),
-    RawResponse = [
-        {<<"name">>, Name},
-        {<<"providers">>, ProvidersRawResponse},
-        {<<"spaceId">>, SpaceId}
-    ],
-    Response = json_utils:encode(RawResponse),
+    RawResponse = #{
+        <<"name">> => Name,
+        <<"providers">> => ProvidersRawResponse,
+        <<"spaceId">> => SpaceId
+    },
+    Response = json_utils:encode_map(RawResponse),
     {Response, Req2, State2}.

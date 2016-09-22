@@ -117,14 +117,14 @@ list_indexes(Req, State) ->
     RawResponse =
         lists:filtermap(fun
             (#{id := Id, space_id := SID, name := undefined}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
-                {true, [{<<"spaceId">>, SID}, {<<"indexId">>, Id}]};
+                {true, #{<<"spaceId">> => SID, <<"indexId">> => Id}};
             (#{id := Id, space_id := SID, name := Name}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
-                {true, [{<<"spaceId">>, SID}, {<<"name">>, Name}, {<<"indexId">>, Id}]};
+                {true, #{<<"spaceId">> => SID, <<"name">> => Name, <<"indexId">> => Id}};
             (_) ->
                 false
         end, IndexList),
 
-    Response = json_utils:encode(RawResponse),
+    Response = json_utils:encode_map(RawResponse),
     {Response, Req1, State1}.
 
 %%--------------------------------------------------------------------

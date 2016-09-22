@@ -43,28 +43,27 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
-    [{Name :: binary(), Value :: binary()}].
+    maps:map().
 get_user_metadata(Auth, FileKey) ->
     {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey, false, true),
-    Metadata = lists:map(
+    Metadata = lists:filtermap(
         fun
-            (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>) -> undefined;
+            (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>) -> false;
             (Name) ->
                 case onedata_file_api:get_xattr(Auth, FileKey, Name, false) of
                     {ok, #xattr{value = XattrValue}} ->
-                        {Name, XattrValue};
+                        {true, {Name, XattrValue}};
                     {error, ?ENOATTR} ->
-                        undefined
+                        false
                 end
         end, Names),
-    FilteredMetadata = lists:filter(fun(Name) -> Name =/= undefined end, Metadata),
-    filter_user_metadata(FilteredMetadata).
+    filter_user_metadata_map(maps:from_list(Metadata)).
 
 %%--------------------------------------------------------------------
 %% @equiv update_user_metadata(Auth, FileKey, UserMetadata, []).
 %%--------------------------------------------------------------------
--spec update_user_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(),
-  UserMetadata :: [{Name :: binary(), Value :: binary()}]) -> ok.
+-spec update_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(),
+    maps:map()) -> ok.
 update_user_metadata(Auth, FileKey, UserMetadata) ->
     update_user_metadata(Auth, FileKey, UserMetadata, []).
 
@@ -74,47 +73,50 @@ update_user_metadata(Auth, FileKey, UserMetadata) ->
 %% entry in UserMetadata, entry is removed from user metadata associated with a file.
 %% @end
 %%--------------------------------------------------------------------
--spec update_user_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(),
-  UserMetadata :: [{Name :: binary(), Value :: binary()}] | undefined,
-    URIMetadataNames :: [Name :: binary()]) -> ok | no_return().
+-spec update_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(),
+    UserMetadata :: maps:map() | undefined, URIMetadataNames :: [Name :: binary()]) ->
+    ok | no_return().
 update_user_metadata(_Auth, _FileKey, undefined, []) ->
     ok;
 update_user_metadata(Auth, FileKey, undefined, URIMetadataNames) ->
-    update_user_metadata(Auth, FileKey, [], URIMetadataNames);
+    update_user_metadata(Auth, FileKey, #{}, URIMetadataNames);
 update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
-    BodyMetadata = filter_user_metadata(UserMetadata),
-    BodyMetadataNames = get_metadata_names(BodyMetadata),
+    BodyMetadata = filter_user_metadata_map(UserMetadata),
+    BodyMetadataNames = maps:keys(BodyMetadata),
     DeleteAttributeFunction =
         fun
-            (?ACL_XATTR_NAME) -> ok = onedata_file_api:remove_acl(Auth, FileKey);
-            (Name) -> ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
+            (?ACL_XATTR_NAME) ->
+                ok = onedata_file_api:remove_acl(Auth, FileKey);
+            (Name) ->
+                ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
         end,
     ReplaceAttributeFunction =
         fun
             ({?ACL_XATTR_NAME, Value}) ->
-                ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
-                      catch _:Error ->
-                          ?warning_stacktrace("Acl conversion error ~p", [Error]),
-                          throw(?ERROR_INVALID_ACL)
-                      end,
+                ACL = try fslogic_acl:from_json_format_to_acl(Value)
+                catch _:Error ->
+                    ?warning_stacktrace("Acl conversion error ~p", [Error]),
+                    throw(?ERROR_INVALID_ACL)
+                end,
                 ok = onedata_file_api:set_acl(Auth, FileKey, ACL);
-            ({Name, Value}) -> ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = Name, value = Value})
+            ({Name, Value}) ->
+                ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = Name, value = Value})
         end,
     case AllURIMetadataNames of
         [] ->
-            lists:foreach(DeleteAttributeFunction, get_metadata_names(get_user_metadata(Auth, FileKey)) -- BodyMetadataNames),
-            lists:foreach(ReplaceAttributeFunction, BodyMetadata);
+            lists:foreach(DeleteAttributeFunction, maps:keys(get_user_metadata(Auth, FileKey)) -- BodyMetadataNames),
+            lists:foreach(ReplaceAttributeFunction, maps:to_list(BodyMetadata));
         _ ->
-            UriMetadataNames = filter_user_metadata(AllURIMetadataNames),
+            UriMetadataNames = filter_user_metadata_keylist(AllURIMetadataNames),
             lists:foreach(DeleteAttributeFunction, UriMetadataNames -- BodyMetadataNames),
-            lists:foreach(ReplaceAttributeFunction, filter_URI_Names(BodyMetadata, UriMetadataNames))
+            lists:foreach(ReplaceAttributeFunction, maps:to_list(filter_URI_Names(BodyMetadata, UriMetadataNames)))
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata.
 %%--------------------------------------------------------------------
--spec prepare_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(), #file_attr{}) ->
-    [{CdmiName :: binary(), Value :: binary()}].
+-spec prepare_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(), #file_attr{}) ->
+    maps:map().
 prepare_metadata(Auth, FileKey, Attrs) ->
     prepare_metadata(Auth, FileKey, <<"">>, Attrs).
 
@@ -122,11 +124,12 @@ prepare_metadata(Auth, FileKey, Attrs) ->
 %% @doc Prepares cdmi user and storage system metadata with given prefix.
 %%--------------------------------------------------------------------
 -spec prepare_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(), Prefix :: binary(),
-  #file_attr{}) -> [{CdmiName :: binary(), Value :: binary()}].
+    #file_attr{}) -> maps:map().
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
-    UserMetadata = lists:filter(fun({Name, _Value}) -> str_utils:binary_starts_with(Name, Prefix) end, get_user_metadata(Auth, FileKey)),
-    StorageSystemMetadata ++ UserMetadata.
+    UserMetadata = maps:filter(fun(Name, _Value) ->
+        str_utils:binary_starts_with(Name, Prefix) end, get_user_metadata(Auth, FileKey)),
+    maps:merge(StorageSystemMetadata, UserMetadata).
 
 %%--------------------------------------------------------------------
 %% @doc Gets mimetype associated with file, returns default value if no mimetype
@@ -205,7 +208,8 @@ update_cdmi_completion_status(Auth, FileKey, CompletionStatus)
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status_according_to_partial_flag(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
     ok | no_return().
-set_cdmi_completion_status_according_to_partial_flag(_Auth, _FileKey, <<"true">>) -> ok;
+set_cdmi_completion_status_according_to_partial_flag(_Auth, _FileKey, <<"true">>) ->
+    ok;
 set_cdmi_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
     ok = update_cdmi_completion_status(Auth, FileKey, <<"Complete">>).
 
@@ -216,60 +220,78 @@ set_cdmi_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
 %%--------------------------------------------------------------------
 %% @doc Filters out metadata with user_metadata_forbidden_prefix.
 %%--------------------------------------------------------------------
--spec filter_user_metadata(UserMetadata) -> UserMetadata when
-    UserMetadata :: [{CdmiName :: binary(), Value :: binary()}] | [CdmiName :: binary()].
-filter_user_metadata(UserMetadata) when is_list(UserMetadata) ->
-    lists:filter(
+-spec filter_user_metadata_map(maps:map()) -> maps:map().
+filter_user_metadata_map(UserMetadata) when is_map(UserMetadata) ->
+    maps:filter(
         fun
-            ({?ACL_XATTR_NAME, _Value}) -> true;
-            ({Name, _Value}) -> not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX);
-            (?ACL_XATTR_NAME) -> true;
-            (Name) -> not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
+            (?ACL_XATTR_NAME, _Value) -> true;
+            (Name, _Value) ->
+                not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
         end,
         UserMetadata);
-filter_user_metadata(_) ->
+filter_user_metadata_map(_) ->
     throw(?ERROR_INVALID_METADATA).
 
 %%--------------------------------------------------------------------
-%% @doc Returns first list from unzip result.
+%% @doc Filters out metadata with user_metadata_forbidden_prefix.
 %%--------------------------------------------------------------------
--spec get_metadata_names([{A, B}]) -> [A] when A :: term(), B :: term().
-get_metadata_names(TupleList) ->
-    {Result, _} = lists:unzip(TupleList),
-    Result.
+-spec filter_user_metadata_keylist(list()) -> list().
+filter_user_metadata_keylist(UserMetadata) when is_list(UserMetadata) ->
+    lists:filter(
+        fun
+            (?ACL_XATTR_NAME) -> true;
+            (Name) ->
+                not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
+        end,
+        UserMetadata);
+filter_user_metadata_keylist(_) ->
+    throw(?ERROR_INVALID_METADATA).
 
 %%--------------------------------------------------------------------
 %% @doc Filters metadata with names contained in URIMetadataNames list.
 %%--------------------------------------------------------------------
--spec filter_URI_Names(UserMetadata, URIMetadataNames :: [CdmiName]) -> UserMetadata when
-    UserMetadata :: [{CdmiName, Value :: binary()}], CdmiName :: binary().
+-spec filter_URI_Names(maps:map(), [CdmiName :: binary()]) -> maps:map().
 filter_URI_Names(UserMetadata, URIMetadataNames) ->
-    [{Name,Value} || URIName <- URIMetadataNames, {Name, Value} <- UserMetadata, URIName == Name].
+    maps:filter(fun(Name, _) ->
+        lists:member(Name, URIMetadataNames) end, UserMetadata).
 
 %%--------------------------------------------------------------------
 %% @doc Returns system metadata with given prefix, in mochijson parser format
 %%--------------------------------------------------------------------
 -spec prepare_cdmi_metadata(MetadataNames :: [binary()], onedata_file_api:file_key(),
-  onedata_auth_api:auth(), #file_attr{}, Prefix :: binary()) -> list().
-prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) -> [];
+    onedata_auth_api:auth(), #file_attr{}, Prefix :: binary()) -> maps:map().
+prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) ->
+    #{};
 prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
     case str_utils:binary_starts_with(Name, Prefix) of
         true ->
             case Name of
                 <<"cdmi_size">> -> %todo clarify what should be written to cdmi_size for directories
-                    [{<<"cdmi_size">>, integer_to_binary(Attrs#file_attr.size)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
+                        <<"cdmi_size">> => integer_to_binary(Attrs#file_attr.size)
+                    };
                 <<"cdmi_ctime">> ->
-                    [{<<"cdmi_ctime">>, epoch_to_iso8601(Attrs#file_attr.ctime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
+                        <<"cdmi_ctime">> => epoch_to_iso8601(Attrs#file_attr.ctime)
+                    };
                 <<"cdmi_atime">> ->
-                    [{<<"cdmi_atime">>, epoch_to_iso8601(Attrs#file_attr.atime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
+                        <<"cdmi_atime">> => epoch_to_iso8601(Attrs#file_attr.atime)
+                    };
                 <<"cdmi_mtime">> ->
-                    [{<<"cdmi_mtime">>, epoch_to_iso8601(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
+                        <<"cdmi_mtime">> => epoch_to_iso8601(Attrs#file_attr.mtime)
+                    };
                 <<"cdmi_owner">> ->
-                    [{<<"cdmi_owner">>, integer_to_binary(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
+                        <<"cdmi_owner">> => integer_to_binary(Attrs#file_attr.uid)
+                    };
                 ?ACL_XATTR_NAME ->
                     case onedata_file_api:get_acl(Auth, FileKey) of
                         {ok, Acl} ->
-                            [{?ACL_XATTR_NAME, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                            (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
+                                ?ACL_XATTR_NAME => fslogic_acl:from_acl_to_json_format(Acl)
+                            };
                         {error, ?ENOATTR} ->
                             prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)
                     end
