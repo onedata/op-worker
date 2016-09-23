@@ -310,9 +310,7 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, sha
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(File),
 
     {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
-    FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),
-
-    #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
+    #document{value = #file_location{blocks = Blocks, file_id = FileId}} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 

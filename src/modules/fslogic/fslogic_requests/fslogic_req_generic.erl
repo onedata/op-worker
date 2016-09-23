@@ -123,8 +123,9 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
     ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
-            type = Type, mode = Mode, atime = ATime, mtime = MTime,
+            type = Type, mode = Mode, atime = ATime, mtime = MTime, provider_id = ProviderId,
             ctime = CTime, uid = UserID, name = Name, shares = Shares}} = FileDoc} ->
+
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
@@ -149,7 +150,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
                 gid = GID,
                 uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                ctime = CTime, uid = FinalUID, size = Size, name = Name,
+                ctime = CTime, uid = FinalUID, size = Size, name = Name, provider_id = ProviderId,
                 shares = Shares
             }};
         {error, {not_found, _}} ->
