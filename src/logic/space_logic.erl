@@ -251,7 +251,7 @@ has_effective_privilege(SpaceId, UserId, Privilege) ->
 get_effective_privileges(SpaceId, UserId) ->
     {ok, #document{
         value = #onedata_user{
-            group_ids = UGroups
+            effective_group_ids = UGroups
         }}} = onedata_user:get(UserId),
     {ok, #document{
         value = #space_info{

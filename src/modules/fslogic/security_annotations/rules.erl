@@ -184,43 +184,46 @@ check({Perm, File, User, ShareId, Acl}) ->
 %% @doc Checks whether given user has given permission on given file (POSIX permission check).
 %%--------------------------------------------------------------------
 -spec validate_posix_access(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id(), ShareId :: share_info:id()) -> ok | no_return().
-validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, undefined) ->
+validate_posix_access(rdwr, FileDoc, UserId, ShareId) ->
+    ok = validate_posix_access(write, FileDoc, UserId, ShareId),
+    ok = validate_posix_access(read, FileDoc, UserId, ShareId);
+validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, ShareId) ->
     ReqBit =
         case AccessType of
-            rdwr -> 8#6;
             read -> 8#4;
             write -> 8#2;
             exec -> 8#1
         end,
 
-    IsAccessable =
+    CheckType =
         case UserId of
             OwnerId ->
-                ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as owner.", [UserId, ReqBit, FileDoc, Mode]),
-                ((ReqBit bsl 6) band Mode) =:= (ReqBit bsl 6);
+                owner;
             _ ->
                 {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
                 {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
                 case catch lists:keymember(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), 1, Spaces) of
                     true ->
-                        ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as space member.", [UserId, ReqBit, FileDoc, Mode]),
-                        ((ReqBit bsl 3) band Mode) =:= (ReqBit bsl 3);
+                        group;
                     _ ->
-                        ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as other (Spaces ~p, scope ~p).", [UserId, ReqBit, FileDoc, Mode, Spaces, ScopeUUID]),
-                        (ReqBit band Mode) =:= ReqBit
+                        other
                 end
         end,
+    ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as ~p.", [UserId, ReqBit, FileDoc, Mode, CheckType]),
 
-    case IsAccessable of
+    IsAccessible =
+        case CheckType of
+            owner ->
+                ((ReqBit bsl 6) band Mode) =:= (ReqBit bsl 6);
+            group ->
+                ((ReqBit bsl 3) band Mode) =:= (ReqBit bsl 3);
+            other ->
+                (ReqBit band Mode) =:= ReqBit
+        end,
+
+    case IsAccessible of
         true -> ok;
         false -> throw(?EACCES)
-    end;
-validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, _ShareId) ->
-    case AccessType =:= read orelse AccessType =:= exec of
-        true ->
-            ok;
-        false ->
-            validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, undefined)
     end.
 
 %%--------------------------------------------------------------------

@@ -237,7 +237,7 @@ has_effective_user(GroupId, UserId) ->
         {error, {not_found, _}} ->
             false;
         {ok, #document{value = UserInfo}} ->
-            #onedata_user{group_ids = Groups} = UserInfo,
+            #onedata_user{effective_group_ids = Groups} = UserInfo,
             lists:member(GroupId, Groups)
     end.
 

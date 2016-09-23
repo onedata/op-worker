@@ -390,9 +390,11 @@ translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
     #replicate_file{provider_id = ProviderId,
         block = translate_from_protobuf(Block)};
 translate_from_protobuf(#'ReadMetadata'{type = Type, names = Names, inherited = Inherited}) ->
-    #get_metadata{type = Type, names = Names, inherited = Inherited};
+    #get_metadata{type = binary_to_existing_atom(Type, utf8), names = Names, inherited = Inherited};
 translate_from_protobuf(#'WriteMetadata'{metadata = Metadata, names = Names}) ->
     #set_metadata{metadata = translate_from_protobuf(Metadata), names = Names};
+translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
+    #remove_metadata{type = binary_to_existing_atom(Type, utf8)};
 
 translate_from_protobuf(#'ProviderResponse'{status = Status, provider_response = {_, ProviderResponse}}) ->
     #provider_response{
@@ -424,7 +426,9 @@ translate_from_protobuf(#'FileDistribution'{provider_file_distributions = Distri
     TranslatedDistributions = lists:map(fun translate_from_protobuf/1, Distributions),
     #file_distribution{provider_file_distributions = TranslatedDistributions};
 translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
-    #metadata{type = <<"json">>, value = jiffy:decode(Json, [return_maps])};
+    #metadata{type = json, value = json_utils:decode_map(Json)};
+translate_from_protobuf(#'Metadata'{type = <<"rdf">>, value = Rdf}) ->
+    #metadata{type = rdf, value = Rdf};
 translate_from_protobuf(#'CheckPerms'{flags = Flags}) ->
     #check_perms{flags = open_flags_translate_from_protobuf(Flags)};
 translate_from_protobuf(#'CreateShare'{name = Name}) ->
@@ -785,10 +789,12 @@ translate_to_protobuf(#replicate_file{provider_id = ProviderId,
     {replicate_file, #'ReplicateFile'{provider_id = ProviderId,
         block = translate_to_protobuf(Block)}};
 translate_to_protobuf(#get_metadata{type = Type, names = Names, inherited = Inherited}) ->
-    {read_metadata, #'ReadMetadata'{type = Type, names = Names, inherited = Inherited}};
+    {read_metadata, #'ReadMetadata'{type = atom_to_binary(Type, utf8), names = Names, inherited = Inherited}};
 translate_to_protobuf(#set_metadata{metadata = Metadata, names = Names}) ->
     {_, MetadataProto} = translate_to_protobuf(Metadata),
     {write_metadata, #'WriteMetadata'{metadata = MetadataProto, names = Names}};
+translate_to_protobuf(#remove_metadata{type = Type}) ->
+    {remove_metadata, #'RemoveMetadata'{type = atom_to_binary(Type, utf8)}};
 
 translate_to_protobuf(#provider_response{status = Status, provider_response = ProviderResponse}) ->
     {status, StatProto} = translate_to_protobuf(Status),
@@ -816,8 +822,10 @@ translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, bloc
 translate_to_protobuf(#file_distribution{provider_file_distributions = Distributions}) ->
     TranslatedDistributions = lists:map(fun translate_to_protobuf/1, Distributions),
     {file_distribution, #'FileDistribution'{provider_file_distributions = TranslatedDistributions}};
-translate_to_protobuf(#metadata{type = <<"json">>, value = Json}) ->
-    {metadata, #'Metadata'{type = <<"json">>, value = jiffy:encode(Json)}};
+translate_to_protobuf(#metadata{type = json, value = Json}) ->
+    {metadata, #'Metadata'{type = <<"json">>, value = json_utils:encode_map(Json)}};
+translate_to_protobuf(#metadata{type = rdf, value = Rdf}) ->
+    {metadata, #'Metadata'{type = <<"rdf">>, value = Rdf}};
 translate_to_protobuf(#check_perms{flags = Flags}) ->
     {check_perms, #'CheckPerms'{flags = open_flags_translate_to_protobuf(Flags)}};
 translate_to_protobuf(#create_share{name = Name}) ->
