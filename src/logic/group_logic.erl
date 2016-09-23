@@ -226,8 +226,8 @@ get_create_space_token(Auth, GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Predicate telling if given user belongs to given space directly
-%% or via his groups.
+%% Predicate telling if given user belongs to given group directly
+%% or via nested groups.
 %% @end
 %%--------------------------------------------------------------------
 -spec has_effective_user(GroupId :: onedata_group:id(),
