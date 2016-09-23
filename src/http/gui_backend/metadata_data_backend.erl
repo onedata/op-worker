@@ -140,7 +140,10 @@ update_record(<<"file-property">>, FileId, Data) ->
         undefined ->
             ok;
         JSON ->
-            JSONMap = json_utils:decode_map(json_utils:encode(JSON)),
+            JSONMap = case JSON of
+                [] -> #{};
+                _ -> json_utils:decode_map(json_utils:encode(JSON))
+            end,
             ok = logical_file_manager:set_metadata(
                 SessionId, {guid, FileId}, json, JSONMap, []
             )
