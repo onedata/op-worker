@@ -142,7 +142,7 @@ update_record(<<"file-property">>, FileId, Data) ->
         JSON ->
             JSONMap = json_utils:decode_map(json_utils:encode(JSON)),
             ok = logical_file_manager:set_metadata(
-                SessionId, {guid, FileId}, <<"json">>, JSONMap, []
+                SessionId, {guid, FileId}, json, JSONMap, []
             )
     end,
     case proplists:get_value(<<"rdf">>, Data) of
@@ -150,7 +150,7 @@ update_record(<<"file-property">>, FileId, Data) ->
             ok;
         RDF ->
             ok = logical_file_manager:set_metadata(
-                SessionId, {guid, FileId}, <<"rdf">>, RDF, []
+                SessionId, {guid, FileId}, rdf, RDF, []
             )
     end,
     ok.
@@ -174,11 +174,11 @@ delete_record(<<"file-property">>, FileId) ->
                 SessionId, {guid, FileId}, Key
             )
         end, XattrKeys),
-    ok = logical_file_manager:set_metadata(
-        SessionId, {guid, FileId}, <<"json">>, #{}, []
+    ok = logical_file_manager:remove_metadata(
+        SessionId, {guid, FileId}, json
     ),
-    ok = logical_file_manager:set_metadata(
-        SessionId, {guid, FileId}, <<"rdf">>, undefined, []
+    ok = logical_file_manager:remove_metadata(
+        SessionId, {guid, FileId}, rdf
     ),
     ok.
 
@@ -207,17 +207,17 @@ metadata_record(SessionId, FileId) ->
         _ -> Basic
     end,
     {ok, JSON} = logical_file_manager:get_metadata(
-        SessionId, {guid, FileId}, <<"json">>, [], false
+        SessionId, {guid, FileId}, json, [], false
     ),
-    JSONVal = case is_map(JSON) andalso map_size(JSON) of
-        0 -> null;
+    JSONVal = case JSON of
+        ?ENOATTR -> null;
         _ -> json_utils:decode(json_utils:encode_map(JSON))
     end,
     {ok, RDF} = logical_file_manager:get_metadata(
-        SessionId, {guid, FileId}, <<"rdf">>, [], false
+        SessionId, {guid, FileId}, rdf, [], false
     ),
     RDFVal = case RDF of
-        undefined -> null;
+        ?ENOATTR -> null;
         _ -> RDF
     end,
     {ok, [
