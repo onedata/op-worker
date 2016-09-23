@@ -92,6 +92,8 @@ expand_access_definitions(_, ?ROOT_USER_ID, _ShareId, _Inputs, _FileMap, _AclMap
     [];
 expand_access_definitions([root | _Rest], _UserId, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     throw(?EACCES);
+expand_access_definitions(_, ?GUEST_USER_ID, undefined, _Inputs, _FileMap, _AclMap, _UserMap) ->
+    throw(?EACCES);
 expand_access_definitions([{traverse_ancestors, ItemDefinition} | Rest], UserId, ShareId, Inputs, FileMap, AclMap, UserMap) ->
     {User, NewUserMap} = get_user(UserId, UserMap),
     {SubjectDoc, ParentDoc, NewFileMap} =
@@ -186,11 +188,16 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
     {AncestorsCheck, CacheUsed} = expand_ancestors_check(Uuid, [], UserId, UserDoc, ShareId, AclMap),
     case {ShareId, CacheUsed} of
         {undefined, _} ->
+            ?critical("@@@ Share undefined"),
             SubjectCheck ++ AncestorsCheck;
         {_, true} ->
+            ?critical("@@@ Share defined, cache used"),
             SubjectCheck ++ AncestorsCheck;
         {_, false} ->
+            ?critical("@@@ Share defined, cache not used"),
+
             PotentialShares = [SubjectDoc, NewSubjDoc] ++ [Doc || {_, Doc, _, _, _} <- AncestorsCheck],
+            ?critical("potential shares ~p", [PotentialShares]),
             IsValidShare = lists:any(
                 fun(#document{value = #file_meta{shares = Shares}}) ->
                     lists:member(ShareId, Shares)

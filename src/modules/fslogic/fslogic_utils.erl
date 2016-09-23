@@ -67,10 +67,12 @@ gen_storage_file_id(Entry, Path) ->
     {ok, #document{key = Key, value = #file_meta{version = Version}}} = file_meta:get(Entry),
     gen_storage_file_id(Key, Path, Version).
 
--spec gen_storage_file_id(Key :: file_meta:uuid(), Path :: file_meta:path(), Version :: non_neg_integer()) ->
+-spec gen_storage_file_id(Entry :: fslogic_worker:file(), Path :: file_meta:path(), Version :: non_neg_integer()) ->
     helpers:file() | no_return().
-gen_storage_file_id(Key, Path, Version) when is_integer(Version) ->
-    file_meta:snapshot_name(<<Path/binary, "#<UUID>", Key/binary>>, Version).
+gen_storage_file_id(_Entry, Path, 0) ->
+    Path;
+gen_storage_file_id(_Entry, Path, Version) when is_integer(Version) ->
+    file_meta:snapshot_name(Path, Version).
 
 
 -spec get_local_file_location(fslogic_worker:ext_file()) ->

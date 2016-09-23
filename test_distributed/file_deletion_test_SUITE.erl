@@ -175,8 +175,7 @@ init_should_clear_open_files_test(Config) ->
     ?assertEqual(0, length(ClearedOpenFiles)),
 
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
-    %% First call comes from creating file.
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2).
+    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1).
 
 
 open_file_deletion_request_test(Config) ->
@@ -188,8 +187,7 @@ open_file_deletion_request_test(Config) ->
 
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
-    %% First call comes from creating file.
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2).
+    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1).
 
 
 deletion_of_not_open_file_test(Config) ->
@@ -203,8 +201,7 @@ deletion_of_not_open_file_test(Config) ->
 
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
-    %% First call comes from creating file.
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2).
+    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1).
 
 deletion_of_open_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -223,8 +220,8 @@ deletion_of_open_file_test(Config) ->
     %% File should be marked to remove and renamed.
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 1),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 0),
-    %% Calls from creating file nad rename
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2),
+    %% Calls from rename
+    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1),
 
     %% Release of file mark to remove should remove it.
     ?assertEqual(ok, rpc:call(Worker, open_file, register_release,
@@ -232,8 +229,8 @@ deletion_of_open_file_test(Config) ->
     ?assertEqual(false, rpc:call(Worker, open_file, exists, [FileUUID])),
 
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
-    %% Calls from creating file nad rename
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 3).
+    %% Calls rename
+    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2).
 
 
 %===================================================================

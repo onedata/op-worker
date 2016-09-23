@@ -138,7 +138,7 @@ create(#document{} = Parent, #file_meta{} = File) ->
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V} = FM} = FileDoc0) ->
     ?run(begin
         {ok, Scope} = get_scope(Parent),
-        FM1 = FM#file_meta{scope = Scope#document.key},
+        FM1 = FM#file_meta{scope = Scope#document.key, provider_id = oneprovider:get_provider_id()},
         FileDoc =
             case FileDoc0 of
                 #document{key = undefined} = Doc ->
