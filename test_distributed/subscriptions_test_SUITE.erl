@@ -38,7 +38,13 @@
     add_user_to_group_triggers_file_meta_creation/1,
     add_space_to_group_triggers_file_meta_creation/1,
     add_provider_to_space_triggers_file_meta_creation/1,
-    space_without_support_test/1]).
+    space_without_support_test/1,
+    pushing_space_user_write_priv_unlocks_space_for_user/1,
+    pushing_space_group_write_priv_unlocks_space_for_user/1,
+    pushing_space_group_write_priv_locks_space_for_user/1,
+    pushing_space_user_write_priv_locks_space_for_user/1,
+    pushing_space_group_write_priv_locks_space_for_user_even_if_owner/1
+]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
@@ -70,7 +76,12 @@ all() -> ?ALL([
     updates_with_the_actual_data,
     applies_deletion,
     resolves_conflicts,
-    registers_for_updates_with_users
+    registers_for_updates_with_users,
+    pushing_space_user_write_priv_unlocks_space_for_user,
+    pushing_space_group_write_priv_unlocks_space_for_user,
+    pushing_space_group_write_priv_locks_space_for_user,
+    pushing_space_user_write_priv_locks_space_for_user,
+    pushing_space_group_write_priv_locks_space_for_user_even_if_owner
 ]).
 
 
@@ -247,7 +258,7 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, provider_info, P1)),
     ok.
 
-check_file_operations_test_base(Config, UpdateFun, IdExt) ->
+check_file_operations_test_base0(Config, IdExt) ->
     %% given
     [Node | _] = Nodes = ?config(op_worker_nodes, Config),
     {P1, S1, U1, G1} = {get_provider_id(Node), ?ID(s1, IdExt), ?ID(u1, IdExt), ?ID(g1, IdExt)},
@@ -256,11 +267,17 @@ check_file_operations_test_base(Config, UpdateFun, IdExt) ->
     create_fuse_session(Node, SessionID, U1),
     oz_spaces_mock(Nodes, <<"space_name">>),
 
+    {SessionID, Node, S1, U1, P1, Priv1, G1}.
+
+
+check_file_operations_test_base(Config, UpdateFun, IdExt) ->
+    {SessionID, Node, S1, U1, P1, Priv1, G1} = check_file_operations_test_base0(Config, IdExt),
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
+
     %% when
     UpdateFun(Node, S1, U1, P1, Priv1, G1),
 
     %% then
-    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
     OpenResult = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
     ?assertMatch({ok, _}, OpenResult),
@@ -340,7 +357,7 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r2">>, <<"r1">>], S1, space(
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
             )),
             update(5, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
@@ -369,7 +386,7 @@ updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
         push_update(Node, [
             update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
                 [{S1, <<"space_name">>}], S1)),
-            update(5, [<<"r2">>, <<"r1">>], S1, space(
+            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
             ))
         ]),
@@ -400,7 +417,7 @@ updated_user_with_present_space_triggers_file_meta_creation3(Config) ->
         expect_message([U1], 4, []),
 
         push_update(Node, [
-            update(5, [<<"r2">>, <<"r1">>], S1, space(
+            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
             ))
         ]),
@@ -673,6 +690,135 @@ resolves_conflicts(Config) ->
     }, fetch(Node, onedata_user, U1)),
     ok.
 
+
+pushing_space_user_write_priv_unlocks_space_for_user(Config) ->
+    G1 = <<"group1">>,
+    G2 = <<"group2">>,
+
+    UpdateFun1 = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r1">>], S1, space(
+                <<"space_name">>, [{U1, ordsets:from_list([space_write_files])}], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}], S1, [G1, G2]))
+        ]),
+        expect_message([U1], 2, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun1, ?FUNCTION).
+
+
+pushing_space_group_write_priv_unlocks_space_for_user(Config) ->
+    G1 = <<"group1">>,
+    G2 = <<"group2">>,
+
+    UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r1">>], S1, space(
+                <<"space_name">>, [], [{G2, ordsets:from_list([space_write_files])}], [{P1, 1000}]
+            )),
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}], S1, [G1, G2]))
+        ]),
+        expect_message([U1], 2, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun1, ?FUNCTION).
+
+
+pushing_space_group_write_priv_locks_space_for_user(Config) ->
+    G1 = <<"group1">>,
+    G2 = <<"group2">>,
+    G3 = <<"group3">>,
+
+    UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r1">>], S1, space(
+                <<"space_name">>, [], [{G3, ordsets:from_list([space_write_files])}], [{P1, 1000}]
+            )),
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}], S1, [G1, G2]))
+        ]),
+        expect_message([U1], 2, [])
+    end,
+
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
+    {SessionID, Node, S1, U1, P1, Priv1, G0} = check_file_operations_test_base0(Config, ?FUNCTION),
+    UpdateFun1(Node, S1, U1, P1, Priv1, G0),
+
+    ?assertMatch({error, eacces}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)).
+
+pushing_space_user_write_priv_locks_space_for_user(Config) ->
+    G1 = <<"group1">>,
+    G2 = <<"group2">>,
+
+    UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r1">>], S1, space(
+                <<"space_name">>, [{<<"other_user">>, ordsets:from_list([space_write_files])}], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}], S1, [G1, G2]))
+        ]),
+        expect_message([U1], 2, [])
+    end,
+
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
+    {SessionID, Node, S1, U1, P1, Priv1, G0} = check_file_operations_test_base0(Config, ?FUNCTION),
+    UpdateFun1(Node, S1, U1, P1, Priv1, G0),
+
+    ?assertMatch({error, eacces}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)).
+
+
+pushing_space_group_write_priv_locks_space_for_user_even_if_owner(Config) ->
+    UpdateFun1 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r1">>], S1, space(
+                <<"space_name">>, [{U1, ordsets:from_list([space_write_files])}], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}], S1, []))
+        ]),
+        expect_message([U1], 2, [])
+    end,
+
+
+    FilePath = <<"/space_name/", (generator:gen_name())/binary>>,
+    {SessionID, Node, S1, U1, P1, Priv1, G1} = check_file_operations_test_base0(Config, ?FUNCTION),
+    UpdateFun1(Node, S1, U1, P1, Priv1, G1),
+
+    ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#660)),
+    OpenResult = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
+    ?assertMatch({ok, _}, OpenResult),
+    {ok, Handle} = OpenResult,
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, <<"yolo">>)),
+
+
+    UpdateFun2 = fun(Node, S1, U1, P1, _Priv1, _G1) ->
+        push_update(Node, [
+            update(3, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, ordsets:subtract(
+                    privileges:space_admin(), ordsets:from_list([space_write_files])
+                )}], [], [{P1, 1000}]
+            ))
+        ]),
+        expect_message([U1], 3, [])
+    end,
+
+    UpdateFun2(Node, S1, U1, P1, Priv1, G1),
+
+
+    OpenResultW = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
+    ?assertMatch({error, eacces}, OpenResultW),
+
+    %% Read should be possible
+    OpenResultR = lfm_proxy:open(Node, SessionID, {path, FilePath}, read),
+    ?assertMatch({ok, _}, OpenResultR),
+    {ok, HandleR} = OpenResultR,
+    ?assertMatch({ok, <<"yolo">>}, lfm_proxy:read(Node, HandleR, 0, 4)),
+
+    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions

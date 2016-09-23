@@ -117,12 +117,16 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(space_info, create, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
 'after'(space_info, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
 'after'(space_info, save, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
 'after'(space_info, update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+    ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
