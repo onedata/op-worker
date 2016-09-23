@@ -178,8 +178,8 @@ delete(CTX, File, Silent) ->
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name(), boolean()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
-get_xattr(_CTX, _, <<?CDMI_PREFIX_STR, _/binary>>, _) -> throw(?EPERM);
-get_xattr(_CTX, _, <<?ONEDATA_PREFIX_STR, _/binary>>, _) -> throw(?EPERM);
+%%get_xattr(_CTX, _, <<?CDMI_PREFIX_STR, _/binary>>, _) -> throw(?EPERM); %todo fix eperm in attributes/ GET
+%%get_xattr(_CTX, _, <<?ONEDATA_PREFIX_STR, _/binary>>, _) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName, Inherited) ->
     case xattr:get_by_name(FileUuid, XattrName, Inherited) of
         {ok, XattrValue} ->
