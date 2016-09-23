@@ -964,7 +964,7 @@ capabilities(Config) ->
     ?assertEqual([<<"container/">>, <<"dataobject/">>],
         proplists:get_value(<<"children">>, CdmiResponse8)),
     Capabilities = proplists:get_value(<<"capabilities">>, CdmiResponse8),
-    ?assertEqual(?root_capability_list, Capabilities),
+    ?assertEqual(?root_capability_map, maps:from_list(Capabilities)),
     %%------------------------------
 
     %%-- container capabilities ----
@@ -982,7 +982,7 @@ capabilities(Config) ->
     ?assertEqual(<<"container/">>,
         proplists:get_value(<<"objectName">>, CdmiResponse9)),
     Capabilities2 = proplists:get_value(<<"capabilities">>, CdmiResponse9),
-    ?assertEqual(?container_capability_list, Capabilities2),
+    ?assertEqual(?container_capability_list, maps:from_list(Capabilities2)),
     %%------------------------------
 
     %%-- dataobject capabilities ---
@@ -1000,7 +1000,7 @@ capabilities(Config) ->
     ?assertEqual(<<"dataobject/">>,
         proplists:get_value(<<"objectName">>, CdmiResponse10)),
     Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
-    ?assertEqual(?dataobject_capability_list, Capabilities3).
+    ?assertEqual(?dataobject_capability_list, maps:from_list(Capabilities3)).
 %%------------------------------
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path
@@ -1200,7 +1200,8 @@ out_of_range(Config) ->
     ?assertEqual(400, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
 
-    ?assertMatch([{<<"error">>, <<"invalid_childrenrange">>}, _], CdmiResponse4).
+    {_, Error} = ?ERROR_INVALID_CHILDRENRANGE,
+    ?assertMatch(Error, maps:from_list(CdmiResponse4)).
 %%------------------------------
 
 % tests copy and move operations on dataobjects and containers
@@ -1625,20 +1626,6 @@ errors(Config) ->
         do_request(Workers, SpaceName ++ "/some_file_b64", put, RequestHeaders4, RequestBody4),
     ?assertEqual(400, Code4),
     %%------------------------------
-
-    %%-- duplicated body fields ----
-    RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
-    RequestBody5 = json_utils:encode(RawBody5),
-    RequestHeaders5 = [
-        user_1_token_header(Config),
-        ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code5, _Headers5, Response5} =
-        do_request(Workers, SpaceName ++ "/dir_dupl/", put, RequestHeaders5, RequestBody5),
-    ?assertEqual(400, Code5),
-    CdmiResponse5 = json_utils:decode(Response5),
-    ?assertMatch([{<<"error">>, <<"duplicated_body_fields">>}, _], CdmiResponse5),
 
     %%-- reding non-existing file --
     RequestHeaders6 = [

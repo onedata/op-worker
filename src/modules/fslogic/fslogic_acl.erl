@@ -18,7 +18,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([ace_to_proplist/1, proplist_to_ace/1, from_acl_to_json_format/1, from_json_fromat_to_acl/1, check_permission/3]).
+-export([ace_to_map/1, map_to_ace/1, from_acl_to_json_format/1, from_json_format_to_acl/1, check_permission/3]).
 -export([ace_name_to_uid/1, uid_to_ace_name/1, gid_to_ace_name/1, ace_name_to_gid/1]).
 -export([bitmask_to_binary/1, binary_to_bitmask/1]).
 
@@ -35,25 +35,25 @@
 check_permission([], _User, ?no_flags_mask) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?EACCES);
 check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
-  #document{value = #onedata_user{group_ids = Groups}} = User, Operation)
+    #document{value = #onedata_user{group_ids = Groups}} = User, Operation)
     when ?has_flag(Flags, ?identifier_group_mask) ->
     case is_list(Groups) andalso lists:member(GroupId, Groups) of
         false ->
             check_permission(Rest, User, Operation); % if no group matches, ignore this ace
         true -> case Type of
-                 ?allow_mask ->
-                     case (Operation band AceMask) of
-                         Operation -> ok;
-                         OtherAllowedBits ->
-                             check_permission(Rest, User, Operation bxor OtherAllowedBits)
-                     end;
-                 ?deny_mask ->
-                     case (Operation band AceMask) of
-                         ?no_flags_mask ->
-                             check_permission(Rest, User, Operation);
-                         _ -> throw(?EACCES)
-                     end
-             end
+            ?allow_mask ->
+                case (Operation band AceMask) of
+                    Operation -> ok;
+                    OtherAllowedBits ->
+                        check_permission(Rest, User, Operation bxor OtherAllowedBits)
+                end;
+            ?deny_mask ->
+                case (Operation band AceMask) of
+                    ?no_flags_mask ->
+                        check_permission(Rest, User, Operation);
+                    _ -> throw(?EACCES)
+                end
+        end
     end;
 check_permission([#accesscontrolentity{acetype = ?allow_mask, identifier = SameUserId, acemask = AceMask} | Rest], #document{key = SameUserId} = User, Operation) ->
     case (Operation band AceMask) of
@@ -71,58 +71,58 @@ check_permission([#accesscontrolentity{} | Rest], User = #document{}, Operation)
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Parses list of access control entities to format suitable for mochijson2:encode
+%% Parses list of access control entities to format suitable for jiffy:encode
 %% @end
 %%--------------------------------------------------------------------
 -spec from_acl_to_json_format(Acl :: [#accesscontrolentity{}]) -> Result when
     Result :: list().
 from_acl_to_json_format(Acl) ->
-    [ace_to_proplist(Ace) || Ace <- Acl].
+    [ace_to_map(Ace) || Ace <- Acl].
 
 %%--------------------------------------------------------------------
-%% @doc Parses proplist decoded json obtained from mochijson2:decode to
+%% @doc Parses proplist decoded json obtained from jiffy:decode to
 %% list of access control entities
 %% @end
 %%--------------------------------------------------------------------
--spec from_json_fromat_to_acl(JsonAcl :: list()) -> [#accesscontrolentity{}].
-from_json_fromat_to_acl(JsonAcl) ->
-    [proplist_to_ace(AceProplist) || AceProplist <- JsonAcl].
+-spec from_json_format_to_acl(JsonAcl :: list()) -> [#accesscontrolentity{}].
+from_json_format_to_acl(JsonAcl) ->
+    [map_to_ace(AceProplist) || AceProplist <- JsonAcl].
 
 %%--------------------------------------------------------------------
-%% @doc Parses access control entity to format suitable for mochijson2:encode
+%% @doc Parses access control entity to format suitable for jiffy:encode
 %%--------------------------------------------------------------------
--spec ace_to_proplist(#accesscontrolentity{}) -> list().
-ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
-    [
-        {<<"acetype">>, bitmask_to_binary(Type)},
-        {<<"identifier">>,
-            case ?has_flag(Flags, ?identifier_group_mask) of
-                true -> gid_to_ace_name(Who);
-                false -> uid_to_ace_name(Who)
-            end},
-        {<<"aceflags">>, bitmask_to_binary(Flags)},
-        {<<"acemask">>, bitmask_to_binary(AccessMask)}
-    ].
+-spec ace_to_map(#accesscontrolentity{}) -> maps:map().
+ace_to_map(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
+    #{
+        <<"acetype">> => bitmask_to_binary(Type),
+        <<"identifier">> =>
+        case ?has_flag(Flags, ?identifier_group_mask) of
+            true -> gid_to_ace_name(Who);
+            false -> uid_to_ace_name(Who)
+        end,
+        <<"aceflags">> => bitmask_to_binary(Flags),
+        <<"acemask">> => bitmask_to_binary(AccessMask)
+    }.
 
 %%--------------------------------------------------------------------
-%% @doc Parses proplist decoded json obtained from mochijson2:decode to
+%% @doc Parses map decoded json obtained from jiffy:decode to
 %% access control entity
 %% @end
 %%--------------------------------------------------------------------
--spec proplist_to_ace(List :: list()) -> #accesscontrolentity{}.
-proplist_to_ace(List) ->
-    Type = proplists:get_value(<<"acetype">>, List),
-    Flags = proplists:get_value(<<"aceflags">>, List),
-    Mask = proplists:get_value(<<"acemask">>, List),
-    Name = proplists:get_value(<<"identifier">>, List),
+-spec map_to_ace(Map :: maps:map()) -> #accesscontrolentity{}.
+map_to_ace(Map) ->
+    Type = maps:get(<<"acetype">>, Map, undefined),
+    Flags = maps:get(<<"aceflags">>, Map, undefined),
+    Mask = maps:get(<<"acemask">>, Map, undefined),
+    Name = maps:get(<<"identifier">>, Map, undefined),
 
     Acetype = binary_to_bitmask(Type),
     Aceflags = binary_to_bitmask(Flags),
     Acemask = binary_to_bitmask(Mask),
     Identifier = case ?has_flag(Aceflags, ?identifier_group_mask) of
-             true -> ace_name_to_gid(Name);
-             false -> ace_name_to_uid(Name)
-         end,
+        true -> ace_name_to_gid(Name);
+        false -> ace_name_to_uid(Name)
+    end,
 
     #accesscontrolentity{acetype = Acetype, aceflags = Aceflags, acemask = Acemask, identifier = Identifier}.
 
@@ -140,7 +140,7 @@ uid_to_ace_name(?group) ->
     ?group;
 uid_to_ace_name(Uid) ->
     {ok, #document{value = #onedata_user{name = Name}}} = onedata_user:get(Uid),
-    <<Name/binary,"#", Uid/binary>>.
+    <<Name/binary, "#", Uid/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc Transforms acl name representation (name and hash suffix) to global id
@@ -170,7 +170,7 @@ ace_name_to_uid(AceName) ->
 -spec gid_to_ace_name(GRGroupId :: binary()) -> binary().
 gid_to_ace_name(GroupId) ->
     {ok, #document{value = #onedata_group{name = Name}}} = onedata_group:get(GroupId),
-    <<Name/binary,"#", GroupId/binary>>.
+    <<Name/binary, "#", GroupId/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc Transforms acl group name representation (name and hash suffix) to global id

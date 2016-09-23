@@ -120,23 +120,8 @@ delete_resource(Req, State = #{auth := Auth, path := Path}) ->
 get_cdmi(Req, #{options := Options} = State) ->
     NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
     Answer = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
-
-    Response =
-        case proplists:get_value(<<"metadata">>, Answer) of
-            undefined ->
-                json_utils:encode_map(maps:from_list(Answer));
-            Metadata ->
-                case proplists:get_value(<<"cdmi_acl">>, Metadata) of
-                    undefined ->
-                        json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
-                    Acl ->
-                        AclMap = lists:map(fun maps:from_list/1, Acl),
-                        MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
-                        json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
-                end
-        end,
+    Response = json_utils:encode_map(Answer),
     {Response, Req, State}.
-
 
 
 %%--------------------------------------------------------------------
@@ -150,8 +135,8 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     Attrs = get_attr(Auth, Path),
 
     % create dir using mkdir/cp/mv
-    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
-    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
+    RequestedCopyURI = maps:get(<<"copy">>, Body, undefined),
+    RequestedMoveURI = maps:get(<<"move">>, Body, undefined),
     {ok, OperationPerformed} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
@@ -168,7 +153,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
         end,
 
     %update metadata and return result
-    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    RequestedUserMetadata = maps:get(<<"metadata">>, Body, undefined),
     case OperationPerformed of
         none ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
@@ -178,20 +163,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
             {ok, NewAttrs = #file_attr{uuid = FileGUID}} = onedata_file_api:stat(Auth, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Auth, {guid, FileGUID}, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, options => ?DEFAULT_GET_DIR_OPTS}),
-            Response =
-                case proplists:get_value(<<"metadata">>, Answer) of
-                    undefined ->
-                        json_utils:encode_map(maps:from_list(Answer));
-                    Metadata ->
-                        case proplists:get_value(<<"cdmi_acl">>, Metadata) of
-                            undefined ->
-                                json_utils:encode_map(maps:put(<<"metadata">>, maps:from_list(Metadata), maps:from_list(Answer)));
-                            Acl ->
-                                AclMap = lists:map(fun maps:from_list/1, Acl),
-                                MetaMap = maps:put(<<"cdmi_acl">>, AclMap , maps:from_list(Metadata)),
-                                json_utils:encode_map(maps:put(<<"metadata">>, MetaMap, maps:from_list(Answer)))
-                        end
-                end,
+            Response = json_utils:encode_map(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
     end.

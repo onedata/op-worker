@@ -27,13 +27,13 @@
 %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
 -type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {uuid, file_meta:uuid()} | {parent, item_definition()}.
 -type check_type() :: owner % Check whether user owns the item
-                    | traverse_ancestors % validates ancestors' exec permission.
-                    | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
-                    | write
-                    | read
-                    | exec
-                    | rdwr
-                    | acl_access_mask().
+| traverse_ancestors % validates ancestors' exec permission.
+| owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
+| write
+| read
+| exec
+| rdwr
+| acl_access_mask().
 
 -type acl_access_mask() :: binary().
 -type access_definition() :: root | {check_type(), item_definition()}.
@@ -50,7 +50,7 @@
 %%--------------------------------------------------------------------
 -spec before_advice(#annotation{data :: [access_definition()]}, module(), atom(), [term()]) -> term().
 before_advice(#annotation{data = AccessDefinitions}, _M, _F,
-  Args = [#fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}}, share_id = ShareId} | _]) ->
+    Args = [#fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}}, share_id = ShareId} | _]) ->
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
     % TODO - beter cache "or" in AccessType
     % TODO - better cache EACCES (it will be always traversed to first EACCES)
@@ -246,8 +246,8 @@ get_acl(Uuid, Map) ->
         undefined ->
             case xattr:get_by_name(Uuid, ?ACL_XATTR_NAME) of
                 {ok, Value} ->
-                    AclProplist = json_utils:decode(Value),
-                    Acl = fslogic_acl:from_json_fromat_to_acl(AclProplist),
+                    AclMap = json_utils:decode_map(Value),
+                    Acl = fslogic_acl:from_json_format_to_acl(AclMap),
                     {Acl, maps:put(Uuid, Acl, Map)};
                 {error, {not_found, custom_metadata}} ->
                     {undefined, maps:put(Uuid, undefined, Map)}
@@ -263,7 +263,7 @@ get_acl(Uuid, Map) ->
 get_file(ItemDefinition, Map, UserId, FunctionInputs) ->
     case maps:get(ItemDefinition, Map, undefined) of
         undefined ->
-            FileDoc  = get_validation_subject(UserId, resolve_file_entry(ItemDefinition, FunctionInputs)),
+            FileDoc = get_validation_subject(UserId, resolve_file_entry(ItemDefinition, FunctionInputs)),
             {FileDoc, maps:put(ItemDefinition, FileDoc, Map)};
         FileDoc ->
             {FileDoc, Map}
