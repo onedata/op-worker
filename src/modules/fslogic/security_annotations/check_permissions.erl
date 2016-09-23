@@ -188,16 +188,11 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
     {AncestorsCheck, CacheUsed} = expand_ancestors_check(Uuid, [], UserId, UserDoc, ShareId, AclMap),
     case {ShareId, CacheUsed} of
         {undefined, _} ->
-            ?critical("@@@ Share undefined"),
             SubjectCheck ++ AncestorsCheck;
         {_, true} ->
-            ?critical("@@@ Share defined, cache used"),
             SubjectCheck ++ AncestorsCheck;
         {_, false} ->
-            ?critical("@@@ Share defined, cache not used"),
-
             PotentialShares = [SubjectDoc, NewSubjDoc] ++ [Doc || {_, Doc, _, _, _} <- AncestorsCheck],
-            ?critical("potential shares ~p", [PotentialShares]),
             IsValidShare = lists:any(
                 fun(#document{value = #file_meta{shares = Shares}}) ->
                     lists:member(ShareId, Shares)
