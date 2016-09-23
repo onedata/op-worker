@@ -24,7 +24,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([group_record/1]).
+-export([group_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -64,7 +64,11 @@ find(<<"group">>, GroupId) ->
         false ->
             gui_error:unauthorized();
         true ->
-            {ok, group_record(GroupId)}
+            % Check if that user has view privileges in that group
+            HasViewPrivileges = group_logic:has_effective_privilege(
+                GroupId, g_session:get_user_id(), group_view_data
+            ),
+            {ok, group_record(GroupId, HasViewPrivileges)}
     end;
 
 % PermissionsRecord matches <<"group-(user|group)-permission">>
@@ -135,7 +139,8 @@ create_record(<<"group">>, Data) ->
         _ ->
             case group_logic:create(UserAuth, #onedata_group{name = Name}) of
                 {ok, GroupId} ->
-                    GroupRecord = group_record(GroupId),
+                    % This group was created by this user -> he has view privs.
+                    GroupRecord = group_record(GroupId, true),
                     {ok, GroupRecord};
                 {error, _} ->
                     gui_error:report_warning(
@@ -269,9 +274,9 @@ delete_record(<<"group">>, GroupId) ->
 %% Returns a client-compliant group record based on group id.
 %% @end
 %%--------------------------------------------------------------------
--spec group_record(GroupId :: binary()) -> proplists:proplist().
-group_record(GroupId) ->
-    UserId = g_session:get_user_id(),
+-spec group_record(GroupId :: binary(), HasViewPrivileges :: boolean()) ->
+    proplists:proplist().
+group_record(GroupId, HasViewPrivileges) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #onedata_group{
@@ -282,11 +287,8 @@ group_record(GroupId) ->
         }}} = group_logic:get(UserAuth, GroupId),
 
     % Make sure that user is allowed to view requested group - he must have
-    % view privileges in this group.
-    Authorized = group_logic:has_effective_privilege(
-        GroupId, UserId, group_view_data
-    ),
-    case Authorized of
+    % view privileges in this group. If not, return only public data.
+    case HasViewPrivileges of
         false ->
             [
                 {<<"id">>, GroupId},

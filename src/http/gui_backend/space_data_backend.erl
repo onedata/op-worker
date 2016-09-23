@@ -25,7 +25,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([space_record/1]).
+-export([space_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -65,7 +65,11 @@ find(<<"space">>, SpaceId) ->
         false ->
             gui_error:unauthorized();
         true ->
-            {ok, space_record(SpaceId)}
+            % Check if that user has view privileges in that space
+            HasViewPrivileges = space_logic:has_effective_privilege(
+                SpaceId, g_session:get_user_id(), space_view_data
+            ),
+            {ok, space_record(SpaceId, HasViewPrivileges)}
     end;
 
 % PermissionsRecord matches <<"space-(user|group)-permission">>
@@ -137,7 +141,8 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
                 {ok, SpaceId} ->
-                    SpaceRecord = space_record(SpaceId),
+                    % This space was created by this user -> he has view privs.
+                    SpaceRecord = space_record(SpaceId, true),
                     {ok, SpaceRecord};
                 _ ->
                     gui_error:report_warning(
@@ -290,8 +295,9 @@ delete_record(<<"space">>, SpaceId) ->
 %% Returns a client-compliant space record based on space id.
 %% @end
 %%--------------------------------------------------------------------
--spec space_record(SpaceId :: binary()) -> proplists:proplist().
-space_record(SpaceId) ->
+-spec space_record(SpaceId :: binary(), HasViewPrivileges :: boolean()) ->
+    proplists:proplist().
+space_record(SpaceId, HasViewPrivileges) ->
     UserId = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
@@ -302,12 +308,9 @@ space_record(SpaceId) ->
         }}} = space_logic:get(UserAuth, SpaceId, UserId),
     DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
 
-    % Make sure that user is allowed to view requested space -
-    % he must have view privileges in this space.
-    Authorized = space_logic:has_effective_privilege(
-        SpaceId, UserId, space_view_data
-    ),
-    case Authorized of
+    % Make sure that user is allowed to view requested space - he must have
+    % view privileges in this space. If not, return only public data.
+    case HasViewPrivileges of
         false ->
             [
                 {<<"id">>, SpaceId},
