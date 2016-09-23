@@ -193,28 +193,6 @@ has_effective_user(SpaceId, UserId) ->
             #onedata_user{spaces = SpaceNames} = UserInfo,
             proplists:is_defined(SpaceId, SpaceNames)
     end.
-%%    case space_info:get(SpaceId) of
-%%        {error, {not_found, _}} ->
-%%            false;
-%%        {ok, #document{value = SpaceInfo}} ->
-%%            #space_info{users = Users, groups = SpaceGroups} = SpaceInfo,
-%%            {SpaceGroupIds, _} = lists:unzip(SpaceGroups),
-%%            case lists:keymember(UserId, 1, Users) of
-%%                true ->
-%%                    true;
-%%                false ->
-%%                    case onedata_user:get(UserId) of
-%%                        {error, {not_found, _}} ->
-%%                            false;
-%%                        {ok, #document{value = UserInfo}} ->
-%%                            #onedata_user{group_ids = UserGroups} = UserInfo,
-%%                            not ordsets:is_disjoint(
-%%                                ordsets:from_list(SpaceGroupIds),
-%%                                ordsets:from_list(UserGroups)
-%%                            )
-%%                    end
-%%            end
-%%    end.
 
 
 %%--------------------------------------------------------------------

@@ -206,19 +206,19 @@ metadata_record(SessionId, FileId) ->
         [] -> null;
         _ -> Basic
     end,
-    {ok, JSON} = logical_file_manager:get_metadata(
+    GetJSONResult = logical_file_manager:get_metadata(
         SessionId, {guid, FileId}, json, [], false
     ),
-    JSONVal = case JSON of
-        ?ENOATTR -> null;
-        _ -> json_utils:decode(json_utils:encode_map(JSON))
+    JSONVal = case GetJSONResult of
+        {error, ?ENOATTR} -> null;
+        {ok, JSON} -> json_utils:decode(json_utils:encode_map(JSON))
     end,
-    {ok, RDF} = logical_file_manager:get_metadata(
+    GetRDFResult = logical_file_manager:get_metadata(
         SessionId, {guid, FileId}, rdf, [], false
     ),
-    RDFVal = case RDF of
-        ?ENOATTR -> null;
-        _ -> RDF
+    RDFVal = case GetRDFResult of
+        {error, ?ENOATTR} -> null;
+        {ok, RDF} -> RDF
     end,
     {ok, [
         {<<"id">>, FileId},

@@ -349,16 +349,12 @@ file_record(SessionId, FileId) ->
                 [] -> null;
                 [ShareId] -> ShareId
             end,
-            {ok, Xattrs} = logical_file_manager:list_xattr(
-                SessionId, {guid, FileId}, false, true
+            {ok, HasCustomMetadata} = logical_file_manager:has_custom_metadata(
+                SessionId, {guid, FileId}
             ),
-            Metadata = case Xattrs of
-                [] ->
-                    null;
-                [<<"cdmi_acl">>] ->
-                    null;
-                _ ->
-                    FileId
+            Metadata = case HasCustomMetadata of
+                false -> null;
+                true -> FileId
             end,
             Res = [
                 {<<"id">>, FileId},
