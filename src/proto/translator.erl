@@ -283,6 +283,7 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         ctime = FileAttr#'FileAttr'.ctime,
         type = FileAttr#'FileAttr'.type,
         size = FileAttr#'FileAttr'.size,
+        provider_id = FileAttr#'FileAttr'.provider_id,
         shares = FileAttr#'FileAttr'.shares
     };
 translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
@@ -680,6 +681,7 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         ctime = FileAttr#file_attr.ctime,
         type = FileAttr#file_attr.type,
         size = FileAttr#file_attr.size,
+        provider_id = FileAttr#file_attr.provider_id,
         shares = FileAttr#file_attr.shares
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->

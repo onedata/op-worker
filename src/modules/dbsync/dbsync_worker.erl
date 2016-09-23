@@ -27,7 +27,7 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, timer:seconds(1)).
+-define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
 -define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).

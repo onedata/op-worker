@@ -58,21 +58,23 @@ check({{owner, 'or', ?write_attributes}, Doc, #document{key = UserId} = User, Sh
 check({{AccessType1, 'or', AccessType2}, Doc, User, ShareId, Acl}) ->
     case
         {
-                catch check({AccessType1, Doc, User, ShareId,  Acl}),
-                catch check({AccessType2, Doc, User, ShareId,  Acl})
+                catch check({AccessType1, Doc, User, ShareId, Acl}),
+                catch check({AccessType2, Doc, User, ShareId, Acl})
         }
     of
         {ok, _} -> ok;
         {_, ok} -> ok;
         _ -> throw(?EACCES)
     end;
-check({AccessType, #document{value = #file_meta{is_scope = true}} = Doc, #document{key = UserId}, ShareId, undefined}) when
+check({AccessType, #document{value = #file_meta{is_scope = true}} = Doc, #document{key = UserId} = UserDoc, ShareId, undefined}) when
     AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
     ok = validate_scope_access(Doc, UserId, ShareId),
-    ok = validate_posix_access(AccessType, Doc, UserId, ShareId);
-check({AccessType, Doc, #document{key = UserId}, ShareId, undefined}) when
+    ok = validate_posix_access(AccessType, Doc, UserId, ShareId),
+    ok = validate_scope_privs(AccessType, Doc, UserDoc, ShareId);
+check({AccessType, Doc, #document{key = UserId} = UserDoc, ShareId, undefined}) when
     AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
-    ok = validate_posix_access(AccessType, Doc, UserId, ShareId);
+    ok = validate_posix_access(AccessType, Doc, UserId, ShareId),
+    ok = validate_scope_privs(AccessType, Doc, UserDoc, ShareId);
 
 
 % if no acl specified, map access masks checks to posix checks
@@ -137,18 +139,21 @@ check({?read_object, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?read_object_mask);
 check({?list_container, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?list_container_mask);
-check({?write_object, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?write_object_mask);
-check({?add_object, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?add_object_mask);
+check({?write_object, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_object_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
+check({?add_object, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?add_object_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
 check({?append_data, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?append_data_mask);
 check({?add_subcontainer, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?add_subcontainer_mask);
 check({?read_metadata, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?read_metadata_mask);
-check({?write_metadata, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?write_metadata_mask);
+check({?write_metadata, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_metadata_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
 check({?execute, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?execute_mask);
 check({?traverse_container, #document{value = #file_meta{is_scope = true}} = FileDoc, #document{key = UserId} = UserDoc, ShareId, Acl}) ->
@@ -156,22 +161,27 @@ check({?traverse_container, #document{value = #file_meta{is_scope = true}} = Fil
     fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
 check({?traverse_container, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
-check({?delete_object, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?delete_object_mask);
-check({?delete_subcontainer, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?delete_subcontainer_mask);
+check({?delete_object, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?delete_object_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
+check({?delete_subcontainer, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?delete_subcontainer_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
 check({?read_attributes, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?read_attributes_mask);
 check({?write_attributes, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?write_attributes_mask);
-check({?delete, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?delete_mask);
+check({?delete, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?delete_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
 check({?read_acl, _, UserDoc, _, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?read_acl_mask);
-check({?write_acl, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?write_acl_mask);
-check({?write_owner, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?write_owner_mask);
+check({?write_acl, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_acl_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
+check({?write_owner, Doc, UserDoc, ShareId, Acl}) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_owner_mask),
+    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
 check({Perm, File, User, ShareId, Acl}) ->
     ?error_stacktrace("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)", [Perm, File, User, ShareId, Acl]),
     throw(?EACCES).
@@ -246,4 +256,42 @@ validate_scope_access(FileDoc, UserId, undefined) ->
             end
     end;
 validate_scope_access(_FileDoc, _UserId, _ShareId) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc Checks whether given user has permission to access given file with respect to scope settings.
+%%--------------------------------------------------------------------
+-spec validate_scope_privs(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(),
+    UserDoc :: datastore:document(), ShareId :: share_info:id()) -> ok | no_return().
+validate_scope_privs(write, FileDoc, #document{key = UserId, value = #onedata_user{effective_group_ids = UserGroups}}, _ShareId) ->
+    {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
+    {ok, #document{value = #space_info{users = Users, groups = Groups}}} =
+        space_info:get(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), UserId),
+
+    SpeceWritePriv = space_write_files,
+
+    UserPrivs = proplists:get_value(UserId, Users, []),
+    case lists:member(SpeceWritePriv, UserPrivs) of
+        true -> ok;
+        false ->
+            SpaceGroupsSet = sets:from_list(proplists:get_keys(Groups)),
+            UserGroupsSet = sets:from_list(UserGroups),
+            CommonGroups = sets:to_list(sets:intersection(UserGroupsSet, SpaceGroupsSet)),
+
+            ValidGroups = lists:foldl(fun(GroupId, AccIn) ->
+                GroupPrivs = proplists:get_value(GroupId, Groups, []),
+                case lists:member(SpeceWritePriv, GroupPrivs) of
+                    true ->
+                        [GroupId | AccIn];
+                    false ->
+                        AccIn
+                end
+            end, [], CommonGroups),
+            case ValidGroups of
+                [] -> throw(?EACCES);
+                _ -> ok
+            end
+    end;
+validate_scope_privs(_, _, _, _) ->
     ok.

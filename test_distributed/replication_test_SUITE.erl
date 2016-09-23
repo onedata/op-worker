@@ -127,7 +127,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
-        name = <<"test_file">>,
+        name = <<"local_file_location_should_have_correct_uid_for_local_user">>,
         type = ?REGULAR_FILE_TYPE,
         mtime = CTime,
         atime = CTime,
@@ -164,7 +164,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
-        name = <<"test_file">>,
+        name = <<"local_file_location_should_be_chowned_when_missing_user_appears1">>,
         type = ?REGULAR_FILE_TYPE,
         mtime = CTime,
         atime = CTime,
@@ -173,7 +173,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     },
     FileMeta2 = #file_meta{
         mode = 8#777,
-        name = <<"test_file2">>,
+        name = <<"local_file_location_should_be_chowned_when_missing_user_appears2">>,
         type = ?REGULAR_FILE_TYPE,
         mtime = CTime,
         atime = CTime,

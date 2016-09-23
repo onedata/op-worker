@@ -113,7 +113,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(onedata_user_bucket, [{?MODEL_NAME, create}, {?MODEL_NAME, save},
+        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,6 +124,14 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
+'after'(?MODEL_NAME, create, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+    ok = permissions_cache:invalidate_permissions_cache();
+'after'(?MODEL_NAME, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+    ok = permissions_cache:invalidate_permissions_cache();
+'after'(?MODEL_NAME, save, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+    ok = permissions_cache:invalidate_permissions_cache();
+'after'(?MODEL_NAME, update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+    ok = permissions_cache:invalidate_permissions_cache();
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
