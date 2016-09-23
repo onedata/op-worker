@@ -105,8 +105,8 @@ ls_with_stats_test(Config) ->
         {success_rate, ?SUCCESS_RATE},
         {parameters, [
             [{name, proc_num}, {value, 1}, {description, "Number of threads used during the test."}],
-            [{name, dir_level}, {value, 10}, {description, "Level of test directory."}],
-            [{name, dirs_num_per_proc}, {value, 10}, {description, "Number of dirs tested by single thread."}]
+            [{name, dir_level}, {value, 100}, {description, "Level of test directory."}],
+            [{name, dirs_num_per_proc}, {value, 100}, {description, "Number of dirs tested by single thread."}]
         ]},
         {description, "Tests performance of ls with gettin stats operation"},
         {config, [{name, low_level_single_thread_small_dir},
@@ -219,6 +219,8 @@ ls_with_stats_test_base(Config) ->
         end
     end),
 
+%%    timer:sleep(timer:seconds(20)),
+
     % List directory
     {LsTime, LSDirs} = measure_execution_time(fun() ->
         LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
@@ -227,6 +229,14 @@ ls_with_stats_test_base(Config) ->
         ?assertEqual(DirsNumPerProc*ProcNum, length(ListedDirs)),
         ListedDirs
     end),
+
+%%    {LsTime2, _} = measure_execution_time(fun() ->
+%%        LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
+%%        ?assertMatch({ok, _}, LSAns),
+%%        {ok, ListedDirs} = LSAns,
+%%        ?assertEqual(DirsNumPerProc*ProcNum, length(ListedDirs)),
+%%        ListedDirs
+%%                                              end),
 
     % Stat listed directories
     {StatTime, _} = measure_execution_time(fun() ->
@@ -261,7 +271,7 @@ ls_with_stats_test_base(Config) ->
 
     LsWithStatTime = LsTime + StatTime,
 
-    [
+    Ans = [
         #parameter{name = create_tree_time, value = CreateTreeTime, unit = "us",
             description = "Time of test tree creation"},
         #parameter{name = create_dirs_time, value = CreateDirsTime, unit = "us",
@@ -272,7 +282,10 @@ ls_with_stats_test_base(Config) ->
             description = "Time of all stat operations"},
         #parameter{name = ls_stat_time, value = LsWithStatTime, unit = "us",
             description = "Total time of ls and all stat operations"}
-    ].
+    ],
+
+    ct:print("~p", [{Ans}]),
+    Ans.
 
 ls_test(Config) ->
     ?PERFORMANCE(Config, [
