@@ -315,7 +315,9 @@ file_record(SessionId, FileId) ->
                 size = SizeAttr,
                 mtime = ModificationTime,
                 mode = PermissionsAttr,
-                shares = Shares} = FileAttr,
+                shares = Shares,
+                provider_id = ProviderId
+            } = FileAttr,
 
             UserRootDirUUID = get_user_root_dir_uuid(SessionId),
             ParentUUID = case get_parent(SessionId, FileId) of
@@ -369,6 +371,7 @@ file_record(SessionId, FileId) ->
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, Share},
+                {<<"provider">>, ProviderId},
                 {<<"fileProperty">>, Metadata}
             ],
             {ok, Res}

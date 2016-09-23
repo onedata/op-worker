@@ -173,7 +173,9 @@ file_record(SessionId, FileId) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr} = FileAttr,
+                mode = PermissionsAttr,
+                provider_id = ProviderId
+            } = FileAttr,
 
             % Resolve parent guid of this file
             {ok, ParentGUID} = logical_file_manager:get_parent(
@@ -225,6 +227,7 @@ file_record(SessionId, FileId) ->
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, null},
+                {<<"provider">>, ProviderId},
                 {<<"fileProperty">>, Metadata}
             ],
             {ok, Res}
