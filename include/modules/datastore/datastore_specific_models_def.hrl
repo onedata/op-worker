@@ -200,7 +200,7 @@
 -record(handle_service_info, {
     name :: handle_service_info:name() | undefined,
     proxy_endpoint :: handle_service_info:proxy_endpoint() | undefined,
-    service_properties :: handle_service_info:service_properties() | undefined,
+    service_properties = [] :: handle_service_info:service_properties(),
     users = [] :: [{UserId :: binary(), [privileges:handle_service_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:handle_service_privilege()]}],
     revision_history = [] :: [subscriptions:rev()]
