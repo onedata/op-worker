@@ -25,7 +25,8 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([space_record/2]).
+
+-export([space_record/1, space_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -65,11 +66,7 @@ find(<<"space">>, SpaceId) ->
         false ->
             gui_error:unauthorized();
         true ->
-            % Check if that user has view privileges in that space
-            HasViewPrivileges = space_logic:has_effective_privilege(
-                SpaceId, g_session:get_user_id(), space_view_data
-            ),
-            {ok, space_record(SpaceId, HasViewPrivileges)}
+            {ok, space_record(SpaceId)}
     end;
 
 % PermissionsRecord matches <<"space-(user|group)-permission">>
@@ -290,9 +287,24 @@ delete_record(<<"space">>, SpaceId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns a client-compliant space record based on space id.
+%% Returns a client-compliant space record based on space id. Automatically
+%% check if the user has view privileges in that space and returns proper data.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_record(SpaceId :: binary()) -> proplists:proplist().
+space_record(SpaceId) ->
+    % Check if that user has view privileges in that space
+    HasViewPrivileges = space_logic:has_effective_privilege(
+        SpaceId, g_session:get_user_id(), space_view_data
+    ),
+    space_record(SpaceId, HasViewPrivileges).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space record based on space id. Allows to
+%% override HasViewPrivileges.
 %% @end
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary(), HasViewPrivileges :: boolean()) ->

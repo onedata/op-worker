@@ -24,7 +24,8 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([group_record/2]).
+
+-export([group_record/1, group_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -64,11 +65,7 @@ find(<<"group">>, GroupId) ->
         false ->
             gui_error:unauthorized();
         true ->
-            % Check if that user has view privileges in that group
-            HasViewPrivileges = group_logic:has_effective_privilege(
-                GroupId, g_session:get_user_id(), group_view_data
-            ),
-            {ok, group_record(GroupId, HasViewPrivileges)}
+            {ok, group_record(GroupId)}
     end;
 
 % PermissionsRecord matches <<"group-(user|group)-permission">>
@@ -269,9 +266,24 @@ delete_record(<<"group">>, GroupId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns a client-compliant group record based on group id.
+%% Returns a client-compliant group record based on group id. Automatically
+%% check if the user has view privileges in that group and returns proper data.
+%% @end
+%%--------------------------------------------------------------------
+-spec group_record(GroupId :: binary()) -> proplists:proplist().
+group_record(GroupId) ->
+    % Check if that user has view privileges in that group
+    HasViewPrivileges = group_logic:has_effective_privilege(
+        GroupId, g_session:get_user_id(), group_view_data
+    ),
+    group_record(GroupId, HasViewPrivileges).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant group record based on group id. Allows to
+%% override HasViewPrivileges.
 %% @end
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary(), HasViewPrivileges :: boolean()) ->
