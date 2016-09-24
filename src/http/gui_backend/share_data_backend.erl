@@ -68,9 +68,12 @@ find(<<"share">>, ShareId) ->
             parent_space = ParentSpaceId,
             public_url = PublicURL
         }}} = share_logic:get(UserAuth, ShareId),
-    % Make sure that user is allowed to view requested space - he must have
+    % Make sure that user is allowed to view requested share - he must have
     % view privileges in this space.
-    case space_logic:has_effective_user(ParentSpaceId, UserId) of
+    Authorized = space_logic:has_effective_privilege(
+        ParentSpaceId, UserId, space_view_data
+    ),
+    case Authorized of
         false ->
             gui_error:unauthorized();
         true ->
@@ -95,14 +98,23 @@ find_all(<<"share">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
-    % TODO check privileges
     ShareIds = lists:foldl(
         fun(SpaceId, Acc) ->
-            {ok, #document{
-                value = #space_info{
-                    shares = Shares
-                }}} = space_info:get(SpaceId),
-            Shares ++ Acc
+            % Make sure that user is allowed to view shares in this space -
+            % he must have view privileges in this space.
+            Authorized = space_logic:has_effective_privilege(
+                SpaceId, UserId, space_view_data
+            ),
+            case Authorized of
+                true ->
+                    {ok, #document{
+                        value = #space_info{
+                            shares = Shares
+                        }}} = space_info:get(SpaceId),
+                    Shares ++ Acc;
+                false ->
+                    Acc
+            end
         end, [], SpaceIds),
     Res = lists:map(
         fun(ShareId) ->
