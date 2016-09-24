@@ -117,6 +117,30 @@ props_to_value(provider_info, Props) ->
         urls = proplists:get_value(<<"urls">>, Props),
         space_ids = proplists:get_value(<<"space_ids">>, Props),
         public_only = proplists:get_value(<<"public_only">>, Props)
+    };
+props_to_value(handle_service_info, Props) ->
+    #handle_service_info{
+        name = proplists:get_value(<<"name">>, Props),
+        proxy_endpoint = proplists:get_value(<<"proxy_endpoint">>, Props),
+        service_properties = proplists:get_value(<<"service_properties">>, Props),
+        users = process_ids_with_privileges(
+            proplists:get_value(<<"users">>, Props, [])),
+        groups = process_ids_with_privileges(
+            proplists:get_value(<<"groups">>, Props, []))
+    };
+props_to_value(handle_info, Props) ->
+    #handle_info{
+        handle_service_id = proplists:get_value(<<"handle_service_id">>, Props),
+        public_handle = proplists:get_value(<<"public_handle">>, Props),
+        resource_type = proplists:get_value(<<"resource_type">>, Props),
+        resource_id = proplists:get_value(<<"resource_id">>, Props),
+        metadata = proplists:get_value(<<"metadata">>, Props),
+        users = process_ids_with_privileges(
+            proplists:get_value(<<"users">>, Props, [])),
+        groups = process_ids_with_privileges(
+            proplists:get_value(<<"groups">>, Props, [])),
+        timestamp = deserialize_timestamp(
+            proplists:get_value(<<"timestamp">>, Props))
     }.
 
 
@@ -153,3 +177,15 @@ process_ids_with_privileges(Raw) ->
             binary_to_atom(Bin, latin1)
         end, Binaries)}
     end, Raw).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% @private
+%% Translates list of integers that come from subscriptions into
+%% erlang datetime format.
+%% @end
+%%-------------------------------------------------------------------
+-spec deserialize_timestamp([integer()]) -> calendar:datetime().
+deserialize_timestamp([A, B, C, D, E, F]) ->
+    {{A, B, C}, {D, E, F}}.

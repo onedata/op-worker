@@ -196,6 +196,29 @@
     revision_history = [] :: [subscriptions:rev()]
 }).
 
+%% Model for caching handle service details fetched from OZ
+-record(handle_service_info, {
+    name :: handle_service_info:name() | undefined,
+    proxy_endpoint :: handle_service_info:proxy_endpoint() | undefined,
+    service_properties :: handle_service_info:service_properties() | undefined,
+    users = [] :: [{UserId :: binary(), [privileges:handle_service_privilege()]}],
+    groups = [] :: [{GroupId :: binary(), [privileges:handle_service_privilege()]}],
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+%% Model for caching handle details fetched from OZ
+-record(handle_info, {
+    handle_service_id :: handle_service_info:id() | undefined,
+    public_handle :: handle_info:public_handle() | undefined,
+    resource_type :: handle_info:resource_type() | undefined,
+    resource_id :: handle_info:resource_id() | undefined,
+    metadata :: handle_info:metadata() | undefined,
+    users = [] :: [{UserId :: binary(), [privileges:handle_privilege()]}],
+    groups = [] :: [{GroupId :: binary(), [privileges:handle_privilege()]}],
+    timestamp = handle_info:actual_timestamp() :: handle_info:timestamp(),
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()]
