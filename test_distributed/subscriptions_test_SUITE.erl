@@ -195,7 +195,8 @@ saves_the_actual_data(Config) ->
             <<"Share 1">>,
             Sp1,
             <<"root_file_id">>,
-            <<"public_url">>
+            <<"public_url">>,
+            <<"handle">>
         ))
     ]),
     expect_message([], 4, []),
@@ -225,6 +226,7 @@ saves_the_actual_data(Config) ->
         parent_space = Sp1,
         root_file_id = <<"root_file_id">>,
         public_url = <<"public_url">>,
+        handle = <<"handle">>,
         revision_history = [<<"r2">>, <<"r1">>]}})
     }, fetch(Node, share_info, Sh1)),
     ?assertMatch({ok, #document{key = G1, value = #onedata_group{
@@ -903,10 +905,11 @@ space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
         {groups, GroupsWithPrivileges}, {providers_supports, Supports}]}.
 
 share(Name, ParentSpaceId) ->
-    share(Name, ParentSpaceId, <<"">>, <<"">>).
-share(Name, ParentSpaceId, RootFileId, PublicUrl) ->
+    share(Name, ParentSpaceId, <<"">>, <<"">>, <<"">>).
+share(Name, ParentSpaceId, RootFileId, PublicUrl, Handle) ->
     {share, [{name, Name}, {root_file_id, RootFileId},
-        {parent_space, ParentSpaceId}, {public_url, PublicUrl}]}.
+        {parent_space, ParentSpaceId}, {public_url, PublicUrl},
+        {handle, Handle}]}.
 
 group(Name) ->
     group(Name, [], []).

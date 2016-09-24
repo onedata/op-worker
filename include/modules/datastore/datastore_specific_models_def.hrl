@@ -192,6 +192,7 @@
     public_url = undefined :: undefined | binary(),
     root_file_id = undefined :: undefined | binary(),
     parent_space = undefined :: undefined | binary(),
+    handle = undefined :: undefined | binary(),
     revision_history = [] :: [subscriptions:rev()]
 }).
 

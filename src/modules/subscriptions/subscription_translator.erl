@@ -108,7 +108,8 @@ props_to_value(share_info, Props) ->
         name = proplists:get_value(<<"name">>, Props),
         public_url = proplists:get_value(<<"public_url">>, Props),
         root_file_id = proplists:get_value(<<"root_file_id">>, Props),
-        parent_space = proplists:get_value(<<"parent_space">>, Props)
+        parent_space = proplists:get_value(<<"parent_space">>, Props),
+        handle = proplists:get_value(<<"handle">>, Props)
     };
 props_to_value(provider_info, Props) ->
     #provider_info{
