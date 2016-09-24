@@ -222,6 +222,7 @@ metadata_record(SessionId, FileId) ->
     ),
     JSONVal = case GetJSONResult of
         {error, ?ENOATTR} -> null;
+        {ok, Map} when map_size(Map) =:= 0 -> <<"{}">>;
         {ok, JSON} -> json_utils:decode(json_utils:encode_map(JSON))
     end,
     GetRDFResult = logical_file_manager:get_metadata(
