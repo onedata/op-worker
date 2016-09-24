@@ -139,6 +139,10 @@ update_record(<<"file-property">>, FileId, Data) ->
     case proplists:get_value(<<"json">>, Data) of
         undefined ->
             ok;
+        null ->
+            ok = logical_file_manager:remove_metadata(
+                SessionId, {guid, FileId}, json
+            );
         JSON ->
             JSONMap = case JSON of
                 [] -> #{};
@@ -151,6 +155,10 @@ update_record(<<"file-property">>, FileId, Data) ->
     case proplists:get_value(<<"rdf">>, Data) of
         undefined ->
             ok;
+        null ->
+            ok = logical_file_manager:remove_metadata(
+                SessionId, {guid, FileId}, rdf
+            );
         RDF ->
             ok = logical_file_manager:set_metadata(
                 SessionId, {guid, FileId}, rdf, RDF, []
