@@ -153,8 +153,12 @@ create_or_update(Doc, Diff) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(Auth, GroupId) ->
     try
-        {ok, #group_details{id = Id, name = Name, type = Type}} =
+        {ok, #group_details{id = Id, name = Name, type = TypeBin}} =
             oz_groups:get_details(Auth, GroupId),
+        Type = case TypeBin of
+            Bin when is_binary(Bin) -> binary_to_atom(TypeBin, utf8);
+            _ -> TypeBin
+        end,
         case Type of
             public ->
                 % Only public info about this group was discoverable
