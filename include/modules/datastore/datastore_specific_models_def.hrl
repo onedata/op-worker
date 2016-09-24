@@ -104,7 +104,9 @@
 %% Local, cached version of OZ group
 -record(onedata_group, {
     name :: undefined | binary(),
-    type :: undefined | onedata_group:type(),
+    % Public means that only public data could be retrieved from the OZ as
+    % no user in this provider has rights to view group data.
+    type :: undefined | public | onedata_group:type(),
     users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
     effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
     nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
