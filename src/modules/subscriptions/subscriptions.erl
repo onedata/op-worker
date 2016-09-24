@@ -24,8 +24,10 @@
 
 -type(seq() :: non_neg_integer()).
 -type(rev() :: term()).
--type(model() :: onedata_group | onedata_user | space_info | share_info | provider_info).
--type(record() :: #space_info{} | #onedata_user{} | #onedata_group{} | #share_info{} | #provider_info{}).
+-type model() :: onedata_group | onedata_user | space_info | share_info |
+provider_info | handle_service_info | handle_info.
+-type record() :: #space_info{} | #onedata_user{} | #onedata_group{} |
+#share_info{} | #provider_info{} | #handle_service_info{} | #handle_info{}.
 -export_type([seq/0, rev/0, model/0, record/0]).
 
 %%--------------------------------------------------------------------
