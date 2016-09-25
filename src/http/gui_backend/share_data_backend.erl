@@ -325,7 +325,10 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
                     {ok, FileData} = find(
                         <<"file-shared">>, <<"containerDir.", ShareId/binary>>
                     ),
-                    gui_async:push_updated(<<"file-shared">>, FileData),
+                    FileDataNewName = lists:keyreplace(
+                        <<"name">>, 1, FileData, {<<"name">>, NewName}
+                    ),
+                    gui_async:push_updated(<<"file-shared">>, FileDataNewName),
                     ok;
                 {error, {403, <<>>, <<>>}} ->
                     gui_error:report_warning(<<"You do not have permissions to "
