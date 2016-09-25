@@ -133,7 +133,7 @@ find(<<"file-shared">>, AssocId) ->
                 [ShareId] ->
                     % Check if this is the root dir
                     <<"containerDir.", ShareId/binary>>;
-                false ->
+                [] ->
                     op_gui_utils:ids_to_association(
                         ShareId, get_parent(SessionId, FileId)
                     )
