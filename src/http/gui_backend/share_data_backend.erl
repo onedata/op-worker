@@ -81,7 +81,7 @@ find(<<"share">>, ShareId) ->
             {ok, [
                 {<<"id">>, ShareId},
                 {<<"name">>, Name},
-                {<<"file">>, op_gui_utils:ids_to_association(ShareId, FileId)},
+                {<<"file">>, FileId},
                 {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
                 {<<"dataSpace">>, ParentSpaceId},
                 {<<"publicUrl">>, PublicURL}
