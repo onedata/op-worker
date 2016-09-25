@@ -82,10 +82,12 @@ find(<<"share">>, ShareId) ->
                 {<<"id">>, ShareId},
                 {<<"name">>, Name},
                 {<<"file">>, FileId},
+                {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
                 {<<"dataSpace">>, ParentSpaceId},
                 {<<"publicUrl">>, PublicURL}
             ]}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

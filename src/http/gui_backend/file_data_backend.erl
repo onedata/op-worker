@@ -304,6 +304,30 @@ get_user_root_dir_uuid(SessionId) ->
 %%--------------------------------------------------------------------
 -spec file_record(SessionId :: binary(), FileId :: binary()) ->
     {ok, proplists:proplist()}.
+file_record(_SessionId, <<"containerDir.", ShareId/binary>>) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{
+        value = #share_info{
+            name = Name,
+            root_file_id = RootFileId
+        }}} = share_logic:get(UserAuth, ShareId),
+    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
+    Res = [
+        {<<"id">>, <<"share", ShareId/binary>>},
+        {<<"name">>, Name},
+        {<<"type">>, <<"dir">>},
+        {<<"permissions">>, 0},
+        {<<"modificationTime">>, 0},
+        {<<"size">>, 0},
+        {<<"parent">>, null},
+        {<<"children">>, [FileId]},
+        {<<"fileAcl">>, null},
+        {<<"share">>, null},
+        {<<"provider">>, null},
+        {<<"fileProperty">>, null}
+    ],
+    {ok, Res};
+
 file_record(SessionId, FileId) ->
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
         {error, ?ENOENT} ->
