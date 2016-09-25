@@ -321,6 +321,11 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
         NewName ->
             case share_logic:set_name(UserAuth, ShareId, NewName) of
                 ok ->
+                    % Push container dir as its name has also changed.
+                    {ok, FileData} = find(
+                        <<"file-shared">>, <<"containerDir.", ShareId/binary>>
+                    ),
+                    gui_async:push_updated(<<"file-shared">>, FileData),
                     ok;
                 {error, {403, <<>>, <<>>}} ->
                     gui_error:report_warning(<<"You do not have permissions to "
