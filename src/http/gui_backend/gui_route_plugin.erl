@@ -93,6 +93,7 @@ data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
 data_backend(true, <<"share">>) -> share_data_backend;
 data_backend(true, <<"file-shared">>) -> share_data_backend;
+data_backend(true, <<"file-property-shared">>) -> share_data_backend;
 data_backend(true, <<"group">>) -> group_data_backend;
 data_backend(true, <<"group-user-permission">>) -> group_data_backend;
 data_backend(true, <<"group-group-permission">>) -> group_data_backend;
