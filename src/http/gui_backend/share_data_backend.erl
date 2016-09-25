@@ -81,12 +81,121 @@ find(<<"share">>, ShareId) ->
             {ok, [
                 {<<"id">>, ShareId},
                 {<<"name">>, Name},
-                {<<"file">>, FileId},
+                {<<"file">>, op_gui_utils:ids_to_association(ShareId, FileId)},
                 {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
                 {<<"dataSpace">>, ParentSpaceId},
                 {<<"publicUrl">>, PublicURL}
             ]}
+    end;
+
+find(<<"file-shared">>, <<"containerDir.", ShareId/binary>>) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{
+        value = #share_info{
+            name = Name,
+            root_file_id = RootFileId
+        }}} = share_logic:get(UserAuth, ShareId),
+    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
+    Res = [
+        {<<"id">>, <<"containerDir.", ShareId/binary>>},
+        {<<"name">>, Name},
+        {<<"type">>, <<"dir">>},
+        {<<"permissions">>, 0},
+        {<<"modificationTime">>, 0},
+        {<<"size">>, 0},
+        {<<"parent">>, null},
+        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
+        {<<"fileAcl">>, null},
+        {<<"share">>, null},
+        {<<"provider">>, null},
+        {<<"fileProperty">>, null}
+    ],
+    {ok, Res};
+
+find(<<"file-shared">>, AssocId) ->
+    SessionId = g_session:get_session_id(),
+    {ShareId, FileId} = op_gui_utils:association_to_ids(AssocId),
+    case logical_file_manager:stat(SessionId, {guid, FileId}) of
+        {error, ?ENOENT} ->
+            gui_error:report_error(<<"No such file or directory.">>);
+        {ok, FileAttr} ->
+            #file_attr{
+                name = Name,
+                type = TypeAttr,
+                size = SizeAttr,
+                mtime = ModificationTime,
+                mode = PermissionsAttr,
+                shares = Shares,
+                provider_id = ProviderId
+            } = FileAttr,
+
+            ParentUUID = case Shares of
+                [ShareId] ->
+                    % Check if this is the root dir
+                    <<"containerDir.", ShareId/binary>>;
+                false ->
+                    op_gui_utils:ids_to_association(
+                        ShareId, get_parent(SessionId, FileId)
+                    )
+            end,
+
+            {Type, Size} = case TypeAttr of
+                ?DIRECTORY_TYPE -> {<<"dir">>, null};
+                _ -> {<<"file">>, SizeAttr}
+            end,
+            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
+            Children = case Type of
+                <<"file">> ->
+                    [];
+                <<"dir">> ->
+                    case logical_file_manager:ls(
+                        SessionId, {guid, FileId}, 0, 1000) of
+                        {ok, List} ->
+                            List;
+                        _ ->
+                            []
+                    end
+            end,
+            ChildrenIds = [
+                op_gui_utils:ids_to_association(ShareId, ChId) ||
+                {ChId, _} <- Children
+            ],
+            {ok, HasCustomMetadata} = logical_file_manager:has_custom_metadata(
+                SessionId, {guid, FileId}
+            ),
+            Metadata = case HasCustomMetadata of
+                false -> null;
+                true -> FileId
+            end,
+            Res = [
+                {<<"id">>, AssocId},
+                {<<"name">>, Name},
+                {<<"type">>, Type},
+                {<<"permissions">>, Permissions},
+                {<<"modificationTime">>, ModificationTime},
+                {<<"size">>, Size},
+                {<<"parent">>, ParentUUID},
+                {<<"children">>, ChildrenIds},
+                {<<"fileAcl">>, FileId},
+                {<<"share">>, null},
+                {<<"provider">>, ProviderId},
+                {<<"fileProperty">>, Metadata}
+            ],
+            {ok, Res}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the UUID of parent of given file. This is needed because
+%% spaces dir has two different UUIDs, should be removed when this is fixed.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(SessionId :: binary(), FileGUID :: binary()) -> binary().
+get_parent(SessionId, FileGUID) ->
+    {ok, ParentGUID} = logical_file_manager:get_parent(SessionId, {guid, FileGUID}),
+    ParentGUID.
 
 
 %%--------------------------------------------------------------------

@@ -73,6 +73,7 @@ find(<<"share-public">>, ShareId) ->
         {<<"id">>, ShareId},
         {<<"name">>, Name},
         {<<"file">>, RootFileId},
+        {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
         {<<"publicUrl">>, PublicURL}
     ]};
 find(<<"file-public">>, FileId) ->
