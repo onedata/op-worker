@@ -224,7 +224,7 @@ file_record(SessionId, FileId) ->
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, null},
                 {<<"provider">>, ProviderId},
-                {<<"filePropertyPublic">>, Metadata}
+                {<<"fileProperty">>, Metadata}
             ],
             {ok, Res}
     end.
