@@ -165,7 +165,7 @@ find(<<"file-shared">>, AssocId) ->
             ),
             Metadata = case HasCustomMetadata of
                 false -> null;
-                true -> FileId
+                true -> AssocId
             end,
             Res = [
                 {<<"id">>, AssocId},

@@ -99,7 +99,7 @@ find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
     ],
     {ok, Res};
 
-find(<<"file-public">>,AssocId) ->
+find(<<"file-public">>, AssocId) ->
     SessionId = g_session:get_session_id(),
     {ShareId, FileId} = op_gui_utils:association_to_ids(AssocId),
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
@@ -152,7 +152,7 @@ find(<<"file-public">>,AssocId) ->
             ),
             Metadata = case HasCustomMetadata of
                 false -> null;
-                true -> FileId
+                true -> AssocId
             end,
             Res = [
                 {<<"id">>, AssocId},
