@@ -86,7 +86,7 @@ find(<<"file-public">>, FileId) ->
     end;
 find(<<"file-property-public">>, FileId) ->
     try
-        metadata_data_backend:metadata_record(?GUEST_SESS_ID, FileId)
+        metadata_record(?GUEST_SESS_ID, FileId)
     catch T:M ->
         ?warning("Cannot get metadata for file (~p). ~p:~p", [
             FileId, T, M
@@ -228,3 +228,50 @@ file_record(SessionId, FileId) ->
             ],
             {ok, Res}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a metadata record for given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec metadata_record(SessionId :: binary(), FileId :: binary()) ->
+    {ok, proplists:proplist()} | gui_error:error_result().
+metadata_record(SessionId, FileId) ->
+    {ok, XattrKeys} = logical_file_manager:list_xattr(
+        SessionId, {guid, FileId}, false, false
+    ),
+    Basic = lists:map(
+        fun(Key) ->
+            {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(
+                SessionId, {guid, FileId}, Key, false
+            ),
+            {Key, Value}
+        end, XattrKeys),
+    BasicVal = case Basic of
+        [] -> null;
+        _ -> Basic
+    end,
+    GetJSONResult = logical_file_manager:get_metadata(
+        SessionId, {guid, FileId}, json, [], false
+    ),
+    JSONVal = case GetJSONResult of
+        {error, ?ENOATTR} -> null;
+        {ok, Map} when map_size(Map) =:= 0 -> <<"{}">>;
+        {ok, JSON} -> json_utils:decode(json_utils:encode_map(JSON))
+    end,
+    GetRDFResult = logical_file_manager:get_metadata(
+        SessionId, {guid, FileId}, rdf, [], false
+    ),
+    RDFVal = case GetRDFResult of
+        {error, ?ENOATTR} -> null;
+        {ok, RDF} -> RDF
+    end,
+    {ok, [
+        {<<"id">>, FileId},
+        {<<"filePublic">>, FileId},
+        {<<"basic">>, BasicVal},
+        {<<"json">>, JSONVal},
+        {<<"rdf">>, RDFVal}
+    ]}.
