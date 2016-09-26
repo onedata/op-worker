@@ -15,6 +15,7 @@
 -behaviour(rpc_backend_behaviour).
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([handle/2]).

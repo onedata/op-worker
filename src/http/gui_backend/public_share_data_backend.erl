@@ -82,7 +82,6 @@ find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
             name = Name,
             root_file_id = RootFileId
         }}} = share_logic:get(UserAuth, ShareId),
-    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
@@ -91,7 +90,7 @@ find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
         {<<"modificationTime">>, 0},
         {<<"size">>, 0},
         {<<"parent">>, null},
-        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
+        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFileId)]},
         {<<"fileAcl">>, null},
         {<<"share">>, null},
         {<<"provider">>, null},
