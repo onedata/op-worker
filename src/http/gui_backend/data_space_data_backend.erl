@@ -24,6 +24,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([data_space_record/1]).
 
 %%%===================================================================
 %%% API functions
@@ -57,30 +58,15 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space">>, SpaceId) ->
-    UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
-    {ok, #document{
-        value = #space_info{
-            name = Name,
-            providers_supports = Providers
-        }}} = space_logic:get(UserAuth, SpaceId, UserId),
-    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
-    % If current provider is not supported, return null rootDir which will
-    % cause the client to render a "space not supported" message.
-    RootDir = case Providers of
-        [] ->
-            null;
-        _ ->
-            fslogic_uuid:uuid_to_guid(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
-    end,
-    Res = [
-        {<<"id">>, SpaceId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"rootDir">>, RootDir},
-        {<<"space">>, SpaceId}
-    ],
-    {ok, Res}.
+    % Make sure that user is allowed to view requested space - he must belong
+    % to it.
+    case space_logic:has_effective_user(SpaceId, UserId) of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            {ok, data_space_record(SpaceId)}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -145,3 +131,42 @@ update_record(<<"data-space">>, _Id, _Data) ->
     ok | gui_error:error_result().
 delete_record(<<"data-space">>, _Id) ->
     gui_error:report_error(<<"Not iplemented">>).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant data space record based on space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec data_space_record(SpaceId :: space_info:id()) -> proplists:proplist().
+data_space_record(SpaceId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    UserId = g_session:get_user_id(),
+    {ok, #document{
+    value = #space_info{
+        name = Name,
+        providers_supports = Providers
+    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
+    % If current provider is not supported, return null rootDir which
+    % will cause the client to render a "space not supported" message.
+    RootDir = case Providers of
+        [] ->
+            null;
+        _ ->
+            fslogic_uuid:uuid_to_guid(
+                fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId
+            )
+    end,
+    [
+        {<<"id">>, SpaceId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
+        {<<"rootDir">>, RootDir},
+        {<<"space">>, SpaceId}
+    ].

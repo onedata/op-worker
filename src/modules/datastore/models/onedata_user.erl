@@ -84,7 +84,7 @@ create(Document) ->
 get(?ROOT_USER_ID) ->
     {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
 get(?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #onedata_user{name = <<"nobody">>}}};
+    {ok, #document{key = ?GUEST_USER_ID, value = #onedata_user{name = <<"nobody">>, spaces = []}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 

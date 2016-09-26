@@ -25,7 +25,8 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([space_record/1]).
+
+-export([space_record/1, space_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -59,13 +60,35 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"space">>, SpaceId) ->
-    {ok, space_record(SpaceId)};
+    UserId = g_session:get_user_id(),
+    % Check if the user belongs to this space
+    case space_logic:has_effective_user(SpaceId, UserId) of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            {ok, space_record(SpaceId)}
+    end;
 
-find(<<"space-user-permission">>, AssocId) ->
-    {ok, space_user_permission_record(AssocId)};
-
-find(<<"space-group-permission">>, AssocId) ->
-    {ok, space_group_permission_record(AssocId)}.
+% PermissionsRecord matches <<"space-(user|group)-permission">>
+find(PermissionsRecord, AssocId) ->
+    {_, SpaceId} = op_gui_utils:association_to_ids(AssocId),
+    UserId = g_session:get_user_id(),
+    % Make sure that user is allowed to view requested privileges - he must have
+    % view privileges in this space.
+    Authorized = space_logic:has_effective_privilege(
+        SpaceId, UserId, space_view_data
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            case PermissionsRecord of
+                <<"space-user-permission">> ->
+                    {ok, space_user_permission_record(AssocId)};
+                <<"space-group-permission">> ->
+                    {ok, space_group_permission_record(AssocId)}
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -115,7 +138,8 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
                 {ok, SpaceId} ->
-                    SpaceRecord = space_record(SpaceId),
+                    % This space was created by this user -> he has view privs.
+                    SpaceRecord = space_record(SpaceId, true),
                     {ok, SpaceRecord};
                 _ ->
                     gui_error:report_warning(
@@ -161,7 +185,7 @@ update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
             case space_logic:set_name(UserAuth, SpaceId, NewName) of
                 ok ->
                     ok;
-                {error, {403,<<>>,<<>>}} ->
+                {error, {403, <<>>, <<>>}} ->
                     gui_error:report_warning(
                         <<"You do not have privileges to modify this space.">>);
                 {error, _} ->
@@ -195,7 +219,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify space privileges.">>);
         {error, _} ->
@@ -228,7 +252,7 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
     case Result of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify space privileges.">>);
         {error, _} ->
@@ -249,7 +273,7 @@ delete_record(<<"space">>, SpaceId) ->
     case space_logic:delete(UserAuth, SpaceId) of
         ok ->
             ok;
-        {error, {403,<<>>,<<>>}} ->
+        {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(
                 <<"You do not have privileges to modify this space.">>);
         {error, _} ->
@@ -263,40 +287,70 @@ delete_record(<<"space">>, SpaceId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns a client-compliant space record based on space id.
+%% Returns a client-compliant space record based on space id. Automatically
+%% check if the user has view privileges in that space and returns proper data.
 %% @end
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
-    CurrentUser = g_session:get_user_id(),
+    % Check if that user has view privileges in that space
+    HasViewPrivileges = space_logic:has_effective_privilege(
+        SpaceId, g_session:get_user_id(), space_view_data
+    ),
+    space_record(SpaceId, HasViewPrivileges).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space record based on space id. Allows to
+%% override HasViewPrivileges.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_record(SpaceId :: binary(), HasViewPrivileges :: boolean()) ->
+    proplists:proplist().
+space_record(SpaceId, HasViewPrivileges) ->
+    UserId = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #space_info{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
+        }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
 
-    UserPermissions = lists:map(
-        fun({UsId, _UsPerms}) ->
-            op_gui_utils:ids_to_association(UsId, SpaceId)
-        end, UsersAndPerms),
+    % Make sure that user is allowed to view requested space - he must have
+    % view privileges in this space. If not, return only public data.
+    case HasViewPrivileges of
+        false ->
+            [
+                {<<"id">>, SpaceId},
+                {<<"name">>, Name},
+                {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
+                {<<"hasViewPrivilege">>, false},
+                {<<"userPermissions">>, []},
+                {<<"groupPermissions">>, []}
+            ];
+        true ->
+            UserPermissions = lists:map(
+                fun({UsId, _UsPerms}) ->
+                    op_gui_utils:ids_to_association(UsId, SpaceId)
+                end, UsersAndPerms),
 
-    GroupPermissions = lists:map(
-        fun({GroupId, _GroupPerms}) ->
-            op_gui_utils:ids_to_association(GroupId, SpaceId)
-        end, GroupsAndPerms),
-
-    DefaultSpaceId = user_logic:get_default_space(UserAuth, CurrentUser),
-    [
-        {<<"id">>, SpaceId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"userPermissions">>, UserPermissions},
-        {<<"groupPermissions">>, GroupPermissions}
-    ].
+            GroupPermissions = lists:map(
+                fun({GroupId, _GroupPerms}) ->
+                    op_gui_utils:ids_to_association(GroupId, SpaceId)
+                end, GroupsAndPerms),
+            [
+                {<<"id">>, SpaceId},
+                {<<"name">>, Name},
+                {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
+                {<<"hasViewPrivilege">>, true},
+                {<<"userPermissions">>, UserPermissions},
+                {<<"groupPermissions">>, GroupPermissions}
+            ]
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -24,6 +24,7 @@
 -export([set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_create_space_token/2]).
+-export([has_effective_user/2, has_effective_privilege/3]).
 
 %%%===================================================================
 %%% API
@@ -222,3 +223,42 @@ get_invite_group_token(Auth, GroupId) ->
 get_create_space_token(Auth, GroupId) ->
     oz_groups:get_create_space_token(Auth, GroupId).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user belongs to given group directly
+%% or via nested groups.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_effective_user(GroupId :: onedata_group:id(),
+    UserId :: onedata_user:id()) -> boolean().
+has_effective_user(GroupId, UserId) ->
+    case onedata_user:get(UserId) of
+        {error, {not_found, _}} ->
+            false;
+        {ok, #document{value = UserInfo}} ->
+            #onedata_user{effective_group_ids = Groups} = UserInfo,
+            lists:member(GroupId, Groups)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user has a privilege in given group.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_effective_privilege(GroupId :: onedata_group:id(),
+    UserId :: onedata_user:id(), Privilege :: privileges:group_privilege()) ->
+    boolean().
+has_effective_privilege(GroupId, UserId, Privilege) ->
+    case has_effective_user(GroupId, UserId) of
+        false ->
+            false;
+        true ->
+            {ok, #document{
+                value = #onedata_group{
+                    users = UserTuples
+                }}} = onedata_group:get(GroupId),
+            UserPrivileges = proplists:get_value(UserId, UserTuples, []),
+            lists:member(Privilege, UserPrivileges)
+    end.

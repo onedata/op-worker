@@ -87,7 +87,7 @@ list_dir(Config) ->
     CdmiResponse1 = json_utils:decode(Response1),
     ?assertEqual(<<"application/cdmi-container">>,
         proplists:get_value(<<"objectType">>, CdmiResponse1)),
-    ?assertEqual(<<"dir/">>,
+    ?assertEqual(<<"dir 1/">>,
         proplists:get_value(<<"objectName">>, CdmiResponse1)),
     ?assertEqual(<<"Complete">>,
         proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
@@ -103,7 +103,7 @@ list_dir(Config) ->
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(list_to_binary(SpaceName ++ "/"), proplists:get_value(<<"objectName">>, CdmiResponse2)),
-    ?assertEqual([<<"dir/">>],
+    ?assertEqual([<<"dir 1/">>],
         proplists:get_value(<<"children">>, CdmiResponse2)),
     %%------------------------------
 
@@ -120,7 +120,7 @@ list_dir(Config) ->
             get, [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
-    ?assertEqual(<<"dir/">>,
+    ?assertEqual(<<"dir 1/">>,
         proplists:get_value(<<"objectName">>, CdmiResponse4)),
     ?assertEqual([<<"file.txt">>],
         proplists:get_value(<<"children">>, CdmiResponse4)),
@@ -861,7 +861,7 @@ objectid(Config) ->
     ?assertEqual(200, Code2),
 
     CdmiResponse2 = json_utils:decode(Response2),
-    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
+    ?assertEqual(<<"dir 1/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
     DirId = proplists:get_value(<<"objectID">>, CdmiResponse2),
     ?assertNotEqual(DirId, undefined),
     ?assert(is_binary(DirId)),
@@ -870,7 +870,7 @@ objectid(Config) ->
     ?assertEqual(<<"cdmi_capabilities/container/">>, proplists:get_value(<<"capabilitiesURI">>, CdmiResponse2)),
     %%------------------------------
 
-    %%--- /dir/file.txt objectid ---
+    %%--- /dir 1/file.txt objectid ---
     RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code3, _Headers3, Response3} = do_request(WorkerP2, filename:join(TestDirName, TestFileName), get, RequestHeaders3, []),
     ?assertEqual(200, Code3),
@@ -880,7 +880,7 @@ objectid(Config) ->
     FileId = proplists:get_value(<<"objectID">>, CdmiResponse3),
     ?assertNotEqual(FileId, undefined),
     ?assert(is_binary(FileId)),
-    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/dir/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
+    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/dir 1/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
     ?assertEqual(DirId, proplists:get_value(<<"parentID">>, CdmiResponse3)),
     ?assertEqual(<<"cdmi_capabilities/dataobject/">>, proplists:get_value(<<"capabilitiesURI">>, CdmiResponse3)),
     %%------------------------------
@@ -897,7 +897,7 @@ objectid(Config) ->
     ?assertEqual(CdmiResponse1WithoutAtime, CdmiResponse4WithoutAtime), % should be the same as in 1 (except access time)
     %%------------------------------
 
-    %%--- get /dir/ by objectid ----
+    %%--- get /dir 1/ by objectid ----
     RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code5, _Headers5, Response5} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
@@ -912,7 +912,7 @@ objectid(Config) ->
     ),
     %%------------------------------
 
-    %% get /dir/file.txt by objectid
+    %% get /dir 1/file.txt by objectid
     RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
     {ok, Code6, _Headers6, Response6} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/file.txt", get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
@@ -1761,7 +1761,7 @@ cdmi_endpoint(Node) ->
 
 create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    TestDirName = "dir",
+    TestDirName = "dir 1",
     TestFileName = "file.txt",
     FullTestDirName = filename:join([binary_to_list(SpaceName), TestDirName]),
     FullTestFileName = filename:join(["/", binary_to_list(SpaceName), TestDirName, TestFileName]),

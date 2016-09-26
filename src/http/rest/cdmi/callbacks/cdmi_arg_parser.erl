@@ -55,9 +55,10 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec malformed_capability_request(req(), maps:map()) -> {boolean(), req(), maps:map()} | no_return().
 malformed_capability_request(Req, State) ->
-    {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
-    case maps:find(cdmi_version, State2) of
-        {ok, _} -> {false, Req, State2};
+    {State2, Req2} = add_version_to_state(Req, State),
+    {State3, Req3} = add_opts_to_state(Req2, State2),
+    case maps:find(cdmi_version, State3) of
+        {ok, _} -> {false, Req3, State3};
         _ -> throw(?ERROR_UNSUPPORTED_VERSION)
     end.
 
@@ -199,8 +200,7 @@ add_opts_to_state(Req, State) ->
 -spec add_path_to_state(cowboy_req:req(), maps:map()) ->
     {result_state(), cowboy_req:req()}.
 add_path_to_state(Req, State) ->
-    {RawPath, NewReq} = cowboy_req:path(Req),
-    <<"/cdmi", Path/binary>> = RawPath,
+    {Path, NewReq} = cdmi_path:get_path(Req),
     {State#{path => Path}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -220,9 +220,7 @@ add_path_to_state(Req, State) ->
 add_objectid_path_to_state(Req, State) ->
     % get objectid
     {Id, Req2} = cowboy_req:binding(id, Req),
-    {RawPath, Req3} = cowboy_req:path(Req2),
-    IdSize = byte_size(Id),
-    <<"/cdmi/cdmi_objectid/", Id:IdSize/binary, Path/binary>> = RawPath,
+    {Path, Req3} = cdmi_path:get_path_of_id_request(Req2),
 
     % get uuid from objectid
     Uuid =

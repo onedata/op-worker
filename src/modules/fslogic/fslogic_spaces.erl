@@ -166,7 +166,7 @@ make_space_exist(SpaceId) ->
                 #document{key = SpaceDirUuid,
                     value = #file_meta{
                         name = SpaceId, type = ?DIRECTORY_TYPE,
-                        mode = 8#1770, mtime = CTime, atime = CTime,
+                        mode = 8#1775, mtime = CTime, atime = CTime,
                         ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                     }}) of
                 {ok, _RootUUID} -> ok;
