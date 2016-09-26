@@ -66,14 +66,20 @@ find(<<"share-public">>, ShareId) ->
         value = #share_info{
             name = Name,
             root_file_id = RootFileId,
-            public_url = PublicURL
+            public_url = PublicURL,
+            handle = Handle
         }}} = share_logic:get(provider, ShareId),
+    HandleVal = case Handle of
+        undefined -> null;
+        _ -> Handle
+    end,
     {ok, [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
         {<<"file">>, RootFileId},
         {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
-        {<<"publicUrl">>, PublicURL}
+        {<<"publicUrl">>, PublicURL},
+        {<<"handle">>, HandleVal}
     ]};
 find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
     UserAuth = op_gui_utils:get_user_auth(),
