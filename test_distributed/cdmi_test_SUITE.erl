@@ -51,7 +51,9 @@
     acl_test/1,
     errors_test/1,
     accept_header_test/1,
-    copy_move_test/1
+    move_copy_conflict_test/1,
+    move_test/1,
+    copy_test/1
 ]).
 
 all() ->
@@ -76,9 +78,11 @@ all() ->
         partial_upload_test,
         acl_test,
         errors_test,
-        accept_header_test
-%%        copy_move_test %todo split into smaller tests and enable when copy/move will be working properly
-    ]).
+        accept_header_test,
+        move_copy_conflict_test,
+        move_test
+%%        copy_test %todo implement copy
+]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -145,8 +149,14 @@ mimetype_and_encoding_test(Config) ->
 out_of_range_test(Config) ->
     cdmi_test_base:out_of_range(Config).
 
-copy_move_test(Config) ->
-    cdmi_test_base:copy_move(Config).
+move_copy_conflict_test(Config) ->
+    cdmi_test_base:move_copy_conflict(Config).
+
+move_test(Config) ->
+    cdmi_test_base:move(Config).
+
+copy_test(Config) ->
+    cdmi_test_base:copy(Config).
 
 partial_upload_test(Config) ->
     cdmi_test_base:partial_upload(Config).
