@@ -55,7 +55,8 @@
     create_list_index/1,
     set_get_json_metadata_inherited/1,
     set_get_xattr_inherited/1,
-    set_get_json_metadata_using_filter/1
+    set_get_json_metadata_using_filter/1,
+    primitive_json_metadata_test/1
 ]).
 
 all() ->
@@ -85,7 +86,8 @@ all() ->
         create_list_index,
         set_get_json_metadata_inherited,
         set_get_xattr_inherited,
-        set_get_json_metadata_using_filter
+        set_get_json_metadata_using_filter,
+        primitive_json_metadata_test
     ]).
 
 %%%===================================================================
@@ -795,6 +797,21 @@ set_get_json_metadata_using_filter(Config) ->
         },
         json_utils:decode_map(ReponseBody)).
 
+
+primitive_json_metadata_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    Primitives = [<<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
+        <<"null">>, <<"\"string\"">>],
+
+    lists:foreach(fun(Primitive) ->
+        ?assertMatch({ok, 204, _, _},
+            do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+                [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], Primitive)),
+        ?assertMatch({ok, 200, _, Primitive},
+            do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
+                [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], []))
+    end, Primitives).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
