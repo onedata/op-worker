@@ -86,12 +86,14 @@ route(_) -> ?INDEX.
 data_backend(true, <<"file">>) -> file_data_backend;
 data_backend(true, <<"file-acl">>) -> file_data_backend;
 data_backend(true, <<"file-distribution">>) -> file_data_backend;
-data_backend(true, <<"metadata">>) -> metadata_data_backend;
+data_backend(true, <<"file-property">>) -> metadata_data_backend;
 data_backend(true, <<"data-space">>) -> data_space_data_backend;
 data_backend(true, <<"space">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
 data_backend(true, <<"share">>) -> share_data_backend;
+data_backend(true, <<"file-shared">>) -> share_data_backend;
+data_backend(true, <<"file-property-shared">>) -> share_data_backend;
 data_backend(true, <<"group">>) -> group_data_backend;
 data_backend(true, <<"group-user-permission">>) -> group_data_backend;
 data_backend(true, <<"group-group-permission">>) -> group_data_backend;
@@ -101,7 +103,8 @@ data_backend(true, <<"system-group">>) -> system_data_backend;
 % File browsing is allowed for anyone when viewing public shares. It requires
 % read-only access to shares and files.
 data_backend(_, <<"share-public">>) -> public_share_data_backend;
-data_backend(_, <<"file-public">>) -> public_share_data_backend.
+data_backend(_, <<"file-public">>) -> public_share_data_backend;
+data_backend(_, <<"file-property-public">>) -> public_share_data_backend.
 
 
 %%--------------------------------------------------------------------

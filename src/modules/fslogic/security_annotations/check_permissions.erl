@@ -92,6 +92,8 @@ expand_access_definitions(_, ?ROOT_USER_ID, _ShareId, _Inputs, _FileMap, _AclMap
     [];
 expand_access_definitions([root | _Rest], _UserId, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     throw(?EACCES);
+expand_access_definitions(_, ?GUEST_USER_ID, undefined, _Inputs, _FileMap, _AclMap, _UserMap) ->
+    throw(?EACCES);
 expand_access_definitions([{traverse_ancestors, ItemDefinition} | Rest], UserId, ShareId, Inputs, FileMap, AclMap, UserMap) ->
     {User, NewUserMap} = get_user(UserId, UserMap),
     {SubjectDoc, ParentDoc, NewFileMap} =

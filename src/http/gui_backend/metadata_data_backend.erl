@@ -54,7 +54,7 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"metadata">>, FileId) ->
+find(<<"file-property">>, FileId) ->
     SessionId = g_session:get_session_id(),
     try
         metadata_record(SessionId, FileId)
@@ -62,7 +62,7 @@ find(<<"metadata">>, FileId) ->
         ?warning("Cannot get metadata for file (~p). ~p:~p", [
             FileId, T, M
         ]),
-        {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
+        gui_error:internal_server_error()
     end.
 
 
@@ -73,7 +73,7 @@ find(<<"metadata">>, FileId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"metadata">>) ->
+find_all(<<"file-property">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -84,7 +84,7 @@ find_all(<<"metadata">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"metadata">>, _Data) ->
+find_query(<<"file-property">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -95,8 +95,10 @@ find_query(<<"metadata">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"metadata">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+create_record(<<"file-property">>, Data) ->
+    FileId = proplists:get_value(<<"file">>, Data),
+    ok = update_record(<<"file-property">>, FileId, Data),
+    metadata_record(g_session:get_session_id(), FileId).
 
 
 %%--------------------------------------------------------------------
@@ -107,8 +109,62 @@ create_record(<<"metadata">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"metadata">>, FileId, Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+update_record(<<"file-property">>, FileId, Data) ->
+    SessionId = g_session:get_session_id(),
+    case proplists:get_value(<<"basic">>, Data) of
+        undefined ->
+            ok;
+        NewXattrs ->
+            NewXattrsKeys = proplists:get_keys(NewXattrs),
+            % Get current xattrs
+            {ok, CurrentXattrs} = logical_file_manager:list_xattr(
+                SessionId, {guid, FileId}, false, false
+            ),
+            KeysToBeRemoved = CurrentXattrs -- NewXattrsKeys,
+            % Remove xattrs that no longer exist
+            lists:foreach(
+                fun(Key) ->
+                    ok = logical_file_manager:remove_xattr(
+                        SessionId, {guid, FileId}, Key
+                    )
+                end, KeysToBeRemoved),
+            % Update all xattrs that were sent by the client
+            lists:foreach(
+                fun({K, V}) ->
+                    ok = logical_file_manager:set_xattr(
+                        SessionId, {guid, FileId}, #xattr{name = K, value = V}
+                    )
+                end, NewXattrs)
+    end,
+    case proplists:get_value(<<"json">>, Data) of
+        undefined ->
+            ok;
+        null ->
+            ok = logical_file_manager:remove_metadata(
+                SessionId, {guid, FileId}, json
+            );
+        JSON ->
+            JSONMap = case JSON of
+                [] -> #{};
+                _ -> json_utils:decode_map(json_utils:encode(JSON))
+            end,
+            ok = logical_file_manager:set_metadata(
+                SessionId, {guid, FileId}, json, JSONMap, []
+            )
+    end,
+    case proplists:get_value(<<"rdf">>, Data) of
+        undefined ->
+            ok;
+        null ->
+            ok = logical_file_manager:remove_metadata(
+                SessionId, {guid, FileId}, rdf
+            );
+        RDF ->
+            ok = logical_file_manager:set_metadata(
+                SessionId, {guid, FileId}, rdf, RDF, []
+            )
+    end,
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -118,8 +174,24 @@ update_record(<<"metadata">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"metadata">>, FileId) ->
-    gui_error:report_error(<<"Not implemented">>).
+delete_record(<<"file-property">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    {ok, XattrKeys} = logical_file_manager:list_xattr(
+        SessionId, {guid, FileId}, false, false
+    ),
+    lists:foreach(
+        fun(Key) ->
+            ok = logical_file_manager:remove_xattr(
+                SessionId, {guid, FileId}, Key
+            )
+        end, XattrKeys),
+    ok = logical_file_manager:remove_metadata(
+        SessionId, {guid, FileId}, json
+    ),
+    ok = logical_file_manager:remove_metadata(
+        SessionId, {guid, FileId}, rdf
+    ),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -131,8 +203,39 @@ delete_record(<<"metadata">>, FileId) ->
 -spec metadata_record(SessionId :: binary(), FileId :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 metadata_record(SessionId, FileId) ->
-    {ok, Xattr} = logical_file_manager:list_xattr(
+    {ok, XattrKeys} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false
     ),
-    % Filter out internal xattrs
-    gui_error:report_error(<<"Not implemented">>).
+    Basic = lists:map(
+        fun(Key) ->
+            {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(
+                SessionId, {guid, FileId}, Key, false
+            ),
+            {Key, Value}
+        end, XattrKeys),
+    BasicVal = case Basic of
+        [] -> null;
+        _ -> Basic
+    end,
+    GetJSONResult = logical_file_manager:get_metadata(
+        SessionId, {guid, FileId}, json, [], false
+    ),
+    JSONVal = case GetJSONResult of
+        {error, ?ENOATTR} -> null;
+        {ok, Map} when map_size(Map) =:= 0 -> <<"{}">>;
+        {ok, JSON} -> json_utils:decode(json_utils:encode_map(JSON))
+    end,
+    GetRDFResult = logical_file_manager:get_metadata(
+        SessionId, {guid, FileId}, rdf, [], false
+    ),
+    RDFVal = case GetRDFResult of
+        {error, ?ENOATTR} -> null;
+        {ok, RDF} -> RDF
+    end,
+    {ok, [
+        {<<"id">>, FileId},
+        {<<"file">>, FileId},
+        {<<"basic">>, BasicVal},
+        {<<"json">>, JSONVal},
+        {<<"rdf">>, RDFVal}
+    ]}.

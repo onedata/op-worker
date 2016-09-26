@@ -24,6 +24,7 @@
 -export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_invite_provider_token/2]).
+-export([has_effective_user/2, has_effective_privilege/3]).
 
 
 %%%===================================================================
@@ -174,3 +175,81 @@ get_invite_group_token(Auth, SpaceId) ->
     {ok, binary()} | {error, Reason :: term()}.
 get_invite_provider_token(Auth, SpaceId) ->
     oz_spaces:get_invite_provider_token(Auth, SpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user belongs to given space directly
+%% or via his groups.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_effective_user(SpaceId :: space_info:id(),
+    UserId :: onedata_user:id()) -> boolean().
+has_effective_user(SpaceId, UserId) ->
+    case onedata_user:get(UserId) of
+        {error, {not_found, _}} ->
+            false;
+        {ok, #document{value = UserInfo}} ->
+            #onedata_user{spaces = SpaceNames} = UserInfo,
+            proplists:is_defined(SpaceId, SpaceNames)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user has a privilege in given space, directly
+%% or via his groups.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_effective_privilege(SpaceId :: space_info:id(),
+    UserId :: onedata_user:id(), Privilege :: privileges:space_privilege()) ->
+    boolean().
+has_effective_privilege(SpaceId, UserId, Privilege) ->
+    case has_effective_user(SpaceId, UserId) of
+        false ->
+            false;
+        true ->
+            {ok, UserPrivileges} = get_effective_privileges(SpaceId, UserId),
+            ordsets:is_element(Privilege, UserPrivileges)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Retrieves effective user privileges taking into account any groups
+%% he is a member of that also are members of the Space.
+%% Throws exception when call to the datastore fails,
+%% or space/user doesn't exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective_privileges(SpaceId :: space_info:id(),
+    UserId :: onedata_user:id()) ->
+    {ok, ordsets:ordset(privileges:space_privilege())}.
+get_effective_privileges(SpaceId, UserId) ->
+    {ok, #document{
+        value = #onedata_user{
+            effective_group_ids = UGroups
+        }}} = onedata_user:get(UserId),
+    {ok, #document{
+        value = #space_info{
+            users = UserTuples,
+            groups = SGroupTuples
+        }}} = space_info:get(SpaceId),
+
+    UserGroups = sets:from_list(UGroups),
+
+    PrivilegesSets = lists:filtermap(fun({GroupId, Privileges}) ->
+        case sets:is_element(GroupId, UserGroups) of
+            true -> {true, ordsets:from_list(Privileges)};
+            false -> false
+        end
+    end, SGroupTuples),
+
+    UserPrivileges =
+        case lists:keyfind(UserId, 1, UserTuples) of
+            {UserId, Privileges} -> ordsets:from_list(Privileges);
+            false -> ordsets:new()
+        end,
+
+    {ok, ordsets:union([UserPrivileges | PrivilegesSets])}.

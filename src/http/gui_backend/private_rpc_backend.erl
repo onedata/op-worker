@@ -74,6 +74,23 @@ handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
             gui_error:internal_server_error()
     end;
 
+% Checks if file that is displayed in shares view can be downloaded
+% (i.e. can be read by the user) and if so, returns download URL.
+handle(<<"getSharedFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
+    {_, FileId} = op_gui_utils:association_to_ids(AssocId),
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:check_perms(SessionId, {guid, FileId}, read) of
+        {ok, true} ->
+            Hostname = g_ctx:get_requested_hostname(),
+            URL = str_utils:format_bin("https://~s/download/~s",
+                [Hostname, FileId]),
+            {ok, [{<<"fileUrl">>, URL}]};
+        {ok, false} ->
+            gui_error:report_error(<<"Permission denied">>);
+        _ ->
+            gui_error:internal_server_error()
+    end;
+
 %%--------------------------------------------------------------------
 %% Space related procedures
 %%--------------------------------------------------------------------
@@ -172,7 +189,6 @@ handle(<<"createFileShare">>, Props) ->
             gui_error:report_warning(
                 <<"Cannot create share due to unknown error.">>)
     end;
-
 
 
 %%--------------------------------------------------------------------

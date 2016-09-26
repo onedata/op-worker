@@ -22,11 +22,6 @@
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
-%% Keys of special cdmi attrs
--define(MIMETYPE_XATTR_NAME, <<"cdmi_mimetype">>).
--define(TRANSFER_ENCODING_XATTR_NAME, <<"cdmi_valuetransferencoding">>).
--define(CDMI_COMPLETION_STATUS_XATTR_NAME, <<"cdmi_completion_status">>).
-
 %% API
 -export([chmod/3, get_file_attr/2, delete/3, update_times/5,
     get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
@@ -34,8 +29,8 @@
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
     get_file_path/2, chmod_storage_files/3, replicate_file/3,
-    get_metadata/5, set_metadata/5, check_perms/3, create_share/3,
-    remove_share/2]).
+    get_metadata/5, set_metadata/5, remove_metadata/3,
+    check_perms/3, create_share/3, remove_share/2]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -86,7 +81,7 @@ chmod(CTX, File, Mode) ->
 
     % remove acl
     {ok, FileUuid} = file_meta:to_uuid(File),
-    xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
+    xattr:delete_by_name(FileUuid, ?ACL_KEY),
     {ok, _} = file_meta:update(File, #{mode => Mode}),
     ok = permissions_cache:invalidate_permissions_cache(),
 
@@ -183,7 +178,8 @@ delete(CTX, File, Silent) ->
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name(), boolean()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
-get_xattr(_CTX, _, <<"cdmi_", _/binary>>, _) -> throw(?EPERM);
+%%get_xattr(_CTX, _, <<?CDMI_PREFIX_STR, _/binary>>, _) -> throw(?EPERM); %todo fix eperm in attributes/ GET
+%%get_xattr(_CTX, _, <<?ONEDATA_PREFIX_STR, _/binary>>, _) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName, Inherited) ->
     case xattr:get_by_name(FileUuid, XattrName, Inherited) of
         {ok, XattrValue} ->
@@ -200,7 +196,8 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName, Inherited) ->
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
-set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
+set_xattr(_CTX, _, #xattr{name = <<?CDMI_PREFIX_STR, _/binary>>}) -> throw(?EPERM);
+set_xattr(_CTX, _, #xattr{name = <<?ONEDATA_PREFIX_STR, _/binary>>}) -> throw(?EPERM);
 set_xattr(CTX, {uuid, FileUuid} = FileEntry, #xattr{name = XattrName, value = XattrValue}) ->
     case xattr:save(FileUuid, XattrName, XattrValue) of
         {ok, _} ->
@@ -261,7 +258,7 @@ list_xattr(_CTX, {uuid, FileUuid}, Inherited, ShowInternal) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
 get_acl(_CTX, {uuid, FileUuid}) ->
-    case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
+    case xattr:get_by_name(FileUuid, ?ACL_KEY) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Val}};
         {error, {not_found, custom_metadata}} ->
@@ -275,7 +272,7 @@ get_acl(_CTX, {uuid, FileUuid}) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
-    case xattr:save(FileUuid, ?ACL_XATTR_NAME, Val) of
+    case xattr:save(FileUuid, ?ACL_KEY, Val) of
         {ok, _} ->
             ok = permissions_cache:invalidate_permissions_cache(),
             ok = chmod_storage_files(
@@ -295,7 +292,7 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
-    case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
+    case xattr:delete_by_name(FileUuid, ?ACL_KEY) of
         ok ->
             ok = permissions_cache:invalidate_permissions_cache(),
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
@@ -317,7 +314,7 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
-    case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
+    case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_KEY) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
         {error, {not_found, custom_metadata}} ->
@@ -331,7 +328,7 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     xattr:transfer_encoding()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
-    case xattr:save(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME, Encoding) of
+    case xattr:save(FileUuid, ?TRANSFER_ENCODING_KEY, Encoding) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
@@ -348,7 +345,7 @@ set_transfer_encoding(CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
-    case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
+    case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_KEY) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Val}};
         {error, {not_found, custom_metadata}} ->
@@ -365,7 +362,7 @@ get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
     xattr:cdmi_completion_status()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
-    case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME, CompletionStatus) of
+    case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus) of
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
@@ -378,7 +375,7 @@ set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_CTX, {uuid, FileUuid}) ->
-    case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
+    case xattr:get_by_name(FileUuid, ?MIMETYPE_KEY) of
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
         {error, {not_found, custom_metadata}} ->
@@ -392,7 +389,7 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
     xattr:mimetype()) -> #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
-    case xattr:save(FileUuid, ?MIMETYPE_XATTR_NAME, Mimetype) of
+    case xattr:save(FileUuid, ?MIMETYPE_KEY, Mimetype) of
         {ok, _} ->
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
@@ -450,19 +447,20 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
 %% Get metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), [binary()], boolean()) -> {ok, #{}}.
+-spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(),
+    custom_metadata:filter(), boolean()) -> {ok, custom_metadata:value()}.
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
-get_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Names, Inherited) ->
+get_metadata(_CTX, {uuid, FileUuid}, json, Names, Inherited) ->
     case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of
         {ok, Meta} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"json">>, value = Meta}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = json, value = Meta}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end;
-get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _, _) ->
+get_metadata(_CTX, {uuid, FileUuid}, rdf, _, _) ->
     case custom_metadata:get_rdf_metadata(FileUuid) of
         {ok, Meta} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = <<"rdf">>, value = Meta}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = rdf, value = Meta}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
@@ -472,13 +470,28 @@ get_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, _, _) ->
 %% Set metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(), #{}, [binary()]) -> ok.
+-spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(),
+    custom_metadata:value(), custom_metadata:filter()) -> ok.
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
-set_metadata(_CTX, {uuid, FileUuid}, <<"json">>, Value, Names) ->
+set_metadata(_CTX, {uuid, FileUuid}, json, Value, Names) ->
     {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
     #provider_response{status = #status{code = ?OK}};
-set_metadata(_CTX, {uuid, FileUuid}, <<"rdf">>, Value, _) ->
+set_metadata(_CTX, {uuid, FileUuid}, rdf, Value, _) ->
     {ok, _} = custom_metadata:set_rdf_metadata(FileUuid, Value),
+    #provider_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove metadata linked with file
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type()) -> ok.
+-check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
+remove_metadata(_CTX, {uuid, FileUuid}, json) ->
+    ok = custom_metadata:remove_json_metadata(FileUuid),
+    #provider_response{status = #status{code = ?OK}};
+remove_metadata(_CTX, {uuid, FileUuid}, rdf) ->
+    ok = custom_metadata:remove_rdf_metadata(FileUuid),
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------

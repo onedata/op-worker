@@ -15,30 +15,46 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/metadata.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_json_metadata/1, get_json_metadata/3, set_json_metadata/2, set_json_metadata/3,
-    get_xattr_metadata/3, list_xattr_metadata/2, remove_xattr_metadata/2, set_xattr_metadata/3,
-    exists_xattr_metadata/2, get_rdf_metadata/1, set_rdf_metadata/2]).
+-export([get_json_metadata/1, get_json_metadata/3, set_json_metadata/2,
+    set_json_metadata/3, remove_json_metadata/1]).
+-export([get_rdf_metadata/1, set_rdf_metadata/2, remove_rdf_metadata/1]).
+-export([get_xattr_metadata/3, list_xattr_metadata/2, exists_xattr_metadata/2,
+    remove_xattr_metadata/2, set_xattr_metadata/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     create_or_update/2, 'after'/5, before/4]).
 
--type type() :: binary().
+% Metadata types
+-type type() :: json | rdf.
 -type name() :: binary().
+-type value() :: rdf() | json().
 -type names() :: [name()].
 -type metadata() :: #metadata{}.
 -type rdf() :: binary().
 -type view_id() :: binary().
+-type filter() :: [binary()].
 
--export_type([type/0, name/0, names/0, metadata/0, rdf/0, view_id/0]).
+% JSON type
+-type json() :: json_object() | json_array().
+-type json_array() :: [json_term()].
+-type json_object() :: #{json_key() => json_term()}.
+-type json_key() :: binary() | atom().
+-type json_term() :: json_array()
+| json_object()
+| json_string()
+| json_number()
+| true | false | null.
+-type json_string() :: binary().
+-type json_number() :: float() | integer().
 
--define(JSON_PREFIX, <<"onedata_json">>).
--define(RDF_PREFIX, <<"onedata_rdf">>).
+-export_type([type/0, name/0, value/0, names/0, metadata/0, rdf/0, view_id/0, filter/0]).
 
 %%%===================================================================
 %%% API
@@ -65,13 +81,14 @@ get_json_metadata(FileUuid) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_json_metadata(file_meta:uuid(), [binary()], boolean()) ->
+-spec get_json_metadata(file_meta:uuid(), filter(), Inherited :: boolean()) ->
     {ok, maps:map()} | datastore:get_error().
 get_json_metadata(FileUuid, Names, false) ->
     case get(FileUuid) of
-        {ok, #document{value = #custom_metadata{value = Meta}}} ->
-            Json = maps:get(?JSON_PREFIX, Meta, #{}),
+        {ok, #document{value = #custom_metadata{value = #{?JSON_METADATA_KEY := Json}}}} ->
             {ok, custom_meta_manipulation:find(Json, Names)};
+        {ok, #document{value = #custom_metadata{}}} ->
+            {error, {not_found,custom_metadata}};
         Error ->
             Error
     end;
@@ -117,30 +134,46 @@ set_json_metadata(FileUuid, Json) ->
 set_json_metadata(FileUuid, JsonToInsert, Names) ->
     ToCreate = #document{key = FileUuid, value = #custom_metadata{
         space_id = get_space_id(FileUuid),
-        value = #{?JSON_PREFIX => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
+        value = #{?JSON_METADATA_KEY => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
     }},
     create_or_update(ToCreate, fun(Meta = #custom_metadata{value = MetaValue}) ->
-        Json = maps:get(?JSON_PREFIX, MetaValue, #{}),
+        Json = maps:get(?JSON_METADATA_KEY, MetaValue, #{}),
         NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
-        {ok, Meta#custom_metadata{value = MetaValue#{?JSON_PREFIX => NewJson}}}
+        {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
     end).
 
 %%--------------------------------------------------------------------
-%% @doc Gets file's rdf metadata
-%% @equiv get_xattr_metadata(FileUuid, ?RDF_PREFIX).
+%% @doc Removes file's json metadata
+%% @equiv remove_xattr_metadata(FileUuid, ?JSON_METADATA_KEY).
 %%--------------------------------------------------------------------
--spec get_rdf_metadata(file_meta:uuid()) -> {ok, rdf()} | datastore:get_error().
-get_rdf_metadata(FileUuid) ->
-    get_xattr_metadata(FileUuid, ?RDF_PREFIX, false).
+-spec remove_json_metadata(file_meta:uuid()) -> ok | datastore:generic_error().
+remove_json_metadata(FileUuid) ->
+    remove_xattr_metadata(FileUuid, ?JSON_METADATA_KEY).
 
 %%--------------------------------------------------------------------
 %% @doc Gets file's rdf metadata
-%% @equiv get_xattr_metadata(FileUuid, ?RDF_PREFIX).
+%% @equiv get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
+%%--------------------------------------------------------------------
+-spec get_rdf_metadata(file_meta:uuid()) -> {ok, rdf()} | datastore:get_error().
+get_rdf_metadata(FileUuid) ->
+    get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY, false).
+
+%%--------------------------------------------------------------------
+%% @doc Gets file's rdf metadata
+%% @equiv get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
 %%--------------------------------------------------------------------
 -spec set_rdf_metadata(file_meta:uuid(), rdf()) ->
     {ok, file_meta:uuid()} | datastore:generic_error().
 set_rdf_metadata(FileUuid, Value) ->
-    set_xattr_metadata(FileUuid, ?RDF_PREFIX, Value).
+    set_xattr_metadata(FileUuid, ?RDF_METADATA_KEY, Value).
+
+%%--------------------------------------------------------------------
+%% @doc Removes file's rdf metadata
+%% @equiv remove_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
+%%--------------------------------------------------------------------
+-spec remove_rdf_metadata(file_meta:uuid()) -> ok | datastore:generic_error().
+remove_rdf_metadata(FileUuid) ->
+    remove_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
 
 %%--------------------------------------------------------------------
 %% @doc Get extended attribute metadata
