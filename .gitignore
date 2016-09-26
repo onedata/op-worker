@@ -27,6 +27,7 @@ doc
 logs
 priv
 .rebar
+rebar3.crashdump
 
 c_lib
 c_src/helpers_nif/*.o
