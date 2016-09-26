@@ -30,8 +30,7 @@
 find(Json, []) ->
     Json;
 find(Json, [Name | Rest]) ->
-    NameSize = byte_size(Name),
-    IndexSize = NameSize - 2,
+    IndexSize = get_index_size(Name),
     case Name of
         <<"[", Element:IndexSize/binary, "]">> when is_list(Json) ->
             Index = binary_to_integer(Element) + 1,
@@ -43,10 +42,10 @@ find(Json, [Name | Rest]) ->
                     find(SubJson, Rest)
             end;
         Name when is_map(Json) ->
-            case maps:get(Name, Json, undefined) of
-                undefined ->
+            case maps:find(Name, Json) of
+                error ->
                     throw({error, ?ENOATTR});
-                SubJson ->
+                {ok, SubJson} ->
                     find(SubJson, Rest)
             end;
         _ ->
@@ -62,8 +61,7 @@ find(Json, [Name | Rest]) ->
 insert(_Json, JsonToInsert, []) ->
     JsonToInsert;
 insert(undefined, JsonToInsert, [Name | Rest]) ->
-    NameSize = byte_size(Name),
-    IndexSize = NameSize - 2,
+    IndexSize = get_index_size(Name),
     case Name of
         <<"[", Element:IndexSize/binary, "]">> ->
             Index = binary_to_integer(Element) + 1,
@@ -72,8 +70,7 @@ insert(undefined, JsonToInsert, [Name | Rest]) ->
             maps:put(Name, insert(undefined, JsonToInsert, Rest), #{})
     end;
 insert(Json, JsonToInsert, [Name | Rest]) ->
-    NameSize = byte_size(Name),
-    IndexSize = NameSize - 2,
+    IndexSize = get_index_size(Name),
     case Name of
         <<"[", Element:IndexSize/binary, "]">> when is_list(Json) ->
             Index = binary_to_integer(Element) + 1,
@@ -85,12 +82,8 @@ insert(Json, JsonToInsert, [Name | Rest]) ->
                     setnth(Index, Json, insert(undefined, JsonToInsert, Rest))
             end;
         _ when is_map(Json) ->
-            case maps:get(Name, Json, undefined) of
-                undefined ->
-                    maps:put(Name, insert(undefined, JsonToInsert, Rest), Json);
-                SubJson ->
-                    maps:put(Name, insert(SubJson, JsonToInsert, Rest), Json)
-            end;
+            SubJson = maps:get(Name, Json, undefined),
+            maps:put(Name, insert(SubJson, JsonToInsert, Rest), Json);
         _ ->
             throw({error, ?ENOATTR})
     end.
@@ -132,6 +125,15 @@ merge([Json | Rest]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get byte size of json array index stored in binary: e. g. "[12]" -> 2
+%% @end
+%%--------------------------------------------------------------------
+-spec get_index_size(Name :: binary()) -> integer().
+get_index_size(Name) ->
+    byte_size(Name) - 2.
 
 %%--------------------------------------------------------------------
 %% @doc
