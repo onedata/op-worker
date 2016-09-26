@@ -29,14 +29,28 @@
 -spec find(Json :: maps:map(), [binary()]) -> maps:map() | no_return().
 find(Json, []) ->
     Json;
-find(Json, [_Name | _Rest]) when not is_map(Json) ->
-    throw({error, ?ENOATTR});
 find(Json, [Name | Rest]) ->
-    case maps:get(Name, Json, undefined) of
-        undefined ->
-            throw({error, ?ENOATTR});
-        SubJson ->
-            find(SubJson, Rest)
+    NameSize = byte_size(Name),
+    IndexSize = NameSize - 2,
+    case Name of
+        <<"[", Element:IndexSize/binary, "]">> when is_list(Json) ->
+            Index = binary_to_integer(Element) + 1,
+            case length(Json) < Index of
+                true ->
+                    throw({error, ?ENOATTR});
+                false ->
+                    SubJson = lists:nth(Index, Json),
+                    find(SubJson, Rest)
+            end;
+        Name when is_map(Json) ->
+            case maps:get(Name, Json, undefined) of
+                undefined ->
+                    throw({error, ?ENOATTR});
+                SubJson ->
+                    find(SubJson, Rest)
+            end;
+        _ ->
+            throw({error, ?ENOATTR})
     end.
 
 %%--------------------------------------------------------------------
@@ -48,13 +62,37 @@ find(Json, [Name | Rest]) ->
 insert(_Json, JsonToInsert, []) ->
     JsonToInsert;
 insert(undefined, JsonToInsert, [Name | Rest]) ->
-    maps:put(Name, insert(undefined, JsonToInsert, Rest), #{});
+    NameSize = byte_size(Name),
+    IndexSize = NameSize - 2,
+    case Name of
+        <<"[", Element:IndexSize/binary, "]">> ->
+            Index = binary_to_integer(Element) + 1,
+            [null || _ <- lists:seq(1, Index - 1)] ++ [insert(undefined, JsonToInsert, Rest)];
+        _ ->
+            maps:put(Name, insert(undefined, JsonToInsert, Rest), #{})
+    end;
 insert(Json, JsonToInsert, [Name | Rest]) ->
-    case maps:get(Name, Json, undefined) of
-        undefined ->
-            maps:put(Name, insert(undefined, JsonToInsert, Rest), Json);
-        SubJson ->
-            maps:put(Name, insert(SubJson, JsonToInsert, Rest), Json)
+    NameSize = byte_size(Name),
+    IndexSize = NameSize - 2,
+    case Name of
+        <<"[", Element:IndexSize/binary, "]">> when is_list(Json) ->
+            Index = binary_to_integer(Element) + 1,
+            Length = length(Json),
+            case Length < Index of
+                true ->
+                    Json ++ [null || _ <- lists:seq(Length + 1, Index - 1)] ++ [insert(undefined, JsonToInsert, Rest)];
+                false ->
+                    setnth(Index, Json, insert(undefined, JsonToInsert, Rest))
+            end;
+        _ when is_map(Json) ->
+            case maps:get(Name, Json, undefined) of
+                undefined ->
+                    maps:put(Name, insert(undefined, JsonToInsert, Rest), Json);
+                SubJson ->
+                    maps:put(Name, insert(SubJson, JsonToInsert, Rest), Json)
+            end;
+        _ ->
+            throw({error, ?ENOATTR})
     end.
 
 %%--------------------------------------------------------------------
@@ -94,3 +132,12 @@ merge([Json | Rest]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Set nth element of list
+%% @end
+%%--------------------------------------------------------------------
+-spec setnth(non_neg_integer(), list(), term()) -> list().
+setnth(1, [_ | Rest], New) -> [New | Rest];
+setnth(I, [E | Rest], New) -> [E | setnth(I - 1, Rest, New)].
