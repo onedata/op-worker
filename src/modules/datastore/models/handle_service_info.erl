@@ -15,6 +15,7 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/oz/oz_handle_services.hrl").
 
 -type id() :: binary().
 -type name() :: binary().
@@ -24,8 +25,8 @@
 -export_type([id/0, name/0, proxy_endpoint/0, service_properties/0]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
+-export([save/1, get/1, get_or_fetch/2, list/0, exists/1, delete/1, update/2,
+    create/1, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -67,6 +68,21 @@ create(Document) ->
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets space info from the database in user context. If space info is not found
+%% fetches it from onezone and stores it in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), HandleServiceId :: id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Auth, HandleServiceId) ->
+    case ?MODULE:get(HandleServiceId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Auth, HandleServiceId);
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -125,3 +141,35 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Fetches space info from onezone and stores it in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(Auth :: oz_endpoint:auth(), HandleServiceId :: id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+fetch(Auth, HandleServiceId) ->
+    {ok, #handle_service_details{
+        name = Name,
+        proxy_endpoint = ProxyEndpoint,
+        service_properties = ServiceProperties
+    }} = oz_handle_services:get_details(Auth, HandleServiceId),
+
+    Doc = #document{key = HandleServiceId, value = #handle_service_info{
+        name = Name,
+        proxy_endpoint = ProxyEndpoint,
+        service_properties = ServiceProperties
+    }},
+
+    case create(Doc) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
+
+    {ok, Doc}.
