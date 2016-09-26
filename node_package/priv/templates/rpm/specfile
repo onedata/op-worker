@@ -57,22 +57,23 @@ BuildRequires: erlang-erts{{rpm_build_requires}}
 # Setup vars.config like other platforms, but do it inside of spec file
 cat > rpm.vars.config <<EOF
 %% Platform-specific installation paths
-{platform_bin_dir,  "%{platform_bin_dir}"}.
-{platform_data_dir, "%{platform_data_dir}"}.
-{platform_etc_dir,  "%{platform_etc_dir}"}.
-{platform_base_dir, "%{platform_base_dir}"}.
-{platform_lib_dir,  "%{platform_lib_dir}"}.
-{platform_log_dir,  "%{platform_log_dir}"}.
+{platform_bin_dir,    "%{platform_bin_dir}"}.
+{platform_data_dir,   "%{platform_data_dir}"}.
+{platform_etc_dir,    "%{platform_etc_dir}"}.
+{platform_base_dir,   "%{platform_base_dir}"}.
+{platform_lib_dir,    "%{platform_lib_dir}"}.
+{platform_log_dir,    "%{platform_log_dir}"}.
 
-{runner_script_dir, "%{platform_bin_dir}"}.
-{runner_base_dir,   "%{platform_base_dir}"}.
-{runner_etc_dir,    "%{platform_etc_dir}"}.
-{runner_log_dir,    "%{platform_log_dir}"}.
-{runner_lib_dir,    "%{platform_lib_dir}"}.
-{runner_patch_dir,  "%{platform_lib_dir}/{{package_patch_dir}}"}.
-{runner_user,       "{{package_runner_user}}"}.
-{pipe_dir,          "%{_localstatedir}/run/{{package_install_name}}/"}.
-{app_version,       "{{revision_}}"}.
+{runner_script_dir,   "%{platform_bin_dir}"}.
+{runner_base_dir,     "%{platform_base_dir}"}.
+{runner_etc_dir,      "%{platform_etc_dir}"}.
+{runner_log_dir,      "%{platform_log_dir}"}.
+{runner_lib_dir,      "%{platform_lib_dir}"}.
+{runner_patch_dir,    "%{platform_lib_dir}/{{package_patch_dir}}"}.
+{runner_user,         "{{package_runner_user}}"}.
+{runner_wait_process, "{{package_runner_wait_process}}"}.
+{pipe_dir,            "%{_localstatedir}/run/{{package_install_name}}/"}.
+{app_version,         "{{revision_}}"}.
 EOF
 
 %build
