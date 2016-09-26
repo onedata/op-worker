@@ -33,7 +33,8 @@
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
 % Checks if file can be downloaded (i.e. can be read by the user) and if so,
 % returns download URL.
-handle(<<"getPublicFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
+handle(<<"getPublicFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
+    {_, FileId} = op_gui_utils:association_to_ids(AssocId),
     PermsCheckAnswer = logical_file_manager:check_perms(
         ?GUEST_SESS_ID, {guid, FileId}, read
     ),
