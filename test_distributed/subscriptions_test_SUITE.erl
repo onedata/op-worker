@@ -163,10 +163,13 @@ accounts_incoming_updates(Config) ->
 saves_the_actual_data(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, Sp1, Sh1, U1, U2, G1} =
-        {?ID(p1), ?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(u2), ?ID(g1)},
+    {P1, Sp1, U1, U2, G1} =
+        {?ID(p1), ?ID(sp1), ?ID(u1), ?ID(u2), ?ID(g1)},
+    {U3, G2, Sh1, HS1, H1} = {?ID(u3), ?ID(g2), ?ID(sh1), ?ID(hs1), ?ID(h1)},
     Priv1 = privileges:space_user(),
     Priv2 = privileges:space_admin(),
+    HSPrivs = privileges:handle_service_admin(),
+    HPrivs = privileges:handle_admin(),
 
     %% when
     push_update(Node, [
@@ -197,21 +200,48 @@ saves_the_actual_data(Config) ->
             <<"root_file_id">>,
             <<"public_url">>,
             <<"handle">>
+        )),
+        update(5, [<<"r2">>, <<"r1">>], HS1, handle_service(
+            <<"Handle Service 1">>,
+            [{U3, HSPrivs}],
+            [{G2, HSPrivs}]
+        )),
+        update(6, [<<"r2">>, <<"r1">>], H1, handle(
+            HS1,
+            Sh1,
+            [{U3, HPrivs}],
+            [{G2, HPrivs}]
         ))
     ]),
-    expect_message([], 4, []),
+    expect_message([], 6, []),
 
     push_update(Node, [
-        update(5, [<<"r2">>, <<"r1">>], U1,
+        update(7, [<<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
                 [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>,
                 [<<"A">>, <<"B">>, <<"Z">>])
         ),
-        update(6, [<<"r2">>, <<"r1">>], U2,
+        update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
+        ),
+        update(9, [<<"r2">>, <<"r1">>], G2, group(
+            <<"group with handles">>,
+            [],
+            [{U3, Priv1}],
+            [{U3, Priv1}],
+            [],
+            [],
+            [HS1],
+            [H1],
+            <<"unit">>
+        )),
+        update(10, [<<"r2">>, <<"r1">>], U3,
+            user(<<"user with handles">>, [G2],
+                [{<<"C">>, <<"D">>}], <<"C">>,
+                [G2], [HS1], [H1], false)
         )
     ]),
-    expect_message([], 6, []),
+    expect_message([], 10, []),
 
     %% then
     ?assertMatch({ok, (#document{key = Sp1, value = #space_info{
@@ -258,6 +288,47 @@ saves_the_actual_data(Config) ->
         space_ids = [Sp1],
         public_only = false}}
     }, fetch(Node, provider_info, P1)),
+    ?assertMatch({ok, #document{key = G2, value = #onedata_group{
+        name = <<"group with handles">>,
+        type = unit,
+        spaces = [],
+        users = [{U3, Priv1}],
+        effective_users = [{U3, Priv1}],
+        nested_groups = [],
+        parent_groups = [],
+        handle_services = [HS1],
+        handles = [H1],
+        revision_history = [<<"r2">>, <<"r1">>]}}
+    }, fetch(Node, onedata_group, G1)),
+    ?assertMatch({ok, #document{key = U3, value = #onedata_user{
+        name = <<"user with handles">>,
+        group_ids = [G2],
+        spaces = [{<<"C">>, <<"D">>}],
+        default_space = <<"C">>,
+        effective_group_ids = [G2],
+        handle_services = [HS1],
+        handles = [H1],
+        revision_history = [<<"r2">>, <<"r1">>]}}
+    }, fetch(Node, onedata_user, U1)),
+    ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
+        name = <<"Handle Service 1">>,
+        proxy_endpoint = <<"">>,
+        service_properties = [],
+        users = [{U3, HSPrivs}],
+        groups = [{G2, HSPrivs}],
+        revision_history = [<<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_service_info, HS1)),
+    ?assertMatch({ok, #document{key = H1, value = #handle_info{
+        handle_service_id = HS1,
+        public_handle = <<"">>,
+        resource_type = <<"">>,
+        resource_id = Sh1,
+        metadata = <<"">>,
+        users = [{U3, HPrivs}],
+        groups = [{G2, HPrivs}],
+        timestamp = {{0, 0, 0}, {0, 0, 0}},
+        revision_history = [<<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_info, H1)),
     ok.
 
 check_file_operations_test_base0(Config, IdExt) ->
@@ -911,25 +982,48 @@ share(Name, ParentSpaceId, RootFileId, PublicUrl, Handle) ->
         {parent_space, ParentSpaceId}, {public_url, PublicUrl},
         {handle, Handle}]}.
 
+handle_service(Name, UsersWithPrivs, GroupsWithPrivs) ->
+    handle_service(Name, <<"">>, [], UsersWithPrivs, GroupsWithPrivs).
+handle_service(Name, ProxyEndpoint, ServiceProperties, UsersWithPrivs, GroupsWithPrivs) ->
+    {handle_service, [{name, Name}, {proxy_endpoint, ProxyEndpoint},
+        {service_properties, ServiceProperties}, {users, UsersWithPrivs},
+        {groups, GroupsWithPrivs}]}.
+
+handle(HandleServiceId, ResourceId, UsersWithPrivs, GroupsWithPrivs) ->
+    handle(HandleServiceId, <<"">>, <<"">>, ResourceId, <<"">>, UsersWithPrivs,
+        GroupsWithPrivs, [0, 0, 0, 0, 0, 0]).
+handle(HandleServiceId, PublicHandle, ResourceType, ResourceId, Metadata, UsersWithPrivs,
+    GroupsWithPrivs, Timestamp) ->
+    {handle, [{handle_service_id, HandleServiceId}, {public_handle, PublicHandle},
+        {resource_type, ResourceType}, {resource_id, ResourceId},
+        {metadata, Metadata}, {users, UsersWithPrivs},
+        {groups, GroupsWithPrivs}, {timestamp, Timestamp}]}.
+
 group(Name) ->
     group(Name, [], []).
 group(Name, SIDs, Users) ->
     group(Name, SIDs, Users, Users, [], [], undefined).
 group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, Type) ->
+    group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, [], [], Type).
+group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, HandleServices, Handles, Type) ->
     {group, [{name, Name}, {type, Type}, {spaces, SIDs}, {users, Users},
         {effective_users, EffectiveUsers}, {nested_groups, NestedGroups},
-        {parent_groups, ParentGroups}]}.
+        {parent_groups, ParentGroups}, {handle_services, HandleServices},
+        {handles, Handles}]}.
 
 public_only_user(Name) ->
     user(Name, [], [], undefined, [], true).
 user(Name, GIDs, Spaces, DefaultSpace) ->
     user(Name, GIDs, Spaces, DefaultSpace, GIDs).
 user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups) ->
-    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, false).
+    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, [], [], false).
 user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, PublicOnly) ->
+    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, [], [], PublicOnly).
+user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, HandleServices, Handles, PublicOnly) ->
     {user, [{name, Name}, {group_ids, GIDs}, {space_names, Spaces},
         {public_only, PublicOnly}, {default_space, DefaultSpace},
-        {effective_group_ids, EffectiveGroups}]}.
+        {effective_group_ids, EffectiveGroups}, {handle_services, HandleServices},
+        {handles, Handles}]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].

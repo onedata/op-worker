@@ -92,6 +92,8 @@
     connected_accounts = [] :: [onedata_user:connected_account()],
     alias = <<"">>:: binary(),
     email_list = [] :: [binary()],
+    handle_services = [] ::[HandleServiceId :: binary()],
+    handles = [] ::[HandleId :: binary()],
     revision_history = [] :: [subscriptions:rev()],
     % This field means that only public information is available about this
     % user. This is the case when given user hasn't ever logged in to this
@@ -112,6 +114,8 @@
     nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
     parent_groups = [] :: [binary()],
     spaces = [] :: [SpaceId :: binary()],
+    handle_services = [] ::[HandleServiceId :: binary()],
+    handles = [] ::[HandleId :: binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 

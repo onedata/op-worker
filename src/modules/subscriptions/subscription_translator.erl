@@ -81,7 +81,9 @@ props_to_value(onedata_user, Props) ->
         name = proplists:get_value(<<"name">>, Props),
         group_ids = proplists:get_value(<<"group_ids">>, Props, []),
         effective_group_ids = proplists:get_value(<<"effective_group_ids">>, Props, []),
-        spaces = proplists:get_value(<<"space_names">>, Props, [])
+        spaces = proplists:get_value(<<"space_names">>, Props, []),
+        handle_services = proplists:get_value(<<"handle_services">>, Props, []),
+        handles = proplists:get_value(<<"handles">>, Props, [])
     };
 props_to_value(onedata_group, Props) ->
     #onedata_group{
@@ -93,7 +95,9 @@ props_to_value(onedata_group, Props) ->
             proplists:get_value(<<"effective_users">>, Props, [])),
         nested_groups = process_ids_with_privileges(
             proplists:get_value(<<"nested_groups">>, Props, [])),
-        parent_groups = proplists:get_value(<<"parent_groups">>, Props, [])
+        parent_groups = proplists:get_value(<<"parent_groups">>, Props, []),
+        handle_services = proplists:get_value(<<"handle_services">>, Props, []),
+        handles = proplists:get_value(<<"handles">>, Props, [])
     };
 props_to_value(space_info, Props) ->
     #space_info{
@@ -160,6 +164,10 @@ type_to_model(<<"group">>) ->
     onedata_group;
 type_to_model(<<"user">>) ->
     onedata_user;
+type_to_model(<<"handle_service">>) ->
+    handle_service_info;
+type_to_model(<<"handle">>) ->
+    handle_info;
 type_to_model(_Type) ->
     ?error("Unexpected update type ~p", [_Type]).
 

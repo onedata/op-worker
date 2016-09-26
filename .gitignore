@@ -4,6 +4,7 @@
 .dialyzer.plt
 .idea
 .rebar
+rebar3.crashdump
 
 cluster_manager
 
