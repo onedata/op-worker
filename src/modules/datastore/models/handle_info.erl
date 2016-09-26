@@ -14,6 +14,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_handles.hrl").
 
@@ -171,6 +172,24 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: oz_endpoint:auth(), HandleId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
+fetch(?GUEST_SESS_ID = Auth, HandleId) ->
+    {ok, #handle_details{
+        public_handle = PublicHandle,
+        metadata = Metadata
+    }} = oz_handles:get_public_details(Auth, HandleId),
+
+    Doc = #document{key = HandleId, value = #handle_info{
+        public_handle = PublicHandle,
+        metadata = Metadata
+    }},
+
+    case create(Doc) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
+
+    {ok, Doc};
+
 fetch(Auth, HandleId) ->
     {ok, #handle_details{
         handle_service_id = HandleServiceId,
