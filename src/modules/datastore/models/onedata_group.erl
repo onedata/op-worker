@@ -155,41 +155,56 @@ fetch(Auth, GroupId) ->
     try
         {ok, #group_details{id = Id, name = Name, type = Type}} =
             oz_groups:get_details(Auth, GroupId),
-        {ok, SpaceIds} = oz_groups:get_spaces(Auth, Id),
-        {ok, ParentIds} = oz_groups:get_parents(Auth, Id),
+        case Type of
+            public ->
+                % Only public info about this group was discoverable
+                OnedataGroupDoc = #document{
+                    key = Id, value = #onedata_group{
+                        name = Name,
+                        type = Type
+                    }},
+                case onedata_group:create(OnedataGroupDoc) of
+                    {ok, _} -> ok;
+                    {error, already_exists} -> ok
+                end,
+                {ok, OnedataGroupDoc};
+            _ ->
+                {ok, SpaceIds} = oz_groups:get_spaces(Auth, Id),
+                {ok, ParentIds} = oz_groups:get_parents(Auth, Id),
 
-        % nested groups
-        {ok, NestedIds} = oz_groups:get_nested(Auth, Id),
-        NestedGroupsWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_nested_privileges(Auth, Id, UID),
-            {UID, Privileges}
-        end, NestedIds),
+                % nested groups
+                {ok, NestedIds} = oz_groups:get_nested(Auth, Id),
+                NestedGroupsWithPrivileges = utils:pmap(fun(UID) ->
+                    {ok, Privileges} = oz_groups:get_nested_privileges(Auth, Id, UID),
+                    {UID, Privileges}
+                end, NestedIds),
 
-        % users
-        {ok, UserIds} = oz_groups:get_users(Auth, Id),
-        UsersWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_user_privileges(Auth, Id, UID),
-            {UID, Privileges}
-        end, UserIds),
+                % users
+                {ok, UserIds} = oz_groups:get_users(Auth, Id),
+                UsersWithPrivileges = utils:pmap(fun(UID) ->
+                    {ok, Privileges} = oz_groups:get_user_privileges(Auth, Id, UID),
+                    {UID, Privileges}
+                end, UserIds),
 
-        % effective users
-        {ok, EffectiveUserIds} = oz_groups:get_effective_users(Auth, Id),
-        EffectiveUsersWithPrivileges = utils:pmap(fun(UID) ->
-            {ok, Privileges} = oz_groups:get_effective_user_privileges(Auth, Id, UID),
-            {UID, Privileges}
-        end, EffectiveUserIds),
+                % effective users
+                {ok, EffectiveUserIds} = oz_groups:get_effective_users(Auth, Id),
+                EffectiveUsersWithPrivileges = utils:pmap(fun(UID) ->
+                    {ok, Privileges} = oz_groups:get_effective_user_privileges(Auth, Id, UID),
+                    {UID, Privileges}
+                end, EffectiveUserIds),
 
-        %todo consider getting user_details for each group member and storing it as onedata_user
-        OnedataGroupDoc = #document{key = Id, value = #onedata_group{
-            users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
-            effective_users = EffectiveUsersWithPrivileges, type = Type,
-            parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
+                %todo consider getting user_details for each group member and storing it as onedata_user
+                OnedataGroupDoc = #document{key = Id, value = #onedata_group{
+                    users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
+                    effective_users = EffectiveUsersWithPrivileges, type = Type,
+                    parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
 
-        case onedata_group:create(OnedataGroupDoc) of
-            {ok, _} -> ok;
-            {error, already_exists} -> ok
-        end,
-        {ok, OnedataGroupDoc}
+                case onedata_group:create(OnedataGroupDoc) of
+                    {ok, _} -> ok;
+                    {error, already_exists} -> ok
+                end,
+                {ok, OnedataGroupDoc}
+        end
     catch
         _:Reason ->
             {error, Reason}

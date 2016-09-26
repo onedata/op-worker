@@ -366,7 +366,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(custom_metadata_bucket, [{file_meta, delete}], ?DISK_ONLY_LEVEL)#model_config{sync_enabled = true}.
+    ?MODEL_CONFIG(custom_metadata_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc

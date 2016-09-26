@@ -315,7 +315,9 @@ file_record(SessionId, FileId) ->
                 size = SizeAttr,
                 mtime = ModificationTime,
                 mode = PermissionsAttr,
-                shares = Shares} = FileAttr,
+                shares = Shares,
+                provider_id = ProviderId
+            } = FileAttr,
 
             UserRootDirUUID = get_user_root_dir_uuid(SessionId),
             ParentUUID = case get_parent(SessionId, FileId) of
@@ -347,6 +349,13 @@ file_record(SessionId, FileId) ->
                 [] -> null;
                 [ShareId] -> ShareId
             end,
+            {ok, HasCustomMetadata} = logical_file_manager:has_custom_metadata(
+                SessionId, {guid, FileId}
+            ),
+            Metadata = case HasCustomMetadata of
+                false -> null;
+                true -> FileId
+            end,
             Res = [
                 {<<"id">>, FileId},
                 {<<"name">>, Name},
@@ -357,7 +366,9 @@ file_record(SessionId, FileId) ->
                 {<<"parent">>, ParentUUID},
                 {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
-                {<<"share">>, Share}
+                {<<"share">>, Share},
+                {<<"provider">>, ProviderId},
+                {<<"fileProperty">>, Metadata}
             ],
             {ok, Res}
     end.
