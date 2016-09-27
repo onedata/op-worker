@@ -163,9 +163,8 @@ accounts_incoming_updates(Config) ->
 saves_the_actual_data(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, Sp1, U1, U2, G1} =
-        {?ID(p1), ?ID(sp1), ?ID(u1), ?ID(u2), ?ID(g1)},
-    {U3, G2, Sh1, HS1, H1} = {?ID(u3), ?ID(g2), ?ID(sh1), ?ID(hs1), ?ID(h1)},
+    {P1, Sp1, U1, U2, G1} = {?ID(p1), ?ID(sp1), ?ID(u1), ?ID(u2), ?ID(g1)},
+    {Sh1, HS1, H1} = {?ID(sh1), ?ID(hs1), ?ID(h1)},
     Priv1 = privileges:space_user(),
     Priv2 = privileges:space_admin(),
     HSPrivs = privileges:handle_service_admin(),

@@ -31,23 +31,28 @@
     Update :: datastore:document(),
     UpdateRevs :: [subscriptions:rev()]) -> ok.
 update_model(Model, UpdateDoc, UpdateRevs) ->
-    Key = UpdateDoc#document.key,
-    Update = UpdateDoc#document{
-        rev = hd(UpdateRevs),
-        value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs)
-    },
+    try
+        Key = UpdateDoc#document.key,
+        Update = UpdateDoc#document{
+            rev = hd(UpdateRevs),
+            value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs)
+        },
 
-    {ok, Key} = Model:create_or_update(Update, fun(Record) ->
-        RevisionHistory = get_revisions(Model, Record),
-        UpdatedRecord = case should_update(RevisionHistory, UpdateRevs) of
-            {false, UpdatedHistory} ->
-                set_revisions(Model, Record, UpdatedHistory);
-            {true, UpdatedHistory} ->
-                NewRecord = Update#document.value,
-                set_revisions(Model, NewRecord, UpdatedHistory)
-        end,
-        {ok, UpdatedRecord}
-    end),
+        {ok, Key} = Model:create_or_update(Update, fun(Record) ->
+            RevisionHistory = get_revisions(Model, Record),
+            UpdatedRecord = case should_update(RevisionHistory, UpdateRevs) of
+                {false, UpdatedHistory} ->
+                    set_revisions(Model, Record, UpdatedHistory);
+                {true, UpdatedHistory} ->
+                    NewRecord = Update#document.value,
+                    set_revisions(Model, NewRecord, UpdatedHistory)
+            end,
+            {ok, UpdatedRecord}
+        end)
+    catch Error:Reason ->
+        ?warning_stacktrace("Cannot apply changes from subscriptions - ~p:~p~",
+            [Error, Reason])
+    end,
     ok.
 
 %%--------------------------------------------------------------------
