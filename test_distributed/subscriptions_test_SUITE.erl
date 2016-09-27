@@ -309,7 +309,7 @@ saves_the_actual_data(Config) ->
         handle_services = [HS1],
         handles = [H1],
         revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_user, U1)),
+    }, fetch(Node, onedata_user, U3)),
     ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
         name = <<"Handle Service 1">>,
         proxy_endpoint = <<"">>,
