@@ -18,6 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/oz/oz_handles.hrl").
 
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
@@ -114,7 +115,16 @@ create_record(<<"handle">>, Data) ->
         <<"handle">>, 1, ShareData, {<<"handle">>, HandleId}
     ),
     gui_async:push_updated(<<"share">>, NewShareData),
-    find(<<"handle">>, HandleId).
+    {ok, #handle_details{
+        public_handle = PublicHandle
+    }} = oz_handles:get_details(Auth, HandleId),
+    {ok, [
+        {<<"id">>, HandleId},
+        {<<"handleService">>, HandleServiceId},
+        {<<"share">>, ShareId},
+        {<<"metadataString">>, Metadata},
+        {<<"publicHandle">>, PublicHandle}
+    ]}.
 
 
 %%--------------------------------------------------------------------
