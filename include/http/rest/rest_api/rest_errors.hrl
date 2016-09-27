@@ -66,6 +66,14 @@
     <<"error_description">> => <<"The filter parameter is missing.">>}}).
 -define(ERROR_INVALID_OBJECTID, {?BAD_REQUEST, #{<<"error">> => <<"invalid_objectid">>,
     <<"error_description">> => <<"Given id is invalid.">>}}).
+-define(ERROR_INVALID_ENDKEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_endkey">>,
+    <<"error_description">> => <<"The endkey parameter is invalid, it must be a valid json.">>}}).
+-define(ERROR_INVALID_STARTKEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_startkey">>,
+    <<"error_description">> => <<"The startkey parameter is invalid, it must be a valid json.">>}}).
+-define(ERROR_INVALID_KEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_key">>,
+    <<"error_description">> => <<"The key parameter is invalid, it must be a valid json.">>}}).
+-define(ERROR_INVALID_KEYS, {?BAD_REQUEST, #{<<"error">> => <<"invalid_keys">>,
+    <<"error_description">> => <<"The keys parameter is invalid, it must be a valid json list.">>}}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, #{<<"error">> => <<"unauthorized">>,
