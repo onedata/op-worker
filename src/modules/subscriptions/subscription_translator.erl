@@ -123,7 +123,6 @@ props_to_value(provider_info, Props) ->
         public_only = proplists:get_value(<<"public_only">>, Props)
     };
 props_to_value(handle_service_info, Props) ->
-    ?dump({handle_service_info, Props}),
     #handle_service_info{
         name = proplists:get_value(<<"name">>, Props),
         proxy_endpoint = proplists:get_value(<<"proxy_endpoint">>, Props),
@@ -134,7 +133,6 @@ props_to_value(handle_service_info, Props) ->
             proplists:get_value(<<"groups">>, Props, []))
     };
 props_to_value(handle_info, Props) ->
-    ?dump({handle_info, Props}),
     #handle_info{
         handle_service_id = proplists:get_value(<<"handle_service_id">>, Props),
         public_handle = proplists:get_value(<<"public_handle">>, Props),
