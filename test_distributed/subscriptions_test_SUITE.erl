@@ -203,14 +203,14 @@ saves_the_actual_data(Config) ->
         )),
         update(5, [<<"r2">>, <<"r1">>], HS1, handle_service(
             <<"Handle Service 1">>,
-            [{U3, HSPrivs}],
-            [{G2, HSPrivs}]
+            [{<<"U1">>, HSPrivs}],
+            [{<<"G1">>, HSPrivs}]
         )),
         update(6, [<<"r2">>, <<"r1">>], H1, handle(
             HS1,
-            Sh1,
-            [{U3, HPrivs}],
-            [{G2, HPrivs}]
+            <<"share">>,
+            [{<<"U2">>, HPrivs}],
+            [{<<"G2">>, HPrivs}]
         ))
     ]),
     expect_message([], 6, []),
@@ -223,25 +223,9 @@ saves_the_actual_data(Config) ->
         ),
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
-        ),
-        update(9, [<<"r2">>, <<"r1">>], G2, group(
-            <<"group with handles">>,
-            [],
-            [{U3, Priv1}],
-            [{U3, Priv1}],
-            [],
-            [],
-            [HS1],
-            [H1],
-            <<"unit">>
-        )),
-        update(10, [<<"r2">>, <<"r1">>], U3,
-            user(<<"user with handles">>, [G2],
-                [{<<"C">>, <<"D">>}], <<"C">>,
-                [G2], [HS1], [H1], false)
         )
     ]),
-    expect_message([], 10, []),
+    expect_message([], 8, []),
 
     %% then
     ?assertMatch({ok, (#document{key = Sp1, value = #space_info{
@@ -288,44 +272,22 @@ saves_the_actual_data(Config) ->
         space_ids = [Sp1],
         public_only = false}}
     }, fetch(Node, provider_info, P1)),
-    ?assertMatch({ok, #document{key = G2, value = #onedata_group{
-        name = <<"group with handles">>,
-        type = unit,
-        spaces = [],
-        users = [{U3, Priv1}],
-        effective_users = [{U3, Priv1}],
-        nested_groups = [],
-        parent_groups = [],
-        handle_services = [HS1],
-        handles = [H1],
-        revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_group, G2)),
-    ?assertMatch({ok, #document{key = U3, value = #onedata_user{
-        name = <<"user with handles">>,
-        group_ids = [G2],
-        spaces = [{<<"C">>, <<"D">>}],
-        default_space = <<"C">>,
-        effective_group_ids = [G2],
-        handle_services = [HS1],
-        handles = [H1],
-        revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_user, U3)),
     ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
         name = <<"Handle Service 1">>,
         proxy_endpoint = <<"">>,
         service_properties = [],
-        users = [{U3, HSPrivs}],
-        groups = [{G2, HSPrivs}],
+        users = [{<<"U1">>, HSPrivs}],
+        groups = [{<<"G1">>, HSPrivs}],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, handle_service_info, HS1)),
     ?assertMatch({ok, #document{key = H1, value = #handle_info{
         handle_service_id = HS1,
         public_handle = <<"">>,
         resource_type = <<"">>,
-        resource_id = Sh1,
+        resource_id = <<"share">>,
         metadata = <<"">>,
-        users = [{U3, HPrivs}],
-        groups = [{G2, HPrivs}],
+        users = [{<<"U2">>, HPrivs}],
+        groups = [{<<"G2">>, HPrivs}],
         timestamp = {{0, 0, 0}, {0, 0, 0}},
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, handle_info, H1)),
@@ -903,7 +865,8 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+%%    ?TEST_STOP(Config).
+    ok.
 
 init_per_testcase(Case, Config) ->
     ?CASE_START(Case),
