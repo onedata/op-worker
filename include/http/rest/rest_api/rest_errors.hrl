@@ -58,6 +58,10 @@
     <<"error_description">> => <<"The skip parameter is invalid, it must be of integer type.">>}}).
 -define(ERROR_INVALID_FILTER_TYPE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_filter_type">>,
     <<"error_description">> => <<"The filter_type parameter is invalid.">>}}).
+-define(ERROR_INVALID_FILTER, {?BAD_REQUEST, #{<<"error">> => <<"invalid_filter">>,
+    <<"error_description">> => <<"The filter parameter is invalid.">>}}).
+-define(ERROR_MISSING_FILTER, {?BAD_REQUEST, #{<<"error">> => <<"missing_filter">>,
+    <<"error_description">> => <<"The filter parameter is missing.">>}}).
 -define(ERROR_INVALID_OBJECTID, {?BAD_REQUEST, #{<<"error">> => <<"invalid_objectid">>,
     <<"error_description">> => <<"Given id is invalid.">>}}).
 

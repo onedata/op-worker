@@ -54,7 +54,7 @@ handle(Req, State, _, invalid_json) ->
 handle(Req, State, error, {error, ?ENOENT}) ->
     handle(Req, State, error, ?ERROR_NOT_FOUND);
 handle(Req, State, error, {error, ?ENOATTR}) ->
-    handle(Req, State, error, ?ERROR_NOT_FOUND);
+    handle(Req, State, error, ?ERROR_ATTRIBUTE_NOT_FOUND);
 handle(Req, State, error, {error, ?EACCES}) ->
     handle(Req, State, error, ?ERROR_PERMISSION_DENIED);
 handle(Req, State, error, {error, ?EPERM}) ->
