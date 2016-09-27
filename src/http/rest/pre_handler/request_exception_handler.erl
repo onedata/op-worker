@@ -47,9 +47,9 @@ handle(Req, State, error, {error, no_peer_certificate}) ->
     {halt, Req2, State};
 handle(Req, State, error, {error,{not_found,file_meta}}) ->
     handle(Req, State, error, ?ERROR_NOT_FOUND);
-handle(Req, State, error, {error,{_, invalid_json}}) ->
+handle(Req, State, _, {error,{_, invalid_json}}) ->
     handle(Req, State, error, invalid_json);
-handle(Req, State, error, invalid_json) ->
+handle(Req, State, _, invalid_json) ->
     handle(Req, State, error, ?ERROR_INVALID_JSON);
 handle(Req, State, error, {error, ?ENOENT}) ->
     handle(Req, State, error, ?ERROR_NOT_FOUND);
