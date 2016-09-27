@@ -132,7 +132,12 @@ parse_extended(Req, State) ->
     {parse_result(), cowboy_req:req()}.
 parse_attribute(Req, State = #{extended := true}) ->
     {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
-    {State#{attribute => Attribute}, NewReq};
+    case Attribute =:= undefined orelse is_binary(Attribute) of
+        true ->
+            {State#{attribute => Attribute}, NewReq};
+        false ->
+            throw(?ERROR_INVALID_ATTRIBUTE_NAME)
+    end;
 parse_attribute(Req, State) ->
     {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
     case lists:member(Attribute, ?ALLOWED_ATTRIBUTES) of

@@ -18,12 +18,14 @@
     <<"error_description">> => <<"Given attribute is not valid">>}}).
 -define(ERROR_UNDEFINED_ATTRIBUTE, {?BAD_REQUEST, #{<<"error">> => <<"undefined_attribute">>,
     <<"error_description">> => <<"You must define attribute name when requesting for extended attribute.">>}}).
+-define(ERROR_INVALID_ATTRIBUTE_BODY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_body">>,
+    <<"error_description">> => <<"Request's body is malformed, provide one valid attribute with its value.">>}}).
+-define(ERROR_INVALID_ATTRIBUTE_NAME, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_name">>,
+    <<"error_description">> => <<"Request's attribute name is invalid.">>}}).
 -define(ERROR_INVALID_EXTENDED_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_extended_flag">>,
     <<"error_description">> => <<"Given extended flag is not a valid boolean.">>}}).
 -define(ERROR_INVALID_INHERITED_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_inherited_flag">>,
     <<"error_description">> => <<"Given inherited flag is not a valid boolean.">>}}).
--define(ERROR_INVALID_ATTRIBUTE_BODY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_body">>,
-    <<"error_description">> => <<"Request's body is malformed, provide one valid attribute with its value.">>}}).
 -define(ERROR_INVALID_MODE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_mode">>,
     <<"error_description">> => <<"Given mode is invalid, it should be provided in octal form.">>}}).
 -define(ERROR_TOO_MANY_ENTRIES, {?BAD_REQUEST, #{<<"error">> => <<"too_many_entries">>,
