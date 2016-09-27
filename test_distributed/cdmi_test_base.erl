@@ -47,7 +47,9 @@
     acl/1,
     errors/1,
     accept_header/1,
-    copy_move/1
+    move_copy_conflict/1,
+    move/1,
+    copy/1
 ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -1204,21 +1206,16 @@ out_of_range(Config) ->
     ?assertMatch(Error, maps:from_list(CdmiResponse4)).
 %%------------------------------
 
-% tests copy and move operations on dataobjects and containers
-copy_move(Config) ->
+move_copy_conflict(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     FileName =  filename:join([binary_to_list(SpaceName), "move_test_file.txt"]),
-    DirName = filename:join([binary_to_list(SpaceName), "move_test_dir"]) ++ "/",
-
     FileUri = list_to_binary(filename:join("/", FileName)),
     FileData = <<"data">>,
     create_file(Config, FileName),
-    mkdir(Config, DirName),
     write_to_file(Config, FileName, FileData, 0),
     NewMoveFileName = "new_move_test_file",
-    NewMoveDirName = "new_move_test_dir/",
 
     %%--- conflicting mv/cpy ------- (we cannot move and copy at the same time)
     ?assertEqual(FileData, get_file_content(Config, FileName)),
@@ -1228,10 +1225,26 @@ copy_move(Config) ->
     {ok, Code1, _Headers1, Response1} = do_request(Workers, NewMoveFileName, put, RequestHeaders1, RequestBody1),
     ?assertEqual(400, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
-    ?assertMatch([{<<"conflicting_body_fields">>, _}], CdmiResponse1),
+    ?assertMatch([{<<"error_description">>, _},
+        {<<"error">>,<<"conflicting_body_fields">>}], CdmiResponse1),
 
-    ?assertEqual(FileData, get_file_content(Config, FileName)),
+    ?assertEqual(FileData, get_file_content(Config, FileName)).
     %%------------------------------
+
+% tests copy and move operations on dataobjects and containers
+move(Config) ->
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FileName =  filename:join([binary_to_list(SpaceName), "move_test_file.txt"]),
+    DirName = filename:join([binary_to_list(SpaceName), "move_test_dir"]) ++ "/",
+
+    FileData = <<"data">>,
+    create_file(Config, FileName),
+    mkdir(Config, DirName),
+    write_to_file(Config, FileName, FileData, 0),
+    NewMoveFileName = filename:join([binary_to_list(SpaceName), "new_move_test_file"]),
+    NewMoveDirName = filename:join([binary_to_list(SpaceName), "new_move_test_dir"]) ++ "/",
 
     %%----------- dir mv -----------
     ?assert(object_exists(Config, DirName)),
@@ -1239,8 +1252,7 @@ copy_move(Config) ->
 
     RequestHeaders2 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
     RequestBody2 = json_utils:encode([{<<"move">>, list_to_binary(DirName)}]),
-    {ok, Code2, _Headers2, _Response2} = do_request(Workers, NewMoveDirName, put, RequestHeaders2, RequestBody2),
-    ?assertEqual(201, Code2),
+    ?assertMatch({ok, 201, _Headers2, _Response2}, do_request(Workers, NewMoveDirName, put, RequestHeaders2, RequestBody2)),
 
     ?assert(not object_exists(Config, DirName)),
     ?assert(object_exists(Config, NewMoveDirName)),
@@ -1252,13 +1264,16 @@ copy_move(Config) ->
     ?assertEqual(FileData, get_file_content(Config, FileName)),
     RequestHeaders3 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     RequestBody3 = json_utils:encode([{<<"move">>, list_to_binary(FileName)}]),
-    {ok, Code3, _Headers3, _Response3} = do_request(Workers, NewMoveFileName, put, RequestHeaders3, RequestBody3),
-    ?assertEqual(201, Code3),
+    ?assertMatch({ok, _Code3, _Headers3, _Response3}, do_request(Workers, NewMoveFileName, put, RequestHeaders3, RequestBody3)),
 
     ?assert(not object_exists(Config, FileName)),
     ?assert(object_exists(Config, NewMoveFileName)),
-    ?assertEqual(FileData, get_file_content(Config, NewMoveFileName)),
+    ?assertEqual(FileData, get_file_content(Config, NewMoveFileName)).
     %%------------------------------
+
+copy(Config) ->
+    [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     %%---------- file cp ----------- (copy file, with xattrs and acl)
     % create file to copy
