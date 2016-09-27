@@ -42,3 +42,5 @@ docs/_build/
 
 _build
 compile_commands.json
+
+rel/files/vm.args

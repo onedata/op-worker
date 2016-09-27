@@ -21,7 +21,11 @@
 -env ERL_MAX_ETS_TABLES 1000000
 
 ## Configure schedulers
-## +S 2:2
+## +S 32:32
+## +SDcpu 16:8
++sfwi 500
+## +scl false
+## +sub true
 
 ## Enable Symmetric Multiprocessing
 -smp enable
