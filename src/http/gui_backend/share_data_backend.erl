@@ -66,13 +66,19 @@ find(<<"share">>, ShareId) ->
             name = Name,
             root_file_id = RootFileId,
             parent_space = ParentSpaceId,
-            public_url = PublicURL
+            public_url = PublicURL,
+            handle = Handle
         }}} = share_logic:get(UserAuth, ShareId),
     % Make sure that user is allowed to view requested share - he must have
     % view privileges in this space.
     Authorized = space_logic:has_effective_privilege(
         ParentSpaceId, UserId, space_view_data
     ),
+    HandleVal = case Handle of
+        undefined -> null;
+        <<"undefined">> -> null;
+        _ -> Handle
+    end,
     case Authorized of
         false ->
             gui_error:unauthorized();
@@ -84,7 +90,8 @@ find(<<"share">>, ShareId) ->
                 {<<"file">>, FileId},
                 {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
                 {<<"dataSpace">>, ParentSpaceId},
-                {<<"publicUrl">>, PublicURL}
+                {<<"publicUrl">>, PublicURL},
+                {<<"handle">>, HandleVal}
             ]}
     end;
 

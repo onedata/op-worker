@@ -5,40 +5,51 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Cache for share details fetched from OZ.
+%%% @doc
+%%% @doc Cache for handle details fetched from OZ.
 %%% @end
 %%%-------------------------------------------------------------------
--module(share_info).
+-module(handle_info).
 -author("Lukasz Opiola").
 -behaviour(model_behaviour).
 
--include("proto/common/credentials.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/oz/oz_handles.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_shares.hrl").
+
+-type id() :: binary().
+-type resource_type() :: binary().
+-type resource_id() :: binary().
+-type public_handle() :: binary().
+-type metadata() :: binary().
+-type timestamp() :: calendar:datetime().
+
+-export_type([id/0, resource_type/0, resource_id/0, public_handle/0, metadata/0,
+    timestamp/0]).
 
 %% API
--export([create_or_update/2, get_or_fetch/2]).
+-export([actual_timestamp/0]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
-
--type id() :: binary() | undefined.
--type name() :: binary().
-
-% guid of special 'share' type, which when used as guest user, allows for read
-% only access to file (when used as normal user it behaves like normal guid).
-% Apart from FileUuid and SpaceId, it contains also ShareId.
--type share_guid() :: fslogic_worker:file_guid().
-
--export_type([id/0, name/0, share_guid/0]).
+-export([save/1, get/1, get_or_fetch/2, list/0, exists/1, delete/1, update/2,
+    create/1, model_init/0, 'after'/5, before/4]).
+-export([create_or_update/2]).
 
 %%%===================================================================
 %%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @equiv universaltime().
+%%--------------------------------------------------------------------
+-spec actual_timestamp() -> timestamp().
+actual_timestamp() ->
+    erlang:universaltime().
+
+%%%===================================================================
+%%% model_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -48,28 +59,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-{ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
     datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets space info from the database in user context. If space info is not found
-%% fetches it from onezone and stores it in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: onedata_user:id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, ShareId) ->
-    case ?MODULE:get(ShareId) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Auth, ShareId);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%%===================================================================
-%%% model_behaviour callbacks
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,6 +102,30 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Gets space info from the database in user context. If space info is not found
+%% fetches it from onezone and stores it in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), HandleId :: id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Auth, HandleId) ->
+    case ?MODULE:get(HandleId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Auth, HandleId);
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -133,7 +149,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(share_info_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    StoreLevel = ?DISK_ONLY_LEVEL,
+    ?MODEL_CONFIG(handle_info_bucket, [], StoreLevel).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -166,21 +183,43 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetches space info from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth(), ShareId :: binary()) ->
+-spec fetch(Auth :: oz_endpoint:auth(), HandleId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(Auth, ShareId) ->
-    {ok, #share_details{
-        name = Name,
-        public_url = PublicURL,
-        root_file_id = RootFileId,
-        parent_space = ParentSpace
-    }} = oz_shares:get_details(Auth, ShareId),
+fetch(?GUEST_SESS_ID = Auth, HandleId) ->
+    {ok, #handle_details{
+        public_handle = PublicHandle,
+        metadata = Metadata
+    }} = oz_handles:get_public_details(Auth, HandleId),
 
-    Doc = #document{key = ShareId, value = #share_info{
-        name = Name,
-        public_url = PublicURL,
-        root_file_id = RootFileId,
-        parent_space = ParentSpace
+    Doc = #document{key = HandleId, value = #handle_info{
+        public_handle = PublicHandle,
+        metadata = Metadata
+    }},
+
+    case create(Doc) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
+
+    {ok, Doc};
+
+fetch(Auth, HandleId) ->
+    {ok, #handle_details{
+        handle_service_id = HandleServiceId,
+        public_handle = PublicHandle,
+        resource_type = ResourceType,
+        resource_id = ResourceId,
+        metadata = Metadata,
+        timestamp = Timestamp
+    }} = oz_handles:get_details(Auth, HandleId),
+
+    Doc = #document{key = HandleId, value = #handle_info{
+        handle_service_id = HandleServiceId,
+        public_handle = PublicHandle,
+        resource_type = ResourceType,
+        resource_id = ResourceId,
+        metadata = Metadata,
+        timestamp = Timestamp
     }},
 
     case create(Doc) of
