@@ -644,25 +644,32 @@ updates_with_the_actual_data(Config) ->
 applies_deletion(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, Sp1, Sh1, U1, G1} = {?ID(p1), ?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1)},
+    {P1, Sp1, Sh1, U1, G1, HS1, H1} =
+        {?ID(p1), ?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1), ?ID(hs1), ?ID(h1)},
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
         update(3, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
         update(4, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], Sp1)),
-        update(5, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
+        update(5, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>)),
+        update(6, [<<"r3">>, <<"r2">>, <<"r1">>], HS1,
+            handle_service(<<"handle service first">>, [], [])),
+        update(7, [<<"r3">>, <<"r2">>, <<"r1">>], H1,
+            handle(HS1, <<"someId">>, [], []))
     ]),
-    expect_message([], 5, []),
+    expect_message([], 7, []),
 
     %% when
     push_update(Node, [
-        update(6, undefined, P1, {<<"provider">>, <<"delete">>}),
-        update(8, undefined, Sp1, {<<"space">>, <<"delete">>}),
-        update(9, undefined, G1, {<<"group">>, <<"delete">>}),
-        update(7, undefined, Sh1, {<<"share">>, <<"delete">>}),
-        update(10, undefined, U1, {<<"user">>, <<"delete">>})
+        update(8, undefined, P1, {<<"provider">>, <<"delete">>}),
+        update(9, undefined, Sp1, {<<"space">>, <<"delete">>}),
+        update(10, undefined, G1, {<<"group">>, <<"delete">>}),
+        update(11, undefined, Sh1, {<<"share">>, <<"delete">>}),
+        update(12, undefined, U1, {<<"user">>, <<"delete">>}),
+        update(13, undefined, HS1, {<<"handle_service">>, <<"delete">>}),
+        update(14, undefined, H1, {<<"handle">>, <<"delete">>})
     ]),
-    expect_message([], 10, []),
+    expect_message([], 14, []),
 
     %% then
     ?assertMatch({error, {not_found, space_info}},
@@ -681,7 +688,8 @@ applies_deletion(Config) ->
 resolves_conflicts(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {Sp1, Sh1, U1, G1} = {?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1)},
+    {Sp1, Sh1, U1, G1, HS1, H1} =
+        {?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1), ?ID(hs1), ?ID(h1)},
     push_update(Node, [
         update(1, [<<"r3">>, <<"r2">>, <<"r1">>], Sp1, space(<<"space xp">>)),
         update(2, [<<"r3">>, <<"r2">>, <<"r1">>], Sh1, share(<<"share xp">>, Sp1)),
@@ -689,20 +697,28 @@ resolves_conflicts(Config) ->
         update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
                 [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
-        )
+        ),
+        update(5, [<<"r3">>, <<"r2">>, <<"r1">>], HS1,
+            handle_service(<<"handle service first">>, [], [])),
+        update(6, [<<"r3">>, <<"r2">>, <<"r1">>], H1,
+            handle(HS1, <<"someId">>, [], []))
     ]),
-    expect_message([], 4, []),
+    expect_message([], 6, []),
 
     %% when
     push_update(Node, [
-        update(5, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
-        update(6, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
-        update(7, [<<"r3">>], G1, group(<<"group">>)),
-        update(8, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
+        update(7, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
+        update(8, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
+        update(9, [<<"r3">>], G1, group(<<"group">>)),
+        update(10, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata">>, [], [], Sp1)
-        )
+        ),
+        update(11, [<<"r2">>, <<"r1">>], HS1,
+            handle_service(<<"handle service second">>, [], [])),
+        update(12, [<<"r2">>, <<"r1">>], H1,
+            handle(HS1, <<"someOtherId">>, [], []))
     ]),
-    expect_message([], 8, []),
+    expect_message([], 12, []),
 
     %% then
     ?assertMatch({ok, #document{key = Sp1, value = #space_info{
@@ -722,6 +738,20 @@ resolves_conflicts(Config) ->
         group_ids = [<<"A">>, <<"B">>], spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
+    ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
+        name = <<"handle service first">>,
+        users = [],
+        groups = [],
+        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_service_info, HS1)),
+    ?assertMatch({ok, #document{key = H1, value = #handle_info{
+        handle_service_id = HS1,
+        resource_id = <<"someId">>,
+        users = [],
+        groups = [],
+        timestamp = {{0, 0, 0}, {0, 0, 0}},
+        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_info, H1)),
     ok.
 
 
@@ -864,8 +894,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-%%    ?TEST_STOP(Config).
-    ok.
+    ?TEST_STOP(Config).
 
 init_per_testcase(Case, Config) ->
     ?CASE_START(Case),
