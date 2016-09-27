@@ -68,7 +68,7 @@ find(<<"share-public">>, ShareId) ->
             root_file_id = RootFileId,
             public_url = PublicURL,
             handle = Handle
-        }}} = share_logic:get(provider, ShareId),
+        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
     HandleVal = case Handle of
         undefined -> null;
         <<"undefined">> -> null;
@@ -87,7 +87,7 @@ find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
         value = #share_info{
             name = Name,
             root_file_id = RootFileId
-        }}} = share_logic:get(provider, ShareId),
+        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
@@ -215,6 +215,18 @@ find(<<"file-property-public">>, AssocId) ->
         {<<"basic">>, BasicVal},
         {<<"json">>, JSONVal},
         {<<"rdf">>, RDFVal}
+    ]};
+
+find(<<"handle-public">>, HandleId) ->
+    {ok, #document{
+        value = #handle_info{
+            public_handle = PublicHandle,
+            metadata = Metadata
+        }}} = handle_logic:get(?GUEST_SESS_ID, HandleId),
+    {ok, [
+        {<<"id">>, HandleId},
+        {<<"metadataString">>, Metadata},
+        {<<"publicHandle">>, PublicHandle}
     ]}.
 
 

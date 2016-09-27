@@ -107,7 +107,7 @@ data_backend(true, <<"system-group">>) -> system_data_backend;
 data_backend(_, <<"share-public">>) -> public_share_data_backend;
 data_backend(_, <<"file-public">>) -> public_share_data_backend;
 data_backend(_, <<"file-property-public">>) -> public_share_data_backend;
-data_backend(_, <<"handle-public">>) -> handle_data_backend.
+data_backend(_, <<"handle-public">>) -> public_share_data_backend.
 
 
 %%--------------------------------------------------------------------
