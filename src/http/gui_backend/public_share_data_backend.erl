@@ -71,6 +71,7 @@ find(<<"share-public">>, ShareId) ->
         }}} = share_logic:get(provider, ShareId),
     HandleVal = case Handle of
         undefined -> null;
+        <<"undefined">> -> null;
         _ -> Handle
     end,
     {ok, [

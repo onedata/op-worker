@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_handles.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -type id() :: binary().
 -type resource_type() :: binary().

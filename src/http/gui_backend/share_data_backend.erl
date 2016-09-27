@@ -76,6 +76,7 @@ find(<<"share">>, ShareId) ->
     ),
     HandleVal = case Handle of
         undefined -> null;
+        <<"undefined">> -> null;
         _ -> Handle
     end,
     case Authorized of
