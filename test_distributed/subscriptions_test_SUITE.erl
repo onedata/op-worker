@@ -299,7 +299,7 @@ saves_the_actual_data(Config) ->
         handle_services = [HS1],
         handles = [H1],
         revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_group, G1)),
+    }, fetch(Node, onedata_group, G2)),
     ?assertMatch({ok, #document{key = U3, value = #onedata_user{
         name = <<"user with handles">>,
         group_ids = [G2],
