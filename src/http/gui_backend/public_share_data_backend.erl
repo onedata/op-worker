@@ -83,12 +83,11 @@ find(<<"share-public">>, ShareId) ->
         {<<"handle">>, HandleVal}
     ]};
 find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #share_info{
             name = Name,
             root_file_id = RootFileId
-        }}} = share_logic:get(UserAuth, ShareId),
+        }}} = share_logic:get(provider, ShareId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
@@ -106,7 +105,7 @@ find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
     {ok, Res};
 
 find(<<"file-public">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = ?GUEST_SESS_ID,
     {ShareId, FileId} = op_gui_utils:association_to_ids(AssocId),
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
         {error, ?ENOENT} ->
@@ -179,7 +178,7 @@ find(<<"file-public">>, AssocId) ->
 
 
 find(<<"file-property-public">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = ?GUEST_SESS_ID,
     {_, FileId} = op_gui_utils:association_to_ids(AssocId),
     {ok, XattrKeys} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false
