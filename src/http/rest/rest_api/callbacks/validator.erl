@@ -208,7 +208,7 @@ parse_callback(Req, State) ->
                 undefined;
             _ ->
                 Json = json_utils:decode_map(Body),
-                maps:get(<<"url">>, Json)
+                maps:get(<<"url">>, Json, undefined)
         end,
     {State#{callback => Callback}, NewReq}.
 
