@@ -821,7 +821,6 @@ empty_metadata_invalid_json_test(Config) ->
     InvalidJsons = [<<"">>, <<"aaa">>, <<"{">>, <<"{\"aaa\": aaa}">>],
 
     lists:foreach(fun(InvalidJson) ->
-        ct:print("~p", [InvalidJson]),
         ?assertMatch({ok, 400, _, _},
             do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
                 [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], InvalidJson))

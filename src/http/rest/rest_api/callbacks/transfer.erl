@@ -250,11 +250,11 @@ id_to_pid(TransferId) ->
 %% Check if transfer server pid exists.
 %% @end
 %%--------------------------------------------------------------------
--spec check_transfer_existence(pid()) -> ok | {error, {not_found, trnasfer}}.
+-spec check_transfer_existence(pid()) -> ok | {error, {not_found, transfer}}.
 check_transfer_existence(Pid) ->
     case utils:process_info(Pid) of
         undefined ->
-            {error, {not_found, trnasfer}};
+            {error, {not_found, transfer}};
         _ ->
             ok
     end.
