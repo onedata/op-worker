@@ -163,10 +163,12 @@ accounts_incoming_updates(Config) ->
 saves_the_actual_data(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, Sp1, Sh1, U1, U2, G1} =
-        {?ID(p1), ?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(u2), ?ID(g1)},
+    {P1, Sp1, U1, U2, G1} = {?ID(p1), ?ID(sp1), ?ID(u1), ?ID(u2), ?ID(g1)},
+    {Sh1, HS1, H1} = {?ID(sh1), ?ID(hs1), ?ID(h1)},
     Priv1 = privileges:space_user(),
     Priv2 = privileges:space_admin(),
+    HSPrivs = privileges:handle_service_admin(),
+    HPrivs = privileges:handle_admin(),
 
     %% when
     push_update(Node, [
@@ -195,22 +197,34 @@ saves_the_actual_data(Config) ->
             <<"Share 1">>,
             Sp1,
             <<"root_file_id">>,
-            <<"public_url">>
+            <<"public_url">>,
+            <<"handle">>
+        )),
+        update(5, [<<"r2">>, <<"r1">>], HS1, handle_service(
+            <<"Handle Service 1">>,
+            [{<<"U1">>, HSPrivs}],
+            [{<<"G1">>, HSPrivs}]
+        )),
+        update(6, [<<"r2">>, <<"r1">>], H1, handle(
+            HS1,
+            <<"share">>,
+            [{<<"U2">>, HPrivs}],
+            [{<<"G2">>, HPrivs}]
         ))
     ]),
-    expect_message([], 4, []),
+    expect_message([], 6, []),
 
     push_update(Node, [
-        update(5, [<<"r2">>, <<"r1">>], U1,
+        update(7, [<<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
                 [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>,
                 [<<"A">>, <<"B">>, <<"Z">>])
         ),
-        update(6, [<<"r2">>, <<"r1">>], U2,
+        update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
         )
     ]),
-    expect_message([], 6, []),
+    expect_message([], 8, []),
 
     %% then
     ?assertMatch({ok, (#document{key = Sp1, value = #space_info{
@@ -225,6 +239,7 @@ saves_the_actual_data(Config) ->
         parent_space = Sp1,
         root_file_id = <<"root_file_id">>,
         public_url = <<"public_url">>,
+        handle = <<"handle">>,
         revision_history = [<<"r2">>, <<"r1">>]}})
     }, fetch(Node, share_info, Sh1)),
     ?assertMatch({ok, #document{key = G1, value = #onedata_group{
@@ -256,6 +271,25 @@ saves_the_actual_data(Config) ->
         space_ids = [Sp1],
         public_only = false}}
     }, fetch(Node, provider_info, P1)),
+    ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
+        name = <<"Handle Service 1">>,
+        proxy_endpoint = <<"">>,
+        service_properties = [],
+        users = [{<<"U1">>, HSPrivs}],
+        groups = [{<<"G1">>, HSPrivs}],
+        revision_history = [<<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_service_info, HS1)),
+    ?assertMatch({ok, #document{key = H1, value = #handle_info{
+        handle_service_id = HS1,
+        public_handle = <<"">>,
+        resource_type = <<"">>,
+        resource_id = <<"share">>,
+        metadata = <<"">>,
+        users = [{<<"U2">>, HPrivs}],
+        groups = [{<<"G2">>, HPrivs}],
+        timestamp = {{0, 0, 0}, {0, 0, 0}},
+        revision_history = [<<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_info, H1)),
     ok.
 
 check_file_operations_test_base0(Config, IdExt) ->
@@ -610,25 +644,32 @@ updates_with_the_actual_data(Config) ->
 applies_deletion(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, Sp1, Sh1, U1, G1} = {?ID(p1), ?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1)},
+    {P1, Sp1, Sh1, U1, G1, HS1, H1} =
+        {?ID(p1), ?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1), ?ID(hs1), ?ID(h1)},
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
         update(3, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
         update(4, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], Sp1)),
-        update(5, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
+        update(5, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>)),
+        update(6, [<<"r3">>, <<"r2">>, <<"r1">>], HS1,
+            handle_service(<<"handle service first">>, [], [])),
+        update(7, [<<"r3">>, <<"r2">>, <<"r1">>], H1,
+            handle(HS1, <<"someId">>, [], []))
     ]),
-    expect_message([], 5, []),
+    expect_message([], 7, []),
 
     %% when
     push_update(Node, [
-        update(6, undefined, P1, {<<"provider">>, <<"delete">>}),
-        update(8, undefined, Sp1, {<<"space">>, <<"delete">>}),
-        update(9, undefined, G1, {<<"group">>, <<"delete">>}),
-        update(7, undefined, Sh1, {<<"share">>, <<"delete">>}),
-        update(10, undefined, U1, {<<"user">>, <<"delete">>})
+        update(8, undefined, P1, {<<"provider">>, <<"delete">>}),
+        update(9, undefined, Sp1, {<<"space">>, <<"delete">>}),
+        update(10, undefined, G1, {<<"group">>, <<"delete">>}),
+        update(11, undefined, Sh1, {<<"share">>, <<"delete">>}),
+        update(12, undefined, U1, {<<"user">>, <<"delete">>}),
+        update(13, undefined, HS1, {<<"handle_service">>, <<"delete">>}),
+        update(14, undefined, H1, {<<"handle">>, <<"delete">>})
     ]),
-    expect_message([], 10, []),
+    expect_message([], 14, []),
 
     %% then
     ?assertMatch({error, {not_found, space_info}},
@@ -647,7 +688,8 @@ applies_deletion(Config) ->
 resolves_conflicts(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {Sp1, Sh1, U1, G1} = {?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1)},
+    {Sp1, Sh1, U1, G1, HS1, H1} =
+        {?ID(sp1), ?ID(sh1), ?ID(u1), ?ID(g1), ?ID(hs1), ?ID(h1)},
     push_update(Node, [
         update(1, [<<"r3">>, <<"r2">>, <<"r1">>], Sp1, space(<<"space xp">>)),
         update(2, [<<"r3">>, <<"r2">>, <<"r1">>], Sh1, share(<<"share xp">>, Sp1)),
@@ -655,20 +697,28 @@ resolves_conflicts(Config) ->
         update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
                 [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
-        )
+        ),
+        update(5, [<<"r3">>, <<"r2">>, <<"r1">>], HS1,
+            handle_service(<<"handle service first">>, [], [])),
+        update(6, [<<"r3">>, <<"r2">>, <<"r1">>], H1,
+            handle(HS1, <<"someId">>, [], []))
     ]),
-    expect_message([], 4, []),
+    expect_message([], 6, []),
 
     %% when
     push_update(Node, [
-        update(5, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
-        update(6, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
-        update(7, [<<"r3">>], G1, group(<<"group">>)),
-        update(8, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
+        update(7, [<<"r2">>, <<"r1">>], Sp1, space(<<"space">>)),
+        update(8, [<<"r2">>, <<"r1">>], Sh1, share(<<"share">>, Sp1)),
+        update(9, [<<"r3">>], G1, group(<<"group">>)),
+        update(10, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata">>, [], [], Sp1)
-        )
+        ),
+        update(11, [<<"r2">>, <<"r1">>], HS1,
+            handle_service(<<"handle service second">>, [], [])),
+        update(12, [<<"r2">>, <<"r1">>], H1,
+            handle(HS1, <<"someOtherId">>, [], []))
     ]),
-    expect_message([], 8, []),
+    expect_message([], 12, []),
 
     %% then
     ?assertMatch({ok, #document{key = Sp1, value = #space_info{
@@ -688,6 +738,20 @@ resolves_conflicts(Config) ->
         group_ids = [<<"A">>, <<"B">>], spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
+    ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
+        name = <<"handle service first">>,
+        users = [],
+        groups = [],
+        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_service_info, HS1)),
+    ?assertMatch({ok, #document{key = H1, value = #handle_info{
+        handle_service_id = HS1,
+        resource_id = <<"someId">>,
+        users = [],
+        groups = [],
+        timestamp = {{0, 0, 0}, {0, 0, 0}},
+        revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
+    }, fetch(Node, handle_info, H1)),
     ok.
 
 
@@ -903,30 +967,54 @@ space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
         {groups, GroupsWithPrivileges}, {providers_supports, Supports}]}.
 
 share(Name, ParentSpaceId) ->
-    share(Name, ParentSpaceId, <<"">>, <<"">>).
-share(Name, ParentSpaceId, RootFileId, PublicUrl) ->
+    share(Name, ParentSpaceId, <<"">>, <<"">>, <<"">>).
+share(Name, ParentSpaceId, RootFileId, PublicUrl, Handle) ->
     {share, [{name, Name}, {root_file_id, RootFileId},
-        {parent_space, ParentSpaceId}, {public_url, PublicUrl}]}.
+        {parent_space, ParentSpaceId}, {public_url, PublicUrl},
+        {handle, Handle}]}.
+
+handle_service(Name, UsersWithPrivs, GroupsWithPrivs) ->
+    handle_service(Name, <<"">>, [], UsersWithPrivs, GroupsWithPrivs).
+handle_service(Name, ProxyEndpoint, ServiceProperties, UsersWithPrivs, GroupsWithPrivs) ->
+    {handle_service, [{name, Name}, {proxy_endpoint, ProxyEndpoint},
+        {service_properties, ServiceProperties}, {users, UsersWithPrivs},
+        {groups, GroupsWithPrivs}]}.
+
+handle(HandleServiceId, ResourceId, UsersWithPrivs, GroupsWithPrivs) ->
+    handle(HandleServiceId, <<"">>, <<"">>, ResourceId, <<"">>, UsersWithPrivs,
+        GroupsWithPrivs, [0, 0, 0, 0, 0, 0]).
+handle(HandleServiceId, PublicHandle, ResourceType, ResourceId, Metadata, UsersWithPrivs,
+    GroupsWithPrivs, Timestamp) ->
+    {handle, [{handle_service_id, HandleServiceId}, {public_handle, PublicHandle},
+        {resource_type, ResourceType}, {resource_id, ResourceId},
+        {metadata, Metadata}, {users, UsersWithPrivs},
+        {groups, GroupsWithPrivs}, {timestamp, Timestamp}]}.
 
 group(Name) ->
     group(Name, [], []).
 group(Name, SIDs, Users) ->
     group(Name, SIDs, Users, Users, [], [], undefined).
 group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, Type) ->
+    group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, [], [], Type).
+group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, HandleServices, Handles, Type) ->
     {group, [{name, Name}, {type, Type}, {spaces, SIDs}, {users, Users},
         {effective_users, EffectiveUsers}, {nested_groups, NestedGroups},
-        {parent_groups, ParentGroups}]}.
+        {parent_groups, ParentGroups}, {handle_services, HandleServices},
+        {handles, Handles}]}.
 
 public_only_user(Name) ->
     user(Name, [], [], undefined, [], true).
 user(Name, GIDs, Spaces, DefaultSpace) ->
     user(Name, GIDs, Spaces, DefaultSpace, GIDs).
 user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups) ->
-    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, false).
+    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, [], [], false).
 user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, PublicOnly) ->
+    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, [], [], PublicOnly).
+user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, HandleServices, Handles, PublicOnly) ->
     {user, [{name, Name}, {group_ids, GIDs}, {space_names, Spaces},
         {public_only, PublicOnly}, {default_space, DefaultSpace},
-        {effective_group_ids, EffectiveGroups}]}.
+        {effective_group_ids, EffectiveGroups}, {handle_services, HandleServices},
+        {handles, Handles}]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].

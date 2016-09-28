@@ -66,22 +66,28 @@ find(<<"share-public">>, ShareId) ->
         value = #share_info{
             name = Name,
             root_file_id = RootFileId,
-            public_url = PublicURL
-        }}} = share_logic:get(provider, ShareId),
+            public_url = PublicURL,
+            handle = Handle
+        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
+    HandleVal = case Handle of
+        undefined -> null;
+        <<"undefined">> -> null;
+        _ -> Handle
+    end,
     {ok, [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
         {<<"file">>, RootFileId},
         {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
-        {<<"publicUrl">>, PublicURL}
+        {<<"publicUrl">>, PublicURL},
+        {<<"handle">>, HandleVal}
     ]};
 find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #share_info{
             name = Name,
             root_file_id = RootFileId
-        }}} = share_logic:get(UserAuth, ShareId),
+        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
@@ -99,7 +105,7 @@ find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
     {ok, Res};
 
 find(<<"file-public">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = ?GUEST_SESS_ID,
     {ShareId, FileId} = op_gui_utils:association_to_ids(AssocId),
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
         {error, ?ENOENT} ->
@@ -172,7 +178,7 @@ find(<<"file-public">>, AssocId) ->
 
 
 find(<<"file-property-public">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = ?GUEST_SESS_ID,
     {_, FileId} = op_gui_utils:association_to_ids(AssocId),
     {ok, XattrKeys} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false
@@ -209,6 +215,18 @@ find(<<"file-property-public">>, AssocId) ->
         {<<"basic">>, BasicVal},
         {<<"json">>, JSONVal},
         {<<"rdf">>, RDFVal}
+    ]};
+
+find(<<"handle-public">>, HandleId) ->
+    {ok, #document{
+        value = #handle_info{
+            public_handle = PublicHandle,
+            metadata = Metadata
+        }}} = handle_logic:get(?GUEST_SESS_ID, HandleId),
+    {ok, [
+        {<<"id">>, HandleId},
+        {<<"metadataString">>, Metadata},
+        {<<"publicHandle">>, PublicHandle}
     ]}.
 
 
