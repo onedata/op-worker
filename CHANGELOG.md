@@ -4,6 +4,58 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc7
+
+* VFS-2567 Use ShareId and FileId in getPublicFileDownloadUrl public rpc call
+* VFS-2567 Use new approach to shared files displaying in public view
+* VFS-2567 Push container dir change upon share rename
+* VFS-2567 Share.file is now file rather than file-shared record
+* VFS-2567 Add file-property-shared record dedicated for shares view
+* VFS-2567 Add file-shared record dedicated for shares view
+* VFS-2567 Add container dir to share record
+* VFS-2567 Change name of fileProperty field in file public record
+* VFS-2567 Add reference to publi file from public metadata record
+* VFS-2567 Add public metadata record in file public record
+* VFS-2567 Make sure group type is an atom in onedata_group fetch
+* VFS-2567 Allow getting only public data about a group
+* VFS-2567 Show shares only to users with space_view_data
+* VFS-2567 Fix json and rdf metadata not being properly deleted in update callback in data backend
+* VFS-2594 Add read and execute permission for others on space dir. Block guest users from reading non shared files
+* VFS-2567 Fix some bugs in code responsible for checking view privileges
+* VFS-2594 Add check of 'other' perms for share files.
+* VFS-2567 Check view permissions in groups and shares gui backend
+* VFS-2594 Refactor lfm_proxy module.
+* VFS-2594 Move xattr name definitions to header, do not alow direct modification of xattrs with 'onedata_' prefix.
+* VFS-2594 Add remove_metadata operation.
+* VFS-2567 Check view permissions in space gui backend
+* VFS-2594 Add has_custom_metadata method to logical_file_manager.
+* VFS-2180 Implement support for read only spaces
+* VFS-2180 Add provider's ID to file_attr message
+* VFS 2557 Update tests init/teardown
+* VFS-2456 Add metadata to public view
+* VFS-2456 Implement first version of metadata backend
+* VFS-2405 Add some error handling to group privileges
+* VFS-2405 Add some error handling to space privileges
+* VFS-2405 Add error handling when user is not authorized to manage shares
+* VFS-2555 Remove shares on file removal, add doc for share_guid, decode oz 403 error as eacces.
+* VFS-2555 Add shares field to file attr.
+* VFS-2405 Adjust to new shares API in OP, fix a badmatch
+* VFS-2405 Use lfm API to create and delete share
+* VFS-2555 Implement remove_share operation and move some logic out of share_logic.
+* VFS-2555 Add Name parameter to create_share operation.
+* VFS-2405 Implement share_logic:delete
+* VFS-2555 Adjust fslogic_proxyio_test to shares.
+* VFS-2555 Improve share permissions and guest user management.
+* VFS-2555 Add protocol for operations on shares
+* VFS-2555 Add guest session, prepare api and tests for shares.
+* VFS-2405 do not use root session id in shares view
+* VFS-2405 Add mockup of public share data backend
+* VFS-2405 Add mapping in gui backend for the new space permission (manage shares)
+* VFS-2405 Further code refactor
+* VFS-2405 Adjust to new OZ model where shares are no longer spaces
+* VFS-2405 Add share specific parameters to space record
+
+
 ### 3.0.0-rc6
 
 * VFS-2180 Improve links conflict resolution
