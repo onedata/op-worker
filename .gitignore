@@ -4,6 +4,7 @@
 .dialyzer.plt
 .idea
 .rebar
+rebar3.crashdump
 
 cluster_manager
 
@@ -26,6 +27,7 @@ doc
 logs
 priv
 .rebar
+rebar3.crashdump
 
 c_lib
 c_src/helpers_nif/*.o
@@ -40,3 +42,5 @@ docs/_build/
 
 _build
 compile_commands.json
+
+rel/files/vm.args
