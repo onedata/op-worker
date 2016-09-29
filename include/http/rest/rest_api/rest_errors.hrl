@@ -18,12 +18,14 @@
     <<"error_description">> => <<"Given attribute is not valid">>}}).
 -define(ERROR_UNDEFINED_ATTRIBUTE, {?BAD_REQUEST, #{<<"error">> => <<"undefined_attribute">>,
     <<"error_description">> => <<"You must define attribute name when requesting for extended attribute.">>}}).
+-define(ERROR_INVALID_ATTRIBUTE_BODY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_body">>,
+    <<"error_description">> => <<"Request's body is malformed, provide one valid attribute with its value.">>}}).
+-define(ERROR_INVALID_ATTRIBUTE_NAME, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_name">>,
+    <<"error_description">> => <<"Request's attribute name is invalid.">>}}).
 -define(ERROR_INVALID_EXTENDED_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_extended_flag">>,
     <<"error_description">> => <<"Given extended flag is not a valid boolean.">>}}).
 -define(ERROR_INVALID_INHERITED_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_inherited_flag">>,
     <<"error_description">> => <<"Given inherited flag is not a valid boolean.">>}}).
--define(ERROR_INVALID_ATTRIBUTE_BODY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_attribute_body">>,
-    <<"error_description">> => <<"Request's body is malformed, provide one valid attribute with its value.">>}}).
 -define(ERROR_INVALID_MODE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_mode">>,
     <<"error_description">> => <<"Given mode is invalid, it should be provided in octal form.">>}}).
 -define(ERROR_TOO_MANY_ENTRIES, {?BAD_REQUEST, #{<<"error">> => <<"too_many_entries">>,
@@ -58,8 +60,20 @@
     <<"error_description">> => <<"The skip parameter is invalid, it must be of integer type.">>}}).
 -define(ERROR_INVALID_FILTER_TYPE, {?BAD_REQUEST, #{<<"error">> => <<"invalid_filter_type">>,
     <<"error_description">> => <<"The filter_type parameter is invalid.">>}}).
+-define(ERROR_INVALID_FILTER, {?BAD_REQUEST, #{<<"error">> => <<"invalid_filter">>,
+    <<"error_description">> => <<"The filter parameter is invalid.">>}}).
+-define(ERROR_MISSING_FILTER, {?BAD_REQUEST, #{<<"error">> => <<"missing_filter">>,
+    <<"error_description">> => <<"The filter parameter is missing.">>}}).
 -define(ERROR_INVALID_OBJECTID, {?BAD_REQUEST, #{<<"error">> => <<"invalid_objectid">>,
     <<"error_description">> => <<"Given id is invalid.">>}}).
+-define(ERROR_INVALID_ENDKEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_endkey">>,
+    <<"error_description">> => <<"The endkey parameter is invalid, it must be a valid json.">>}}).
+-define(ERROR_INVALID_STARTKEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_startkey">>,
+    <<"error_description">> => <<"The startkey parameter is invalid, it must be a valid json.">>}}).
+-define(ERROR_INVALID_KEY, {?BAD_REQUEST, #{<<"error">> => <<"invalid_key">>,
+    <<"error_description">> => <<"The key parameter is invalid, it must be a valid json.">>}}).
+-define(ERROR_INVALID_KEYS, {?BAD_REQUEST, #{<<"error">> => <<"invalid_keys">>,
+    <<"error_description">> => <<"The keys parameter is invalid, it must be a valid json list.">>}}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, #{<<"error">> => <<"unauthorized">>,
