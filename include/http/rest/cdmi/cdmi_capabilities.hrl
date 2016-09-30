@@ -19,8 +19,8 @@
 -define(root_capability_map, #{
     <<"cdmi_dataobjects">> => <<"true">>,
     <<"cdmi_security_access_control">> => <<"true">>,
-%%    <<"cdmi_object_move_from_local">> => <<"true">>,
-%%    <<"cdmi_object_copy_from_local">> => <<"true">>,
+    <<"cdmi_object_move_from_local">> => <<"true">>,
+%%    <<"cdmi_object_copy_from_local">> => <<"true">>, %todo implement copy
     <<"cdmi_object_access_by_ID">> => <<"true">>
 }).
 

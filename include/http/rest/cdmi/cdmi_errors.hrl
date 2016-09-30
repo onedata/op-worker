@@ -58,5 +58,7 @@
 %% HTTP 404 errors
 -define(ERROR_NOT_FOUND, {?NOT_FOUND, #{<<"error">> => <<"not_found">>,
     <<"error_description">> => <<"The resource could not be found.">>}}).
+-define(ERROR_ATTRIBUTE_NOT_FOUND, {?NOT_FOUND, #{<<"error">> => <<"attribute_not_found">>,
+    <<"error_description">> => <<"The attribute could not be found.">>}}).
 
 -endif.
