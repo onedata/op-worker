@@ -79,6 +79,7 @@ permission_cache_invalidate_test_base(Config, Attempts) ->
     end, WS),
 
     %TODO - sprawdzic czy wszedzie skasowano dokument opisujacy uniewaznienie cache
+    %TODO - sprawdzic dla ACL
 
     ok.
 

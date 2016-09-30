@@ -193,6 +193,25 @@ notify_waiting(Doc = #document{key = FileUuid,
                     _ ->
                         true
                 end;
+            [{rev, Model, Rev}] ->
+                case verify_revision(FileUuid, Model, Rev) of
+                    ok ->
+                        Pid ! file_is_now_consistent,
+                        case is_process_alive(Pid) of
+                            true ->
+                                ok;
+                            _ ->
+                                case DbsyncPosthookArguments of
+                                    {M, F, Args} ->
+                                        spawn(M, F, Args);
+                                    _ ->
+                                        spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                                end
+                        end,
+                        false;
+                    _ ->
+                        true
+                end;
             _ ->
                 true
         end
@@ -291,15 +310,28 @@ check_missing_components(FileUuid, SpaceId, [link_to_parent | RestMissing], Foun
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [{rev, Model, Rev} | RestMissing], Found) ->
+    case verify_revision(FileUuid, Model, Rev) of
+        ok ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, [{rev, Model, Rev} | Found]);
+        _ ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+    end.
+
+verify_revision(FileUuid, Model, Rev) ->
     Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
     MC = Model:model_init(),
     % TODO - what if document has been deleted in parallel by other provider?
     % TODO - get all revisions simmilar to process_raw_doc
     case catch erlang:apply(Driver, get, [MC, FileUuid]) of
-        {ok, #document{rev = {CurrentRev, _}}} when CurrentRev >= Rev ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, [{rev, Model, Rev} | Found]);
-        _ ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+        {ok, #document{rev = CurrentRev} = D} ->
+            case permissions_cache:rev_to_number(CurrentRev) >= Rev of
+                true ->
+                    ok;
+                _ ->
+                    younger_revision
+            end;
+        E ->
+            not_found
     end.
 
 %%%===================================================================

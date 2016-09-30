@@ -182,7 +182,7 @@ verify_propagation(ControllerKey, SpaceId) ->
     MyId = oneprovider:get_provider_id(),
     ListFun = fun(LinkName, _LinkTarget, Acc) ->
         [LinkName | Acc]
-              end,
+    end,
 
     {ok, Links} = datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, []),
     LocalLister = lists:member(MyId, Links),

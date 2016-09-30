@@ -24,7 +24,7 @@
 
 %% API
 -export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate_permissions_cache/2,
-    check_remote_invalitation/4]).
+    check_remote_invalitation/4, rev_to_number/1]).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).

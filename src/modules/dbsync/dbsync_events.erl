@@ -81,6 +81,9 @@ change_replicated_internal(SpaceId, #change{model = change_propagation_controlle
     doc = #document{deleted = false, value = #links{model = change_propagation_controller, doc_key = DocKey}}}) ->
     ?info("change_replicated_internal: change_propagation_controller links ~p", [DocKey]),
     ok = change_propagation_controller:verify_propagation(DocKey, SpaceId);
+change_replicated_internal(_SpaceId, #change{model = xattr, doc = #document{key = FileUUID, value = #xattr{}}}) ->
+    ?info("change_replicated_internal: changed xattr ~p", [FileUUID]),
+    ok = file_consistency:add_components_and_notify(FileUUID, [xattr]);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
