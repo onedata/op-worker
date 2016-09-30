@@ -23,7 +23,8 @@
     list/0, model_init/0, 'after'/5, before/4]).
 
 %% API
--export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0]).
+-export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate_permissions_cache/2,
+    check_remote_invalitation/4]).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
@@ -191,6 +192,61 @@ cache_permission(Rule, Value) ->
             #permissions_cache_helper{value = Value}})
     end.
 
+invalidate_permissions_cache(Model, Key) ->
+    invalidate_permissions_cache(),
+
+    MC = Model:model_init(),
+    Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
+    {Rev, Document} = case MC#model_config.store_level of
+        ?DISK_ONLY_LEVEL ->
+            {ok, Doc} = erlang:apply(Driver, get, [MC, Key]),
+            {rev_to_number(Doc#document.rev), Doc};
+        _ ->
+            A1 = erlang:apply(Driver, get, [MC, Key]),
+            Driver2 = datastore:driver_to_module(datastore:level_to_driver(
+                caches_controller:cache_to_datastore_level(Model))),
+            A2 = erlang:apply(Driver2, get, [MC, Key]),
+            case {A1, A2} of
+                {{ok, Doc}, {ok, Doc2}} ->
+                    case Doc2#document.value =:= Doc#document.value of
+                        true ->
+                            {rev_to_number(Doc#document.rev), Doc};
+                        _ ->
+                            {rev_to_number(Doc#document.rev) + 1, Doc}
+                    end;
+                {{ok, Doc}, _} ->
+                    {rev_to_number(Doc#document.rev), Doc};
+                {_, {ok, Doc}} ->
+                    {0, Doc}
+            end
+    end,
+
+    case dbsync_worker:has_sync_context(Document) of
+        true ->
+            SpaceId = dbsync_worker:get_space_id(Document),
+            {ok, _} = change_propagation_controller:save_info(Model, Key, Rev, SpaceId, ?MODEL_NAME, check_remote_invalitation),
+            ok;
+        _ ->
+            ok
+    end.
+
+check_remote_invalitation(Model, Key, Rev, SpaceId) ->
+    ok = file_consistency:wait(Key, SpaceId, [{rev, Model, Rev}],
+        {?MODULE, check_remote_invalitation, [Model, Key, Rev, SpaceId]}),
+    invalidate_permissions_cache().
+
+% TODO - move to driver
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec rev_to_number(binary()) -> non_neg_integer().
+rev_to_number(Rev) ->
+    [Num, _ID] = binary:split(Rev, <<"-">>),
+    binary_to_integer(Num).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Clears all permissions from cache.
@@ -198,6 +254,16 @@ cache_permission(Rule, Value) ->
 %%--------------------------------------------------------------------
 -spec invalidate_permissions_cache() -> ok.
 invalidate_permissions_cache() ->
+%%    dla dokumentow cachowanych
+%%    pobrac z dysku aktualna rewizje dokumentu i jego wartosc (w sekcji krytycznej obejmujacej zrzut na dysk w cache controllerze)
+%%    jesli wartosc na dysku zgadza sie z wartoscia w pamieci to uzywac numeru rewizji z dysku, jesli nie o 1 wiekszego
+%%    dla dokumentow disk only - pobrac rewizje z dysku i jej uzywac
+%%    zapisac w dokumencie ze cache uniewazniamy dla takiej rewizji i takiego klucza oraz info ze ten provider juz uniewaznil
+%%    jak przyjdzie taki doc z dbsync to zapisac sie file_confistency na dany dokument - jak przyjdzie to dopisujemy sie do tych co uniewaznili
+%%    kazde dopisanie (w tym pierwsze) skutkuje sprawdzeniem ilu jest providerow w space - jesli tylu ilu uniewaznilo to kasujemy dokument
+%%    (jesli jest tylko 1 to nigdy nie zapisujemy)
+
+
     CurrentModel = case get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;

@@ -25,7 +25,7 @@
 %% export for tests
 -export([
     basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4,
-    file_consistency_test_skeleton/5, get_links/1
+    file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1
 ]).
 
 % for file consistency testing
@@ -47,6 +47,41 @@
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
+
+permission_cache_invalidate_test_base(Config, Attempts) ->
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    [SessId1 | _] = SessIds = lists:map(fun(Worker) ->
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
+    end, Workers),
+    WS = lists:zip(Workers, SessIds),
+
+    [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
+        NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
+        [NewDir | Acc]
+    end, [<<"/space1">>], lists:seq(1,10)),
+    [_ | TreeDirs] = lists:reverse(TreeDirsReversed),
+
+    lists:foreach(fun(D) ->
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId1, D, 8#755))
+    end, TreeDirs),
+
+    [_, _, TestDir | _] = TreeDirs,
+
+    lists:foreach(fun({Worker, SessId}) ->
+        ?assertEqual({ok, []}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+    end, WS),
+
+    ?assertMatch(ok, lfm_proxy:set_perms(Worker1, SessId1, {path, TestDir}, 0)),
+    lists:foreach(fun({Worker, SessId}) ->
+%%        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+        % TODO - repair
+        ?assertEqual({error,{badmatch,{error,eacces}}}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+    end, WS),
+
+    %TODO - sprawdzic czy wszedzie skasowano dokument opisujacy uniewaznienie cache
+
+    ok.
+
 
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);

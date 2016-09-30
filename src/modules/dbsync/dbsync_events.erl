@@ -73,6 +73,14 @@ change_replicated_internal(SpaceId, Change = #change{model = file_location, doc 
 change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{value = #links{model = file_meta, doc_key = FileUUID}}}) ->
     ?info("change_replicated_internal: changed links ~p", [FileUUID]),
     ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [link_to_parent, parent_links]);
+change_replicated_internal(_SpaceId, #change{model = change_propagation_controller,
+    doc = #document{deleted = false, key = Key} = Doc}) ->
+    ?info("change_replicated_internal: change_propagation_controller ~p", [Key]),
+    ok = change_propagation_controller:mark_change_propagated(Doc);
+change_replicated_internal(SpaceId, #change{model = change_propagation_controller,
+    doc = #document{deleted = false, value = #links{model = change_propagation_controller, doc_key = DocKey}}}) ->
+    ?info("change_replicated_internal: change_propagation_controller links ~p", [DocKey]),
+    ok = change_propagation_controller:verify_propagation(DocKey, SpaceId);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 

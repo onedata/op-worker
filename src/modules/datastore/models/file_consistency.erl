@@ -30,8 +30,8 @@ model_init/0, 'after'/5, before/4]).
 -type id() :: file_meta:id().
 %%-type component() :: file_meta | local_file_location | parent_links | links | link_to_parent
 %%    | {link_to_child, file_meta:name(), file_meta:uuid()}.
--type component() :: file_meta | local_file_location | parent_links | link_to_parent
-    | {link_to_child, file_meta:name(), file_meta:uuid()}.
+-type component() :: file_meta | local_file_location | parent_links | link_to_parent | xattr
+    | {link_to_child, file_meta:name(), file_meta:uuid()} | {rev, Module :: atom(), Rev :: non_neg_integer()}.
 -type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
 
 -export_type([id/0, component/0, waiting/0]).
@@ -161,7 +161,12 @@ notify_waiting(Doc = #document{key = FileUuid,
                     true ->
                         ok;
                     _ ->
-                        spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                        case DbsyncPosthookArguments of
+                            {M, F, Args} ->
+                                spawn(M, F, Args);
+                            _ ->
+                                spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                        end
                 end,
                 false;
             [{link_to_child, WaitName, ChildUuid}] ->
@@ -174,7 +179,12 @@ notify_waiting(Doc = #document{key = FileUuid,
                                     true ->
                                         ok;
                                     _ ->
-                                        spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                                        case DbsyncPosthookArguments of
+                                            {M, F, Args} ->
+                                                spawn(M, F, Args);
+                                            _ ->
+                                                spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                                        end
                                 end,
                                 false;
                             false ->
@@ -279,6 +289,17 @@ check_missing_components(FileUuid, SpaceId, [link_to_parent | RestMissing], Foun
             check_missing_components(FileUuid, SpaceId, RestMissing, [link_to_parent | Found]);
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+    end;
+check_missing_components(FileUuid, SpaceId, [{rev, Model, Rev} | RestMissing], Found) ->
+    Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
+    MC = Model:model_init(),
+    % TODO - what if document has been deleted in parallel by other provider?
+    % TODO - get all revisions simmilar to process_raw_doc
+    case catch erlang:apply(Driver, get, [MC, FileUuid]) of
+        {ok, #document{rev = {CurrentRev, _}}} when CurrentRev >= Rev ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, [{rev, Model, Rev} | Found]);
+        _ ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end.
 
 %%%===================================================================
@@ -347,6 +368,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
+    % TODO - clear file consistency info when file is ok
     ?MODEL_CONFIG(file_consistency_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------

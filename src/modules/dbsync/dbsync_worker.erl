@@ -25,7 +25,7 @@
 -export([apply_batch_changes/3, init_stream/3]).
 -export([bcast_status/0, on_status_received/3]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata]).
+-define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata, change_propagation_controller]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
@@ -741,6 +741,8 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
     {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
 get_space_id(#document{value = #monitoring_state{monitoring_id = MonitoringId}}) ->
     #monitoring_id{main_subject_type = space, main_subject_id = SpaceId} = MonitoringId,
+    {ok, SpaceId};
+get_space_id(#document{value = #change_propagation_controller{space_id = SpaceId}}) ->
     {ok, SpaceId};
 get_space_id(#document{key = Key} = Doc) ->
     try state_get({sid, Key}) of
