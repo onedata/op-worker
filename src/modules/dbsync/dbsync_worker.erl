@@ -24,6 +24,7 @@
 -export([state_get/1, state_put/2]).
 -export([apply_batch_changes/3, init_stream/3]).
 -export([bcast_status/0, on_status_received/3]).
+-export([has_sync_context/1, get_space_id/1]).
 
 -define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata, change_propagation_controller]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).

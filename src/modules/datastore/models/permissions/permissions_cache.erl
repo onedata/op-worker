@@ -223,9 +223,8 @@ invalidate_permissions_cache(Model, Key) ->
 
     case dbsync_worker:has_sync_context(Document) of
         true ->
-            SpaceId = dbsync_worker:get_space_id(Document),
-            {ok, _} = change_propagation_controller:save_info(Model, Key, Rev, SpaceId, ?MODEL_NAME, check_remote_invalitation),
-            ok;
+            {ok, SpaceId} = dbsync_worker:get_space_id(Document),
+            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, check_remote_invalitation);
         _ ->
             ok
     end.
