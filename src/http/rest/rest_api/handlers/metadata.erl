@@ -228,10 +228,14 @@ validate_metadata_type(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_filter_list(binary(), binary()) -> list().
-get_filter_list(<<"keypath">>, Filter) ->
-    binary:split(Filter, <<".">>, [global]);
 get_filter_list(undefined, _) ->
     [];
+get_filter_list(<<"keypath">>, undefined)->
+    throw(?ERROR_MISSING_FILTER);
+get_filter_list(<<"keypath">>, Filter) when not is_binary(Filter) ->
+    throw(?ERROR_INVALID_FILTER);
+get_filter_list(<<"keypath">>, Filter) ->
+    binary:split(Filter, <<".">>, [global]);
 get_filter_list(_, _) ->
     throw(?ERROR_INVALID_FILTER_TYPE).
 
