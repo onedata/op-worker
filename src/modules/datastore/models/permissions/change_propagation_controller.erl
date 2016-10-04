@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper model used for caching permissions to files (main model is permissions_cache).
+%%% Model used to control propagation of changes that require action after
+%%% particular revision is replicated.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(change_propagation_controller).
@@ -150,6 +151,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves information about change to be propagated.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_change(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(), Rev :: non_neg_integer(),
+    SpaceId :: binary(), VefifyModule :: atom(), VerifyFun :: atom()) -> ok | no_return().
 save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
     MyId = oneprovider:get_provider_id(),
@@ -165,19 +173,31 @@ save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
             ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, {MyId, SavedDoc})
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves information that change propagated and activates action connected with change.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_change_propagated(datastore:document()) -> ok | no_return().
 mark_change_propagated(#document{key = ControllerKey, value = #change_propagation_controller{space_id = SpaceId,
     change_revision = Rev, verify_module = VM, verify_function = VF}} = Doc) ->
     MyId = oneprovider:get_provider_id(),
     case verify_propagation(ControllerKey, SpaceId) of
-        true ->
+        {ok, true} ->
             ok;
-        _ ->
+        {ok, _} ->
             ok = datastore:add_links(?LINK_STORE_LEVEL, Doc, {MyId, Doc})
     end,
 
     {Model, Uuid} = decode_key(ControllerKey),
     ok = apply(VM, VF, [Model, Uuid, Rev, SpaceId]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Verifies if change was propagated to all providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: binary()) -> {ok, _} | no_return().
 verify_propagation(ControllerKey, SpaceId) ->
     MyId = oneprovider:get_provider_id(),
     ListFun = fun(LinkName, _LinkTarget, Acc) ->
@@ -194,7 +214,7 @@ verify_propagation(ControllerKey, SpaceId) ->
                  end,
 
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
-    ToDel = length(Links) + Correction >= length(Providers),
+    ToDel = (length(Links) + Correction) >= length(Providers),
     case ToDel of
         true ->
             ok = datastore:delete_links(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, [Links]),
@@ -202,10 +222,28 @@ verify_propagation(ControllerKey, SpaceId) ->
         _ ->
             ok
     end,
-    ToDel.
+    {ok, ToDel}.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets key of document that describes change.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_key(Model :: model_behaviour:model_type(), Uuid :: datastore:ext_key()) -> binary().
 get_key(Model, Uuid) ->
     base64:encode(term_to_binary({Model, Uuid})).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets change description from key.
+%% @end
+%%--------------------------------------------------------------------
+-spec decode_key(Key :: binary()) -> {Model :: model_behaviour:model_type(), Uuid :: datastore:ext_key()}.
 decode_key(Key) ->
     binary_to_term(base64:decode(Key)).

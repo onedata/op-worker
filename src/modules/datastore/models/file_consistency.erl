@@ -48,7 +48,7 @@ model_init/0, 'after'/5, before/4]).
 %% @end
 %%--------------------------------------------------------------------
 -spec wait(file_meta:uuid(), space_info:id(), [file_consistency:component()], list()) -> ok.
-wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
+wait(FileUuid, SpaceId, WaitFor, RestartPosthookData) ->
     {NeedsToWait, WaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
             Doc = case get(FileUuid) of
@@ -82,7 +82,7 @@ wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
                     {false, [parent_links | ParentLinksPartial]};
                 _ ->
                     NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present = UpdatedPresentComponents,
-                        waiting = [{UpdatedMissingComponents -- [parent_links], self(), DbsyncPosthookArguments} | Waiting]}}),
+                        waiting = [{UpdatedMissingComponents -- [parent_links], self(), RestartPosthookData} | Waiting]}}),
                     {ok, _} = save(NewDoc),
                     {true, case lists:member(parent_links, UpdatedMissingComponents) of
                                true -> [parent_links | ParentLinksPartial];
@@ -106,10 +106,10 @@ wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
         [parent_links] ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(FileUuid, SpaceId),
             file_consistency:wait(ParentUuid, SpaceId, [file_meta, link_to_parent, parent_links],
-                DbsyncPosthookArguments);
+                RestartPosthookData);
         [parent_links, {NewUuid, WaitName, ChildUuid}] ->
             file_consistency:wait(NewUuid, SpaceId, [file_meta, link_to_parent, parent_links,
-                {link_to_child, WaitName, ChildUuid}], DbsyncPosthookArguments)
+                {link_to_child, WaitName, ChildUuid}], RestartPosthookData)
     end.
 
 %%--------------------------------------------------------------------
@@ -153,7 +153,7 @@ add_components_and_notify(FileUuid, FoundComponents) ->
 -spec notify_waiting(datastore:document()) -> datastore:document().
 notify_waiting(Doc = #document{key = FileUuid,
     value = FC = #file_consistency{components_present = Components, waiting = Waiting}}) ->
-    NewWaiting = lists:filter(fun({Missing, Pid, DbsyncPosthookArguments}) ->
+    NewWaiting = lists:filter(fun({Missing, Pid, RestartPosthookData}) ->
         case Missing -- Components of
             [] ->
                 Pid ! file_is_now_consistent,
@@ -161,11 +161,11 @@ notify_waiting(Doc = #document{key = FileUuid,
                     true ->
                         ok;
                     _ ->
-                        case DbsyncPosthookArguments of
+                        case RestartPosthookData of
                             {M, F, Args} ->
                                 spawn(M, F, Args);
                             _ ->
-                                spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                                spawn(dbsync_events, change_replicated, RestartPosthookData)
                         end
                 end,
                 false;
@@ -179,11 +179,11 @@ notify_waiting(Doc = #document{key = FileUuid,
                                     true ->
                                         ok;
                                     _ ->
-                                        case DbsyncPosthookArguments of
+                                        case RestartPosthookData of
                                             {M, F, Args} ->
                                                 spawn(M, F, Args);
                                             _ ->
-                                                spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                                                spawn(dbsync_events, change_replicated, RestartPosthookData)
                                         end
                                 end,
                                 false;
@@ -201,11 +201,11 @@ notify_waiting(Doc = #document{key = FileUuid,
                             true ->
                                 ok;
                             _ ->
-                                case DbsyncPosthookArguments of
+                                case RestartPosthookData of
                                     {M, F, Args} ->
                                         spawn(M, F, Args);
                                     _ ->
-                                        spawn(dbsync_events, change_replicated, DbsyncPosthookArguments)
+                                        spawn(dbsync_events, change_replicated, RestartPosthookData)
                                 end
                         end,
                         false;
@@ -317,20 +317,27 @@ check_missing_components(FileUuid, SpaceId, [{rev, Model, Rev} | RestMissing], F
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if revision of document is present.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_revision(file_meta:uuid(), space_info:id(), non_neg_integer()) ->
+    ok | younger_revision | not_found.
 verify_revision(FileUuid, Model, Rev) ->
     Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
     MC = Model:model_init(),
     % TODO - what if document has been deleted in parallel by other provider?
     % TODO - get all revisions simmilar to process_raw_doc
     case catch erlang:apply(Driver, get, [MC, FileUuid]) of
-        {ok, #document{rev = CurrentRev} = D} ->
-            case permissions_cache:rev_to_number(CurrentRev) >= Rev of
+        {ok, #document{rev = CurrentRev}} ->
+            case couchdb_datastore_driver:rev_to_number(CurrentRev) >= Rev of
                 true ->
                     ok;
                 _ ->
                     younger_revision
             end;
-        E ->
+        _ ->
             not_found
     end.
 
@@ -400,7 +407,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    % TODO - clear file consistency info when file is ok
+    % TODO - clear file consistency info when file is ok (triggered with time)
     ?MODEL_CONFIG(file_consistency_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
