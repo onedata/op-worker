@@ -961,26 +961,26 @@ push_update(Node, Updates) ->
 provider(Name) ->
     provider(Name, [], [], false).
 provider(Name, URLs, Spaces, PublicOnly) ->
-    {provider, [{client_name, Name}, {urls, URLs}, {space_ids, Spaces},
+    {od_provider, [{client_name, Name}, {urls, URLs}, {space_ids, Spaces},
         {public_only, PublicOnly}]}.
 
 space(Name) ->
     space(Name, [], [], []).
 space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
-    {space, [{name, Name}, {users, UsersWithPrivileges},
+    {od_space, [{name, Name}, {users, UsersWithPrivileges},
         {groups, GroupsWithPrivileges}, {providers_supports, Supports}]}.
 
 share(Name, ParentSpaceId) ->
     share(Name, ParentSpaceId, <<"">>, <<"">>, <<"">>).
 share(Name, ParentSpaceId, RootFileId, PublicUrl, Handle) ->
-    {share, [{name, Name}, {root_file_id, RootFileId},
+    {od_share, [{name, Name}, {root_file_id, RootFileId},
         {parent_space, ParentSpaceId}, {public_url, PublicUrl},
         {handle, Handle}]}.
 
 handle_service(Name, UsersWithPrivs, GroupsWithPrivs) ->
     handle_service(Name, <<"">>, [], UsersWithPrivs, GroupsWithPrivs).
 handle_service(Name, ProxyEndpoint, ServiceProperties, UsersWithPrivs, GroupsWithPrivs) ->
-    {handle_service, [{name, Name}, {proxy_endpoint, ProxyEndpoint},
+    {od_handle_service, [{name, Name}, {proxy_endpoint, ProxyEndpoint},
         {service_properties, ServiceProperties}, {users, UsersWithPrivs},
         {groups, GroupsWithPrivs}]}.
 
@@ -989,7 +989,7 @@ handle(HandleServiceId, ResourceId, UsersWithPrivs, GroupsWithPrivs) ->
         GroupsWithPrivs, [0, 0, 0, 0, 0, 0]).
 handle(HandleServiceId, PublicHandle, ResourceType, ResourceId, Metadata, UsersWithPrivs,
     GroupsWithPrivs, Timestamp) ->
-    {handle, [{handle_service_id, HandleServiceId}, {public_handle, PublicHandle},
+    {od_handle, [{handle_service_id, HandleServiceId}, {public_handle, PublicHandle},
         {resource_type, ResourceType}, {resource_id, ResourceId},
         {metadata, Metadata}, {users, UsersWithPrivs},
         {groups, GroupsWithPrivs}, {timestamp, Timestamp}]}.
@@ -1001,7 +1001,7 @@ group(Name, SIDs, Users) ->
 group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, Type) ->
     group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, [], [], Type).
 group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, HandleServices, Handles, Type) ->
-    {group, [{name, Name}, {type, Type}, {spaces, SIDs}, {users, Users},
+    {od_group, [{name, Name}, {type, Type}, {spaces, SIDs}, {users, Users},
         {effective_users, EffectiveUsers}, {nested_groups, NestedGroups},
         {parent_groups, ParentGroups}, {handle_services, HandleServices},
         {handles, Handles}]}.
@@ -1015,7 +1015,7 @@ user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups) ->
 user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, PublicOnly) ->
     user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, [], [], PublicOnly).
 user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, HandleServices, Handles, PublicOnly) ->
-    {user, [{name, Name}, {group_ids, GIDs}, {space_names, Spaces},
+    {od_user, [{name, Name}, {group_ids, GIDs}, {space_aliases, Spaces},
         {public_only, PublicOnly}, {default_space, DefaultSpace},
         {effective_group_ids, EffectiveGroups}, {handle_services, HandleServices},
         {handles, Handles}]}.

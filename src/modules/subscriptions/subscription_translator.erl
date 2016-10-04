@@ -81,14 +81,14 @@ props_to_value(od_user, Props) ->
         name = proplists:get_value(<<"name">>, Props),
         group_ids = proplists:get_value(<<"group_ids">>, Props, []),
         effective_group_ids = proplists:get_value(<<"effective_group_ids">>, Props, []),
-        spaces = proplists:get_value(<<"space_names">>, Props, []),
+        spaces = proplists:get_value(<<"space_aliases">>, Props, []),
         handle_services = proplists:get_value(<<"handle_services">>, Props, []),
         handles = proplists:get_value(<<"handles">>, Props, [])
     };
 props_to_value(od_group, Props) ->
     #od_group{
         name = proplists:get_value(<<"name">>, Props),
-        type = binary_to_atom(proplists:get_value(<<"type">>, Props), latin1),
+        type = binary_to_atom(proplists:get_value(<<"type">>, Props), utf8),
         spaces = proplists:get_value(<<"spaces">>, Props, []),
         users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
         effective_users = process_ids_with_privileges(
