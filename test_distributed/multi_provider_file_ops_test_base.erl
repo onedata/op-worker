@@ -108,11 +108,11 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
     end,
     MC = change_propagation_controller:model_init(),
     LSL = MC#model_config.link_store_level,
-    lists:foreach(fun({Worker, _SessId}) ->
-        ?assertEqual({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get, [ControllerUUID]), Attempts),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get, [ControllerUUID]), Attempts * length(Workers)),
         ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
             [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
-    end, WS),
+    end, Workers),
 
     ok.
 
