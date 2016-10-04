@@ -23,6 +23,105 @@
 -type swift_user_ctx() :: #{storage:id() => swift_user:ctx()}.
 -type indexes_value() :: #{indexes:index_id() => indexes:index()}.
 
+
+%% Local, cached version of OZ user
+-record(od_user, {
+    name = <<"">>:: binary(),
+    spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
+    default_space :: binary() | undefined,
+    group_ids :: undefined | [binary()],
+    effective_group_ids = [] :: [binary()],
+    connected_accounts = [] :: [od_user:connected_account()],
+    alias = <<"">>:: binary(),
+    email_list = [] :: [binary()],
+    handle_services = [] ::[HandleServiceId :: binary()],
+    handles = [] ::[HandleId :: binary()],
+    revision_history = [] :: [subscriptions:rev()],
+    % This field means that only public information is available about this
+    % user. This is the case when given user hasn't ever logged in to this
+    % provider, but basic information about him is required (e. g. he is a
+    % member of space or group together with user that is currently logged in).
+    % Public information contains id and name.
+    public_only = false :: boolean()
+}).
+
+
+%% Local, cached version of OZ group
+-record(od_group, {
+    name :: undefined | binary(),
+    % Public means that only public data could be retrieved from the OZ as
+    % no user in this provider has rights to view group data.
+    type :: undefined | public | od_group:type(),
+    users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
+    parent_groups = [] :: [binary()],
+    spaces = [] :: [SpaceId :: binary()],
+    handle_services = [] ::[HandleServiceId :: binary()],
+    handles = [] ::[HandleId :: binary()],
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+
+%% Model for caching space details fetched from OZ
+-record(od_space, {
+    name :: undefined | binary(),
+    providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
+    providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
+    users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
+    groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
+    % All shares that belong to this space.
+    shares = [] :: [od_share:id()],
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+
+%% Model for caching share details fetched from OZ
+-record(od_share, {
+    name = undefined :: undefined | binary(),
+    public_url = undefined :: undefined | binary(),
+    root_file_id = undefined :: undefined | binary(),
+    parent_space = undefined :: undefined | binary(),
+    handle = undefined :: undefined | binary(),
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+
+%% Model for caching provider details fetched from OZ
+-record(od_provider, {
+    client_name :: undefined | binary(),
+    urls = [] :: [binary()],
+    space_ids = [] :: [SpaceId :: binary()],
+    public_only = false :: boolean(), %% see comment in onedata_users
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+
+%% Model for caching handle service details fetched from OZ
+-record(od_handle_service, {
+    name :: od_handle_service:name() | undefined,
+    proxy_endpoint :: od_handle_service:proxy_endpoint() | undefined,
+    service_properties = [] :: od_handle_service:service_properties(),
+    users = [] :: [{UserId :: binary(), [privileges:handle_service_privilege()]}],
+    groups = [] :: [{GroupId :: binary(), [privileges:handle_service_privilege()]}],
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+
+%% Model for caching handle details fetched from OZ
+-record(od_handle, {
+    handle_service_id :: od_handle_service:id() | undefined,
+    public_handle :: od_handle:public_handle() | undefined,
+    resource_type :: od_handle:resource_type() | undefined,
+    resource_id :: od_handle:resource_id() | undefined,
+    metadata :: od_handle:metadata() | undefined,
+    users = [] :: [{UserId :: binary(), [privileges:handle_privilege()]}],
+    groups = [] :: [{GroupId :: binary(), [privileges:handle_privilege()]}],
+    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+
 %% Message ID containing recipient for remote response.
 -record(message_id, {
     issuer :: undefined | client | server,
@@ -30,19 +129,22 @@
     recipient :: pid() | undefined
 }).
 
+
 % State of subscription tracking.
 -record(subscriptions_state, {
     refreshing_node :: node(),
     largest :: undefined | subscriptions:seq(),
     missing :: undefined | [subscriptions:seq()],
-    users :: undefined | sets:set(onedata_user:id())
+    users :: undefined | sets:set(od_user:id())
 }).
+
 
 %% Identity containing user_id
 -record(user_identity, {
-    user_id :: undefined | onedata_user:id(),
+    user_id :: undefined | od_user:id(),
     provider_id :: undefined | oneprovider:id()
 }).
+
 
 %% User session
 -record(session, {
@@ -65,6 +167,7 @@
     transfers = [] :: [transfer:id()]
 }).
 
+
 %% File handle used by the module
 -record(sfm_handle, {
     helper_handle :: undefined | helpers:handle(),
@@ -79,45 +182,9 @@
     is_local = false :: boolean(),
     provider_id :: undefined | oneprovider:id(),
     file_size :: undefined | non_neg_integer(), %% Available only if file is_local
-    share_id :: undefined | share_info:id()
+    share_id :: undefined | od_share:id()
 }).
 
-%% Local, cached version of OZ user
--record(onedata_user, {
-    name = <<"">>:: binary(),
-    spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
-    default_space :: binary() | undefined,
-    group_ids :: undefined | [binary()],
-    effective_group_ids = [] :: [binary()],
-    connected_accounts = [] :: [onedata_user:connected_account()],
-    alias = <<"">>:: binary(),
-    email_list = [] :: [binary()],
-    handle_services = [] ::[HandleServiceId :: binary()],
-    handles = [] ::[HandleId :: binary()],
-    revision_history = [] :: [subscriptions:rev()],
-    % This field means that only public information is available about this
-    % user. This is the case when given user hasn't ever logged in to this
-    % provider, but basic information about him is required (e. g. he is a
-    % member of space or group together with user that is currently logged in).
-    % Public information contains id and name.
-    public_only = false :: boolean()
-}).
-
-%% Local, cached version of OZ group
--record(onedata_group, {
-    name :: undefined | binary(),
-    % Public means that only public data could be retrieved from the OZ as
-    % no user in this provider has rights to view group data.
-    type :: undefined | public | onedata_group:type(),
-    users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
-    effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
-    nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
-    parent_groups = [] :: [binary()],
-    spaces = [] :: [SpaceId :: binary()],
-    handle_services = [] ::[HandleServiceId :: binary()],
-    handles = [] ::[HandleId :: binary()],
-    revision_history = [] :: [subscriptions:rev()]
-}).
 
 -record(file_meta, {
     name :: undefined | file_meta:name(),
@@ -126,7 +193,7 @@
     mtime :: undefined | file_meta:time(),
     atime :: undefined | file_meta:time(),
     ctime :: undefined | file_meta:time(),
-    uid :: undefined | onedata_user:id(), %% Reference to onedata_user that owns this file
+    uid :: undefined | od_user:id(), %% Reference to od_user that owns this file
     size = 0 :: undefined | file_meta:size(),
     version = 0, %% Snapshot version
     is_scope = false :: boolean(),
@@ -134,7 +201,7 @@
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     %% symlink_value for symlinks, file_guid for phantom files (redirection)
     link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
-    shares = [] :: [share_info:id()]
+    shares = [] :: [od_share:id()]
 }).
 
 
@@ -143,6 +210,7 @@
     name :: helpers:name(),
     args :: helpers:args()
 }).
+
 
 %% Model for storing storage information
 -record(storage, {
@@ -161,7 +229,7 @@
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
     handle_id :: binary() | undefined,
-    space_id :: undefined | space_info:id(),
+    space_id :: undefined | od_space:id(),
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
@@ -169,94 +237,48 @@
     last_rename :: fslogic_file_location:last_rename()
 }).
 
-%% Model for caching provider details fetched from OZ
--record(provider_info, {
-    client_name :: undefined | binary(),
-    urls = [] :: [binary()],
-    space_ids = [] :: [SpaceId :: binary()],
-    public_only = false :: boolean(), %% see comment in onedata_users
-    revision_history = [] :: [subscriptions:rev()]
-}).
-
-%% Model for caching space details fetched from OZ
--record(space_info, {
-    name :: undefined | binary(),
-    providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
-    providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
-    users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
-    groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
-    % All shares that belong to this space.
-    shares = [] :: [share_info:id()],
-    revision_history = [] :: [subscriptions:rev()]
-}).
-
-%% Model for caching share details fetched from OZ
--record(share_info, {
-    name = undefined :: undefined | binary(),
-    public_url = undefined :: undefined | binary(),
-    root_file_id = undefined :: undefined | binary(),
-    parent_space = undefined :: undefined | binary(),
-    handle = undefined :: undefined | binary(),
-    revision_history = [] :: [subscriptions:rev()]
-}).
-
-%% Model for caching handle service details fetched from OZ
--record(handle_service_info, {
-    name :: handle_service_info:name() | undefined,
-    proxy_endpoint :: handle_service_info:proxy_endpoint() | undefined,
-    service_properties = [] :: handle_service_info:service_properties(),
-    users = [] :: [{UserId :: binary(), [privileges:handle_service_privilege()]}],
-    groups = [] :: [{GroupId :: binary(), [privileges:handle_service_privilege()]}],
-    revision_history = [] :: [subscriptions:rev()]
-}).
-
-%% Model for caching handle details fetched from OZ
--record(handle_info, {
-    handle_service_id :: handle_service_info:id() | undefined,
-    public_handle :: handle_info:public_handle() | undefined,
-    resource_type :: handle_info:resource_type() | undefined,
-    resource_id :: handle_info:resource_id() | undefined,
-    metadata :: handle_info:metadata() | undefined,
-    users = [] :: [{UserId :: binary(), [privileges:handle_privilege()]}],
-    groups = [] :: [{GroupId :: binary(), [privileges:handle_privilege()]}],
-    timestamp = handle_info:actual_timestamp() :: handle_info:timestamp(),
-    revision_history = [] :: [subscriptions:rev()]
-}).
 
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()]
 }).
 
+
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
     ctx = #{} :: ceph_user_ctx()
 }).
+
 
 %% Model that maps onedata user to POSIX user
 -record(posix_user, {
     ctx = #{} :: posix_user_ctx()
 }).
 
+
 %% Model that maps onedata user to Amazon S3 user
 -record(s3_user, {
     ctx = #{} :: s3_user_ctx()
 }).
+
 
 %% Model that maps onedata user to Openstack Swift user
 -record(swift_user, {
     ctx = #{} :: swift_user_ctx()
 }).
 
+
 %% Model that holds state entries for DBSync worker
 -record(dbsync_state, {
     entry :: term()
 }).
 
+
 %% Model that holds state entries for DBSync worker
 -record(dbsync_batches, {
     batches = #{} :: maps:map()
 }).
+
 
 %% Model that holds files created by root, whose owner needs to be changed when
 %% the user will be present in current provider.
@@ -265,10 +287,12 @@
     file_uuids = [] :: [file_meta:uuid()]
 }).
 
+
 %% Model for holding current quota state for spaces
 -record(space_quota, {
     current_size = 0 :: non_neg_integer()
 }).
+
 
 %% Record that holds monitoring id
 -record(monitoring_id, {
@@ -279,6 +303,7 @@
     secondary_subject_id = <<"">> :: datastore:id(),
     provider_id = oneprovider:get_provider_id() :: oneprovider:id()
 }).
+
 
 %% Model for holding state of monitoring
 -record(monitoring_state, {
@@ -294,16 +319,19 @@
     active_descriptors = #{} :: active_descriptors()
 }).
 
+
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
-    space_id :: undefined | space_info:id(),
+    space_id :: undefined | od_space:id(),
     value = #{} :: maps:map()
 }).
+
 
 %% Model that holds database views
 -record(indexes, {
     value = #{} :: indexes_value()
 }).
+
 
 %% Model that keeps track of consistency of file metadata
 -record(file_consistency, {
@@ -311,10 +339,12 @@
     waiting = [] :: [file_consistency:waiting()]
 }).
 
+
 %% Model that caches files' permissions
 -record(permissions_cache, {
     value = undefined :: term()
 }).
+
 
 %% Helper model for caching files' permissions
 -record(permissions_cache_helper, {

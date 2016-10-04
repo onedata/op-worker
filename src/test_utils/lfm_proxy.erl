@@ -315,17 +315,17 @@ remove_metadata(Worker, SessId, FileKey, Type) ->
 check_perms(Worker, SessId, FileKey, OpenMode) ->
     ?EXEC(Worker, logical_file_manager:check_perms(SessId, FileKey, OpenMode)).
 
--spec create_share(node(), session:id(), logical_file_manager:file_key(), share_info:name()) ->
-    {ok, {share_info:id(), share_info:share_guid()}} | {error, term()}.
+-spec create_share(node(), session:id(), logical_file_manager:file_key(), od_share:name()) ->
+    {ok, {od_share:id(), od_share:share_guid()}} | {error, term()}.
 create_share(Worker, SessId, FileKey, Name) ->
     ?EXEC(Worker, logical_file_manager:create_share(SessId, FileKey, Name)).
 
--spec remove_share(node(), session:id(), share_info:id()) ->
+-spec remove_share(node(), session:id(), od_share:id()) ->
     ok | {error, term()}.
 remove_share(Worker, SessId, FileKey) ->
     ?EXEC(Worker, logical_file_manager:remove_share(SessId, FileKey)).
 
--spec remove_share_by_guid(node(), session:id(), share_info:share_guid()) ->
+-spec remove_share_by_guid(node(), session:id(), od_share:share_guid()) ->
     ok | {error, term()}.
 remove_share_by_guid(Worker, SessId, ShareGuid) ->
     ?EXEC(Worker, logical_file_manager:remove_share_by_guid(SessId, ShareGuid)).

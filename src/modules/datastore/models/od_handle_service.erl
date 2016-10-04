@@ -8,7 +8,7 @@
 %%% @doc Cache for handle service details fetched from OZ.
 %%% @end
 %%%-------------------------------------------------------------------
--module(handle_service_info).
+-module(od_handle_service).
 -author("Lukasz Opiola").
 -behaviour(model_behaviour).
 
@@ -172,7 +172,7 @@ fetch(Auth, HandleServiceId) ->
         service_properties = ServiceProperties
     }} = oz_handle_services:get_details(Auth, HandleServiceId),
 
-    Doc = #document{key = HandleServiceId, value = #handle_service_info{
+    Doc = #document{key = HandleServiceId, value = #od_handle_service{
         name = Name,
         proxy_endpoint = ProxyEndpoint,
         service_properties = ServiceProperties

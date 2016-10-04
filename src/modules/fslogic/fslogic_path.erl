@@ -161,7 +161,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
 get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
+    {ok, #document{value = #od_user{spaces = Spaces}}} = od_user:get(UserId),
 
     MatchedSpaces = lists:filter(fun({_, Name}) ->
         Name =:= SpaceName
@@ -226,15 +226,15 @@ basename_and_parent(Path) ->
 %% and concatenates them into path().
 %% @end
 %%--------------------------------------------------------------------
--spec gen_path(file_meta:entry(), onedata_user:id(), [file_meta:name()]) ->
+-spec gen_path(file_meta:entry(), od_user:id(), [file_meta:name()]) ->
     {ok, file_meta:path()} | datastore:generic_error() | no_return().
 gen_path(Entry, UserId, Tokens) ->
     {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
         {ok, #document{key = ?ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
-            {ok, #document{value = #space_info{name = SpaceName}}} =
-                space_info:get(SpaceId, UserId),
+            {ok, #document{value = #od_space{name = SpaceName}}} =
+                od_space:get(SpaceId, UserId),
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUUID}} ->
             gen_path({uuid, ParentUUID}, UserId, [Name | Tokens])

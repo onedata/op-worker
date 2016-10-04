@@ -38,7 +38,7 @@
 -spec get(GroupId :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 get(GroupId) ->
-    onedata_group:get(GroupId).
+    od_group:get(GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -50,7 +50,7 @@ get(GroupId) ->
 -spec get(oz_endpoint:auth(), GroupId :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 get(Auth, GroupId) ->
-    onedata_group:get_or_fetch(Auth, GroupId).
+    od_group:get_or_fetch(Auth, GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -59,10 +59,10 @@ get(Auth, GroupId) ->
 %% User identity is determined using provided auth.
 %% @end
 %%--------------------------------------------------------------------
--spec create(oz_endpoint:auth(), #onedata_group{}) ->
+-spec create(oz_endpoint:auth(), #od_group{}) ->
     {ok, GroupId :: binary()} | {error, Reason :: term()}.
 create(Auth, Record) ->
-    Name = Record#onedata_group.name,
+    Name = Record#od_group.name,
     oz_users:create_group(Auth, [
         {<<"name">>, Name},
         % Use default group type
@@ -230,14 +230,14 @@ get_create_space_token(Auth, GroupId) ->
 %% or via nested groups.
 %% @end
 %%--------------------------------------------------------------------
--spec has_effective_user(GroupId :: onedata_group:id(),
-    UserId :: onedata_user:id()) -> boolean().
+-spec has_effective_user(GroupId :: od_group:id(),
+    UserId :: od_user:id()) -> boolean().
 has_effective_user(GroupId, UserId) ->
-    case onedata_user:get(UserId) of
+    case od_user:get(UserId) of
         {error, {not_found, _}} ->
             false;
         {ok, #document{value = UserInfo}} ->
-            #onedata_user{effective_group_ids = Groups} = UserInfo,
+            #od_user{effective_group_ids = Groups} = UserInfo,
             lists:member(GroupId, Groups)
     end.
 
@@ -247,8 +247,8 @@ has_effective_user(GroupId, UserId) ->
 %% Predicate telling if given user has a privilege in given group.
 %% @end
 %%--------------------------------------------------------------------
--spec has_effective_privilege(GroupId :: onedata_group:id(),
-    UserId :: onedata_user:id(), Privilege :: privileges:group_privilege()) ->
+-spec has_effective_privilege(GroupId :: od_group:id(),
+    UserId :: od_user:id(), Privilege :: privileges:group_privilege()) ->
     boolean().
 has_effective_privilege(GroupId, UserId, Privilege) ->
     case has_effective_user(GroupId, UserId) of
@@ -256,9 +256,9 @@ has_effective_privilege(GroupId, UserId, Privilege) ->
             false;
         true ->
             {ok, #document{
-                value = #onedata_group{
+                value = #od_group{
                     users = UserTuples
-                }}} = onedata_group:get(GroupId),
+                }}} = od_group:get(GroupId),
             UserPrivileges = proplists:get_value(UserId, UserTuples, []),
             lists:member(Privilege, UserPrivileges)
     end.

@@ -202,7 +202,7 @@ delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
 %% Removes given shares from oz and db.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_shares(session:id(), [share_info:id()]) -> ok | no_return().
+-spec delete_shares(session:id(), [od_share:id()]) -> ok | no_return().
 delete_shares(_SessId, []) ->
     ok;
 delete_shares(SessId, Shares) ->

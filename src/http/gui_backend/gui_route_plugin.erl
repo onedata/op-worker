@@ -137,9 +137,9 @@ public_rpc_backend() -> public_rpc_backend.
     {ok, proplists:proplist()} | gui_error:error_result().
 session_details() ->
     {ok, #document{
-        value = #onedata_user{
+        value = #od_user{
             name = Name
-        }}} = onedata_user:get(g_session:get_user_id()),
+        }}} = od_user:get(g_session:get_user_id()),
     Res = [
         {<<"userName">>, Name},
         {<<"manageProvidersURL">>,

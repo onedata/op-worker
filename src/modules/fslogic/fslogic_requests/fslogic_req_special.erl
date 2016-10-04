@@ -76,8 +76,8 @@ read_dir(#fslogic_ctx{space_id = SpaceId, share_id = ShareId} = CTX, File, Offse
     UserRootUUID = fslogic_uuid:user_root_dir_uuid(UserId),
     case Key of
         UserRootUUID ->
-            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
-                onedata_user:get(UserId),
+            {ok, #document{value = #od_user{spaces = Spaces}}} =
+                od_user:get(UserId),
 
             Children =
                 case Offset < length(Spaces) of

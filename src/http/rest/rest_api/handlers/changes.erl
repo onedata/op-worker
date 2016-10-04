@@ -152,7 +152,7 @@ stream_loop(SendChunk, State = #{timeout := Timeout, ref := Ref, space_id := Spa
 %%--------------------------------------------------------------------
 %% @doc Parse and send change received from db stream, to the client.
 %%--------------------------------------------------------------------
--spec send_change(function(), #change{}, space_info:id()) -> ok.
+-spec send_change(function(), #change{}, od_space:id()) -> ok.
 send_change(SendChunk, #change{seq = Seq, doc = #document{
     key = FileUuid, value = #custom_metadata{}}}, RequestedSpaceId) ->
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),

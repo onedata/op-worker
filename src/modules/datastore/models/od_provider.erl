@@ -8,7 +8,7 @@
 %%% @doc Cache for space details fetched from Global Registry.
 %%% @end
 %%%-------------------------------------------------------------------
--module(provider_info).
+-module(od_provider).
 -author("Michal Zmuda").
 -behaviour(model_behaviour).
 
@@ -150,7 +150,7 @@ create_or_update(Doc, Diff) ->
 -spec get_or_fetch(ProviderId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(ProviderId) ->
-    case provider_info:get(ProviderId) of
+    case od_provider:get(ProviderId) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(ProviderId);
         Error -> Error
@@ -176,14 +176,14 @@ fetch(ProviderId) ->
                 {true, []}
         end,
 
-        Doc = #document{key = ProviderId, value = #provider_info{
+        Doc = #document{key = ProviderId, value = #od_provider{
             client_name = Name,
             urls = URLs,
             space_ids = SpaceIDs,
             public_only = PublicOnly
         }},
 
-        case provider_info:create(Doc) of
+        case od_provider:create(Doc) of
             {ok, _} -> ok;
             {error, already_exists} -> ok
         end,

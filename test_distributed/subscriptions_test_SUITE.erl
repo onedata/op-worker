@@ -227,22 +227,22 @@ saves_the_actual_data(Config) ->
     expect_message([], 8, []),
 
     %% then
-    ?assertMatch({ok, (#document{key = Sp1, value = #space_info{
+    ?assertMatch({ok, (#document{key = Sp1, value = #od_space{
         name = <<"space xp">>,
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         groups = [{<<"G1">>, Priv2}],
         providers_supports = [{<<"P1">>, 1000}],
         revision_history = [<<"r2">>, <<"r1">>]}})
-    }, fetch(Node, space_info, Sp1)),
-    ?assertMatch({ok, (#document{key = Sh1, value = #share_info{
+    }, fetch(Node, od_space, Sp1)),
+    ?assertMatch({ok, (#document{key = Sh1, value = #od_share{
         name = <<"Share 1">>,
         parent_space = Sp1,
         root_file_id = <<"root_file_id">>,
         public_url = <<"public_url">>,
         handle = <<"handle">>,
         revision_history = [<<"r2">>, <<"r1">>]}})
-    }, fetch(Node, share_info, Sh1)),
-    ?assertMatch({ok, #document{key = G1, value = #onedata_group{
+    }, fetch(Node, od_share, Sh1)),
+    ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
         type = unit,
         spaces = [<<"S1">>, <<"S2">>],
@@ -251,35 +251,35 @@ saves_the_actual_data(Config) ->
         nested_groups = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
         parent_groups = [<<"dad">>, <<"mom">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_group, G1)),
-    ?assertMatch({ok, #document{key = U1, value = #onedata_user{
+    }, fetch(Node, od_group, G1)),
+    ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
         spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         default_space = <<"C">>,
         effective_group_ids = [<<"A">>, <<"B">>, <<"Z">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_user, U1)),
-    ?assertMatch({ok, #document{key = U2, value = #onedata_user{
+    }, fetch(Node, od_user, U1)),
+    ?assertMatch({ok, #document{key = U2, value = #od_user{
         name = <<"bombastic">>,
         revision_history = []}}
-    }, fetch(Node, onedata_user, U2)),
-    ?assertMatch({ok, #document{key = P1, value = #provider_info{
+    }, fetch(Node, od_user, U2)),
+    ?assertMatch({ok, #document{key = P1, value = #od_provider{
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r2">>, <<"r1">>],
         urls = [<<"url1">>, <<"url2">>],
         space_ids = [Sp1],
         public_only = false}}
-    }, fetch(Node, provider_info, P1)),
-    ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
+    }, fetch(Node, od_provider, P1)),
+    ?assertMatch({ok, #document{key = HS1, value = #od_handle_service{
         name = <<"Handle Service 1">>,
         proxy_endpoint = <<"">>,
         service_properties = [],
         users = [{<<"U1">>, HSPrivs}],
         groups = [{<<"G1">>, HSPrivs}],
         revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, handle_service_info, HS1)),
-    ?assertMatch({ok, #document{key = H1, value = #handle_info{
+    }, fetch(Node, od_handle_service, HS1)),
+    ?assertMatch({ok, #document{key = H1, value = #od_handle{
         handle_service_id = HS1,
         public_handle = <<"">>,
         resource_type = <<"">>,
@@ -289,7 +289,7 @@ saves_the_actual_data(Config) ->
         groups = [{<<"G2">>, HPrivs}],
         timestamp = {{0, 0, 0}, {0, 0, 0}},
         revision_history = [<<"r2">>, <<"r1">>]}}
-    }, fetch(Node, handle_info, H1)),
+    }, fetch(Node, od_handle, H1)),
     ok.
 
 check_file_operations_test_base0(Config, IdExt) ->
@@ -603,14 +603,14 @@ updates_with_the_actual_data(Config) ->
     expect_message([], 9, []),
 
     %% then
-    ?assertMatch({ok, (#document{key = S1, value = #space_info{
+    ?assertMatch({ok, (#document{key = S1, value = #od_space{
         name = <<"space xp">>,
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         groups = [{<<"G1">>, Priv2}],
         providers_supports = [{<<"P1">>, 1000}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}})
-    }, fetch(Node, space_info, S1)),
-    ?assertMatch({ok, #document{key = G1, value = #onedata_group{
+    }, fetch(Node, od_space, S1)),
+    ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
         type = team,
         spaces = [<<"S1">>, <<"S2">>],
@@ -619,26 +619,26 @@ updates_with_the_actual_data(Config) ->
         nested_groups = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
         parent_groups = [<<"dad">>, <<"mom">>],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_group, G1)),
-    ?assertMatch({ok, #document{key = U1, value = #onedata_user{
+    }, fetch(Node, od_group, G1)),
+    ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
         effective_group_ids = [<<"A">>, <<"B">>, <<"Y">>],
         default_space = <<"C">>,
         spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_user, U1)),
-    ?assertMatch({ok, #document{key = U2, value = #onedata_user{
+    }, fetch(Node, od_user, U1)),
+    ?assertMatch({ok, #document{key = U2, value = #od_user{
         name = <<"bombastic">>,
         revision_history = []}}
-    }, fetch(Node, onedata_user, U2)),
-    ?assertMatch({ok, #document{key = P1, value = #provider_info{
+    }, fetch(Node, od_user, U2)),
+    ?assertMatch({ok, #document{key = P1, value = #od_provider{
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>],
         urls = [<<"url1">>, <<"url2">>],
         space_ids = [S1],
         public_only = true}}
-    }, fetch(Node, provider_info, P1)),
+    }, fetch(Node, od_provider, P1)),
     ok.
 
 applies_deletion(Config) ->
@@ -672,16 +672,20 @@ applies_deletion(Config) ->
     expect_message([], 14, []),
 
     %% then
-    ?assertMatch({error, {not_found, space_info}},
-        fetch(Node, space_info, Sp1)),
-    ?assertMatch({error, {not_found, share_info}},
-        fetch(Node, share_info, Sh1)),
-    ?assertMatch({error, {not_found, onedata_group}},
-        fetch(Node, onedata_group, G1)),
-    ?assertMatch({error, {not_found, onedata_user}},
-        fetch(Node, onedata_user, U1)),
-    ?assertMatch({error, {not_found, provider_info}},
-        fetch(Node, provider_info, P1)),
+    ?assertMatch({error, {not_found, od_space}},
+        fetch(Node, od_space, Sp1)),
+    ?assertMatch({error, {not_found, od_share}},
+        fetch(Node, od_share, Sh1)),
+    ?assertMatch({error, {not_found, od_group}},
+        fetch(Node, od_group, G1)),
+    ?assertMatch({error, {not_found, od_user}},
+        fetch(Node, od_user, U1)),
+    ?assertMatch({error, {not_found, od_provider}},
+        fetch(Node, od_provider, P1)),
+    ?assertMatch({error, {not_found, od_handle_service}},
+        fetch(Node, od_handle_service, HS1)),
+    ?assertMatch({error, {not_found, od_handle}},
+        fetch(Node, od_handle, H1)),
     ok.
 
 %% details of conflict resolutions are covered by eunit tests
@@ -721,37 +725,37 @@ resolves_conflicts(Config) ->
     expect_message([], 12, []),
 
     %% then
-    ?assertMatch({ok, #document{key = Sp1, value = #space_info{
+    ?assertMatch({ok, #document{key = Sp1, value = #od_space{
         name = <<"space xp">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, space_info, Sp1)),
-    ?assertMatch({ok, #document{key = Sh1, value = #share_info{
+    }, fetch(Node, od_space, Sp1)),
+    ?assertMatch({ok, #document{key = Sh1, value = #od_share{
         name = <<"share xp">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, share_info, Sh1)),
-    ?assertMatch({ok, #document{key = G1, value = #onedata_group{
+    }, fetch(Node, od_share, Sh1)),
+    ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_group, G1)),
-    ?assertMatch({ok, #document{key = U1, value = #onedata_user{
+    }, fetch(Node, od_group, G1)),
+    ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>, default_space = <<"C">>,
         group_ids = [<<"A">>, <<"B">>], spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, onedata_user, U1)),
-    ?assertMatch({ok, #document{key = HS1, value = #handle_service_info{
+    }, fetch(Node, od_user, U1)),
+    ?assertMatch({ok, #document{key = HS1, value = #od_handle_service{
         name = <<"handle service first">>,
         users = [],
         groups = [],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, handle_service_info, HS1)),
-    ?assertMatch({ok, #document{key = H1, value = #handle_info{
+    }, fetch(Node, od_handle_service, HS1)),
+    ?assertMatch({ok, #document{key = H1, value = #od_handle{
         handle_service_id = HS1,
         resource_id = <<"someId">>,
         users = [],
         groups = [],
         timestamp = {{0, 0, 0}, {0, 0, 0}},
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
-    }, fetch(Node, handle_info, H1)),
+    }, fetch(Node, od_handle, H1)),
     ok.
 
 

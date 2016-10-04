@@ -39,35 +39,35 @@ all() -> ?ALL([
 
 providers_with_common_support_retrieval_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    save(Worker, <<"s1">>, #space_info{providers_supports = [{<<"we">>, 1}, {<<"p1">>, 1}, {<<"p2">>, 1}]}),
-    save(Worker, <<"s2">>, #space_info{providers_supports = [{<<"we">>, 1}, {<<"p3">>, 1}]}),
-    save(Worker, <<"s3">>, #space_info{providers_supports = [{<<"p4">>, 1}]}),
-    save(Worker, <<"p1">>, #provider_info{space_ids = [<<"s1">>]}),
-    save(Worker, <<"p2">>, #provider_info{space_ids = [<<"s1">>]}),
-    save(Worker, <<"p3">>, #provider_info{space_ids = [<<"s2">>]}),
-    save(Worker, <<"p4">>, #provider_info{space_ids = [<<"s3">>]}),
-    save(Worker, <<"we">>, #provider_info{space_ids = [<<"s1">>, <<"s2">>]}),
+    save(Worker, <<"s1">>, #od_space{providers_supports = [{<<"we">>, 1}, {<<"p1">>, 1}, {<<"p2">>, 1}]}),
+    save(Worker, <<"s2">>, #od_space{providers_supports = [{<<"we">>, 1}, {<<"p3">>, 1}]}),
+    save(Worker, <<"s3">>, #od_space{providers_supports = [{<<"p4">>, 1}]}),
+    save(Worker, <<"p1">>, #od_provider{space_ids = [<<"s1">>]}),
+    save(Worker, <<"p2">>, #od_provider{space_ids = [<<"s1">>]}),
+    save(Worker, <<"p3">>, #od_provider{space_ids = [<<"s2">>]}),
+    save(Worker, <<"p4">>, #od_provider{space_ids = [<<"s3">>]}),
+    save(Worker, <<"we">>, #od_provider{space_ids = [<<"s1">>, <<"s2">>]}),
     set_own_provider_id(Worker, <<"we">>),
 
     % proper state
     ?assertMatch([<<"p1">>, <<"p2">>, <<"p3">>, <<"we">>], get_providers_with_common_support(Worker)),
 
     % no public info about this provider
-    save(Worker, <<"we">>, #provider_info{space_ids = [], public_only = true}),
+    save(Worker, <<"we">>, #od_provider{space_ids = [], public_only = true}),
     ?assertMatch({error, no_private_info}, get_providers_with_common_support(Worker)),
 
     % no info about this provider at all
-    delete_document(Worker, provider_info, <<"we">>),
+    delete_document(Worker, od_provider, <<"we">>),
     ?assertMatch({error, no_info}, get_providers_with_common_support(Worker)),
 
     % missing space info
-    save(Worker, <<"we">>, #provider_info{space_ids = [<<"s1">>, <<"s2">>]}),
-    delete_document(Worker, space_info, <<"s2">>),
-    ?assertMatch({error, no_space_info}, get_providers_with_common_support(Worker)),
+    save(Worker, <<"we">>, #od_provider{space_ids = [<<"s1">>, <<"s2">>]}),
+    delete_document(Worker, od_space, <<"s2">>),
+    ?assertMatch({error, no_od_space}, get_providers_with_common_support(Worker)),
 
     % missing provider info
-    save(Worker, <<"s2">>, #space_info{providers_supports = [{<<"we">>, 1}, {<<"p3">>, 1}]}),
-    delete_document(Worker, provider_info, <<"p1">>),
+    save(Worker, <<"s2">>, #od_space{providers_supports = [{<<"we">>, 1}, {<<"p3">>, 1}]}),
+    delete_document(Worker, od_provider, <<"p1">>),
     ?assertMatch({error, no_public_provider_info}, get_providers_with_common_support(Worker)),
 
     ok.

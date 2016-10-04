@@ -6,42 +6,30 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% OZ user data cache
+%%% OZ group data cache
 %%% @end
 %%%-------------------------------------------------------------------
--module(onedata_user).
+-module(od_group).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/common/credentials.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/oz/oz_groups.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, create_or_update/2]).
+-export([fetch/2, get_or_fetch/2, create_or_update/2]).
 
--export_type([doc/0, id/0, connected_account/0]).
+-export_type([id/0, type/0]).
 
--type doc() :: datastore:document().
+-type type() :: 'organization' | 'unit' | 'team' | 'role'.
 -type id() :: binary().
-
-%% Oauth connected accounts in form of proplist:
-%%[
-%%    {<<"provider_id">>, binary()},
-%%    {<<"user_id">>, binary()},
-%%    {<<"login">>, binary()},
-%%    {<<"name">>, binary()},
-%%    {<<"email_list">>, [binary()]}
-%%]
--type connected_account() :: proplists:proplist().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -81,12 +69,17 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
-get(?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #onedata_user{name = <<"nobody">>, spaces = []}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -113,8 +106,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [{?MODEL_NAME, create}, {?MODEL_NAME, save},
-        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(onedata_group_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,14 +116,6 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(?MODEL_NAME, create, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, save, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -162,75 +146,80 @@ create_or_update(Doc, Diff) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch user from OZ and save it in cache.
+%% Fetch group from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth()) ->
+-spec fetch(Auth :: oz_endpoint:auth(), GroupId :: id()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(Auth) ->
-    {ok, #user_details{
-        id = UserId, name = Name, connected_accounts = ConnectedAccounts,
-        alias = Alias, email_list = EmailList}
-    } = oz_users:get_details(Auth),
-    {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-        oz_users:get_spaces(Auth),
-    {ok, GroupIds} = oz_users:get_groups(Auth),
-    {ok, EffectiveGroupIds} = oz_users:get_effective_groups(Auth),
-
-    Spaces = utils:pmap(fun(SpaceId) ->
-        {ok, #space_details{name = SpaceName}} =
-            oz_spaces:get_details(Auth, SpaceId),
-        {SpaceId, SpaceName}
-    end, SpaceIds),
-
-    OnedataUser = #onedata_user{
-        name = Name,
-        spaces = Spaces,
-        default_space = DefaultSpaceId,
-        group_ids = GroupIds,
-        effective_group_ids = EffectiveGroupIds,
-        connected_accounts = ConnectedAccounts,
-        alias = Alias,
-        email_list = EmailList
-    },
-    OnedataUserDoc = #document{key = UserId, value = OnedataUser},
-
-    case onedata_user:create(OnedataUserDoc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    utils:pforeach(fun(SpaceId) ->
-        space_info:get_or_fetch(Auth, SpaceId, UserId)
-    end, SpaceIds),
-
-    utils:pforeach(fun(GroupId) ->
-        onedata_group:get_or_fetch(Auth, GroupId)
-    end, GroupIds),
-
-    {ok, OnedataUserDoc}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get user from cache or fetch from OZ and save in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: id()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, UserId) ->
+fetch(Auth, GroupId) ->
     try
-        case onedata_user:get(UserId) of
-            {ok, Doc} -> {ok, Doc};
-            {error, {not_found, _}} -> fetch(Auth);
-            Error -> Error
+        {ok, #group_details{id = Id, name = Name, type = Type}} =
+            oz_groups:get_details(Auth, GroupId),
+        case Type of
+            public ->
+                % Only public info about this group was discoverable
+                OnedataGroupDoc = #document{
+                    key = Id, value = #od_group{
+                        name = Name,
+                        type = Type
+                    }},
+                case od_group:create(OnedataGroupDoc) of
+                    {ok, _} -> ok;
+                    {error, already_exists} -> ok
+                end,
+                {ok, OnedataGroupDoc};
+            _ ->
+                {ok, SpaceIds} = oz_groups:get_spaces(Auth, Id),
+                {ok, ParentIds} = oz_groups:get_parents(Auth, Id),
+
+                % nested groups
+                {ok, NestedIds} = oz_groups:get_nested(Auth, Id),
+                NestedGroupsWithPrivileges = utils:pmap(fun(UID) ->
+                    {ok, Privileges} = oz_groups:get_nested_privileges(Auth, Id, UID),
+                    {UID, Privileges}
+                end, NestedIds),
+
+                % users
+                {ok, UserIds} = oz_groups:get_users(Auth, Id),
+                UsersWithPrivileges = utils:pmap(fun(UID) ->
+                    {ok, Privileges} = oz_groups:get_user_privileges(Auth, Id, UID),
+                    {UID, Privileges}
+                end, UserIds),
+
+                % effective users
+                {ok, EffectiveUserIds} = oz_groups:get_effective_users(Auth, Id),
+                EffectiveUsersWithPrivileges = utils:pmap(fun(UID) ->
+                    {ok, Privileges} = oz_groups:get_effective_user_privileges(Auth, Id, UID),
+                    {UID, Privileges}
+                end, EffectiveUserIds),
+
+                %todo consider getting user_details for each group member and storing it as od_user
+                OnedataGroupDoc = #document{key = Id, value = #od_group{
+                    users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
+                    effective_users = EffectiveUsersWithPrivileges, type = Type,
+                    parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
+
+                case od_group:create(OnedataGroupDoc) of
+                    {ok, _} -> ok;
+                    {error, already_exists} -> ok
+                end,
+                {ok, OnedataGroupDoc}
         end
     catch
         _:Reason ->
-            ?error_stacktrace("Cannot get or fetch details of onedata user ~p due to: ~p",
-                [UserId, Reason]),
             {error, Reason}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Get group from cache or fetch from OZ and save in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), GroupId :: od_group:id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Auth, GroupId) ->
+    case od_group:get(GroupId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Auth, GroupId);
+        Error -> Error
+    end.

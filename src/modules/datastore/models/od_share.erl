@@ -8,7 +8,7 @@
 %%% @doc Cache for share details fetched from OZ.
 %%% @end
 %%%-------------------------------------------------------------------
--module(share_info).
+-module(od_share).
 -author("Lukasz Opiola").
 -behaviour(model_behaviour).
 
@@ -58,7 +58,7 @@ create_or_update(Doc, Diff) ->
 %% fetches it from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: od_user:id()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Auth, ShareId) ->
     case ?MODULE:get(ShareId) of
@@ -176,7 +176,7 @@ fetch(Auth, ShareId) ->
         parent_space = ParentSpace
     }} = oz_shares:get_details(Auth, ShareId),
 
-    Doc = #document{key = ShareId, value = #share_info{
+    Doc = #document{key = ShareId, value = #od_share{
         name = Name,
         public_url = PublicURL,
         root_file_id = RootFileId,

@@ -326,7 +326,7 @@ get_child(Doc, Name) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+    ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update}, {od_user, save}, {od_user, update}],
         ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
@@ -338,13 +338,13 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -514,7 +514,7 @@ get_parent_uuid(Entry) ->
 %% Returns file's parent uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_uuid(file_meta:uuid(), space_info:id()) -> {ok, datastore:key()} | datastore:get_error().
+-spec get_parent_uuid(file_meta:uuid(), od_space:id()) -> {ok, datastore:key()} | datastore:get_error().
 get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
     ?ROOT_DIR_UUID;
 get_parent_uuid(FileUuid, SpaceId) ->
@@ -654,12 +654,12 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(oz_endpoint:auth(), UserId :: onedata_user:id()) -> ok.
+-spec setup_onedata_user(oz_endpoint:auth(), UserId :: od_user:id()) -> ok.
 setup_onedata_user(_Client, UserId) ->
     ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
-    critical_section:run([onedata_user, UserId], fun() ->
-        {ok, #document{value = #onedata_user{spaces = Spaces}}} =
-            onedata_user:get(UserId),
+    critical_section:run([od_user, UserId], fun() ->
+        {ok, #document{value = #od_user{spaces = Spaces}}} =
+            od_user:get(UserId),
 
         CTime = erlang:system_time(seconds),
 
@@ -792,7 +792,7 @@ set_link_context_for_space(SpaceId) ->
 %% Add shareId to file meta
 %% @end
 %%--------------------------------------------------------------------
--spec add_share(uuid(), share_info:id()) -> {ok, uuid()}  | datastore:generic_error().
+-spec add_share(uuid(), od_share:id()) -> {ok, uuid()}  | datastore:generic_error().
 add_share(FileUuid, ShareId) ->
     update({uuid, FileUuid},
         fun(FileMeta = #file_meta{shares = Shares}) ->
@@ -804,7 +804,7 @@ add_share(FileUuid, ShareId) ->
 %% Remove shareId from file meta
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(uuid(), share_info:id()) -> {ok, uuid()} | datastore:generic_error().
+-spec remove_share(uuid(), od_share:id()) -> {ok, uuid()} | datastore:generic_error().
 remove_share(FileUuid, ShareId) ->
     update({uuid, FileUuid},
         fun(FileMeta = #file_meta{shares = Shares}) ->

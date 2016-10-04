@@ -47,7 +47,7 @@ model_init/0, 'after'/5, before/4]).
 %% the change after system restart
 %% @end
 %%--------------------------------------------------------------------
--spec wait(file_meta:uuid(), space_info:id(), [file_consistency:component()], list()) -> ok.
+-spec wait(file_meta:uuid(), od_space:id(), [file_consistency:component()], list()) -> ok.
 wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
     {NeedsToWait, WaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
@@ -196,7 +196,7 @@ notify_waiting(Doc = #document{key = FileUuid,
 %% notify waiting processes.
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_add_components(file_meta:uuid(), space_info:id(), [component()]) -> ok.
+-spec check_and_add_components(file_meta:uuid(), od_space:id(), [component()]) -> ok.
 check_and_add_components(FileUuid, SpaceId, Components) ->
     FoundComponents = check_missing_components(FileUuid, SpaceId, Components),
     add_components_and_notify(FileUuid, FoundComponents).
@@ -206,7 +206,7 @@ check_and_add_components(FileUuid, SpaceId, Components) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id()) ->
+-spec check_missing_components(file_meta:uuid(), od_space:id()) ->
     [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}].
 check_missing_components(FileUuid, SpaceId) ->
     check_missing_components(FileUuid, SpaceId, [file_meta, local_file_location, link_to_parent, parent_links]).
@@ -216,7 +216,7 @@ check_missing_components(FileUuid, SpaceId) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id(), [component()]) ->
+-spec check_missing_components(file_meta:uuid(), od_space:id(), [component()]) ->
     [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}].
 check_missing_components(FileUuid, SpaceId, Missing) ->
     check_missing_components(FileUuid, SpaceId, Missing, []).
@@ -226,7 +226,7 @@ check_missing_components(FileUuid, SpaceId, Missing) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id(), [component()], [component()]) ->
+-spec check_missing_components(file_meta:uuid(), od_space:id(), [component()], [component()]) ->
     [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}].
 check_missing_components(_FileUuid, _SpaceId, [], Found) ->
     Found;

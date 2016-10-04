@@ -37,7 +37,7 @@
 -spec get(oz_endpoint:auth(), UserId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(Auth, UserId) ->
-    onedata_user:get_or_fetch(Auth, UserId).
+    od_user:get_or_fetch(Auth, UserId).
 
 
 %%--------------------------------------------------------------------
@@ -45,12 +45,12 @@ get(Auth, UserId) ->
 %% Returns list of user space IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+-spec get_spaces(oz_endpoint:auth(), UserId :: od_user:id()) ->
     {ok, [{SpaceId :: binary(), SpaceName :: binary()}]} |
     {error, Reason :: term()}.
 get_spaces(Auth, UserId) ->
     case get(Auth, UserId) of
-        {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
+        {ok, #document{value = #od_user{spaces = Spaces}}} ->
             {ok, Spaces};
         {error, Reason} ->
             {error, Reason}
@@ -63,12 +63,12 @@ get_spaces(Auth, UserId) ->
 %% @todo this should be removed in favour of get_spaces/2
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces(UserId :: onedata_user:id()) ->
+-spec get_spaces(UserId :: od_user:id()) ->
     {ok, [{SpaceId :: binary(), SpaceName :: binary()}]} |
     {error, Reason :: term()}.
 get_spaces(UserId) ->
-    case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
+    case od_user:get(UserId) of
+        {ok, #document{value = #od_user{spaces = Spaces}}} ->
             {ok, Spaces};
         {error, Reason} ->
             {error, Reason}
@@ -81,12 +81,12 @@ get_spaces(UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_default_space(oz_endpoint:auth(), UserId :: binary()) ->
-    {ok, SpaceId :: space_info:id()} | datastore:get_error().
+    {ok, SpaceId :: od_space:id()} | datastore:get_error().
 get_default_space(Auth, UserId) ->
     case get(Auth, UserId) of
         {ok, Doc} ->
             #document{
-                value = #onedata_user{
+                value = #od_user{
                     default_space = DefaultSpace
                 }} = Doc,
             DefaultSpace;
@@ -134,11 +134,11 @@ leave_group(Auth, GroupId) ->
 %% Returns list of user group IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_groups(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+-spec get_groups(oz_endpoint:auth(), UserId :: od_user:id()) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
 get_groups(Auth, UserId) ->
     case get(Auth, UserId) of
-        {ok, #document{value = #onedata_user{group_ids = GroupsIds}}} ->
+        {ok, #document{value = #od_user{group_ids = GroupsIds}}} ->
             {ok, GroupsIds};
         {error, Reason} ->
             {error, Reason}
@@ -150,11 +150,11 @@ get_groups(Auth, UserId) ->
 %% Returns list of user effective group IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective_groups(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+-spec get_effective_groups(oz_endpoint:auth(), UserId :: od_user:id()) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
 get_effective_groups(Auth, UserId) ->
     case get(Auth, UserId) of
-        {ok, #document{value = #onedata_user{
+        {ok, #document{value = #od_user{
             effective_group_ids = GroupsIds}}} ->
             {ok, GroupsIds};
         {error, Reason} ->
@@ -167,7 +167,7 @@ get_effective_groups(Auth, UserId) ->
 %% Returns list of user effective group IDs.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective_handle_services(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+-spec get_effective_handle_services(oz_endpoint:auth(), UserId :: od_user:id()) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
 get_effective_handle_services(Auth, UserId) ->
     case get(Auth, UserId) of
@@ -175,14 +175,14 @@ get_effective_handle_services(Auth, UserId) ->
             {error, Reason};
         {ok, Doc} ->
             #document{
-                value = #onedata_user{
+                value = #od_user{
                     handle_services = UserHandleServices,
                     effective_group_ids = EffectiveGroupIds
                 }} = Doc,
             GroupHandleServices = lists:flatmap(
                 fun(GroupId) ->
                     {ok, #document{
-                        value = #onedata_group{
+                        value = #od_group{
                             handle_services = GroupHS
                         }}} = group_logic:get(Auth, GroupId),
                     GroupHS

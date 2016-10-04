@@ -9,7 +9,7 @@
 %%% @doc Cache for handle details fetched from OZ.
 %%% @end
 %%%-------------------------------------------------------------------
--module(handle_info).
+-module(od_handle).
 -author("Lukasz Opiola").
 -behaviour(model_behaviour).
 
@@ -191,7 +191,7 @@ fetch(?GUEST_SESS_ID = Auth, HandleId) ->
         metadata = Metadata
     }} = oz_handles:get_public_details(Auth, HandleId),
 
-    Doc = #document{key = HandleId, value = #handle_info{
+    Doc = #document{key = HandleId, value = #od_handle{
         public_handle = PublicHandle,
         metadata = Metadata
     }},
@@ -213,7 +213,7 @@ fetch(Auth, HandleId) ->
         timestamp = Timestamp
     }} = oz_handles:get_details(Auth, HandleId),
 
-    Doc = #document{key = HandleId, value = #handle_info{
+    Doc = #document{key = HandleId, value = #od_handle{
         handle_service_id = HandleServiceId,
         public_handle = PublicHandle,
         resource_type = ResourceType,

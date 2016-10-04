@@ -99,7 +99,7 @@ chmod(CTX, File, Mode) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
+-spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: od_user:id()) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_owner, 2}]).
 chown(_, _File, _UserId) ->
@@ -513,7 +513,7 @@ check_perms(Ctx, Uuid, rdwr) ->
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, share_info:name()) -> #provider_response{}.
+-spec create_share(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, od_share:name()) -> #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}]).
 create_share(Ctx = #fslogic_ctx{space_id = SpaceId}, {uuid, FileUuid}, Name) ->
     SessId = fslogic_context:get_session_id(Ctx),

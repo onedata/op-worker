@@ -84,8 +84,8 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %% Expand access definition to form allowing it to be verified by rules module.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_access_definitions([access_definition()], onedata_user:id(), share_info:id(), list(), maps:map(), maps:map(), maps:map()) ->
-    [{check_type(), undefined | datastore:document(), datastore:document(), share_info:id(), [#accesscontrolentity{}]}].
+-spec expand_access_definitions([access_definition()], od_user:id(), od_share:id(), list(), maps:map(), maps:map(), maps:map()) ->
+    [{check_type(), undefined | datastore:document(), datastore:document(), od_share:id(), [#accesscontrolentity{}]}].
 expand_access_definitions([], _UserId, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];
 expand_access_definitions(_, ?ROOT_USER_ID, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
@@ -128,7 +128,7 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, ShareId,
 %% @doc Returns file that shall be the subject of permission validation instead given file.
 %%      E.g. for virtual "/" directory returns deafult space file.
 %%--------------------------------------------------------------------
--spec get_validation_subject(onedata_user:id(), fslogic_worker:ext_file()) -> fslogic_worker:file() | no_return().
+-spec get_validation_subject(od_user:id(), fslogic_worker:ext_file()) -> fslogic_worker:file() | no_return().
 get_validation_subject(UserId, #sfm_handle{file_uuid = FileGUID}) ->
     get_validation_subject(UserId, {guid, FileGUID});
 get_validation_subject(UserId, {guid, FileGUID}) ->
@@ -155,8 +155,8 @@ resolve_file_entry({parent, Item}, Inputs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec expand_traverse_ancestors_check(file_meta:doc() | undefined, file_meta:doc() | undefined,
-    onedata_user:doc(), share_info:id(), maps:map()) ->
-    [{check_type(), datastore:document(), datastore:document(), share_info:id(), [#accesscontrolentity{}]}].
+    od_user:doc(), od_share:id(), maps:map()) ->
+    [{check_type(), datastore:document(), datastore:document(), od_share:id(), [#accesscontrolentity{}]}].
 expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
     UserDoc = #document{key = UserId}, ShareId, AclMap) ->
 
@@ -211,9 +211,9 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
 %% each ancestor and subject document. Starts from doc parent.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_ancestors_check(file_meta:uuid(), Acc, onedata_user:id(), onedata_user:doc(), share_info:id(), maps:map()) ->
+-spec expand_ancestors_check(file_meta:uuid(), Acc, od_user:id(), od_user:doc(), od_share:id(), maps:map()) ->
     {Acc, CacheUsed :: boolean()} when
-    Acc :: [{acl_access_mask(), file_meta:doc(), onedata_user:doc(), share_info:id(), undefined | [#accesscontrolentity{}]}].
+    Acc :: [{acl_access_mask(), file_meta:doc(), od_user:doc(), od_share:id(), undefined | [#accesscontrolentity{}]}].
 expand_ancestors_check(?ROOT_DIR_UUID, Acc, _UserId, _UserDoc, _ShareId, _AclMap) ->
     {Acc, false};
 expand_ancestors_check(Key, Acc, UserId, UserDoc, ShareId, AclMap) ->
@@ -261,7 +261,7 @@ get_acl(Uuid, Map) ->
 %%--------------------------------------------------------------------
 %% @doc Get file_doc matching given item definition
 %%--------------------------------------------------------------------
--spec get_file(item_definition(), maps:map(), onedata_user:id(), list()) -> {datastore:document(), maps:map()}.
+-spec get_file(item_definition(), maps:map(), od_user:id(), list()) -> {datastore:document(), maps:map()}.
 get_file(ItemDefinition, Map, UserId, FunctionInputs) ->
     case maps:get(ItemDefinition, Map, undefined) of
         undefined ->
@@ -274,11 +274,11 @@ get_file(ItemDefinition, Map, UserId, FunctionInputs) ->
 %%--------------------------------------------------------------------
 %% @doc Get user_doc for given user id
 %%--------------------------------------------------------------------
--spec get_user(onedata_user:id(), maps:map()) -> {datastore:document(), maps:map()}.
+-spec get_user(od_user:id(), maps:map()) -> {datastore:document(), maps:map()}.
 get_user(UserId, Map) ->
     case maps:get(UserId, Map, undefined) of
         undefined ->
-            {ok, UserDoc} = onedata_user:get(UserId),
+            {ok, UserDoc} = od_user:get(UserId),
             {UserDoc, maps:put(UserId, UserDoc, Map)};
         UserDoc ->
             {UserDoc, Map}
@@ -290,7 +290,7 @@ get_user(UserId, Map) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_rule_and_cache_result({term(), FileDoc :: datastore:document() | undefined,
-    UserDoc :: datastore:document(), ShareId :: share_info:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
+    UserDoc :: datastore:document(), ShareId :: od_share:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
 check_rule_and_cache_result({AccessType, FileDoc, UserDoc, ShareId, _} = Def) ->
     try
         ok = rules:check(Def)
@@ -305,7 +305,7 @@ check_rule_and_cache_result({AccessType, FileDoc, UserDoc, ShareId, _} = Def) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_ok_result({CheckType :: term(), file_meta:doc() | undefined,
-    onedata_user:doc(), share_info:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
+    od_user:doc(), od_share:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok.
 cache_ok_result({AccessType, FileDoc, UserDoc, ShareId, _}) ->
     permissions_cache:cache_permission({AccessType, get_doc_id(UserDoc), ShareId, get_doc_id(FileDoc)}, ok).
 
