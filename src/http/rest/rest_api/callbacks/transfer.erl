@@ -62,7 +62,9 @@ start(SessionId, FileEntry, ProviderId, Callback) ->
 %%--------------------------------------------------------------------
 -spec get_status(TransferId :: id()) -> status().
 get_status(TransferId)  ->
-    gen_server2:call(id_to_pid(TransferId), get_status).
+    {ok, Pid} = id_to_pid(TransferId),
+    ok = check_transfer_existence(Pid),
+    gen_server2:call(Pid, get_status).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,7 +73,9 @@ get_status(TransferId)  ->
 %%--------------------------------------------------------------------
 -spec get(TransferId :: id()) -> maps:map().
 get(TransferId)  ->
-    gen_server2:call(id_to_pid(TransferId), get_info).
+    {ok, Pid} = id_to_pid(TransferId),
+    ok = check_transfer_existence(Pid),
+    gen_server2:call(Pid, get_info).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -80,7 +84,9 @@ get(TransferId)  ->
 %%--------------------------------------------------------------------
 -spec stop(id()) -> ok.
 stop(TransferId) ->
-    gen_server2:stop(id_to_pid(TransferId)).
+    {ok, Pid} = id_to_pid(TransferId),
+    ok = check_transfer_existence(Pid),
+    gen_server2:stop(Pid).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -230,6 +236,25 @@ pid_to_id(Pid) ->
 %% Converts transfer id to pid of transfer handler
 %% @end
 %%--------------------------------------------------------------------
--spec id_to_pid(TransferId :: id()) -> pid().
+-spec id_to_pid(TransferId :: id()) -> {ok, pid()} | {error, {not_found, transfer}}.
 id_to_pid(TransferId) ->
-    binary_to_term(base64url:decode(TransferId)).
+    try
+        {ok, binary_to_term(base64url:decode(TransferId))}
+    catch
+        _:_ ->
+            {error, {not_found, transfer}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if transfer server pid exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_transfer_existence(pid()) -> ok | {error, {not_found, transfer}}.
+check_transfer_existence(Pid) ->
+    case utils:process_info(Pid) of
+        undefined ->
+            {error, {not_found, transfer}};
+        _ ->
+            ok
+    end.

@@ -122,12 +122,22 @@ prepare_options([{descending, _} | _Rest]) ->
 prepare_options([{endkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{endkey, Endkey} | Rest]) ->
-    [{endkey, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)];
+    try
+        [{endkey, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)]
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_ENDKEY)
+    end;
 
 prepare_options([{startkey, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{startkey, StartKey} | Rest]) ->
-    [{startkey, couchbeam_ejson:decode(StartKey)} | prepare_options(Rest)];
+    try
+        [{startkey, couchbeam_ejson:decode(StartKey)} | prepare_options(Rest)]
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_STARTKEY)
+    end;
 
 prepare_options([{inclusive_end, true} | Rest]) ->
     [inclusive_end | prepare_options(Rest)];
@@ -139,12 +149,24 @@ prepare_options([{inclusive_end, _} | _Rest]) ->
 prepare_options([{key, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{key, Key} | Rest]) ->
-    [{key, couchbeam_ejson:decode(Key)} | prepare_options(Rest)];
+    try
+        [{key, couchbeam_ejson:decode(Key)} | prepare_options(Rest)]
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_KEY)
+    end;
 
 prepare_options([{keys, undefined} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{keys, Keys} | Rest]) ->
-    [{keys, couchbeam_ejson:decode(Keys)} | prepare_options(Rest)];
+    try
+        DecodedKeys = couchbeam_ejson:decode(Keys),
+        true = is_list(DecodedKeys),
+        [{keys, DecodedKeys} | prepare_options(Rest)]
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_KEYS)
+    end;
 
 prepare_options([{limit, undefined} | Rest]) ->
     prepare_options(Rest);

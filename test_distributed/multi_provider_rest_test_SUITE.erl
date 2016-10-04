@@ -55,7 +55,9 @@
     create_list_index/1,
     set_get_json_metadata_inherited/1,
     set_get_xattr_inherited/1,
-    set_get_json_metadata_using_filter/1
+    set_get_json_metadata_using_filter/1,
+    primitive_json_metadata_test/1,
+    empty_metadata_invalid_json_test/1
 ]).
 
 all() ->
@@ -85,7 +87,9 @@ all() ->
         create_list_index,
         set_get_json_metadata_inherited,
         set_get_xattr_inherited,
-        set_get_json_metadata_using_filter
+        set_get_json_metadata_using_filter,
+        primitive_json_metadata_test,
+        empty_metadata_invalid_json_test
     ]).
 
 %%%===================================================================
@@ -758,7 +762,7 @@ set_get_json_metadata_using_filter(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
-            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"key1\": \"value1\", \"key2\": \"value2\"}">>)),
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": [\"v1\", \"v2\"]}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
@@ -766,6 +770,11 @@ set_get_json_metadata_using_filter(Config) ->
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode_map(Body),
     ?assertMatch(<<"value1">>, DecodedBody),
+    {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key3.[1]">>, get,
+            [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
+    DecodedBody2 = json_utils:decode_map(Body2),
+    ?assertMatch(<<"v2">>, DecodedBody2),
 
     %when
     ?assertMatch({ok, 204, _, _},
@@ -774,6 +783,9 @@ set_get_json_metadata_using_filter(Config) ->
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key2">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"key22\": \"value22\"}">>)),
+    ?assertMatch({ok, 204, _, _},
+        do_request(WorkerP1, <<"metadata/space3?metadata_type=json&filter_type=keypath&filter=key3.[0]">>, put,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"\"v11\"">>)),
 
     %then
     {_, _, _, ReponseBody} = ?assertMatch({ok, 200, _, _},
@@ -782,10 +794,37 @@ set_get_json_metadata_using_filter(Config) ->
     ?assertMatch(
         #{
             <<"key1">> := <<"value11">>,
-            <<"key2">> := #{<<"key22">> := <<"value22">>}
+            <<"key2">> := #{<<"key22">> := <<"value22">>},
+            <<"key3">> := [<<"v11">>, <<"v2">>]
         },
         json_utils:decode_map(ReponseBody)).
 
+
+primitive_json_metadata_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    Primitives = [<<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
+        <<"null">>, <<"\"string\"">>],
+
+    lists:foreach(fun(Primitive) ->
+        ?assertMatch({ok, 204, _, _},
+            do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+                [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], Primitive)),
+        ?assertMatch({ok, 200, _, Primitive},
+            do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, get,
+                [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], []))
+    end, Primitives).
+
+empty_metadata_invalid_json_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+
+    InvalidJsons = [<<"">>, <<"aaa">>, <<"{">>, <<"{\"aaa\": aaa}">>],
+
+    lists:foreach(fun(InvalidJson) ->
+        ?assertMatch({ok, 400, _, _},
+            do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
+                [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], InvalidJson))
+    end, InvalidJsons).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

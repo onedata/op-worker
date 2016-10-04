@@ -38,6 +38,8 @@ models() -> [
     provider_info,
     space_info,
     share_info,
+    handle_info,
+    handle_service_info,
     space_storage,
     ceph_user,
     s3_user,

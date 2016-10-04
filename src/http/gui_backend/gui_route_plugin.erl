@@ -94,6 +94,8 @@ data_backend(true, <<"space-group-permission">>) -> space_data_backend;
 data_backend(true, <<"share">>) -> share_data_backend;
 data_backend(true, <<"file-shared">>) -> share_data_backend;
 data_backend(true, <<"file-property-shared">>) -> share_data_backend;
+data_backend(true, <<"handle">>) -> handle_data_backend;
+data_backend(true, <<"handle-service">>) -> handle_service_data_backend;
 data_backend(true, <<"group">>) -> group_data_backend;
 data_backend(true, <<"group-user-permission">>) -> group_data_backend;
 data_backend(true, <<"group-group-permission">>) -> group_data_backend;
@@ -104,7 +106,8 @@ data_backend(true, <<"system-group">>) -> system_data_backend;
 % read-only access to shares and files.
 data_backend(_, <<"share-public">>) -> public_share_data_backend;
 data_backend(_, <<"file-public">>) -> public_share_data_backend;
-data_backend(_, <<"file-property-public">>) -> public_share_data_backend.
+data_backend(_, <<"file-property-public">>) -> public_share_data_backend;
+data_backend(_, <<"handle-public">>) -> public_share_data_backend.
 
 
 %%--------------------------------------------------------------------

@@ -14,10 +14,11 @@
 
 -include("global_definitions.hrl").
 -include("http/http_common.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("http/rest/http_status.hrl").
+-include("http/rest/rest_api/rest_errors.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
@@ -139,8 +140,10 @@ set_file_attribute(Req, State) ->
     case {Attribute, Extended} of
         {<<"mode">>, false} ->
             ok = onedata_file_api:set_perms(Auth, {path, Path}, Value);
-        {_, true} ->
-            ok = onedata_file_api:set_xattr(Auth, {path, Path}, #xattr{name = Attribute, value = Value})
+        {_, true} when is_binary(Attribute) ->
+            ok = onedata_file_api:set_xattr(Auth, {path, Path}, #xattr{name = Attribute, value = Value});
+        {_, _} ->
+            throw(?ERROR_INVALID_ATTRIBUTE_NAME)
     end,
     {true, Req4, State4}.
 

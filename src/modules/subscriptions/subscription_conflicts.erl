@@ -31,23 +31,28 @@
     Update :: datastore:document(),
     UpdateRevs :: [subscriptions:rev()]) -> ok.
 update_model(Model, UpdateDoc, UpdateRevs) ->
-    Key = UpdateDoc#document.key,
-    Update = UpdateDoc#document{
-        rev = hd(UpdateRevs),
-        value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs)
-    },
+    try
+        Key = UpdateDoc#document.key,
+        Update = UpdateDoc#document{
+            rev = hd(UpdateRevs),
+            value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs)
+        },
 
-    {ok, Key} = Model:create_or_update(Update, fun(Record) ->
-        RevisionHistory = get_revisions(Model, Record),
-        UpdatedRecord = case should_update(RevisionHistory, UpdateRevs) of
-            {false, UpdatedHistory} ->
-                set_revisions(Model, Record, UpdatedHistory);
-            {true, UpdatedHistory} ->
-                NewRecord = Update#document.value,
-                set_revisions(Model, NewRecord, UpdatedHistory)
-        end,
-        {ok, UpdatedRecord}
-    end),
+        {ok, Key} = Model:create_or_update(Update, fun(Record) ->
+            RevisionHistory = get_revisions(Model, Record),
+            UpdatedRecord = case should_update(RevisionHistory, UpdateRevs) of
+                {false, UpdatedHistory} ->
+                    set_revisions(Model, Record, UpdatedHistory);
+                {true, UpdatedHistory} ->
+                    NewRecord = Update#document.value,
+                    set_revisions(Model, NewRecord, UpdatedHistory)
+            end,
+            {ok, UpdatedRecord}
+        end)
+    catch Error:Reason ->
+        ?warning_stacktrace("Cannot apply changes from subscriptions - ~p:~p~",
+            [Error, Reason])
+    end,
     ok.
 
 %%--------------------------------------------------------------------
@@ -112,6 +117,10 @@ get_revisions(onedata_group, Record) ->
     Record#onedata_group.revision_history;
 get_revisions(provider_info, Record) ->
     Record#provider_info.revision_history;
+get_revisions(handle_info, Record) ->
+    Record#handle_info.revision_history;
+get_revisions(handle_service_info, Record) ->
+    Record#handle_service_info.revision_history;
 get_revisions(_Model, _Record) ->
     {error, get_revisions_not_implemented}.
 
@@ -137,5 +146,9 @@ set_revisions(onedata_group, Record, Revisions) ->
     Record#onedata_group{revision_history = Revisions};
 set_revisions(provider_info, Record, Revisions) ->
     Record#provider_info{revision_history = Revisions};
+set_revisions(handle_info, Record, Revisions) ->
+    Record#handle_info{revision_history = Revisions};
+set_revisions(handle_service_info, Record, Revisions) ->
+    Record#handle_service_info{revision_history = Revisions};
 set_revisions(_Model, _Record, _Revisions) ->
     {error, get_revisions_not_implemented}.
