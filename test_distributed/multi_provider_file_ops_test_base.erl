@@ -19,7 +19,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
-
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 %% export for tests
@@ -43,12 +43,31 @@
 -define(rpc(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
+-define(deny_user(UserId),
+    #accesscontrolentity{
+        acetype = ?deny_mask,
+        aceflags = ?no_flags_mask,
+        identifier = UserId,
+        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
+    }).
 
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
 
 permission_cache_invalidate_test_base(Config, Attempts) ->
+    InvalidateFun = fun(Worker, SessId, TestDir) ->
+        ?assertMatch(ok, lfm_proxy:set_perms(Worker, SessId, {path, TestDir}, 0))
+    end,
+
+    InvalidateFun2 = fun(Worker, SessId, TestDir) ->
+        ?assertEqual(ok, lfm_proxy:set_acl(Worker, SessId, {path, TestDir}, [?deny_user(<<"user1">>)]))
+    end,
+
+    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun),
+    permission_cache_invalidate_test_skeleton(Config, Attempts, xattr, InvalidateFun2).
+
+permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, InvalidateFun) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     [SessId1 | _] = SessIds = lists:map(fun(Worker) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
@@ -71,15 +90,29 @@ permission_cache_invalidate_test_base(Config, Attempts) ->
         ?assertEqual({ok, []}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
     end, WS),
 
-    ?assertMatch(ok, lfm_proxy:set_perms(Worker1, SessId1, {path, TestDir}, 0)),
+    StatAns = lfm_proxy:stat(Worker1, SessId1, {path, TestDir}),
+    ?assertMatch({ok, #file_attr{}}, StatAns),
+    {ok, #file_attr{uuid = FileGUID}} = StatAns,
+    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUUID})),
+
+    InvalidateFun(Worker1, SessId1, TestDir),
     lists:foreach(fun({Worker, SessId}) ->
 %%        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
         % TODO - repair
         ?assertEqual({error,{badmatch,{error,eacces}}}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
     end, WS),
 
-    %TODO - sprawdzic czy wszedzie skasowano dokument opisujacy uniewaznienie cache
-    %TODO - sprawdzic dla ACL
+    ListFun = fun(LinkName, _LinkTarget, Acc) ->
+        [LinkName | Acc]
+    end,
+    MC = change_propagation_controller:model_init(),
+    LSL = MC#model_config.link_store_level,
+    lists:foreach(fun({Worker, _SessId}) ->
+        ?assertEqual({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get, [ControllerUUID]), Attempts),
+        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
+            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
+    end, WS),
 
     ok.
 
