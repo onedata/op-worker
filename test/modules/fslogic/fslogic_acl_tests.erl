@@ -101,7 +101,7 @@ check_group_permission_test() ->
     GId2 = <<"gid2">>,
     GId3 = <<"gid3">>,
     Groups1 = [GId1, GId2],
-    User1 = #document{key = Id1, value = #od_user{effective_group_ids = Groups1}},
+    User1 = #document{key = Id1, value = #od_user{groups = Groups1}},
 
     Ace1 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId1, acemask = ?read_mask},
     Ace2 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId2, acemask = ?write_mask},

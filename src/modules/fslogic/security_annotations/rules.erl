@@ -264,7 +264,7 @@ validate_scope_access(_FileDoc, _UserId, _ShareId) ->
 %%--------------------------------------------------------------------
 -spec validate_scope_privs(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(),
     UserDoc :: datastore:document(), ShareId :: od_share:id()) -> ok | no_return().
-validate_scope_privs(write, FileDoc, #document{key = UserId, value = #od_user{effective_group_ids = UserGroups}}, _ShareId) ->
+validate_scope_privs(write, FileDoc, #document{key = UserId, value = #od_user{groups = UserGroups}}, _ShareId) ->
     {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
     {ok, #document{value = #od_space{users = Users, groups = Groups}}} =
         od_space:get(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), UserId),

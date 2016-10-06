@@ -120,22 +120,21 @@ find_all_groups(UserAuth, UserId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary()].
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(),
+    MaxRetries :: integer()) -> [SpaceId :: binary()].
 find_all_groups(_, _, 0) ->
     [];
 
 find_all_groups(UserAuth, UserId, MaxRetries) ->
     {ok, GroupIds} = user_logic:get_groups(UserAuth, UserId),
-    {ok, EffGroupIds} = user_logic:get_effective_groups(UserAuth, UserId),
     % Make sure that effective groups are synchronized - there should be at
     % least as many as direct groups.
-    case length(EffGroupIds) < length(GroupIds) of
-        true ->
+    case GroupIds of
+        [] ->
             timer:sleep(500),
             find_all_groups(UserAuth, UserId, MaxRetries - 1);
-        false ->
-            EffGroupIds
+        _ ->
+            GroupIds
     end.
 
 

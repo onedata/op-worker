@@ -79,8 +79,7 @@ props_to_value(od_user, Props) ->
         end,
         public_only = proplists:get_value(<<"public_only">>, Props),
         name = proplists:get_value(<<"name">>, Props),
-        group_ids = proplists:get_value(<<"group_ids">>, Props, []),
-        effective_group_ids = proplists:get_value(<<"effective_group_ids">>, Props, []),
+        groups = proplists:get_value(<<"effective_group_ids">>, Props, []),
         space_aliases = proplists:get_value(<<"space_aliases">>, Props, []),
         handle_services = proplists:get_value(<<"handle_services">>, Props, []),
         handles = proplists:get_value(<<"handles">>, Props, [])

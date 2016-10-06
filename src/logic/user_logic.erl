@@ -21,7 +21,7 @@
 
 -export([get/2]).
 -export([get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
--export([join_group/2, leave_group/2, get_groups/2, get_effective_groups/2]).
+-export([join_group/2, leave_group/2, get_groups/2]).
 -export([get_effective_handle_services/2]).
 
 %%%===================================================================
@@ -138,24 +138,7 @@ leave_group(Auth, GroupId) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
 get_groups(Auth, UserId) ->
     case get(Auth, UserId) of
-        {ok, #document{value = #od_user{group_ids = GroupsIds}}} ->
-            {ok, GroupsIds};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of user effective group IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_effective_groups(oz_endpoint:auth(), UserId :: od_user:id()) ->
-    {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
-get_effective_groups(Auth, UserId) ->
-    case get(Auth, UserId) of
-        {ok, #document{value = #od_user{
-            effective_group_ids = GroupsIds}}} ->
+        {ok, #document{value = #od_user{groups = GroupsIds}}} ->
             {ok, GroupsIds};
         {error, Reason} ->
             {error, Reason}
@@ -177,7 +160,7 @@ get_effective_handle_services(Auth, UserId) ->
             #document{
                 value = #od_user{
                     handle_services = UserHandleServices,
-                    effective_group_ids = EffectiveGroupIds
+                    groups = EffectiveGroupIds
                 }} = Doc,
             GroupHandleServices = lists:flatmap(
                 fun(GroupId) ->

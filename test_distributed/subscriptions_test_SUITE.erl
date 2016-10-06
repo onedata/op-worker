@@ -216,9 +216,8 @@ saves_the_actual_data(Config) ->
 
     push_update(Node, [
         update(7, [<<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
-                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>,
-                [<<"A">>, <<"B">>, <<"Z">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>, <<"Z">>],
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
         ),
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
@@ -254,10 +253,9 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
-        group_ids = [<<"A">>, <<"B">>],
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         default_space = <<"C">>,
-        effective_group_ids = [<<"A">>, <<"B">>, <<"Z">>],
+        groups = [<<"A">>, <<"B">>, <<"Z">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = U2, value = #od_user{
@@ -563,7 +561,7 @@ updates_with_the_actual_data(Config) ->
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], S1, [<<"Z">>])),
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [<<"Z">>], [], S1)),
         update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
     ]),
     expect_message([], 4, []),
@@ -586,9 +584,8 @@ updates_with_the_actual_data(Config) ->
             <<"team">>
         )),
         update(7, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
-                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>,
-                [<<"A">>, <<"B">>, <<"Y">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>, <<"Y">>],
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>  )
         ),
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
@@ -622,8 +619,7 @@ updates_with_the_actual_data(Config) ->
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
-        group_ids = [<<"A">>, <<"B">>],
-        effective_group_ids = [<<"A">>, <<"B">>, <<"Y">>],
+        groups = [<<"A">>, <<"B">>, <<"Y">>],
         default_space = <<"C">>,
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
@@ -739,7 +735,8 @@ resolves_conflicts(Config) ->
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>, default_space = <<"C">>,
-        group_ids = [<<"A">>, <<"B">>], space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
+        groups = [<<"A">>, <<"B">>],
+        space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = HS1, value = #od_handle_service{
@@ -768,8 +765,8 @@ pushing_space_user_write_priv_unlocks_space_for_user(Config) ->
             update(1, [<<"r1">>], S1, space(
                 <<"space_name">>, [{U1, ordsets:from_list([space_write_files])}], [], [{P1, 1000}]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
-                [{S1, <<"space_name">>}], S1, [G1, G2]))
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+                [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
     end,
@@ -786,8 +783,8 @@ pushing_space_group_write_priv_unlocks_space_for_user(Config) ->
             update(1, [<<"r1">>], S1, space(
                 <<"space_name">>, [], [{G2, ordsets:from_list([space_write_files])}], [{P1, 1000}]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
-                [{S1, <<"space_name">>}], S1, [G1, G2]))
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+                [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
     end,
@@ -805,8 +802,8 @@ pushing_space_group_write_priv_locks_space_for_user(Config) ->
             update(1, [<<"r1">>], S1, space(
                 <<"space_name">>, [], [{G3, ordsets:from_list([space_write_files])}], [{P1, 1000}]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
-                [{S1, <<"space_name">>}], S1, [G1, G2]))
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+                [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
     end,
@@ -826,8 +823,8 @@ pushing_space_user_write_priv_locks_space_for_user(Config) ->
             update(1, [<<"r1">>], S1, space(
                 <<"space_name">>, [{<<"other_user">>, ordsets:from_list([space_write_files])}], [], [{P1, 1000}]
             )),
-            update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
-                [{S1, <<"space_name">>}], S1, [G1, G2]))
+            update(2, [<<"r1">>], U1, user(<<"onedata">>, [G1, G2],
+                [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
     end,
@@ -1007,17 +1004,15 @@ group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, HandleServi
         {handles, Handles}]}.
 
 public_only_user(Name) ->
-    user(Name, [], [], undefined, [], true).
-user(Name, GIDs, Spaces, DefaultSpace) ->
-    user(Name, GIDs, Spaces, DefaultSpace, GIDs).
-user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups) ->
-    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, [], [], false).
-user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, PublicOnly) ->
-    user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, [], [], PublicOnly).
-user(Name, GIDs, Spaces, DefaultSpace, EffectiveGroups, HandleServices, Handles, PublicOnly) ->
-    {od_user, [{name, Name}, {group_ids, GIDs}, {space_aliases, Spaces},
+    user(Name, [], [], undefined, true).
+user(Name, Groups, Spaces, DefaultSpace) ->
+    user(Name, Groups, Spaces, DefaultSpace, [], [], false).
+user(Name, Groups, Spaces, DefaultSpace, PublicOnly) ->
+    user(Name, Groups, Spaces, DefaultSpace, [], [], PublicOnly).
+user(Name, Groups, Spaces, DefaultSpace, HandleServices, Handles, PublicOnly) ->
+    {od_user, [{name, Name}, {space_aliases, Spaces},
         {public_only, PublicOnly}, {default_space, DefaultSpace},
-        {effective_group_ids, EffectiveGroups}, {handle_services, HandleServices},
+        {groups, Groups}, {handle_services, HandleServices},
         {handles, Handles}]}.
 
 update(Seq, Revs, ID, Core) ->

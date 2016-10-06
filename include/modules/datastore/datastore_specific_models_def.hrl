@@ -32,8 +32,7 @@
     connected_accounts = [] :: [od_user:connected_account()],
     default_space :: binary() | undefined,
 
-    group_ids :: undefined | [binary()],
-    effective_group_ids = [] :: [binary()],
+    groups = [] :: [od_group:id()],
     space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
     handle_services = [] :: [od_handle_service:id()],
     handles = [] :: [od_handle:id()],
