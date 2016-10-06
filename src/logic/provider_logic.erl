@@ -76,7 +76,7 @@ get_ids_of_providers_with_common_support() ->
                 #od_provider{public_only = true} ->
                     ?error("Own provider info contains public only data"),
                     {error, no_private_info};
-                #od_provider{space_ids = SIDs} ->
+                #od_provider{spaces = SIDs} ->
                     ger_supporting_providers(SIDs)
             end;
         {error, Reason} ->

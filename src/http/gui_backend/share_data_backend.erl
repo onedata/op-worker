@@ -64,8 +64,8 @@ find(<<"share">>, ShareId) ->
     {ok, #document{
         value = #od_share{
             name = Name,
-            root_file_id = RootFileId,
-            parent_space = ParentSpaceId,
+            root_file = RootFileId,
+            space = ParentSpaceId,
             public_url = PublicURL,
             handle = Handle
         }}} = share_logic:get(UserAuth, ShareId),
@@ -100,7 +100,7 @@ find(<<"file-shared">>, <<"containerDir.", ShareId/binary>>) ->
     {ok, #document{
         value = #od_share{
             name = Name,
-            root_file_id = RootFileId
+            root_file = RootFileId
         }}} = share_logic:get(UserAuth, ShareId),
     FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
     Res = [

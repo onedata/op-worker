@@ -46,7 +46,7 @@ create_share(SessId, FileKey, Name) ->
     ok | logical_file_manager:error_reply().
 remove_share(SessId, ShareID) ->
     case share_logic:get(provider, ShareID) of
-        {ok, #document{value = #od_share{root_file_id = ShareGuid}}} ->
+        {ok, #document{value = #od_share{root_file = ShareGuid}}} ->
             remove_share_by_guid(SessId, ShareGuid);
         Error ->
             Error

@@ -17,17 +17,16 @@
 -include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type doc() :: datastore:document().
--type info() :: #od_provider{}.
--type id() :: binary().
--export_type([doc/0, info/0, id/0]).
-
 %% API
 -export([create_or_update/2, get_or_fetch/1, fetch/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
+
+-type id() :: binary().
+
+-export_type([id/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -180,7 +179,7 @@ fetch(ProviderId) ->
         Doc = #document{key = ProviderId, value = #od_provider{
             client_name = Name,
             urls = URLs,
-            space_ids = SpaceIDs,
+            spaces = SpaceIDs,
             public_only = PublicOnly
         }},
 

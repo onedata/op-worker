@@ -208,7 +208,7 @@ fetch(?GUEST_SESS_ID = Auth, HandleId) ->
 
 fetch(Auth, HandleId) ->
     {ok, #handle_details{
-        handle_service_id = HandleServiceId,
+        handle_service = HandleService,
         public_handle = PublicHandle,
         resource_type = ResourceType,
         resource_id = ResourceId,
@@ -217,7 +217,7 @@ fetch(Auth, HandleId) ->
     }} = oz_handles:get_details(Auth, HandleId),
 
     Doc = #document{key = HandleId, value = #od_handle{
-        handle_service_id = HandleServiceId,
+        handle_service = HandleService,
         public_handle = PublicHandle,
         resource_type = ResourceType,
         resource_id = ResourceId,

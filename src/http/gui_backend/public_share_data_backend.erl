@@ -65,7 +65,7 @@ find(<<"share-public">>, ShareId) ->
     {ok, #document{
         value = #od_share{
             name = Name,
-            root_file_id = RootFileId,
+            root_file = RootFileId,
             public_url = PublicURL,
             handle = Handle
         }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
@@ -86,7 +86,7 @@ find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
     {ok, #document{
         value = #od_share{
             name = Name,
-            root_file_id = RootFileId
+            root_file = RootFileId
         }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},

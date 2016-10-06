@@ -174,15 +174,15 @@ fetch(Auth, ShareId) ->
     {ok, #share_details{
         name = Name,
         public_url = PublicURL,
-        root_file_id = RootFileId,
-        parent_space = ParentSpace
+        root_file = RootFileId,
+        space = Space
     }} = oz_shares:get_details(Auth, ShareId),
 
     Doc = #document{key = ShareId, value = #od_share{
         name = Name,
         public_url = PublicURL,
-        root_file_id = RootFileId,
-        parent_space = ParentSpace
+        root_file = RootFileId,
+        space = Space
     }},
 
     case create(Doc) of

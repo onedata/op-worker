@@ -47,12 +47,12 @@ get(Auth, ShareId) ->
     Name :: od_share:name(), ParentSpaceId :: od_space:id(),
     RootFileId :: od_share:share_guid()) ->
     {ok, od_share:id()} | {error, Reason :: term()}.
-create(Auth, ShareId, Name, ParentSpaceId, ShareFileGuid) ->
+create(Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
     Parameters = [
         {<<"name">>, Name},
-        {<<"rootFileId">>, ShareFileGuid}
+        {<<"rootFile">>, ShareFileGuid}
     ],
-    oz_shares:create(Auth, ShareId, ParentSpaceId, Parameters).
+    oz_shares:create(Auth, ShareId, SpaceId, Parameters).
 
 
 %%--------------------------------------------------------------------

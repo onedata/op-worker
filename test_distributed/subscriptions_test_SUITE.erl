@@ -235,8 +235,8 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, od_space, Sp1)),
     ?assertMatch({ok, (#document{key = Sh1, value = #od_share{
         name = <<"Share 1">>,
-        parent_space = Sp1,
-        root_file_id = <<"root_file_id">>,
+        space = Sp1,
+        root_file = <<"root_file_id">>,
         public_url = <<"public_url">>,
         handle = <<"handle">>,
         revision_history = [<<"r2">>, <<"r1">>]}})
@@ -266,7 +266,7 @@ saves_the_actual_data(Config) ->
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r2">>, <<"r1">>],
         urls = [<<"url1">>, <<"url2">>],
-        space_ids = [Sp1],
+        spaces = [Sp1],
         public_only = false}}
     }, fetch(Node, od_provider, P1)),
     ?assertMatch({ok, #document{key = HS1, value = #od_handle_service{
@@ -278,7 +278,7 @@ saves_the_actual_data(Config) ->
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_handle_service, HS1)),
     ?assertMatch({ok, #document{key = H1, value = #od_handle{
-        handle_service_id = HS1,
+        handle_service = HS1,
         public_handle = <<"">>,
         resource_type = <<"">>,
         resource_id = <<"share">>,
@@ -632,7 +632,7 @@ updates_with_the_actual_data(Config) ->
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>],
         urls = [<<"url1">>, <<"url2">>],
-        space_ids = [S1],
+        spaces = [S1],
         public_only = true}}
     }, fetch(Node, od_provider, P1)),
     ok.
@@ -746,7 +746,7 @@ resolves_conflicts(Config) ->
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_handle_service, HS1)),
     ?assertMatch({ok, #document{key = H1, value = #od_handle{
-        handle_service_id = HS1,
+        handle_service = HS1,
         resource_id = <<"someId">>,
         users = [],
         groups = [],
@@ -955,41 +955,22 @@ push_update(Node, Updates) ->
     Result = rpc:call(Node, subscription_wss, websocket_handle, Request),
     ?assertMatch({ok, _}, Result).
 
-provider(Name) ->
-    provider(Name, [], [], false).
-provider(Name, URLs, Spaces, PublicOnly) ->
-    {od_provider, [{client_name, Name}, {urls, URLs}, {space_ids, Spaces},
-        {public_only, PublicOnly}]}.
-
-space(Name) ->
-    space(Name, [], [], []).
-space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
-    {od_space, [{name, Name}, {users, UsersWithPrivileges},
-        {groups, GroupsWithPrivileges}, {providers_supports, Supports}]}.
-
-share(Name, ParentSpaceId) ->
-    share(Name, ParentSpaceId, <<"">>, <<"">>, <<"">>).
-share(Name, ParentSpaceId, RootFileId, PublicUrl, Handle) ->
-    {od_share, [{name, Name}, {root_file_id, RootFileId},
-        {parent_space, ParentSpaceId}, {public_url, PublicUrl},
-        {handle, Handle}]}.
-
-handle_service(Name, UsersWithPrivs, GroupsWithPrivs) ->
-    handle_service(Name, <<"">>, [], UsersWithPrivs, GroupsWithPrivs).
-handle_service(Name, ProxyEndpoint, ServiceProperties, UsersWithPrivs, GroupsWithPrivs) ->
-    {od_handle_service, [{name, Name}, {proxy_endpoint, ProxyEndpoint},
-        {service_properties, ServiceProperties}, {users, UsersWithPrivs},
-        {groups, GroupsWithPrivs}]}.
-
-handle(HandleServiceId, ResourceId, UsersWithPrivs, GroupsWithPrivs) ->
-    handle(HandleServiceId, <<"">>, <<"">>, ResourceId, <<"">>, UsersWithPrivs,
-        GroupsWithPrivs, [0, 0, 0, 0, 0, 0]).
-handle(HandleServiceId, PublicHandle, ResourceType, ResourceId, Metadata, UsersWithPrivs,
-    GroupsWithPrivs, Timestamp) ->
-    {od_handle, [{handle_service_id, HandleServiceId}, {public_handle, PublicHandle},
-        {resource_type, ResourceType}, {resource_id, ResourceId},
-        {metadata, Metadata}, {users, UsersWithPrivs},
-        {groups, GroupsWithPrivs}, {timestamp, Timestamp}]}.
+public_only_user(Name) ->
+    user(Name, [], [], undefined, true).
+user(Name, Groups, Spaces, DefaultSpace) ->
+    user(Name, Groups, Spaces, DefaultSpace, [], [], false).
+user(Name, Groups, Spaces, DefaultSpace, PublicOnly) ->
+    user(Name, Groups, Spaces, DefaultSpace, [], [], PublicOnly).
+user(Name, Groups, Spaces, DefaultSpace, HandleServices, Handles, PublicOnly) ->
+    {od_user, [
+        {name, Name},
+        {default_space, DefaultSpace},
+        {space_aliases, Spaces},
+        {groups, Groups},
+        {handle_services, HandleServices},
+        {handles, Handles},
+        {public_only, PublicOnly}
+    ]}.
 
 group(Name) ->
     group(Name, [], []).
@@ -1010,22 +991,41 @@ group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, HandleServi
         {handles, Handles}
     ]}.
 
-public_only_user(Name) ->
-    user(Name, [], [], undefined, true).
-user(Name, Groups, Spaces, DefaultSpace) ->
-    user(Name, Groups, Spaces, DefaultSpace, [], [], false).
-user(Name, Groups, Spaces, DefaultSpace, PublicOnly) ->
-    user(Name, Groups, Spaces, DefaultSpace, [], [], PublicOnly).
-user(Name, Groups, Spaces, DefaultSpace, HandleServices, Handles, PublicOnly) ->
-    {od_user, [
-        {name, Name},
-        {default_space, DefaultSpace},
-        {space_aliases, Spaces},
-        {groups, Groups},
-        {handle_services, HandleServices},
-        {handles, Handles},
-        {public_only, PublicOnly}
-    ]}.
+space(Name) ->
+    space(Name, [], [], []).
+space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
+    {od_space, [{name, Name}, {users, UsersWithPrivileges},
+        {groups, GroupsWithPrivileges}, {providers_supports, Supports}]}.
+
+share(Name, ParentSpaceId) ->
+    share(Name, ParentSpaceId, <<"">>, <<"">>, <<"">>).
+share(Name, ParentSpaceId, RootFileId, PublicUrl, Handle) ->
+    {od_share, [{name, Name}, {root_file, RootFileId},
+        {space, ParentSpaceId}, {public_url, PublicUrl},
+        {handle, Handle}]}.
+
+provider(Name) ->
+    provider(Name, [], [], false).
+provider(Name, URLs, Spaces, PublicOnly) ->
+    {od_provider, [{client_name, Name}, {urls, URLs}, {spaces, Spaces},
+        {public_only, PublicOnly}]}.
+
+handle_service(Name, UsersWithPrivs, GroupsWithPrivs) ->
+    handle_service(Name, <<"">>, [], UsersWithPrivs, GroupsWithPrivs).
+handle_service(Name, ProxyEndpoint, ServiceProperties, UsersWithPrivs, GroupsWithPrivs) ->
+    {od_handle_service, [{name, Name}, {proxy_endpoint, ProxyEndpoint},
+        {service_properties, ServiceProperties}, {users, UsersWithPrivs},
+        {groups, GroupsWithPrivs}]}.
+
+handle(HandleServiceId, ResourceId, UsersWithPrivs, GroupsWithPrivs) ->
+    handle(HandleServiceId, <<"">>, <<"">>, ResourceId, <<"">>, UsersWithPrivs,
+        GroupsWithPrivs, [0, 0, 0, 0, 0, 0]).
+handle(HandleServiceId, PublicHandle, ResourceType, ResourceId, Metadata, UsersWithPrivs,
+    GroupsWithPrivs, Timestamp) ->
+    {od_handle, [{handle_service, HandleServiceId}, {public_handle, PublicHandle},
+        {resource_type, ResourceType}, {resource_id, ResourceId},
+        {metadata, Metadata}, {users, UsersWithPrivs},
+        {groups, GroupsWithPrivs}, {timestamp, Timestamp}]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].

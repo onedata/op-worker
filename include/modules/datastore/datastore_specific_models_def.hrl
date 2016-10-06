@@ -48,7 +48,6 @@
     % member of space or group together with user that is currently logged in).
     % Public information contains id and name.
     public_only = false :: boolean(),
-
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -66,7 +65,7 @@
 
     % Effective relations to other entities
     % Users list is a exception where we need both direct and effective
-    % memberships
+    % memberships to check user permissions of different operations.
     users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
     eff_users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
     spaces = [] :: [od_space:id()],
@@ -81,12 +80,15 @@
 -record(od_space, {
     name :: undefined | binary(),
 
-    providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
-    providers_supports = [] :: [{od_provider:id(), Size :: pos_integer()}],
+    % Effective relations to other entities
     users = [] :: [{od_user:id(), [privileges:space_privilege()]}],
     groups = [] :: [{od_group:id(), [privileges:space_privilege()]}],
     % All shares that belong to this space.
     shares = [] :: [od_share:id()],
+    %% Same as providers_supports but simplified for convenience
+    providers = [] :: [oneprovider:id()],
+    providers_supports = [] :: [{od_provider:id(), Size :: pos_integer()}],
+
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -95,9 +97,12 @@
 -record(od_share, {
     name = undefined :: undefined | binary(),
     public_url = undefined :: undefined | binary(),
-    root_file_id = undefined :: undefined | binary(),
-    parent_space = undefined :: undefined | binary(),
-    handle = undefined :: undefined | binary(),
+
+    % Direct relations to other entities
+    space = undefined :: undefined | od_space:id(),
+    handle = undefined :: undefined | od_handle:id(),
+    root_file = undefined :: undefined | binary(),
+
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -106,7 +111,10 @@
 -record(od_provider, {
     client_name :: undefined | binary(),
     urls = [] :: [binary()],
-    space_ids = [] :: [od_space:id()],
+
+    % Direct relations to other entities
+    spaces = [] :: [od_space:id()],
+
     public_only = false :: boolean(), %% see comment in onedata_users
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -117,22 +125,30 @@
     name :: od_handle_service:name() | undefined,
     proxy_endpoint :: od_handle_service:proxy_endpoint() | undefined,
     service_properties = [] :: od_handle_service:service_properties(),
+
+    % Effective relations to other entities
     users = [] :: [{od_user:id(), [privileges:handle_service_privilege()]}],
     groups = [] :: [{od_group:id(), [privileges:handle_service_privilege()]}],
+
     revision_history = [] :: [subscriptions:rev()]
 }).
 
 
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
-    handle_service_id :: od_handle_service:id() | undefined,
     public_handle :: od_handle:public_handle() | undefined,
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
     metadata :: od_handle:metadata() | undefined,
+    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
+
+    % Direct relations to other entities
+    handle_service :: od_handle_service:id() | undefined,
+
+    % Effective relations to other entities
     users = [] :: [{od_user:id(), [privileges:handle_privilege()]}],
     groups = [] :: [{od_group:id(), [privileges:handle_privilege()]}],
-    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
+
     revision_history = [] :: [subscriptions:rev()]
 }).
 

@@ -99,26 +99,31 @@ props_to_value(od_group, Props) ->
         handles = proplists:get_value(<<"handles">>, Props, [])
     };
 props_to_value(od_space, Props) ->
+    ProviderSupports = proplists:get_value(<<"providers_supports">>, Props),
+    {Providers, _} = lists:unzip(ProviderSupports),
     #od_space{
         name = proplists:get_value(<<"name">>, Props),
-        providers_supports = proplists:get_value(<<"providers_supports">>, Props),
-        groups = process_ids_with_privileges(proplists:get_value(<<"groups">>, Props, [])),
-        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
-        shares = proplists:get_value(<<"shares">>, Props)
+        groups = process_ids_with_privileges(
+            proplists:get_value(<<"groups">>, Props, [])),
+        users = process_ids_with_privileges(
+            proplists:get_value(<<"users">>, Props, [])),
+        shares = proplists:get_value(<<"shares">>, Props),
+        providers = Providers,
+        providers_supports = ProviderSupports
     };
 props_to_value(od_share, Props) ->
     #od_share{
         name = proplists:get_value(<<"name">>, Props),
         public_url = proplists:get_value(<<"public_url">>, Props),
-        root_file_id = proplists:get_value(<<"root_file_id">>, Props),
-        parent_space = proplists:get_value(<<"parent_space">>, Props),
+        root_file = proplists:get_value(<<"root_file">>, Props),
+        space = proplists:get_value(<<"space">>, Props),
         handle = proplists:get_value(<<"handle">>, Props)
     };
 props_to_value(od_provider, Props) ->
     #od_provider{
         client_name = proplists:get_value(<<"client_name">>, Props),
         urls = proplists:get_value(<<"urls">>, Props),
-        space_ids = proplists:get_value(<<"space_ids">>, Props),
+        spaces = proplists:get_value(<<"spaces">>, Props),
         public_only = proplists:get_value(<<"public_only">>, Props)
     };
 props_to_value(od_handle_service, Props) ->
@@ -133,7 +138,7 @@ props_to_value(od_handle_service, Props) ->
     };
 props_to_value(od_handle, Props) ->
     #od_handle{
-        handle_service_id = proplists:get_value(<<"handle_service_id">>, Props),
+        handle_service = proplists:get_value(<<"handle_service">>, Props),
         public_handle = proplists:get_value(<<"public_handle">>, Props),
         resource_type = proplists:get_value(<<"resource_type">>, Props),
         resource_id = proplists:get_value(<<"resource_id">>, Props),
