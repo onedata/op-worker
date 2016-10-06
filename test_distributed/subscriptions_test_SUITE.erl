@@ -661,13 +661,13 @@ applies_deletion(Config) ->
 
     %% when
     push_update(Node, [
-        update(8, undefined, P1, {<<"provider">>, <<"delete">>}),
-        update(9, undefined, Sp1, {<<"space">>, <<"delete">>}),
-        update(10, undefined, G1, {<<"group">>, <<"delete">>}),
-        update(11, undefined, Sh1, {<<"share">>, <<"delete">>}),
-        update(12, undefined, U1, {<<"user">>, <<"delete">>}),
-        update(13, undefined, HS1, {<<"handle_service">>, <<"delete">>}),
-        update(14, undefined, H1, {<<"handle">>, <<"delete">>})
+        update(8, undefined, P1, {<<"od_provider">>, <<"delete">>}),
+        update(9, undefined, Sp1, {<<"od_space">>, <<"delete">>}),
+        update(10, undefined, G1, {<<"od_group">>, <<"delete">>}),
+        update(11, undefined, Sh1, {<<"od_share">>, <<"delete">>}),
+        update(12, undefined, U1, {<<"od_user">>, <<"delete">>}),
+        update(13, undefined, HS1, {<<"od_handle_service">>, <<"delete">>}),
+        update(14, undefined, H1, {<<"od_handle">>, <<"delete">>})
     ]),
     expect_message([], 14, []),
 
