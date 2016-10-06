@@ -69,7 +69,7 @@
     parents = [] :: [binary()],
     children = [] :: [{od_group:id(), [privileges:group_privilege()]}],
 %%    eff_parents = [] :: [od_group:id()],
-%%    eff_children = [] :: [od_group:id()],
+%%    eff_children = [] :: [{od_group:id(), [privileges:group_privilege()]}],
 
     % Direct relations to other entities
     users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
