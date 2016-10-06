@@ -204,7 +204,7 @@ fetch(Auth) ->
 
     utils:pforeach(fun(GroupId) ->
         od_group:get_or_fetch(Auth, GroupId)
-    end, GroupIds),
+    end, EffectiveGroupIds),
 
     {ok, OnedataUserDoc}.
 
