@@ -124,7 +124,8 @@ list() ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(change_propagation_controller_bucket, [], ?GLOBALLY_CACHED_LEVEL)#model_config{sync_enabled = true}.
+    ?MODEL_CONFIG(change_propagation_controller_bucket, [], ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL,
+        true, false, mother_scope, other_scopes)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -169,8 +170,9 @@ save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
                 value = #change_propagation_controller{change_revision = Rev, space_id = SpaceId,
                     verify_module = VefifyModule, verify_function = VerifyFun}},
             {ok, Uuid} = save(Doc),
-            SavedDoc = Doc#document{key = Uuid},
-            ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, {MyId, SavedDoc})
+            set_link_context(MyId),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, Doc, {MyId, Doc}),
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -186,6 +188,7 @@ mark_change_propagated(#document{key = ControllerKey, value = #change_propagatio
         {ok, true} ->
             ok;
         {ok, _} ->
+            set_link_context(MyId),
             ok = datastore:add_links(?LINK_STORE_LEVEL, Doc, {MyId, Doc})
     end,
 
@@ -204,6 +207,7 @@ verify_propagation(ControllerKey, SpaceId) ->
         [LinkName | Acc]
     end,
 
+    set_link_context(MyId),
     {ok, Links} = datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, []),
     LocalLister = lists:member(MyId, Links),
     Correction = case LocalLister of
@@ -247,3 +251,15 @@ get_key(Model, Uuid) ->
 -spec decode_key(Key :: binary()) -> {Model :: model_behaviour:model_type(), Uuid :: datastore:ext_key()}.
 decode_key(Key) ->
     binary_to_term(base64:decode(Key)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets link's scopes.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_link_context(ProvId :: binary()) -> ok.
+set_link_context(ProvId) ->
+    erlang:put(mother_scope, ProvId),
+    erlang:put(other_scopes, []),
+    ok.

@@ -64,8 +64,9 @@ permission_cache_invalidate_test_base(Config, Attempts) ->
         ?assertEqual(ok, lfm_proxy:set_acl(Worker, SessId, {path, TestDir}, [?deny_user(<<"user1">>)]))
     end,
 
-    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun),
-    permission_cache_invalidate_test_skeleton(Config, Attempts, xattr, InvalidateFun2).
+    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun).
+    % Uncomment after VFS-2681
+%%    permission_cache_invalidate_test_skeleton(Config, Attempts, custom_metadata, InvalidateFun2).
 
 permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, InvalidateFun) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -103,15 +104,17 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
         ?assertEqual({error,{badmatch,{error,eacces}}}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
     end, WS),
 
-    ListFun = fun(LinkName, _LinkTarget, Acc) ->
-        [LinkName | Acc]
-    end,
-    MC = change_propagation_controller:model_init(),
-    LSL = MC#model_config.link_store_level,
     lists:foreach(fun(Worker) ->
-        ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get, [ControllerUUID]), Attempts * length(Workers)),
-        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
-            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
+        ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
+            [ControllerUUID]), Attempts * length(Workers))
+        % TODO - uncomment after VFS-2678
+%%        ListFun = fun(LinkName, _LinkTarget, Acc) ->
+%%            [LinkName | Acc]
+%%                  end,
+%%        MC = change_propagation_controller:model_init(),
+%%        LSL = MC#model_config.link_store_level,
+%%        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
+%%            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
     end, Workers),
 
     ok.

@@ -766,6 +766,15 @@ get_space_id(#document{key = Key} = Doc) ->
 %%--------------------------------------------------------------------
 -spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
     {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
+get_space_id_not_cached(KeyToCache, #document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
+    #model_config{store_level = StoreLevel} = change_propagation_controller:model_init(),
+    case datastore:get(StoreLevel, change_propagation_controller, DocKey) of
+    {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
+        state_put({sid, KeyToCache}, SpaceId),
+        {ok, SpaceId};
+    {error, Reason} ->
+        {error, Reason}
+    end;
 get_space_id_not_cached(KeyToCache, #document{key = Key} = Doc) ->
     Context = get_sync_context(Doc),
     case file_meta:get_scope(Context) of

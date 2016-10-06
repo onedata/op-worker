@@ -274,7 +274,7 @@ get_acl(_CTX, {uuid, FileUuid}) ->
 set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
     case xattr:save(FileUuid, ?ACL_KEY, Val) of
         {ok, _} ->
-            ok = permissions_cache:invalidate_permissions_cache(xattr, FileUuid),
+            ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid),
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
                 {uuid, FileUuid}, 8#000
@@ -294,7 +294,7 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
 remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
     case xattr:delete_by_name(FileUuid, ?ACL_KEY) of
         ok ->
-            ok = permissions_cache:invalidate_permissions_cache(xattr, FileUuid),
+            ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid),
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
