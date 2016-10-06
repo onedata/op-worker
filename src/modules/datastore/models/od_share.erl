@@ -20,22 +20,24 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_shares.hrl").
 
-%% API
--export([create_or_update/2, get_or_fetch/2]).
-
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
-
--type id() :: binary() | undefined.
--type name() :: binary().
+-type doc() :: datastore:document().
+-type info() :: #od_share{}.
+-type id() :: binary().
+-export_type([doc/0, info/0, id/0]).
 
 % guid of special 'share' type, which when used as guest user, allows for read
 % only access to file (when used as normal user it behaves like normal guid).
 % Apart from FileUuid and SpaceId, it contains also ShareId.
 -type share_guid() :: fslogic_worker:file_guid().
 
--export_type([id/0, name/0, share_guid/0]).
+-export_type([share_guid/0]).
+
+%% API
+-export([create_or_update/2, get_or_fetch/2]).
+
+%% model_behaviour callbacks
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
+    'after'/5, before/4]).
 
 %%%===================================================================
 %%% API

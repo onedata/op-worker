@@ -194,7 +194,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid2, value = FileMeta2}}]),
-    ?rpc(od_user, create, [#document{key = ExternalUser, value = #od_user{name = <<"User">>, spaces = [{SpaceId, SpaceName}]}}]),
+    ?rpc(od_user, create, [#document{key = ExternalUser, value = #od_user{name = <<"User">>, space_aliases = [{SpaceId, SpaceName}]}}]),
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
 
 

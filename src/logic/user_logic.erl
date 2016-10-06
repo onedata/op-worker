@@ -50,7 +50,7 @@ get(Auth, UserId) ->
     {error, Reason :: term()}.
 get_spaces(Auth, UserId) ->
     case get(Auth, UserId) of
-        {ok, #document{value = #od_user{spaces = Spaces}}} ->
+        {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
             {ok, Spaces};
         {error, Reason} ->
             {error, Reason}
@@ -68,7 +68,7 @@ get_spaces(Auth, UserId) ->
     {error, Reason :: term()}.
 get_spaces(UserId) ->
     case od_user:get(UserId) of
-        {ok, #document{value = #od_user{spaces = Spaces}}} ->
+        {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
             {ok, Spaces};
         {error, Reason} ->
             {error, Reason}

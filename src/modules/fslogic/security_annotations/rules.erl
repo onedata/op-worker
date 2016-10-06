@@ -210,7 +210,7 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
             OwnerId ->
                 owner;
             _ ->
-                {ok, #document{value = #od_user{spaces = Spaces}}} = od_user:get(UserId),
+                {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
                 {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
                 case catch lists:keymember(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), 1, Spaces) of
                     true ->

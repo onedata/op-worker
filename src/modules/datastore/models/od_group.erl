@@ -26,10 +26,12 @@
 %% API
 -export([fetch/2, get_or_fetch/2, create_or_update/2]).
 
--export_type([id/0, type/0]).
-
--type type() :: 'organization' | 'unit' | 'team' | 'role'.
+-type doc() :: datastore:document().
+-type info() :: #od_group{}.
 -type id() :: binary().
+-type type() :: 'organization' | 'unit' | 'team' | 'role'.
+-export_type([doc/0, info/0, id/0]).
+-export_type([type/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks

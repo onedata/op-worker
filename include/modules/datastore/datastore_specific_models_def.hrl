@@ -26,23 +26,25 @@
 
 %% Local, cached version of OZ user
 -record(od_user, {
-    name = <<"">>:: binary(),
-    spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
+    name = <<"">> :: binary(),
+    alias = <<"">> :: binary(),
+    email_list = [] :: [binary()],
+    connected_accounts = [] :: [od_user:connected_account()],
     default_space :: binary() | undefined,
+
     group_ids :: undefined | [binary()],
     effective_group_ids = [] :: [binary()],
-    connected_accounts = [] :: [od_user:connected_account()],
-    alias = <<"">>:: binary(),
-    email_list = [] :: [binary()],
-    handle_services = [] ::[HandleServiceId :: binary()],
-    handles = [] ::[HandleId :: binary()],
-    revision_history = [] :: [subscriptions:rev()],
+    space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
+    handle_services = [] :: [od_handle_service:id()],
+    handles = [] :: [od_handle:id()],
+
     % This field means that only public information is available about this
     % user. This is the case when given user hasn't ever logged in to this
     % provider, but basic information about him is required (e. g. he is a
     % member of space or group together with user that is currently logged in).
     % Public information contains id and name.
-    public_only = false :: boolean()
+    public_only = false :: boolean(),
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 
@@ -52,13 +54,13 @@
     % Public means that only public data could be retrieved from the OZ as
     % no user in this provider has rights to view group data.
     type :: undefined | public | od_group:type(),
-    users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
-    effective_users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
-    nested_groups = [] :: [{GroupId :: binary(), [privileges:group_privilege()]}],
+    users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
+    effective_users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
+    nested_groups = [] :: [{od_group:id(), [privileges:group_privilege()]}],
     parent_groups = [] :: [binary()],
-    spaces = [] :: [SpaceId :: binary()],
-    handle_services = [] ::[HandleServiceId :: binary()],
-    handles = [] ::[HandleId :: binary()],
+    spaces = [] :: [od_space:id()],
+    handle_services = [] :: [od_handle_service:id()],
+    handles = [] :: [od_handle:id()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -67,9 +69,9 @@
 -record(od_space, {
     name :: undefined | binary(),
     providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
-    providers_supports = [] :: [{ProviderId :: oneprovider:id(), Size :: pos_integer()}],
-    users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
-    groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
+    providers_supports = [] :: [{od_provider:id(), Size :: pos_integer()}],
+    users = [] :: [{od_user:id(), [privileges:space_privilege()]}],
+    groups = [] :: [{od_group:id(), [privileges:space_privilege()]}],
     % All shares that belong to this space.
     shares = [] :: [od_share:id()],
     revision_history = [] :: [subscriptions:rev()]
@@ -91,7 +93,7 @@
 -record(od_provider, {
     client_name :: undefined | binary(),
     urls = [] :: [binary()],
-    space_ids = [] :: [SpaceId :: binary()],
+    space_ids = [] :: [od_space:id()],
     public_only = false :: boolean(), %% see comment in onedata_users
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -102,8 +104,8 @@
     name :: od_handle_service:name() | undefined,
     proxy_endpoint :: od_handle_service:proxy_endpoint() | undefined,
     service_properties = [] :: od_handle_service:service_properties(),
-    users = [] :: [{UserId :: binary(), [privileges:handle_service_privilege()]}],
-    groups = [] :: [{GroupId :: binary(), [privileges:handle_service_privilege()]}],
+    users = [] :: [{od_user:id(), [privileges:handle_service_privilege()]}],
+    groups = [] :: [{od_group:id(), [privileges:handle_service_privilege()]}],
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -115,8 +117,8 @@
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
     metadata :: od_handle:metadata() | undefined,
-    users = [] :: [{UserId :: binary(), [privileges:handle_privilege()]}],
-    groups = [] :: [{GroupId :: binary(), [privileges:handle_privilege()]}],
+    users = [] :: [{od_user:id(), [privileges:handle_privilege()]}],
+    groups = [] :: [{od_group:id(), [privileges:handle_privilege()]}],
     timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
     revision_history = [] :: [subscriptions:rev()]
 }).

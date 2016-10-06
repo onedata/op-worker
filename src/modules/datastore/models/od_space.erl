@@ -20,16 +20,17 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
+-type doc() :: datastore:document().
+-type info() :: #od_space{}.
+-type id() :: binary().
+-export_type([doc/0, info/0, id/0]).
+
 %% API
 -export([create_or_update/2, get/2, get_or_fetch/3, get_or_fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
-
--type id() :: binary().
-
--export_type([id/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -173,7 +174,7 @@ get(SpaceId, UserId) ->
     case get(SpaceId, ?ROOT_USER_ID) of
         {ok, #document{value = SpaceInfo} = Doc} ->
             case od_user:get(UserId) of
-                {ok, #document{value = #od_user{spaces = Spaces}}} ->
+                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
                     {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
                     {ok, Doc#document{value = SpaceInfo#od_space{name = SpaceName}}};
                 {error, Reason} ->
@@ -214,7 +215,7 @@ get_or_fetch(Auth, SpaceId, UserId) ->
     case get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) of
         {ok, #document{value = SpaceInfo} = Doc} ->
             case od_user:get_or_fetch(Auth, UserId) of
-                {ok, #document{value = #od_user{spaces = Spaces}}} ->
+                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
                     case lists:keyfind(SpaceId, 1, Spaces) of
                         false ->
                             {ok, Doc};

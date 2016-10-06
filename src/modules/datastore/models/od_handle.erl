@@ -19,6 +19,8 @@
 -include_lib("ctool/include/oz/oz_handles.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-type doc() :: datastore:document().
+-type info() :: #od_handle{}.
 -type id() :: binary().
 -type resource_type() :: binary().
 -type resource_id() :: binary().
@@ -26,7 +28,8 @@
 -type metadata() :: binary().
 -type timestamp() :: calendar:datetime().
 
--export_type([id/0, resource_type/0, resource_id/0, public_handle/0, metadata/0,
+-export_type([doc/0, info/0, id/0]).
+-export_type([resource_type/0, resource_id/0, public_handle/0, metadata/0,
     timestamp/0]).
 
 %% API

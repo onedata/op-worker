@@ -84,7 +84,7 @@ create(Document) ->
 get(?ROOT_USER_ID) ->
     {ok, #document{key = ?ROOT_USER_ID, value = #od_user{name = <<"root">>}}};
 get(?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>, spaces = []}}};
+    {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>, space_aliases = []}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -185,7 +185,7 @@ fetch(Auth) ->
 
     OnedataUser = #od_user{
         name = Name,
-        spaces = Spaces,
+        space_aliases = Spaces,
         default_space = DefaultSpaceId,
         group_ids = GroupIds,
         effective_group_ids = EffectiveGroupIds,

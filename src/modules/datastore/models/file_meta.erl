@@ -658,7 +658,7 @@ get_scope(Entry) ->
 setup_onedata_user(_Client, UserId) ->
     ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
     critical_section:run([od_user, UserId], fun() ->
-        {ok, #document{value = #od_user{spaces = Spaces}}} =
+        {ok, #document{value = #od_user{space_aliases = Spaces}}} =
             od_user:get(UserId),
 
         CTime = erlang:system_time(seconds),

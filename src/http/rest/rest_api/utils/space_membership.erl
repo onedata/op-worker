@@ -39,7 +39,7 @@ check_with_auth(Auth, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec check_with_user(od_user:id(), od_space:id()) -> ok | no_return().
 check_with_user(UserId, SpaceId) ->
-    {ok, #document{value = #od_user{spaces = Spaces}}} = od_user:get(UserId),
+    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
     case lists:any(fun({Id, _}) -> SpaceId =:= Id end, Spaces) of
         true ->
             ok;

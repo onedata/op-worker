@@ -190,7 +190,7 @@ has_effective_user(SpaceId, UserId) ->
         {error, {not_found, _}} ->
             false;
         {ok, #document{value = UserInfo}} ->
-            #od_user{spaces = SpaceNames} = UserInfo,
+            #od_user{space_aliases = SpaceNames} = UserInfo,
             proplists:is_defined(SpaceId, SpaceNames)
     end.
 

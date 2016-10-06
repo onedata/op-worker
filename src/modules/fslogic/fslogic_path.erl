@@ -161,7 +161,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
 get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    {ok, #document{value = #od_user{spaces = Spaces}}} = od_user:get(UserId),
+    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
 
     MatchedSpaces = lists:filter(fun({_, Name}) ->
         Name =:= SpaceName

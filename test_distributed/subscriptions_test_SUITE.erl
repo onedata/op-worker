@@ -255,7 +255,7 @@ saves_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
-        spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
+        space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         default_space = <<"C">>,
         effective_group_ids = [<<"A">>, <<"B">>, <<"Z">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
@@ -625,7 +625,7 @@ updates_with_the_actual_data(Config) ->
         group_ids = [<<"A">>, <<"B">>],
         effective_group_ids = [<<"A">>, <<"B">>, <<"Y">>],
         default_space = <<"C">>,
-        spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
+        space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = U2, value = #od_user{
@@ -739,7 +739,7 @@ resolves_conflicts(Config) ->
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>, default_space = <<"C">>,
-        group_ids = [<<"A">>, <<"B">>], spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
+        group_ids = [<<"A">>, <<"B">>], space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = HS1, value = #od_handle_service{

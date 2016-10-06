@@ -16,12 +16,15 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_handle_services.hrl").
 
+-type doc() :: datastore:document().
+-type info() :: #od_handle_service{}.
 -type id() :: binary().
 -type name() :: binary().
 -type proxy_endpoint() :: binary().
 -type service_properties() :: proplists:proplist().  % JSON proplist
 
--export_type([id/0, name/0, proxy_endpoint/0, service_properties/0]).
+-export_type([doc/0, info/0, id/0]).
+-export_type([name/0, proxy_endpoint/0, service_properties/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, get_or_fetch/2, list/0, exists/1, delete/1, update/2,
