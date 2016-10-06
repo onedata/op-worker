@@ -73,29 +73,28 @@ json_to_updates(Raw) ->
     Value :: subscriptions:record().
 props_to_value(od_user, Props) ->
     #od_user{
+        name = proplists:get_value(<<"name">>, Props),
         default_space = case proplists:get_value(<<"default_space">>, Props) of
             <<"undefined">> -> undefined;
             Value -> Value
         end,
-        public_only = proplists:get_value(<<"public_only">>, Props),
-        name = proplists:get_value(<<"name">>, Props),
-        group_ids = proplists:get_value(<<"group_ids">>, Props, []),
-        groups = proplists:get_value(<<"effective_group_ids">>, Props, []),
         space_aliases = proplists:get_value(<<"space_aliases">>, Props, []),
+        groups = proplists:get_value(<<"groups">>, Props, []),
         handle_services = proplists:get_value(<<"handle_services">>, Props, []),
-        handles = proplists:get_value(<<"handles">>, Props, [])
+        handles = proplists:get_value(<<"handles">>, Props, []),
+        public_only = proplists:get_value(<<"public_only">>, Props)
     };
 props_to_value(od_group, Props) ->
     #od_group{
         name = proplists:get_value(<<"name">>, Props),
         type = binary_to_atom(proplists:get_value(<<"type">>, Props), utf8),
-        spaces = proplists:get_value(<<"spaces">>, Props, []),
         users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
         eff_users = process_ids_with_privileges(
             proplists:get_value(<<"eff_users">>, Props, [])),
         children = process_ids_with_privileges(
             proplists:get_value(<<"children">>, Props, [])),
         parents = proplists:get_value(<<"parents">>, Props, []),
+        spaces = proplists:get_value(<<"spaces">>, Props, []),
         handle_services = proplists:get_value(<<"handle_services">>, Props, []),
         handles = proplists:get_value(<<"handles">>, Props, [])
     };

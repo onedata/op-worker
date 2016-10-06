@@ -80,6 +80,7 @@
 %% Model for caching space details fetched from OZ
 -record(od_space, {
     name :: undefined | binary(),
+
     providers = [] :: [oneprovider:id()], %% Same as providers_supports but simplified for convenience
     providers_supports = [] :: [{od_provider:id(), Size :: pos_integer()}],
     users = [] :: [{od_user:id(), [privileges:space_privilege()]}],
