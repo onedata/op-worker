@@ -200,7 +200,7 @@ mark_change_propagated(#document{key = ControllerKey, value = #change_propagatio
 %% Verifies if change was propagated to all providers.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: binary()) -> {ok, _} | no_return().
+-spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: binary()) -> {ok, boolean()} | no_return().
 verify_propagation(ControllerKey, SpaceId) ->
     MyId = oneprovider:get_provider_id(),
     ListFun = fun(LinkName, _LinkTarget, Acc) ->
@@ -221,7 +221,7 @@ verify_propagation(ControllerKey, SpaceId) ->
     ToDel = (length(Links) + Correction) >= length(Providers),
     case ToDel of
         true ->
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, [Links]),
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, Links),
             ok = delete(ControllerKey);
         _ ->
             ok

@@ -33,6 +33,7 @@ model_init/0, 'after'/5, before/4]).
 -type component() :: file_meta | local_file_location | parent_links | link_to_parent | xattr
     | {link_to_child, file_meta:name(), file_meta:uuid()} | {rev, Module :: atom(), Rev :: non_neg_integer()}.
 -type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
+-type restart_posthook() :: Args:: list() | {Module :: atom(), Function:: atom(), Args:: list()}.
 
 -export_type([id/0, component/0, waiting/0]).
 
@@ -47,7 +48,7 @@ model_init/0, 'after'/5, before/4]).
 %% the change after system restart
 %% @end
 %%--------------------------------------------------------------------
--spec wait(file_meta:uuid(), space_info:id(), [file_consistency:component()], list()) -> ok.
+-spec wait(file_meta:uuid(), space_info:id(), [file_consistency:component()], restart_posthook()) -> ok.
 wait(FileUuid, SpaceId, WaitFor, RestartPosthookData) ->
     {NeedsToWait, WaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
@@ -322,7 +323,7 @@ check_missing_components(FileUuid, SpaceId, [{rev, Model, Rev} | RestMissing], F
 %% Checks if revision of document is present.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_revision(file_meta:uuid(), space_info:id(), non_neg_integer()) ->
+-spec verify_revision(file_meta:uuid(), atom(), non_neg_integer()) ->
     ok | younger_revision | not_found.
 verify_revision(FileUuid, Model, Rev) ->
     Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
