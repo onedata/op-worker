@@ -229,7 +229,7 @@ has_effective_privilege(SpaceId, UserId, Privilege) ->
 get_effective_privileges(SpaceId, UserId) ->
     {ok, #document{
         value = #od_user{
-            groups = UGroups
+            eff_groups = UGroups
         }}} = od_user:get(UserId),
     {ok, #document{
         value = #od_space{

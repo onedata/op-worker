@@ -244,7 +244,7 @@ saves_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
         type = unit,
-        spaces = [<<"S1">>, <<"S2">>],
+        eff_spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         eff_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
         children = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
@@ -255,7 +255,7 @@ saves_the_actual_data(Config) ->
         name = <<"onedata ftw">>,
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         default_space = <<"C">>,
-        groups = [<<"A">>, <<"B">>, <<"Z">>],
+        eff_groups = [<<"A">>, <<"B">>, <<"Z">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_user, U1)),
     ?assertMatch({ok, #document{key = U2, value = #od_user{
@@ -610,7 +610,7 @@ updates_with_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = G1, value = #od_group{
         name = <<"group lol">>,
         type = team,
-        spaces = [<<"S1">>, <<"S2">>],
+        eff_spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         eff_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
         children = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
@@ -619,7 +619,7 @@ updates_with_the_actual_data(Config) ->
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>,
-        groups = [<<"A">>, <<"B">>, <<"Y">>],
+        eff_groups = [<<"A">>, <<"B">>, <<"Y">>],
         default_space = <<"C">>,
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
@@ -735,7 +735,7 @@ resolves_conflicts(Config) ->
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
         name = <<"onedata ftw">>, default_space = <<"C">>,
-        groups = [<<"A">>, <<"B">>],
+        eff_groups = [<<"A">>, <<"B">>],
         space_aliases = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_user, U1)),

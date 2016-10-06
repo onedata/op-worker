@@ -117,7 +117,7 @@ has_efective_group(UserId, GroupId) ->
     case od_user:get(UserId) of
         {error, {not_found, _}} ->
             false;
-        {ok, #document{value = #od_user{groups = Groups}}} ->
+        {ok, #document{value = #od_user{eff_groups = Groups}}} ->
             lists:member(GroupId, Groups)
     end.
 
@@ -153,7 +153,7 @@ leave_group(Auth, GroupId) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
 get_groups(Auth, UserId) ->
     case get(Auth, UserId) of
-        {ok, #document{value = #od_user{groups = GroupsIds}}} ->
+        {ok, #document{value = #od_user{eff_groups = GroupsIds}}} ->
             {ok, GroupsIds};
         {error, Reason} ->
             {error, Reason}
@@ -174,14 +174,14 @@ get_effective_handle_services(Auth, UserId) ->
         {ok, Doc} ->
             #document{
                 value = #od_user{
-                    handle_services = UserHandleServices,
-                    groups = EffectiveGroupIds
+                    eff_handle_services = UserHandleServices,
+                    eff_groups = EffectiveGroupIds
                 }} = Doc,
             GroupHandleServices = lists:flatmap(
                 fun(GroupId) ->
                     {ok, #document{
                         value = #od_group{
-                            handle_services = GroupHS
+                            eff_handle_services = GroupHS
                         }}} = group_logic:get(Auth, GroupId),
                     GroupHS
                 end, EffectiveGroupIds),

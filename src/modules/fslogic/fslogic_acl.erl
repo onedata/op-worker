@@ -35,7 +35,7 @@
 check_permission([], _User, ?no_flags_mask) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?EACCES);
 check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
-    #document{value = #od_user{groups = Groups}} = User, Operation)
+    #document{value = #od_user{eff_groups = Groups}} = User, Operation)
     when ?has_flag(Flags, ?identifier_group_mask) ->
     case is_list(Groups) andalso lists:member(GroupId, Groups) of
         false ->

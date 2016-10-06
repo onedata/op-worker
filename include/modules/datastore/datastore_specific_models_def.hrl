@@ -34,13 +34,19 @@
     % List of user's aliases for spaces
     space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
 
+    % Direct relations to other entities
+%%    groups = [] :: [od_group:id()],
+%%    spaces = [] :: [od_space:id()],
+%%    handle_services = [] :: [od_handle_service:id()],
+%%    handles = [] :: [od_handle:id()],
+
     % Effective relations to other entities
-    groups = [] :: [od_group:id()],
-    spaces = [] :: [od_space:id()],
-    shares = [] :: [od_share:id()],
-    providers = [] :: [od_provider:id()],
-    handle_services = [] :: [od_handle_service:id()],
-    handles = [] :: [od_handle:id()],
+    eff_groups = [] :: [od_group:id()],
+    eff_spaces = [] :: [od_space:id()],
+    eff_shares = [] :: [od_share:id()],
+    eff_providers = [] :: [od_provider:id()],
+    eff_handle_services = [] :: [od_handle_service:id()],
+    eff_handles = [] :: [od_handle:id()],
 
     % This field means that only public information is available about this
     % user. This is the case when given user hasn't ever logged in to this
@@ -60,17 +66,26 @@
     type :: undefined | public | od_group:type(),
 
     % Group graph related entities
-    children = [] :: [{od_group:id(), [privileges:group_privilege()]}],
     parents = [] :: [binary()],
+    children = [] :: [{od_group:id(), [privileges:group_privilege()]}],
+%%    eff_parents = [] :: [od_group:id()],
+%%    eff_children = [] :: [od_group:id()],
+
+    % Direct relations to other entities
+    users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
+%%    spaces = [] :: [od_space:id()],
+%%    handle_services = [] :: [od_handle_service:id()],
+%%    handles = [] :: [od_handle:id()],
 
     % Effective relations to other entities
     % Users list is a exception where we need both direct and effective
     % memberships to check user permissions of different operations.
-    users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
     eff_users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
-    spaces = [] :: [od_space:id()],
-    handle_services = [] :: [od_handle_service:id()],
-    handles = [] :: [od_handle:id()],
+    eff_spaces = [] :: [od_space:id()],
+%%    eff_shares = [] :: [od_share:id()],
+%%    eff_providers = [] :: [od_provider:id()],
+    eff_handle_services = [] :: [od_handle_service:id()],
+    eff_handles = [] :: [od_handle:id()],
 
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -80,14 +95,18 @@
 -record(od_space, {
     name :: undefined | binary(),
 
-    % Effective relations to other entities
+    % Direct relations to other entities
+    providers_supports = [] :: [{od_provider:id(), Size :: pos_integer()}],
+    %% Same as providers_supports but simplified for convenience
+    providers = [] :: [oneprovider:id()],
     users = [] :: [{od_user:id(), [privileges:space_privilege()]}],
     groups = [] :: [{od_group:id(), [privileges:space_privilege()]}],
     % All shares that belong to this space.
     shares = [] :: [od_share:id()],
-    %% Same as providers_supports but simplified for convenience
-    providers = [] :: [oneprovider:id()],
-    providers_supports = [] :: [{od_provider:id(), Size :: pos_integer()}],
+
+    % Effective relations to other entities
+%%    eff_users = [] :: [{od_user:id(), [privileges:space_privilege()]}],
+%%    eff_groups = [] :: [{od_group:id(), [privileges:space_privilege()]}],
 
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -102,6 +121,10 @@
     space = undefined :: undefined | od_space:id(),
     handle = undefined :: undefined | od_handle:id(),
     root_file = undefined :: undefined | binary(),
+
+    % Effective relations to other entities
+%%    eff_users = [] :: [od_user:id()],
+%%    eff_groups = [] :: [od_group:id()],
 
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -130,6 +153,10 @@
     users = [] :: [{od_user:id(), [privileges:handle_service_privilege()]}],
     groups = [] :: [{od_group:id(), [privileges:handle_service_privilege()]}],
 
+    % Effective relations to other entities
+%%    eff_users = [] :: [{od_user:id(), [privileges:handle_service_privilege()]}],
+%%    eff_groups = [] :: [{od_group:id(), [privileges:handle_service_privilege()]}],
+
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -144,10 +171,12 @@
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,
-
-    % Effective relations to other entities
     users = [] :: [{od_user:id(), [privileges:handle_privilege()]}],
     groups = [] :: [{od_group:id(), [privileges:handle_privilege()]}],
+
+    % Effective relations to other entities
+%%    eff_users = [] :: [{od_user:id(), [privileges:handle_privilege()]}],
+%%    eff_groups = [] :: [{od_group:id(), [privileges:handle_privilege()]}],
 
     revision_history = [] :: [subscriptions:rev()]
 }).

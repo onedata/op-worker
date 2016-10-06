@@ -186,7 +186,7 @@ fetch(Auth) ->
         name = Name,
         space_aliases = Spaces,
         default_space = DefaultSpaceId,
-        groups = EffectiveGroupIds,
+        eff_groups = EffectiveGroupIds,
         connected_accounts = ConnectedAccounts,
         alias = Alias,
         email_list = EmailList

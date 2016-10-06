@@ -195,7 +195,7 @@ fetch(Auth, GroupId) ->
 
                 %todo consider getting user_details for each group member and storing it as od_user
                 OnedataGroupDoc = #document{key = Id, value = #od_group{
-                    users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
+                    users = UsersWithPrivileges, eff_spaces = SpaceIds, name = Name,
                     eff_users = EffectiveUsersWithPrivileges, type = Type,
                     parents = ParentIds, children = NestedGroupsWithPrivileges}},
 

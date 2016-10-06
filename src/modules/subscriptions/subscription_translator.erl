@@ -79,9 +79,9 @@ props_to_value(od_user, Props) ->
             Value -> Value
         end,
         space_aliases = proplists:get_value(<<"space_aliases">>, Props, []),
-        groups = proplists:get_value(<<"groups">>, Props, []),
-        handle_services = proplists:get_value(<<"handle_services">>, Props, []),
-        handles = proplists:get_value(<<"handles">>, Props, []),
+        eff_groups = proplists:get_value(<<"groups">>, Props, []),
+        eff_handle_services = proplists:get_value(<<"handle_services">>, Props, []),
+        eff_handles = proplists:get_value(<<"handles">>, Props, []),
         public_only = proplists:get_value(<<"public_only">>, Props)
     };
 props_to_value(od_group, Props) ->
@@ -94,9 +94,9 @@ props_to_value(od_group, Props) ->
         children = process_ids_with_privileges(
             proplists:get_value(<<"children">>, Props, [])),
         parents = proplists:get_value(<<"parents">>, Props, []),
-        spaces = proplists:get_value(<<"spaces">>, Props, []),
-        handle_services = proplists:get_value(<<"handle_services">>, Props, []),
-        handles = proplists:get_value(<<"handles">>, Props, [])
+        eff_spaces = proplists:get_value(<<"spaces">>, Props, []),
+        eff_handle_services = proplists:get_value(<<"handle_services">>, Props, []),
+        eff_handles = proplists:get_value(<<"handles">>, Props, [])
     };
 props_to_value(od_space, Props) ->
     ProviderSupports = proplists:get_value(<<"providers_supports">>, Props),

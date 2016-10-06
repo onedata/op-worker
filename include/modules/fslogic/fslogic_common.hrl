@@ -29,7 +29,7 @@
     session :: #session{},
     session_id :: undefined | session:id(),
     space_id :: file_meta:uuid(),
-    share_id :: od_share:id()
+    share_id :: undefined | od_share:id()
 }).
 
 %% root user definitions
