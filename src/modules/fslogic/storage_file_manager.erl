@@ -54,7 +54,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
-  Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: od_share:id()) ->
+  Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: undefined | od_share:id()) ->
     handle().
 new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, ShareId) ->
     FSize =
