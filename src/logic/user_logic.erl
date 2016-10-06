@@ -21,7 +21,7 @@
 
 -export([get/2]).
 -export([get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
--export([join_group/2, leave_group/2, get_groups/2]).
+-export([has_efective_group/2, join_group/2, leave_group/2, get_groups/2]).
 -export([get_effective_handle_services/2]).
 
 %%%===================================================================
@@ -105,6 +105,21 @@ get_default_space(Auth, UserId) ->
     ok | {error, Reason :: term()}.
 set_default_space(Auth, SpaceId) ->
     oz_users:set_default_space(Auth, [{<<"spaceId">>, SpaceId}]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user effectively belongs to given group.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_efective_group(UserId :: od_user:id(), GroupId :: od_group:id()) -> boolean().
+has_efective_group(UserId, GroupId) ->
+    case od_user:get(UserId) of
+        {error, {not_found, _}} ->
+            false;
+        {ok, #document{value = #od_user{groups = Groups}}} ->
+            lists:member(GroupId, Groups)
+    end.
 
 
 %%--------------------------------------------------------------------

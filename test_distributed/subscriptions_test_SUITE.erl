@@ -246,9 +246,9 @@ saves_the_actual_data(Config) ->
         type = unit,
         spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
-        effective_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
-        nested_groups = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
-        parent_groups = [<<"dad">>, <<"mom">>],
+        eff_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
+        children = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
+        parents = [<<"dad">>, <<"mom">>],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
@@ -585,7 +585,7 @@ updates_with_the_actual_data(Config) ->
         )),
         update(7, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>, <<"Y">>],
-                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>  )
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}], <<"C">>)
         ),
         update(8, [<<"r2">>, <<"r1">>], U2,
             public_only_user(<<"bombastic">>)
@@ -612,9 +612,9 @@ updates_with_the_actual_data(Config) ->
         type = team,
         spaces = [<<"S1">>, <<"S2">>],
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
-        effective_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
-        nested_groups = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
-        parent_groups = [<<"dad">>, <<"mom">>],
+        eff_users = [{<<"U1">>, Priv1}, {<<"U2">>, Priv2}, {<<"U3">>, []}],
+        children = [{<<"bastard">>, []}, {<<"sob">>, Priv2}],
+        parents = [<<"dad">>, <<"mom">>],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, od_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #od_user{
@@ -998,10 +998,17 @@ group(Name, SIDs, Users) ->
 group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, Type) ->
     group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, [], [], Type).
 group(Name, SIDs, Users, EffectiveUsers, NestedGroups, ParentGroups, HandleServices, Handles, Type) ->
-    {od_group, [{name, Name}, {type, Type}, {spaces, SIDs}, {users, Users},
-        {effective_users, EffectiveUsers}, {nested_groups, NestedGroups},
-        {parent_groups, ParentGroups}, {handle_services, HandleServices},
-        {handles, Handles}]}.
+    {od_group, [
+        {name, Name},
+        {type, Type},
+        {spaces, SIDs},
+        {users, Users},
+        {eff_users, EffectiveUsers},
+        {children, NestedGroups},
+        {parents, ParentGroups},
+        {handle_services, HandleServices},
+        {handles, Handles}
+    ]}.
 
 public_only_user(Name) ->
     user(Name, [], [], undefined, true).
@@ -1010,10 +1017,15 @@ user(Name, Groups, Spaces, DefaultSpace) ->
 user(Name, Groups, Spaces, DefaultSpace, PublicOnly) ->
     user(Name, Groups, Spaces, DefaultSpace, [], [], PublicOnly).
 user(Name, Groups, Spaces, DefaultSpace, HandleServices, Handles, PublicOnly) ->
-    {od_user, [{name, Name}, {space_aliases, Spaces},
-        {public_only, PublicOnly}, {default_space, DefaultSpace},
-        {groups, Groups}, {handle_services, HandleServices},
-        {handles, Handles}]}.
+    {od_user, [
+        {name, Name},
+        {default_space, DefaultSpace},
+        {space_aliases, Spaces},
+        {groups, Groups},
+        {handle_services, HandleServices},
+        {handles, Handles},
+        {public_only, PublicOnly}
+    ]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].

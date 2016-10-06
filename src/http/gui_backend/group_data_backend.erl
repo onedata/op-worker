@@ -212,7 +212,7 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_group{
-            nested_groups = GroupsAndPerms
+            children = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
     GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
     NewGroupPerms = lists:foldl(
@@ -294,8 +294,8 @@ group_record(GroupId, HasViewPrivileges) ->
         value = #od_group{
             name = Name,
             users = UsersAndPerms,
-            nested_groups = GroupsAndPerms,
-            parent_groups = ParentGroups
+            children = GroupsAndPerms,
+            parents = ParentGroups
         }}} = group_logic:get(UserAuth, GroupId),
 
     % Make sure that user is allowed to view requested group - he must have
@@ -373,7 +373,7 @@ group_group_permission_record(AssocId) ->
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_group{
-            nested_groups = GroupsAndPerms
+            children = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
     GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
     PermsMapped = lists:map(

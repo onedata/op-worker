@@ -26,12 +26,10 @@
 %% API
 -export([fetch/2, get_or_fetch/2, create_or_update/2]).
 
--type doc() :: datastore:document().
--type info() :: #od_group{}.
--type id() :: binary().
+-export_type([id/0, type/0]).
+
 -type type() :: 'organization' | 'unit' | 'team' | 'role'.
--export_type([doc/0, info/0, id/0]).
--export_type([type/0]).
+-type id() :: binary().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -198,8 +196,8 @@ fetch(Auth, GroupId) ->
                 %todo consider getting user_details for each group member and storing it as od_user
                 OnedataGroupDoc = #document{key = Id, value = #od_group{
                     users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
-                    effective_users = EffectiveUsersWithPrivileges, type = Type,
-                    parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
+                    eff_users = EffectiveUsersWithPrivileges, type = Type,
+                    parents = ParentIds, children = NestedGroupsWithPrivileges}},
 
                 case od_group:create(OnedataGroupDoc) of
                     {ok, _} -> ok;

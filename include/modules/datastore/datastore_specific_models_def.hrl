@@ -31,9 +31,14 @@
     email_list = [] :: [binary()],
     connected_accounts = [] :: [od_user:connected_account()],
     default_space :: binary() | undefined,
-
-    groups = [] :: [od_group:id()],
+    % List of user's aliases for spaces
     space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
+
+    % Effective relations to other entities
+    groups = [] :: [od_group:id()],
+    spaces = [] :: [od_space:id()],
+    shares = [] :: [od_share:id()],
+    providers = [] :: [od_provider:id()],
     handle_services = [] :: [od_handle_service:id()],
     handles = [] :: [od_handle:id()],
 
@@ -43,6 +48,7 @@
     % member of space or group together with user that is currently logged in).
     % Public information contains id and name.
     public_only = false :: boolean(),
+
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -53,13 +59,20 @@
     % Public means that only public data could be retrieved from the OZ as
     % no user in this provider has rights to view group data.
     type :: undefined | public | od_group:type(),
+
+    % Group graph related entities
+    children = [] :: [{od_group:id(), [privileges:group_privilege()]}],
+    parents = [] :: [binary()],
+
+    % Effective relations to other entities
+    % Users list is a exception where we need both direct and effective
+    % memberships
     users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
-    effective_users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
-    nested_groups = [] :: [{od_group:id(), [privileges:group_privilege()]}],
-    parent_groups = [] :: [binary()],
+    eff_users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
     spaces = [] :: [od_space:id()],
     handle_services = [] :: [od_handle_service:id()],
     handles = [] :: [od_handle:id()],
+
     revision_history = [] :: [subscriptions:rev()]
 }).
 
