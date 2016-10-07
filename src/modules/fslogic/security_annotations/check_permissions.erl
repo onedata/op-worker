@@ -155,8 +155,8 @@ resolve_file_entry({parent, Item}, Inputs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec expand_traverse_ancestors_check(file_meta:doc() | undefined, file_meta:doc() | undefined,
-    od_user:doc(), od_share:id(), maps:map()) ->
-    [{check_type(), datastore:document(), datastore:document(), od_share:id(), [#accesscontrolentity{}]}].
+    od_user:doc(), od_share:id() | undefined, maps:map()) ->
+    [{check_type(), datastore:document(), datastore:document(), od_share:id() | undefined, [#accesscontrolentity{}]}].
 expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
     UserDoc = #document{key = UserId}, ShareId, AclMap) ->
 
