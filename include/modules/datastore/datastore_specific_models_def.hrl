@@ -324,7 +324,7 @@
 %% Record that controls change propagation
 -record(change_propagation_controller, {
     change_revision = 0 :: non_neg_integer(),
-    space_id :: binary(),
+    space_id = <<"">> :: binary(),
     verify_module :: atom(),
     verify_function :: atom()
 }).
