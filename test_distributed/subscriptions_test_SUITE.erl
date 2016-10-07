@@ -1005,8 +1005,8 @@ group(Name, SIDs, Users, EffUsers, Children, Parents, HandleServices, Handles, T
         {name, Name},
         {type, Type},
 
-        {children, Children},
         {parents, Parents},
+        {children, Children},
         {eff_parents, []}, % TODO currently always empty
         {eff_children, []}, % TODO currently always empty
 
