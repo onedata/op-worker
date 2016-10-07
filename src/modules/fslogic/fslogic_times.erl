@@ -33,11 +33,8 @@
 -spec calculate_atime(FileEntry :: fslogic_worker:file(),
     CurrentTime :: file_meta:time()) -> file_meta:time() | actual.
 calculate_atime(FileEntry, CurrentTime) ->
-    {ok, #document{value = #file_meta{
-        atime = ATime,
-        mtime = MTime,
-        ctime = CTime}}
-    } = file_meta:get(FileEntry),
+    {ok, Uuid} = file_meta:get_uuid(FileEntry),
+    {ok, {ATime, CTime, MTime}} = times:get_or_default(Uuid),
     case ATime of
         Outdated when Outdated =< MTime orelse Outdated =< CTime ->
             CurrentTime;
@@ -106,8 +103,24 @@ update_mtime_ctime(Entry, UserId, CurrentTime) ->
 %%--------------------------------------------------------------------
 -spec update_times_and_emit(fslogic_worker:file(),
     TimesMap :: #{atom() => file_meta:time()}, UserId :: onedata_user:id()) -> ok.
-update_times_and_emit(Entry, TimesMap, UserId) ->
-    {ok, UUID} = file_meta:update(Entry, TimesMap),
-    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, UUID}) end),
-
+update_times_and_emit(Entry, TimesMap, _UserId) ->
+    {ok, FileUuid} = file_meta:get_uuid(Entry),
+    Times = prepare_times(TimesMap),
+    {ok, FileUuid} = times:create_or_update(#document{key = FileUuid, value = Times}, TimesMap),
+    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUuid}) end),
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Convert map to times document
+%%--------------------------------------------------------------------
+-spec prepare_times(#{atom() => file_meta:time()}) -> #times{}.
+prepare_times(TimesMap) ->
+    #times{
+        atime = maps:get(atime, TimesMap, 0),
+        ctime = maps:get(ctime, TimesMap, 0),
+        mtime = maps:get(mtime, TimesMap, 0)
+    }.

@@ -121,13 +121,12 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         name = Name,
         type = ?REGULAR_FILE_TYPE,
         mode = Mode,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
 
     {ok, FileUUID} = file_meta:create({uuid, ParentUUID}, File),
+    {ok, _} = times:create(#document{key = FileUUID, value = #times{
+        mtime = CTime, atime = CTime, ctime = CTime}}),
 
     try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         {StorageId, FileId} ->

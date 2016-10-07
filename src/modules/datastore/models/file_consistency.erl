@@ -233,7 +233,13 @@ check_missing_components(_FileUuid, _SpaceId, [], Found) ->
 check_missing_components(FileUuid, SpaceId, [file_meta | RestMissing], Found) ->
     case catch file_meta:get(FileUuid) of
         {ok, _} ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, [file_meta | Found]);
+            check_missing_components(FileUuid, SpaceId, RestMissing, [file_meta | Found]),
+            case catch times:get(FileUuid) of
+                {ok, _} ->
+                    check_missing_components(FileUuid, SpaceId, RestMissing, [file_meta | Found]);
+                _ ->
+                    check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+            end;
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;

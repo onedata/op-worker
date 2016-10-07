@@ -63,8 +63,8 @@ change_replicated_internal(SpaceId, Change = #change{model = file_meta, doc = Fi
     ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [parent_links]);
 change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
     ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
+    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [file_meta]),
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
-    ok = file_consistency:add_components_and_notify(FileUUID, [file_meta]),
     ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [parent_links]);
 change_replicated_internal(SpaceId, Change = #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
     ?info("change_replicated_internal: changed file_location ~p", [FileUUID]),
@@ -73,6 +73,9 @@ change_replicated_internal(SpaceId, Change = #change{model = file_location, doc 
 change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{value = #links{model = file_meta, doc_key = FileUUID}}}) ->
     ?info("change_replicated_internal: changed links ~p", [FileUUID]),
     ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [link_to_parent, parent_links]);
+change_replicated_internal(SpaceId, #change{model = times, doc = #document{key = FileUUID, value = #times{}}}) ->
+    ?info("change_replicated_internal: changed times ~p", [FileUUID]),
+    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [file_meta]);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
