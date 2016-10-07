@@ -134,7 +134,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec run_in_critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
 run_in_critical_section(ResourceId, Fun) ->
-    critical_section:run([?MODEL_NAME, ResourceId], Fun).
+    critical_section:run_on_mnesia([?MODEL_NAME, ResourceId], Fun).
 
 %%%===================================================================
 %%% API
