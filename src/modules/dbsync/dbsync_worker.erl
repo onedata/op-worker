@@ -371,7 +371,7 @@ queue_push(QueueKey, {init_batch, Seq}, SpaceId) ->
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
                 until = queue_calculate_until(UntilToSet, Queue1)}
         end);
-queue_push(QueueKey, #change{seq = Until, doc = #document{key = ChangeKey}} = Change, SpaceId) ->
+queue_push(QueueKey, #change{model = ChangeModel, seq = Until, doc = #document{key = ChangeKey}} = Change, SpaceId) ->
     state_update({queue, QueueKey},
         fun(Queue) ->
             Queue1 =
@@ -384,8 +384,8 @@ queue_push(QueueKey, #change{seq = Until, doc = #document{key = ChangeKey}} = Ch
             Since = Queue1#queue.since,
             Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
             FilteredChanges = lists:filter(
-                fun(#change{doc = #document{key = Key}}) ->
-                    ChangeKey /= Key
+                fun(#change{model = Model, doc = #document{key = Key}}) ->
+                    ChangeKey /= Key orelse ChangeModel /= Model
                 end, Batch0#batch.changes),
             ?debug("Changes stream aggregation level: ~p", [length(FilteredChanges) / length(Batch0#batch.changes)]),
             Batch = Batch0#batch{changes = [Change | FilteredChanges], until = max(Until, Since)},
@@ -728,6 +728,8 @@ get_sync_context(#document{value = #links{doc_key = DocKey, model = file_locatio
     #model_config{store_level = StoreLevel} = file_location:model_init(),
     {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
     get_sync_context(Doc);
+get_sync_context(#document{key = Key, value = #custom_metadata{}}) ->
+    Key;
 get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
     FileUUID.
 

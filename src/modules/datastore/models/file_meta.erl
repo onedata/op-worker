@@ -433,7 +433,8 @@ tag_children(LinkName, Targets) ->
         fun({Scope, _VH, _Key, _Model}) ->
             Scope
         end, Targets),
-    LongestPrefix = max(4, binary:longest_common_prefix(Scopes)),
+    MinScope = lists:min([4 | lists:map(fun size/1, Scopes)]),
+    LongestPrefix = max(MinScope, binary:longest_common_prefix(Scopes)),
     lists:map(
         fun({Scope, VH, Key, _}) ->
             case MPID of
@@ -442,7 +443,7 @@ tag_children(LinkName, Targets) ->
                 _ ->
                     case LongestPrefix >= size(Scope) of
                         true ->
-                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, LongestPrefix + 1), Key};
+                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, size(Scope)), Key};
                         false ->
                             {links_utils:make_scoped_link_name(LinkName, Scope, undefined, LongestPrefix + 1), Key}
                     end
