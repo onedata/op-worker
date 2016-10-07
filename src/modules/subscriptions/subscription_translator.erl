@@ -74,56 +74,101 @@ json_to_updates(Raw) ->
 props_to_value(od_user, Props) ->
     #od_user{
         name = proplists:get_value(<<"name">>, Props),
+        alias = proplists:get_value(<<"alias">>, Props), % TODO currently always empty
+        email_list = proplists:get_value(<<"email_list">>, Props), % TODO currently always empty
+        connected_accounts = proplists:get_value( % TODO currently always empty
+            <<"connected_accounts">>, Props),
         default_space = case proplists:get_value(<<"default_space">>, Props) of
             <<"undefined">> -> undefined;
             Value -> Value
         end,
         space_aliases = proplists:get_value(<<"space_aliases">>, Props, []),
-        eff_groups = proplists:get_value(<<"groups">>, Props, []),
-        eff_handle_services = proplists:get_value(<<"handle_services">>, Props, []),
-        eff_handles = proplists:get_value(<<"handles">>, Props, []),
+
+        groups = proplists:get_value(<<"groups">>, Props, []),
+        spaces = proplists:get_value(<<"spaces">>, Props, []), % TODO currently always empty
+        handle_services = proplists:get_value(<<"handle_services">>, Props, []),
+        handles = proplists:get_value(<<"handles">>, Props, []),
+
+        eff_groups = proplists:get_value(<<"eff_groups">>, Props, []),
+        eff_spaces = proplists:get_value(<<"eff_spaces">>, Props, []), % TODO currently always empty
+        eff_shares = proplists:get_value(<<"eff_shares">>, Props, []), % TODO currently always empty
+        eff_providers = proplists:get_value(<<"eff_providers">>, Props, []), % TODO currently always empty
+        eff_handle_services = proplists:get_value(<<"eff_handle_services">>, Props, []), % TODO currently always empty
+        eff_handles = proplists:get_value(<<"eff_handles">>, Props, []), % TODO currently always empty
+
         public_only = proplists:get_value(<<"public_only">>, Props)
     };
 props_to_value(od_group, Props) ->
     #od_group{
         name = proplists:get_value(<<"name">>, Props),
         type = binary_to_atom(proplists:get_value(<<"type">>, Props), utf8),
-        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
-        eff_users = process_ids_with_privileges(
-            proplists:get_value(<<"eff_users">>, Props, [])),
+
+        % Group graph related entities
+        parents = proplists:get_value(<<"parents">>, Props, []),
         children = process_ids_with_privileges(
             proplists:get_value(<<"children">>, Props, [])),
-        parents = proplists:get_value(<<"parents">>, Props, []),
-        eff_spaces = proplists:get_value(<<"spaces">>, Props, []),
-        eff_handle_services = proplists:get_value(<<"handle_services">>, Props, []),
-        eff_handles = proplists:get_value(<<"handles">>, Props, [])
+        eff_parents = proplists:get_value(<<"parents">>, Props, []), % TODO currently always empty
+        eff_children = process_ids_with_privileges(
+            proplists:get_value(<<"children">>, Props, [])), % TODO currently always empty
+
+        % Direct relations to other entities
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props, [])),
+        spaces = proplists:get_value(<<"spaces">>, Props, []),
+        handle_services = proplists:get_value(<<"handle_services">>, Props, []),
+        handles = proplists:get_value(<<"handles">>, Props, []),
+
+        % Effective relations to other entities
+        eff_users = process_ids_with_privileges(
+            proplists:get_value(<<"eff_users">>, Props, [])),
+        eff_spaces = proplists:get_value(<<"eff_spaces">>, Props, []), % TODO currently always empty
+        eff_shares = proplists:get_value(<<"eff_shares">>, Props, []), % TODO currently always empty
+        eff_providers = proplists:get_value(<<"eff_providers">>, Props, []), % TODO currently always empty
+        eff_handle_services = proplists:get_value(<<"handle_services">>, Props, []), % TODO currently always empty
+        eff_handles = proplists:get_value(<<"handles">>, Props, []) % TODO currently always empty
     };
 props_to_value(od_space, Props) ->
     ProviderSupports = proplists:get_value(<<"providers_supports">>, Props),
     {Providers, _} = lists:unzip(ProviderSupports),
     #od_space{
         name = proplists:get_value(<<"name">>, Props),
+
+        % Direct relations to other entities
+        providers = Providers,
+        providers_supports = ProviderSupports,
         groups = process_ids_with_privileges(
             proplists:get_value(<<"groups">>, Props, [])),
         users = process_ids_with_privileges(
             proplists:get_value(<<"users">>, Props, [])),
         shares = proplists:get_value(<<"shares">>, Props),
-        providers = Providers,
-        providers_supports = ProviderSupports
+
+        % Effective relations to other entities
+        eff_users = process_ids_with_privileges(
+            proplists:get_value(<<"eff_users">>, Props, [])), % TODO currently always empty
+        eff_groups = process_ids_with_privileges(
+            proplists:get_value(<<"eff_groups">>, Props, [])) % TODO currently always empty
     };
 props_to_value(od_share, Props) ->
     #od_share{
         name = proplists:get_value(<<"name">>, Props),
         public_url = proplists:get_value(<<"public_url">>, Props),
-        root_file = proplists:get_value(<<"root_file">>, Props),
+
+        % Direct relations to other entities
         space = proplists:get_value(<<"space">>, Props),
-        handle = proplists:get_value(<<"handle">>, Props)
+        handle = proplists:get_value(<<"handle">>, Props),
+        root_file = proplists:get_value(<<"root_file">>, Props),
+
+        % Effective relations to other entities
+        eff_users = proplists:get_value(<<"eff_users">>, Props, []), % TODO currently always empty
+        eff_groups = proplists:get_value(<<"eff_groups">>, Props, []) % TODO currently always empty
     };
 props_to_value(od_provider, Props) ->
     #od_provider{
         client_name = proplists:get_value(<<"client_name">>, Props),
         urls = proplists:get_value(<<"urls">>, Props),
+
+        % Direct relations to other entities
         spaces = proplists:get_value(<<"spaces">>, Props),
+
         public_only = proplists:get_value(<<"public_only">>, Props)
     };
 props_to_value(od_handle_service, Props) ->
@@ -131,24 +176,40 @@ props_to_value(od_handle_service, Props) ->
         name = proplists:get_value(<<"name">>, Props),
         proxy_endpoint = proplists:get_value(<<"proxy_endpoint">>, Props),
         service_properties = proplists:get_value(<<"service_properties">>, Props),
-        users = process_ids_with_privileges(
-            proplists:get_value(<<"users">>, Props, [])),
-        groups = process_ids_with_privileges(
-            proplists:get_value(<<"groups">>, Props, []))
-    };
-props_to_value(od_handle, Props) ->
-    #od_handle{
-        handle_service = proplists:get_value(<<"handle_service">>, Props),
-        public_handle = proplists:get_value(<<"public_handle">>, Props),
-        resource_type = proplists:get_value(<<"resource_type">>, Props),
-        resource_id = proplists:get_value(<<"resource_id">>, Props),
-        metadata = proplists:get_value(<<"metadata">>, Props),
+
+        % Direct relations to other entities
         users = process_ids_with_privileges(
             proplists:get_value(<<"users">>, Props, [])),
         groups = process_ids_with_privileges(
             proplists:get_value(<<"groups">>, Props, [])),
+
+        % Effective relations to other entities
+        eff_users = process_ids_with_privileges(
+            proplists:get_value(<<"eff_users">>, Props, [])), % TODO currently always empty
+        eff_groups = process_ids_with_privileges(
+            proplists:get_value(<<"eff_groups">>, Props, [])) % TODO currently always empty
+    };
+props_to_value(od_handle, Props) ->
+    #od_handle{
+        public_handle = proplists:get_value(<<"public_handle">>, Props),
+        resource_type = proplists:get_value(<<"resource_type">>, Props),
+        resource_id = proplists:get_value(<<"resource_id">>, Props),
+        metadata = proplists:get_value(<<"metadata">>, Props),
         timestamp = deserialize_timestamp(
-            proplists:get_value(<<"timestamp">>, Props))
+            proplists:get_value(<<"timestamp">>, Props)),
+
+        % Direct relations to other entities
+        handle_service = proplists:get_value(<<"handle_service">>, Props),
+        users = process_ids_with_privileges(
+            proplists:get_value(<<"users">>, Props, [])),
+        groups = process_ids_with_privileges(
+            proplists:get_value(<<"groups">>, Props, [])),
+
+        % Effective relations to other entities
+        eff_users = process_ids_with_privileges(
+            proplists:get_value(<<"eff_users">>, Props, [])), % TODO currently always empty
+        eff_groups = process_ids_with_privileges(
+            proplists:get_value(<<"eff_groups">>, Props, [])) % TODO currently always empty
     }.
 
 

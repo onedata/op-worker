@@ -24,29 +24,55 @@
 -type indexes_value() :: #{indexes:index_id() => indexes:index()}.
 
 
-%% Local, cached version of OZ user
+% Records starting with prefix od_ are special records that represent entities
+% in the system and are synchronized to providers via subscriptions.
+% The entities can have various relations between them, especially effective
+% membership is possible via groups and nested groups.
+% these records are synchronized from OZ via subscriptions.
+%
+% The below ASCII visual shows possible relations in entities graph.
+%
+%  provider    share
+%      ^         ^
+%       \       /
+%        \     /
+%         space    handle_service     handle
+%         ^  ^        ^        ^       ^   ^
+%         |   \      /         |      /    |
+%         |    \    /          |     /     |
+%        user    group          user      group
+%                  ^                        ^
+%                  |                        |
+%                  |                        |
+%                group                     user
+%                ^   ^
+%               /     \
+%              /       \
+%            user     user
+
+
 -record(od_user, {
     name = <<"">> :: binary(),
-    alias = <<"">> :: binary(),
-    email_list = [] :: [binary()],
-    connected_accounts = [] :: [od_user:connected_account()],
+    alias = <<"">> :: binary(), % TODO currently always empty
+    email_list = [] :: [binary()], % TODO currently always empty
+    connected_accounts = [] :: [od_user:connected_account()], % TODO currently always empty
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
     space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
 
     % Direct relations to other entities
-%%    groups = [] :: [od_group:id()],
-%%    spaces = [] :: [od_space:id()],
-%%    handle_services = [] :: [od_handle_service:id()],
-%%    handles = [] :: [od_handle:id()],
+    groups = [] :: [od_group:id()],
+    spaces = [] :: [od_space:id()], % TODO currently always empty
+    handle_services = [] :: [od_handle_service:id()],
+    handles = [] :: [od_handle:id()],
 
     % Effective relations to other entities
     eff_groups = [] :: [od_group:id()],
-    eff_spaces = [] :: [od_space:id()],
-    eff_shares = [] :: [od_share:id()],
-    eff_providers = [] :: [od_provider:id()],
-    eff_handle_services = [] :: [od_handle_service:id()],
-    eff_handles = [] :: [od_handle:id()],
+    eff_spaces = [] :: [od_space:id()], % TODO currently always empty
+    eff_shares = [] :: [od_share:id()], % TODO currently always empty
+    eff_providers = [] :: [od_provider:id()], % TODO currently always empty
+    eff_handle_services = [] :: [od_handle_service:id()], % TODO currently always empty
+    eff_handles = [] :: [od_handle:id()], % TODO currently always empty
 
     % This field means that only public information is available about this
     % user. This is the case when given user hasn't ever logged in to this
@@ -68,24 +94,22 @@
     % Group graph related entities
     parents = [] :: [binary()],
     children = [] :: [{od_group:id(), [privileges:group_privilege()]}],
-%%    eff_parents = [] :: [od_group:id()],
-%%    eff_children = [] :: [{od_group:id(), [privileges:group_privilege()]}],
+    eff_parents = [] :: [od_group:id()], % TODO currently always empty
+    eff_children = [] :: [{od_group:id(), [privileges:group_privilege()]}], % TODO currently always empty
 
     % Direct relations to other entities
     users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
-%%    spaces = [] :: [od_space:id()],
-%%    handle_services = [] :: [od_handle_service:id()],
-%%    handles = [] :: [od_handle:id()],
+    spaces = [] :: [od_space:id()],
+    handle_services = [] :: [od_handle_service:id()],
+    handles = [] :: [od_handle:id()],
 
     % Effective relations to other entities
-    % Users list is a exception where we need both direct and effective
-    % memberships to check user permissions of different operations.
     eff_users = [] :: [{od_user:id(), [privileges:group_privilege()]}],
-    eff_spaces = [] :: [od_space:id()],
-%%    eff_shares = [] :: [od_share:id()],
-%%    eff_providers = [] :: [od_provider:id()],
-    eff_handle_services = [] :: [od_handle_service:id()],
-    eff_handles = [] :: [od_handle:id()],
+    eff_spaces = [] :: [od_space:id()], % TODO currently always empty
+    eff_shares = [] :: [od_share:id()], % TODO currently always empty
+    eff_providers = [] :: [od_provider:id()], % TODO currently always empty
+    eff_handle_services = [] :: [od_handle_service:id()], % TODO currently always empty
+    eff_handles = [] :: [od_handle:id()], % TODO currently always empty
 
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -105,8 +129,8 @@
     shares = [] :: [od_share:id()],
 
     % Effective relations to other entities
-%%    eff_users = [] :: [{od_user:id(), [privileges:space_privilege()]}],
-%%    eff_groups = [] :: [{od_group:id(), [privileges:space_privilege()]}],
+    eff_users = [] :: [{od_user:id(), [privileges:space_privilege()]}], % TODO currently always empty
+    eff_groups = [] :: [{od_group:id(), [privileges:space_privilege()]}], % TODO currently always empty
 
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -123,8 +147,8 @@
     root_file = undefined :: undefined | binary(),
 
     % Effective relations to other entities
-%%    eff_users = [] :: [od_user:id()],
-%%    eff_groups = [] :: [od_group:id()],
+    eff_users = [] :: [od_user:id()], % TODO currently always empty
+    eff_groups = [] :: [od_group:id()], % TODO currently always empty
 
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -154,8 +178,8 @@
     groups = [] :: [{od_group:id(), [privileges:handle_service_privilege()]}],
 
     % Effective relations to other entities
-%%    eff_users = [] :: [{od_user:id(), [privileges:handle_service_privilege()]}],
-%%    eff_groups = [] :: [{od_group:id(), [privileges:handle_service_privilege()]}],
+    eff_users = [] :: [{od_user:id(), [privileges:handle_service_privilege()]}], % TODO currently always empty
+    eff_groups = [] :: [{od_group:id(), [privileges:handle_service_privilege()]}], % TODO currently always empty
 
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -175,8 +199,8 @@
     groups = [] :: [{od_group:id(), [privileges:handle_privilege()]}],
 
     % Effective relations to other entities
-%%    eff_users = [] :: [{od_user:id(), [privileges:handle_privilege()]}],
-%%    eff_groups = [] :: [{od_group:id(), [privileges:handle_privilege()]}],
+    eff_users = [] :: [{od_user:id(), [privileges:handle_privilege()]}], % TODO currently always empty
+    eff_groups = [] :: [{od_group:id(), [privileges:handle_privilege()]}], % TODO currently always empty
 
     revision_history = [] :: [subscriptions:rev()]
 }).

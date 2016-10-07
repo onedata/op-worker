@@ -174,7 +174,7 @@ get_effective_handle_services(Auth, UserId) ->
         {ok, Doc} ->
             #document{
                 value = #od_user{
-                    eff_handle_services = UserHandleServices,
+                    handle_services = UserHandleServices,
                     eff_groups = EffectiveGroupIds
                 }} = Doc,
             GroupHandleServices = lists:flatmap(
