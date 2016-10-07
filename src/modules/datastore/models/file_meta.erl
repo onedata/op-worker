@@ -678,13 +678,9 @@ setup_onedata_user(_Client, UserId) ->
                 }
             }) of
             {ok, _RootUUID} ->
-                case times:create(#document{key = FileUuid, value =
-                #times{mtime = CTime, atime = CTime, ctime = CTime}}) of
-                    {ok, _} ->
-                        ok;
-                    {error, already_exists} ->
-                        ok
-                end;
+                {ok, _} = times:save(#document{key = FileUuid, value =
+                    #times{mtime = CTime, atime = CTime, ctime = CTime}}),
+                ok;
             {error, already_exists} -> ok
         end
     end).

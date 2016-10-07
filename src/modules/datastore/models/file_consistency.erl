@@ -28,10 +28,8 @@
 model_init/0, 'after'/5, before/4]).
 
 -type id() :: file_meta:id().
-%%-type component() :: file_meta | local_file_location | parent_links | links | link_to_parent
-%%    | {link_to_child, file_meta:name(), file_meta:uuid()}.
 -type component() :: file_meta | local_file_location | parent_links | link_to_parent
-    | {link_to_child, file_meta:name(), file_meta:uuid()}.
+    | {link_to_child, file_meta:name(), file_meta:uuid()} | times.
 -type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
 
 -export_type([id/0, component/0, waiting/0]).
@@ -105,10 +103,10 @@ wait(FileUuid, SpaceId, WaitFor, DbsyncPosthookArguments) ->
             ok;
         [parent_links] ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(FileUuid, SpaceId),
-            file_consistency:wait(ParentUuid, SpaceId, [file_meta, link_to_parent, parent_links],
+            file_consistency:wait(ParentUuid, SpaceId, [file_meta, times, link_to_parent, parent_links],
                 DbsyncPosthookArguments);
         [parent_links, {NewUuid, WaitName, ChildUuid}] ->
-            file_consistency:wait(NewUuid, SpaceId, [file_meta, link_to_parent, parent_links,
+            file_consistency:wait(NewUuid, SpaceId, [file_meta, times, link_to_parent, parent_links,
                 {link_to_child, WaitName, ChildUuid}], DbsyncPosthookArguments)
     end.
 
@@ -233,13 +231,14 @@ check_missing_components(_FileUuid, _SpaceId, [], Found) ->
 check_missing_components(FileUuid, SpaceId, [file_meta | RestMissing], Found) ->
     case catch file_meta:get(FileUuid) of
         {ok, _} ->
-            check_missing_components(FileUuid, SpaceId, RestMissing, [file_meta | Found]),
-            case catch times:get(FileUuid) of
-                {ok, _} ->
-                    check_missing_components(FileUuid, SpaceId, RestMissing, [file_meta | Found]);
-                _ ->
-                    check_missing_components(FileUuid, SpaceId, RestMissing, Found)
-            end;
+            check_missing_components(FileUuid, SpaceId, RestMissing, [file_meta | Found]);
+        _ ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+    end;
+check_missing_components(FileUuid, SpaceId, [times | RestMissing], Found) ->
+    case catch times:get(FileUuid) of
+        {ok, _} ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, [times | Found]);
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;

@@ -56,26 +56,26 @@ change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document
 change_replicated_internal(SpaceId, Change = #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, link_to_parent, parent_links], [SpaceId, Change]),
+    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, times, link_to_parent, parent_links], [SpaceId, Change]),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
     ok = file_consistency:add_components_and_notify(FileUUID, [local_file_location]),
     ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [parent_links]);
 change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
     ?info("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [file_meta]),
+    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [times]),
     ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
-    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [parent_links]);
+    ok = file_consistency:add_components_and_notify(FileUUID, [file_meta]);
 change_replicated_internal(SpaceId, Change = #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
     ?info("change_replicated_internal: changed file_location ~p", [FileUUID]),
-    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, local_file_location], [SpaceId, Change]),
+    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, times, local_file_location], [SpaceId, Change]),
     ok = replica_dbsync_hook:on_file_location_change(SpaceId, Doc);
 change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{value = #links{model = file_meta, doc_key = FileUUID}}}) ->
     ?info("change_replicated_internal: changed links ~p", [FileUUID]),
     ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [link_to_parent, parent_links]);
-change_replicated_internal(SpaceId, #change{model = times, doc = #document{key = FileUUID, value = #times{}}}) ->
+change_replicated_internal(_SpaceId, #change{model = times, doc = #document{key = FileUUID, value = #times{}}}) ->
     ?info("change_replicated_internal: changed times ~p", [FileUUID]),
-    ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [file_meta]);
+    ok = file_consistency:add_components_and_notify(FileUUID, [times]);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
