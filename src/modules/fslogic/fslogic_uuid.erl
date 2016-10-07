@@ -190,7 +190,7 @@ phantom_uuid_to_uuid(PhantomUUID) ->
 %% Convert Guid and share id to share guid (allowing for guest read)
 %% @end
 %%--------------------------------------------------------------------
--spec uuid_to_share_guid(file_meta:uuid(), od_space:id(), od_share:id()) ->
+-spec uuid_to_share_guid(file_meta:uuid(), od_space:id(), od_share:id() | undefined) ->
     od_share:share_guid().
 uuid_to_share_guid(FileUUID, SpaceId, undefined) ->
     uuid_to_guid(FileUUID, SpaceId);
@@ -224,7 +224,7 @@ share_guid_to_guid(ShareGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec unpack_share_guid(od_share:share_guid()) ->
-    {file_meta:uuid(), od_space:id(), od_share:id()} | {error, non_share_guid}.
+    {file_meta:uuid(), od_space:id(), od_share:id() | undefined} | {error, non_share_guid}.
 unpack_share_guid(ShareGUID) ->
     try binary_to_term(http_utils:base64url_decode(ShareGUID)) of
         {share_guid, FileUUID, SpaceId, ShareId} ->

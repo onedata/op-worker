@@ -54,7 +54,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
-  Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: undefined | od_share:id()) ->
+  Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: od_share:id() | undefined) ->
     handle().
 new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, ShareId) ->
     FSize =
@@ -90,7 +90,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
-    StorageId :: storage:id(), FileId :: helpers:file(), od_share:id(), oneprovider:id()) ->
+    StorageId :: storage:id(), FileId :: helpers:file(), od_share:id() | undefined, oneprovider:id()) ->
     handle().
 new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ShareId, ProviderId) ->
     {IsLocal, Storage, Size} =

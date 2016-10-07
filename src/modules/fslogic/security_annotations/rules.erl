@@ -30,7 +30,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec check({term(), FileDoc :: datastore:document() | undefined, UserDoc :: datastore:document(),
-    od_share:id(), Acl :: [#accesscontrolentity{}] | undefined}) -> ok | no_return().
+    od_share:id() | undefined, Acl :: [#accesscontrolentity{}] | undefined}) -> ok | no_return().
 % standard posix checks
 check({_, _, #document{key = ?ROOT_USER_ID}, _, _}) ->
     ok;
@@ -193,7 +193,7 @@ check({Perm, File, User, ShareId, Acl}) ->
 %%--------------------------------------------------------------------
 %% @doc Checks whether given user has given permission on given file (POSIX permission check).
 %%--------------------------------------------------------------------
--spec validate_posix_access(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(), UserId :: od_user:id(), ShareId :: od_share:id()) -> ok | no_return().
+-spec validate_posix_access(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(), UserId :: od_user:id(), ShareId :: od_share:id() | undefined) -> ok | no_return().
 validate_posix_access(rdwr, FileDoc, UserId, ShareId) ->
     ok = validate_posix_access(write, FileDoc, UserId, ShareId),
     ok = validate_posix_access(read, FileDoc, UserId, ShareId);
@@ -240,7 +240,7 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
 %% @doc Checks whether given user has permission to see given scope file.
 %%      This function is always called before validate_posix_access/3 and shall handle all special cases.
 %%--------------------------------------------------------------------
--spec validate_scope_access(FileDoc :: datastore:document(), UserId :: od_user:id(), ShareId :: od_share:id()) -> ok | no_return().
+-spec validate_scope_access(FileDoc :: datastore:document(), UserId :: od_user:id(), ShareId :: od_share:id() | undefined) -> ok | no_return().
 validate_scope_access(_FileDoc, ?GUEST_USER_ID, undefined) ->
     throw(?ENOENT);
 validate_scope_access(FileDoc, UserId, undefined) ->
@@ -263,7 +263,7 @@ validate_scope_access(_FileDoc, _UserId, _ShareId) ->
 %% @doc Checks whether given user has permission to access given file with respect to scope settings.
 %%--------------------------------------------------------------------
 -spec validate_scope_privs(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(),
-    UserDoc :: datastore:document(), ShareId :: od_share:id()) -> ok | no_return().
+    UserDoc :: datastore:document(), ShareId :: od_share:id() | undefined) -> ok | no_return().
 validate_scope_privs(write, FileDoc, #document{key = UserId, value = #od_user{eff_groups = UserGroups}}, _ShareId) ->
     {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
     {ok, #document{value = #od_space{users = Users, groups = Groups}}} =

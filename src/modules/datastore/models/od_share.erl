@@ -23,13 +23,12 @@
 -type doc() :: datastore:document().
 -type info() :: #od_share{}.
 -type id() :: binary().
--export_type([doc/0, info/0, id/0]).
-
 % guid of special 'share' type, which when used as guest user, allows for read
 % only access to file (when used as normal user it behaves like normal guid).
 % Apart from FileUuid and SpaceId, it contains also ShareId.
 -type share_guid() :: fslogic_worker:file_guid().
 
+-export_type([doc/0, info/0, id/0]).
 -export_type([share_guid/0]).
 
 %% API

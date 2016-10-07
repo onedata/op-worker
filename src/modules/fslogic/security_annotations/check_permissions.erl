@@ -85,7 +85,7 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec expand_access_definitions([access_definition()], od_user:id(), od_share:id() | undefined, list(), maps:map(), maps:map(), maps:map()) ->
-    [{check_type(), undefined | datastore:document(), datastore:document(), od_share:id(), [#accesscontrolentity{}]}].
+    [{check_type(), undefined | datastore:document(), datastore:document(), od_share:id() | undefined, [#accesscontrolentity{}]}].
 expand_access_definitions([], _UserId, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];
 expand_access_definitions(_, ?ROOT_USER_ID, _ShareId, _Inputs, _FileMap, _AclMap, _UserMap) ->
@@ -211,7 +211,7 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
 %% each ancestor and subject document. Starts from doc parent.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_ancestors_check(file_meta:uuid(), Acc, od_user:id(), od_user:doc(), od_share:id(), maps:map()) ->
+-spec expand_ancestors_check(file_meta:uuid(), Acc, od_user:id(), od_user:doc(), od_share:id() | undefined, maps:map()) ->
     {Acc, CacheUsed :: boolean()} when
     Acc :: [{acl_access_mask(), file_meta:doc(), od_user:doc(), od_share:id() | undefined, undefined | [#accesscontrolentity{}]}].
 expand_ancestors_check(?ROOT_DIR_UUID, Acc, _UserId, _UserDoc, _ShareId, _AclMap) ->
