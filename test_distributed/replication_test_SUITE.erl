@@ -1044,10 +1044,13 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     % delete grandparent file_meta
-    ModelConfig = ?rpc(file_meta, model_init, []),
-    FM_SL = ModelConfig#model_config.store_level,
-    {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FM_SL, file_meta, Dir1Uuid]),
-    ok = ?rpc(datastore, delete, [FM_SL, file_meta, Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
+    FileMetaModelConfig = ?rpc(file_meta, model_init, []),
+    FileMetaStoreLevel = FileMetaModelConfig#model_config.store_level,
+    {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FileMetaStoreLevel, file_meta, Dir1Uuid]),
+    TimesModelConfig = ?rpc(times, model_init, []),
+    TimesStoreLevel = TimesModelConfig#model_config.store_level,
+    {ok, #document{value = Dir1Times}} = ?rpc(datastore, get, [TimesStoreLevel, times, Dir1Uuid]),
+    ok = ?rpc(datastore, delete, [FileMetaStoreLevel, file_meta, Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
     timer:sleep(1000), % wait for posthook that deletes file_consistency record
 
     %when
@@ -1059,7 +1062,8 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
     ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, _} = ?rpc(datastore, save, [FM_SL, #document{key = Dir1Uuid, value = Dir1Meta}]),
+    {ok, _} = ?rpc(datastore, save, [FileMetaStoreLevel, #document{key = Dir1Uuid, value = Dir1Meta}]),
+    {ok, _} = ?rpc(datastore, save, [FileMetaStoreLevel, #document{key = Dir1Uuid, value = Dir1Times}]),
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = Dir1Uuid, value = Dir1Meta}}]),
     timer:sleep(timer:seconds(2)),
