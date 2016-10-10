@@ -19,6 +19,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("http/gui_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -42,6 +43,13 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    ?dump({init, self()}),
+    NewETS = ets:new(?LS_SUB_CACHE_ETS, [
+        set, public,
+        {read_concurrency, true},
+        {write_concurrency, true}
+    ]),
+    ets:insert(?LS_CACHE_ETS, {self(), NewETS}),
     ok.
 
 
@@ -52,6 +60,8 @@ init() ->
 %%--------------------------------------------------------------------
 -spec terminate() -> ok.
 terminate() ->
+    ?dump({terminate, self()}),
+    ets:delete_object(?LS_CACHE_ETS, self()),
     ok.
 
 
@@ -373,6 +383,7 @@ file_record(SessionId, FileId) ->
             {ok, Res}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -393,3 +404,19 @@ file_acl_record(SessionId, FileId) ->
             Res = acl_utils:acl_to_json(FileId, Acl),
             {ok, Res}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Caches a LS result in ETS to optimize DB load and allow for pagination
+%% in GUI data view. Must be called by an async process. The whole cache is held
+%% under the key that is the pid of parent websocket process.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_ls_result(DirId :: fslogic_worker:file_guid(),
+    SortedChildren :: [{fslogic_worker:file_guid(), file_meta:name()}]) -> ok.
+cache_ls_result(DirId, SortedChildren) ->
+    WSPid = gui_async:get_ws_process(),
+
+    ok.
