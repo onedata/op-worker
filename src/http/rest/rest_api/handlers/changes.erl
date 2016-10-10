@@ -158,6 +158,11 @@ send_change(SendChunk, #change{seq = Seq, doc = #document{
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
     send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
         RequestedSpaceId);
+send_change(SendChunk, #change{seq = Seq, doc = #document{
+    key = FileUuid, value = #times{}}}, RequestedSpaceId) ->
+    {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
+    send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
+        RequestedSpaceId);
 send_change(SendChunk, Change, RequestedSpaceId) ->
     Scope =
         case Change#change.doc#document.value#file_meta.is_scope of
@@ -183,17 +188,25 @@ send_change(SendChunk, Change, RequestedSpaceId) ->
 prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     key = Uuid, deleted = Deleted,
     value = #file_meta{
-        atime = Atime, ctime = Ctime, is_scope = IsScope, mode = Mode,
-        mtime = Mtime, type = Type, uid = Uid,
+        is_scope = IsScope, mode = Mode, type = Type, uid = Uid,
         version = Version, name = Name}}}, SpaceId) ->
     Ctx = fslogic_context:new(?ROOT_SESS_ID),
+    #times{atime = Atime, ctime = Ctime, mtime = Mtime} =
+        try
+            {ok, #document{value = TimesValue}} = times:get(Uuid),
+            TimesValue
+        catch
+            _:Error0 ->
+                ?error("Cannot fetch times for changes, error: ~p", [Error0]),
+                #times{}
+        end,
     Guid =
         try
             {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid)),
             Val
         catch
-            _:Error ->
-                ?error("Cannot fetch guid for changes, error: ~p", [Error]),
+            _:Error1 ->
+                ?error("Cannot fetch guid for changes, error: ~p", [Error1]),
                 <<>>
         end,
     Path =

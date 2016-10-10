@@ -39,13 +39,11 @@ mkdir(CTX, ParentFile, Name, Mode) ->
         name = Name,
         type = ?DIRECTORY_TYPE,
         mode = Mode,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
     case file_meta:create(ParentFile, File) of
         {ok, DirUUID} ->
+            {ok, _} = times:create(#document{key = DirUUID, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
             fslogic_times:update_mtime_ctime(ParentFile, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = fslogic_uuid:uuid_to_guid(DirUUID)}

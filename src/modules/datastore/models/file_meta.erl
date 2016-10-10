@@ -50,6 +50,7 @@
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 -export([hidden_file_name/1]).
 -export([add_share/2, remove_share/2]).
+-export([get_uuid/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -433,7 +434,8 @@ tag_children(LinkName, Targets) ->
         fun({Scope, _VH, _Key, _Model}) ->
             Scope
         end, Targets),
-    LongestPrefix = max(4, binary:longest_common_prefix(Scopes)),
+    MinScope = lists:min([4 | lists:map(fun size/1, Scopes)]),
+    LongestPrefix = max(MinScope, binary:longest_common_prefix(Scopes)),
     lists:map(
         fun({Scope, VH, Key, _}) ->
             case MPID of
@@ -442,7 +444,7 @@ tag_children(LinkName, Targets) ->
                 _ ->
                     case LongestPrefix >= size(Scope) of
                         true ->
-                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, LongestPrefix + 1), Key};
+                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, size(Scope)), Key};
                         false ->
                             {links_utils:make_scoped_link_name(LinkName, Scope, undefined, LongestPrefix + 1), Key}
                     end
@@ -667,15 +669,18 @@ setup_onedata_user(_Client, UserId) ->
             fslogic_spaces:make_space_exist(SpaceId)
         end, Spaces),
 
+        FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
         case create({uuid, ?ROOT_DIR_UUID},
-            #document{key = fslogic_uuid:user_root_dir_uuid(UserId),
+            #document{key = FileUuid,
                 value = #file_meta{
                     name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                    is_scope = true
+                   uid = ?ROOT_USER_ID, is_scope = true
                 }
             }) of
-            {ok, _RootUUID} -> ok;
+            {ok, _RootUUID} ->
+                {ok, _} = times:save(#document{key = FileUuid, value =
+                    #times{mtime = CTime, atime = CTime, ctime = CTime}}),
+                ok;
             {error, already_exists} -> ok
         end
     end).
@@ -1141,3 +1146,25 @@ is_hidden(FileName) ->
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
         _ -> false
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get uuid of file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_uuid(uuid() | entry()) -> {ok, uuid()} | datastore:get_file_error().
+get_uuid({uuid, Key}) ->
+    {ok, Key};
+get_uuid(#document{key = Uuid, value = #file_meta{}}) ->
+    {ok, Uuid};
+get_uuid({path, Path}) ->
+    case get({path, Path}) of
+        {ok, #document{key = Uuid}} ->
+            {ok, Uuid};
+        Error ->
+            Error
+    end;
+get_uuid(?ROOT_DIR_UUID) ->
+    {ok, ?ROOT_DIR_UUID};
+get_uuid(Uuid) ->
+    {ok, Uuid}.
