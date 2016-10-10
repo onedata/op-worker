@@ -22,7 +22,7 @@
 -export([get/2]).
 -export([get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
 -export([has_efective_group/2, join_group/2, leave_group/2, get_groups/2]).
--export([get_effective_handle_services/2]).
+-export([get_effective_handle_services/2, get_effective_groups/2]).
 
 %%%===================================================================
 %%% API
@@ -153,8 +153,24 @@ leave_group(Auth, GroupId) ->
     {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
 get_groups(Auth, UserId) ->
     case get(Auth, UserId) of
-        {ok, #document{value = #od_user{eff_groups = GroupsIds}}} ->
+        {ok, #document{value = #od_user{groups = GroupsIds}}} ->
             {ok, GroupsIds};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of user effective group IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective_groups(oz_endpoint:auth(), UserId :: onedata_user:id()) ->
+    {ok, GroupsIds :: [binary()]} |  {error, Reason :: term()}.
+get_effective_groups(Auth, UserId) ->
+    case get(Auth, UserId) of
+        {ok, #document{value = #od_user{eff_groups = EffGroups}}} ->
+            {ok, EffGroups};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -181,7 +197,7 @@ get_effective_handle_services(Auth, UserId) ->
                 fun(GroupId) ->
                     {ok, #document{
                         value = #od_group{
-                            eff_handle_services = GroupHS
+                            handle_services = GroupHS
                         }}} = group_logic:get(Auth, GroupId),
                     GroupHS
                 end, EffectiveGroupIds),
