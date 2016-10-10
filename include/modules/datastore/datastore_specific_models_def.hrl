@@ -274,9 +274,6 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
-    mtime :: undefined | file_meta:time(),
-    atime :: undefined | file_meta:time(),
-    ctime :: undefined | file_meta:time(),
     uid :: undefined | od_user:id(), %% Reference to od_user that owns this file
     size = 0 :: undefined | file_meta:size(),
     version = 0, %% Snapshot version
@@ -433,6 +430,13 @@
 %% Helper model for caching files' permissions
 -record(permissions_cache_helper, {
     value = undefined :: term()
+}).
+
+%% Model that holds file timestamps
+-record(times, {
+    atime = 0 :: times:time(),
+    ctime = 0 :: times:time(),
+    mtime = 0 :: times:time()
 }).
 
 -endif.

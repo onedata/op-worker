@@ -57,5 +57,6 @@ models() -> [
     indexes,
     file_consistency,
     permissions_cache,
-    permissions_cache_helper
+    permissions_cache_helper,
+    times
 ].
