@@ -118,8 +118,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
     ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
-            type = Type, mode = Mode, atime = ATime, mtime = MTime, provider_id = ProviderId,
-            ctime = CTime, uid = UserID, name = Name, shares = Shares}} = FileDoc} ->
+            type = Type, mode = Mode, provider_id = ProviderId, uid = UserID,
+            name = Name, shares = Shares}} = FileDoc} ->
 
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
@@ -141,6 +141,9 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
                 _ ->
                     luma_utils:gen_storage_uid(UserID)
             end,
+
+            {ok, {ATime, CTime, MTime}} = times:get_or_default(UUID),
+
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
                 uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),

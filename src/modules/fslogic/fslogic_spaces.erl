@@ -166,11 +166,16 @@ make_space_exist(SpaceId) ->
                 #document{key = SpaceDirUuid,
                     value = #file_meta{
                         name = SpaceId, type = ?DIRECTORY_TYPE,
-                        mode = 8#1775, mtime = CTime, atime = CTime,
-                        ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
+                        mode = 8#1775, uid = ?ROOT_USER_ID, is_scope = true
                     }}) of
-                {ok, _RootUUID} -> ok;
-                {error, already_exists} -> ok
+                {ok, _} ->
+                    case times:create(#document{key = SpaceDirUuid, value =
+                        #times{mtime = CTime, atime = CTime, ctime = CTime}}) of
+                        {ok, _} -> ok;
+                        {error, already_exists} -> ok
+                    end;
+                {error, already_exists} ->
+                    ok
             end
     end.
 
