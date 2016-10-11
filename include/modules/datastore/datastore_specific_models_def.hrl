@@ -23,6 +23,9 @@
 -type swift_user_ctx() :: #{storage:id() => swift_user:ctx()}.
 -type indexes_value() :: #{indexes:index_id() => indexes:index()}.
 
+%%%===================================================================
+%%% Records synchronized via subscriptions
+%%%===================================================================
 
 % Records starting with prefix od_ are special records that represent entities
 % in the system and are synchronized to providers via subscriptions.
@@ -49,7 +52,7 @@
 %               /     \
 %              /       \
 %            user     user
-
+%
 
 -record(od_user, {
     name = <<"">> :: binary(),
@@ -83,7 +86,6 @@
     revision_history = [] :: [subscriptions:rev()]
 }).
 
-
 %% Local, cached version of OZ group
 -record(od_group, {
     name :: undefined | binary(),
@@ -114,7 +116,6 @@
     revision_history = [] :: [subscriptions:rev()]
 }).
 
-
 %% Model for caching space details fetched from OZ
 -record(od_space, {
     name :: undefined | binary(),
@@ -135,7 +136,6 @@
     revision_history = [] :: [subscriptions:rev()]
 }).
 
-
 %% Model for caching share details fetched from OZ
 -record(od_share, {
     name = undefined :: undefined | binary(),
@@ -153,7 +153,6 @@
     revision_history = [] :: [subscriptions:rev()]
 }).
 
-
 %% Model for caching provider details fetched from OZ
 -record(od_provider, {
     client_name :: undefined | binary(),
@@ -165,7 +164,6 @@
     public_only = false :: boolean(), %% see comment in onedata_users
     revision_history = [] :: [subscriptions:rev()]
 }).
-
 
 %% Model for caching handle service details fetched from OZ
 -record(od_handle_service, {
@@ -183,7 +181,6 @@
 
     revision_history = [] :: [subscriptions:rev()]
 }).
-
 
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
@@ -205,6 +202,9 @@
     revision_history = [] :: [subscriptions:rev()]
 }).
 
+%%%===================================================================
+%%% Records specific for oneprovider
+%%%===================================================================
 
 %% Message ID containing recipient for remote response.
 -record(message_id, {
@@ -212,7 +212,6 @@
     id :: undefined | binary(),
     recipient :: pid() | undefined
 }).
-
 
 % State of subscription tracking.
 -record(subscriptions_state, {
@@ -222,13 +221,11 @@
     users :: undefined | sets:set(od_user:id())
 }).
 
-
 %% Identity containing user_id
 -record(user_identity, {
     user_id :: undefined | od_user:id(),
     provider_id :: undefined | oneprovider:id()
 }).
-
 
 %% User session
 -record(session, {
@@ -251,7 +248,6 @@
     transfers = [] :: [transfer:id()]
 }).
 
-
 %% File handle used by the module
 -record(sfm_handle, {
     helper_handle :: undefined | helpers:handle(),
@@ -269,7 +265,6 @@
     share_id :: undefined | od_share:id()
 }).
 
-
 -record(file_meta, {
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
@@ -285,20 +280,17 @@
     shares = [] :: [od_share:id()]
 }).
 
-
 %% Helper name and its arguments
 -record(helper_init, {
     name :: helpers:name(),
     args :: helpers:args()
 }).
 
-
 %% Model for storing storage information
 -record(storage, {
     name :: undefined | storage:name(),
     helpers :: undefined | [helpers:init()]
 }).
-
 
 %% Model for storing file's location data
 -record(file_location, {
@@ -318,48 +310,40 @@
     last_rename :: fslogic_file_location:last_rename()
 }).
 
-
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()]
 }).
-
 
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
     ctx = #{} :: ceph_user_ctx()
 }).
 
-
 %% Model that maps onedata user to POSIX user
 -record(posix_user, {
     ctx = #{} :: posix_user_ctx()
 }).
-
 
 %% Model that maps onedata user to Amazon S3 user
 -record(s3_user, {
     ctx = #{} :: s3_user_ctx()
 }).
 
-
 %% Model that maps onedata user to Openstack Swift user
 -record(swift_user, {
     ctx = #{} :: swift_user_ctx()
 }).
-
 
 %% Model that holds state entries for DBSync worker
 -record(dbsync_state, {
     entry :: term()
 }).
 
-
 %% Model that holds state entries for DBSync worker
 -record(dbsync_batches, {
     batches = #{} :: maps:map()
 }).
-
 
 %% Model that holds files created by root, whose owner needs to be changed when
 %% the user will be present in current provider.
@@ -368,12 +352,10 @@
     file_uuids = [] :: [file_meta:uuid()]
 }).
 
-
 %% Model for holding current quota state for spaces
 -record(space_quota, {
     current_size = 0 :: non_neg_integer()
 }).
-
 
 %% Record that holds monitoring id
 -record(monitoring_id, {
@@ -384,7 +366,6 @@
     secondary_subject_id = <<"">> :: datastore:id(),
     provider_id = oneprovider:get_provider_id() :: oneprovider:id()
 }).
-
 
 %% Model for holding state of monitoring
 -record(monitoring_state, {
@@ -400,19 +381,16 @@
     active_descriptors = #{} :: active_descriptors()
 }).
 
-
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
     value = #{} :: maps:map()
 }).
 
-
 %% Model that holds database views
 -record(indexes, {
     value = #{} :: indexes_value()
 }).
-
 
 %% Model that keeps track of consistency of file metadata
 -record(file_consistency, {
@@ -420,12 +398,10 @@
     waiting = [] :: [file_consistency:waiting()]
 }).
 
-
 %% Model that caches files' permissions
 -record(permissions_cache, {
     value = undefined :: term()
 }).
-
 
 %% Helper model for caching files' permissions
 -record(permissions_cache_helper, {
