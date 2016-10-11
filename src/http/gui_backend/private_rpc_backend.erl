@@ -48,7 +48,7 @@ handle(<<"fileUploadSuccess">>, Props) ->
         logical_file_manager:open(SessionId, {guid, FileId}, read),
     ok = logical_file_manager:fsync(FileHandle),
     ok = logical_file_manager:release(FileHandle),
-    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
+    {ok, FileData} = file_data_backend:file_record(SessionId, FileId, false, 0),
     gui_async:push_created(<<"file">>, FileData),
     % @todo end
     ok;
@@ -92,6 +92,20 @@ handle(<<"getSharedFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
     end;
 
 %%--------------------------------------------------------------------
+%% File manipulation procedures
+%%--------------------------------------------------------------------
+handle(<<"fetchMoreDirChildren">>, Props) ->
+    SessionId = g_session:get_session_id(),
+    DirId = proplists:get_value(<<"dirId">>, Props),
+    CurrentChCount = proplists:get_value(<<"currentChildrenCount">>, Props),
+    {ok, FileData} = file_data_backend:file_record(
+        SessionId, DirId, true, CurrentChCount
+    ),
+    NewChCount = proplists:get_value(<<"children">>, FileData),
+    gui_async:push_updated(<<"file">>, FileData),
+    {ok, [{<<"newChildrenCount">>, length(NewChCount)}]};
+
+%%--------------------------------------------------------------------
 %% Space related procedures
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
@@ -110,7 +124,7 @@ handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            gui_async:push_created(<<"space">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -144,7 +158,7 @@ handle(<<"groupJoinSpace">>, Props) ->
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            gui_async:push_created(<<"space">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -179,7 +193,9 @@ handle(<<"createFileShare">>, Props) ->
     case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
         {ok, {ShareId, _}} ->
             % Push file data so GUI knows that is is shared
-            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
+            {ok, FileData} = file_data_backend:file_record(
+                SessionId, FileId, false, 0
+            ),
             gui_async:push_created(<<"file">>, FileData),
             {ok, [{<<"shareId">>, ShareId}]};
         {error, ?EACCES} ->
@@ -210,7 +226,7 @@ handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
         {ok, GroupId} ->
             GroupRecord = group_data_backend:group_record(GroupId),
             GroupName = proplists:get_value(<<"name">>, GroupRecord),
-            gui_async:push_created(<<"group">>, GroupRecord, self()),
+            gui_async:push_created(<<"group">>, GroupRecord),
             {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
@@ -245,8 +261,8 @@ handle(<<"groupJoinGroup">>, Props) ->
         {ok, ParentGroupId} ->
             ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
             ChildGroupRecord = group_data_backend:group_record(ChildGroupId),
-            gui_async:push_updated(<<"group">>, ParentGroupRecord, self()),
-            gui_async:push_updated(<<"group">>, ChildGroupRecord, self()),
+            gui_async:push_updated(<<"group">>, ParentGroupRecord),
+            gui_async:push_updated(<<"group">>, ChildGroupRecord),
             PrntGroupName = proplists:get_value(<<"name">>, ParentGroupRecord),
             {ok, [{<<"groupName">>, PrntGroupName}]};
         {error, _} ->
