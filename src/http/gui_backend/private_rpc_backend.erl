@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(private_rpc_backend).
--author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
+-author("Lukasz Opiola").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -101,8 +101,8 @@ handle(<<"createFile">>, Props) ->
     Type = proplists:get_value(<<"type">>, Props),
     ?dump({Name, ParentId, Type}),
     case file_data_backend:create_file(SessionId, Name, ParentId, Type) of
-        {ok, FileData} ->
-            FileId = proplists:get_value(<<"id">>, FileData),
+        {ok, FileId} ->
+            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
             gui_async:push_created(<<"file">>, FileData),
             {ok, [{<<"fileId">>, FileId}]};
         Error ->

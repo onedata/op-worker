@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(public_rpc_backend).
--author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
+-author("Lukasz Opiola").
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").

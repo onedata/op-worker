@@ -19,6 +19,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(system_data_backend).
+-behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
@@ -33,9 +34,8 @@
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% data_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------

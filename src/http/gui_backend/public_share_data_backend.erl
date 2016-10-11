@@ -13,6 +13,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(public_share_data_backend).
+-behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 -author("Tomasz Lichon").
@@ -31,7 +32,7 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
-%%% API functions
+%%% data_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------

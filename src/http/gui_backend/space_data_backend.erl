@@ -11,6 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_data_backend).
+-behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 
@@ -29,7 +30,7 @@
 -export([space_record/1, space_record/2]).
 
 %%%===================================================================
-%%% API functions
+%%% data_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------

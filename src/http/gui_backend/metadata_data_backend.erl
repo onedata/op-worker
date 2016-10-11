@@ -11,6 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(metadata_data_backend).
+-behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
 -include_lib("ctool/include/logging.hrl").
@@ -24,7 +25,7 @@
 -export([metadata_record/2]).
 
 %%%===================================================================
-%%% API functions
+%%% data_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
