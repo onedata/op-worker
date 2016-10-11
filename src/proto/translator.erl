@@ -284,7 +284,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         type = FileAttr#'FileAttr'.type,
         size = FileAttr#'FileAttr'.size,
         provider_id = FileAttr#'FileAttr'.provider_id,
-        shares = FileAttr#'FileAttr'.shares
+        shares = FileAttr#'FileAttr'.shares,
+        owner_id = FileAttr#'FileAttr'.owner_id
     };
 translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
     #file_children{child_links = lists:map(
@@ -686,7 +687,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         type = FileAttr#file_attr.type,
         size = FileAttr#file_attr.size,
         provider_id = FileAttr#file_attr.provider_id,
-        shares = FileAttr#file_attr.shares
+        shares = FileAttr#file_attr.shares,
+        owner_id = FileAttr#file_attr.owner_id
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->

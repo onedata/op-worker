@@ -73,7 +73,7 @@ mv(SessId, FileKey, TargetPath) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cp(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), TargetPath :: file_meta:path()) ->
-    ok | logical_file_manager:error_reply().
+    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),

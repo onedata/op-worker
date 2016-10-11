@@ -498,7 +498,7 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(),
-    custom_metadata:filter(), boolean()) -> {ok, custom_metadata:value()}.
+    custom_metadata:filter(), boolean()) -> #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_metadata(_CTX, {uuid, FileUuid}, json, Names, Inherited) ->
     case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of
@@ -521,7 +521,7 @@ get_metadata(_CTX, {uuid, FileUuid}, rdf, _, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type(),
-    custom_metadata:value(), custom_metadata:filter()) -> ok.
+    custom_metadata:value(), custom_metadata:filter()) -> #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_metadata(_CTX, {uuid, FileUuid}, json, Value, Names) ->
     {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names),
@@ -535,7 +535,8 @@ set_metadata(_CTX, {uuid, FileUuid}, rdf, Value, _) ->
 %% Remove metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec remove_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type()) -> ok.
+-spec remove_metadata(session:id(), {uuid, file_meta:uuid()}, custom_metadata:type()) ->
+    #provider_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_metadata(_CTX, {uuid, FileUuid}, json) ->
     ok = custom_metadata:remove_json_metadata(FileUuid),
