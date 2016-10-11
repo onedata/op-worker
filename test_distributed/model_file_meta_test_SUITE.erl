@@ -228,7 +228,7 @@ basic_operations_test_core(Config, LastLevel) ->
 
     {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, fslogic_path, gen_path, [UL20, ?ROOT_SESS_ID]),
     ?assertMatch({ok, Level20Path}, {AL20_2, UL20_2}),
-    test_utils:mock_unload(Workers, [space_info, fslogic_uuid]),
+    test_utils:mock_unload(Workers, [od_space, fslogic_uuid]),
 
     {{A9, U9}, GetScopeLevel0} = ?call_with_time(Worker1, get_scope, [U14]),
     {{A11, U11}, GetScopeLevel2} = ?call_with_time(Worker2, get_scope, [U6]),
@@ -381,9 +381,9 @@ end_per_testcase(Case, _Config) ->
 %%%===================================================================
 
 space_info_mock(Workers, SpaceName) ->
-    test_utils:mock_new(Workers, [space_info, fslogic_uuid]),
-    test_utils:mock_expect(Workers, space_info, get, fun(_, _) ->
-        {ok, #document{value = #space_info{name = SpaceName}}}
+    test_utils:mock_new(Workers, [od_space, fslogic_uuid]),
+    test_utils:mock_expect(Workers, od_space, get, fun(_, _) ->
+        {ok, #document{value = #od_space{name = SpaceName}}}
     end),
     test_utils:mock_expect(Workers, fslogic_uuid, space_dir_uuid_to_spaceid, fun(_) ->
         SpaceName %% Just return space name since space info mock ignores space id anyway

@@ -685,7 +685,8 @@ get_locations_from_map(Map) ->
     end, [], Map).
 
 create_doc(Doc, _ParentDoc, _LocId, _Path) ->
-    {ok, _} = file_meta:save(Doc),
+    {ok, FileUuid} = file_meta:save(Doc),
+    {ok, _} = times:save(#document{key = FileUuid, value = #times{}}),
     ok.
 
 set_parent_link(Doc, ParentDoc, _LocId, _Path) ->

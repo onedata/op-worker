@@ -119,7 +119,7 @@ set_last_rename(#document{value = #file_location{uuid = UUID} = Loc} = Doc,
 %% Create storage file and file_location if there is no file_location defined
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(space_info:id(), datastore:document()) ->
+-spec create_storage_file_if_not_exists(od_space:id(), datastore:document()) ->
     ok | {error, term()}.
 create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
     value = #file_meta{mode = Mode, uid = UserId}}) ->
@@ -198,7 +198,7 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
 %%--------------------------------------------------------------------
 -spec rename_or_delete(file_location:doc(),
     {{helpers:file(), binary()}, non_neg_integer()} | undefined) ->
-    {renamed, file_location:doc(), file_meta:uuid(), onedata_user:id(), space_info:id()}
+    {renamed, file_location:doc(), file_meta:uuid(), od_user:id(), od_space:id()}
     | skipped | deleted.
 rename_or_delete(_, undefined) ->
     skipped;
@@ -208,7 +208,7 @@ rename_or_delete(#document{value = #file_location{last_rename = {_, LocalNum}}},
 rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
     blocks = OldBlocks}}, {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename) ->
     {ok, Auth} = session:get_auth(?ROOT_SESS_ID),
-    {ok, #document{value = #space_info{providers = Providers}}} = space_info:get_or_fetch(Auth, TargetSpaceId, ?ROOT_USER_ID),
+    {ok, #document{value = #od_space{providers = Providers}}} = od_space:get_or_fetch(Auth, TargetSpaceId, ?ROOT_USER_ID),
     TargetSpaceProviders = ordsets:from_list(Providers),
     case ordsets:is_element(oneprovider:get_provider_id(), TargetSpaceProviders) of
         true ->
@@ -244,9 +244,9 @@ rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
 %% Otherwise, file is added to files awaiting owner change.
 %% @end
 %%--------------------------------------------------------------------
--spec chown_file(file_meta:uuid(), onedata_user:id(), space_info:id()) -> ok.
+-spec chown_file(file_meta:uuid(), od_user:id(), od_space:id()) -> ok.
 chown_file(FileUuid, UserId, SpaceId) ->
-    case onedata_user:exists(UserId) of
+    case od_user:exists(UserId) of
         true ->
             files_to_chown:chown_file(FileUuid, UserId, SpaceId);
         false ->

@@ -34,8 +34,8 @@
 %% Add storage ctx to user document and saves in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec add(UserModel :: model(), UserId :: onedata_user:id(), StorageId :: storage:id(),
-    UserCtx :: ctx()) -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+-spec add(UserModel :: model(), UserId :: od_user:id(), StorageId :: storage:id(),
+    UserCtx :: ctx()) -> {ok, UserId :: od_user:id()} | {error, Reason :: term()}.
 add(UserModel, UserId, StorageId, UserCtx) ->
     Diff = fun(User) -> {ok, UserModel:add_ctx(StorageId, UserCtx, User)} end,
     case UserModel:update(UserId, Diff) of
@@ -56,7 +56,7 @@ add(UserModel, UserId, StorageId, UserCtx) ->
 %% Returns user record from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec get(UserModel :: model(), UserId :: onedata_user:id()) ->
+-spec get(UserModel :: model(), UserId :: od_user:id()) ->
     {ok, User :: type()} | {error, Reason :: term()}.
 get(UserModel, UserId) ->
     case UserModel:get(UserId) of
@@ -69,7 +69,7 @@ get(UserModel, UserId) ->
 %% Returns user storage context from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec get_ctx(UserModel :: model(), UserId :: onedata_user:id(), StorageId :: storage:id()) ->
+-spec get_ctx(UserModel :: model(), UserId :: od_user:id(), StorageId :: storage:id()) ->
     UserCtx :: ctx() | undefined.
 get_ctx(UserModel, UserId, StorageId) ->
     case get(UserModel, UserId) of

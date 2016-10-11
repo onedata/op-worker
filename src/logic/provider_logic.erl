@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Interface to provider's cache containing provider_info.
+%%% @doc Interface to provider's cache containing od_provider.
 %%% Operations may involve interactions with OZ api
 %%% or cached records from the datastore.
 %%% @end
@@ -30,7 +30,7 @@
 -spec get(ProviderID :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 get(ProviderID) ->
-    provider_info:get(ProviderID).
+    od_provider:get(ProviderID).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -55,7 +55,7 @@ get_providers_with_common_support() ->
 -spec get_providers(ProviderIDs :: [binary()]) ->
     {ok, [datastore:document()]} | {error, Reason :: term()}.
 get_providers(ProviderIDs) ->
-    Results = utils:pmap(fun provider_info:get/1, ProviderIDs),
+    Results = utils:pmap(fun od_provider:get/1, ProviderIDs),
     case lists:any(fun
         ({error, Reason}) ->
             ?warning("Unable to read provider info due to ~p", [Reason]),
@@ -73,10 +73,10 @@ get_ids_of_providers_with_common_support() ->
     case provider_logic:get(ProviderID) of
         {ok, #document{value = Provider}} ->
             case Provider of
-                #provider_info{public_only = true} ->
+                #od_provider{public_only = true} ->
                     ?error("Own provider info contains public only data"),
                     {error, no_private_info};
-                #provider_info{space_ids = SIDs} ->
+                #od_provider{spaces = SIDs} ->
                     ger_supporting_providers(SIDs)
             end;
         {error, Reason} ->
@@ -88,8 +88,8 @@ get_ids_of_providers_with_common_support() ->
     {ok, [ProviderID :: binary()]} | {error, Reason :: term()}.
 ger_supporting_providers(SpaceIDs) ->
     ProviderIDs = lists:flatten(utils:pmap(fun(SpaceID) ->
-        {ok, #document{value = #space_info{providers_supports = Supports}}}
-            = space_info:get(SpaceID),
+        {ok, #document{value = #od_space{providers_supports = Supports}}}
+            = od_space:get(SpaceID),
         {SupportingProviderIDs, _} = lists:unzip(Supports),
         SupportingProviderIDs
     end, SpaceIDs)),
@@ -97,6 +97,6 @@ ger_supporting_providers(SpaceIDs) ->
     case lists:all(fun erlang:is_binary/1, ProviderIDs) of
         false ->
             ?error("Unable to read space info"),
-            {error, no_space_info};
+            {error, no_od_space};
         true -> {ok, ProviderIDs}
     end.

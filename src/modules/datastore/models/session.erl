@@ -194,7 +194,7 @@ all_with_user() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(SessIdOrSession :: id() | #session{}) ->
-    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+    {ok, UserId :: od_user:id()} | {error, Reason :: term()}.
 get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
     {ok, UserId};
 get_user_id(SessId) ->

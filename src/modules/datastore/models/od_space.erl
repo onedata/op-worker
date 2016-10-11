@@ -8,7 +8,7 @@
 %%% @doc Cache for space details fetched from Global Registry.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_info).
+-module(od_space).
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
@@ -20,16 +20,17 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
+-type doc() :: datastore:document().
+-type info() :: #od_space{}.
+-type id() :: binary().
+-export_type([doc/0, info/0, id/0]).
+
 %% API
 -export([create_or_update/2, get/2, get_or_fetch/3, get_or_fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
-
--type id() :: binary().
-
--export_type([id/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -73,9 +74,9 @@ get(Key) ->
     case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
         {error, Reason} ->
             {error, Reason};
-        {ok, D = #document{value = S = #space_info{providers_supports = Supports}}} when is_list(Supports) ->
+        {ok, D = #document{value = S = #od_space{providers_supports = Supports}}} when is_list(Supports) ->
             {ProviderIds, _} = lists:unzip(Supports),
-            {ok, D#document{value = S#space_info{providers = ProviderIds}}};
+            {ok, D#document{value = S#od_space{providers = ProviderIds}}};
         {ok, Doc} ->
             {ok, Doc}
     end.
@@ -105,8 +106,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_info_bucket, [{space_info, create}, {space_info, save},
-        {space_info, create_or_update}, {space_info, update}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(od_space_bucket, [{?MODULE, create}, {?MODULE, save},
+        {?MODULE, create_or_update}, {?MODULE, update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,16 +117,16 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(space_info, create, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+'after'(?MODULE, create, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
     ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
-'after'(space_info, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+'after'(?MODULE, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
     ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
-'after'(space_info, save, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+'after'(?MODULE, save, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
     ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
-'after'(space_info, update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
+'after'(?MODULE, update, ?GLOBAL_ONLY_LEVEL, _, {ok, SpaceId}) ->
     ok = permissions_cache:invalidate_permissions_cache(),
     emit_monitoring_event(SpaceId);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
@@ -162,20 +163,20 @@ create_or_update(Doc, Diff) ->
 %% Gets space info from the database in user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get(SpaceId :: binary(), UserId :: onedata_user:id()) ->
+-spec get(SpaceId :: binary(), UserId :: od_user:id()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
-    case space_info:get(SpaceId) of
+    case od_space:get(SpaceId) of
         {ok, Doc} -> {ok, Doc};
         {error, Reason} -> {error, Reason}
     end;
 get(SpaceId, UserId) ->
     case get(SpaceId, ?ROOT_USER_ID) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-            case onedata_user:get(UserId) of
-                {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
+            case od_user:get(UserId) of
+                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
                     {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
-                    {ok, Doc#document{value = SpaceInfo#space_info{name = SpaceName}}};
+                    {ok, Doc#document{value = SpaceInfo#od_space{name = SpaceName}}};
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -203,7 +204,7 @@ get_or_fetch(SessionId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(Auth :: oz_endpoint:auth(), SpaceId :: binary(),
-    UserId :: onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
+    UserId :: od_user:id()) -> {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Auth, SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orelse SpecialUser =:= ?GUEST_USER_ID ->
     case get(SpaceId, SpecialUser) of
         {ok, Doc} -> {ok, Doc};
@@ -213,13 +214,13 @@ get_or_fetch(Auth, SpaceId, SpecialUser) when SpecialUser =:= ?ROOT_USER_ID orel
 get_or_fetch(Auth, SpaceId, UserId) ->
     case get_or_fetch(Auth, SpaceId, ?ROOT_USER_ID) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-            case onedata_user:get_or_fetch(Auth, UserId) of
-                {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
+            case od_user:get_or_fetch(Auth, UserId) of
+                {ok, #document{value = #od_user{space_aliases = Spaces}}} ->
                     case lists:keyfind(SpaceId, 1, Spaces) of
                         false ->
                             {ok, Doc};
                         {_, SpaceName} ->
-                            {ok, Doc#document{value = SpaceInfo#space_info{name = SpaceName}}}
+                            {ok, Doc#document{value = SpaceInfo#od_space{name = SpaceName}}}
                     end;
                 {error, Reason} ->
                     {error, Reason}
@@ -263,7 +264,7 @@ fetch(Auth, SpaceId) ->
         {UserId, Privileges}
     end, UserIds),
 
-    Doc = #document{key = SpaceId, value = #space_info{
+    Doc = #document{key = SpaceId, value = #od_space{
         name = Name,
         users = UsersWithPrivileges,
         groups = GroupsWithPrivileges,
@@ -282,16 +283,16 @@ fetch(Auth, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends event informing about space_info update if provider supports space.
+%% Sends event informing about od_space update if provider supports space.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_monitoring_event(datastore:id()) -> no_return().
 emit_monitoring_event(SpaceId) ->
-    case space_info:get(SpaceId) of
-        {ok, #document{value = #space_info{providers = Providers}}} ->
+    case od_space:get(SpaceId) of
+        {ok, #document{value = #od_space{providers = Providers}}} ->
             case lists:member(oneprovider:get_provider_id(), Providers) of
                 true ->
-                    monitoring_event:emit_space_info_updated(SpaceId);
+                    monitoring_event:emit_od_space_updated(SpaceId);
                 _ -> ok
             end;
         _ -> ok

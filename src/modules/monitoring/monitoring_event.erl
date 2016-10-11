@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_storage_used_updated/3, emit_space_info_updated/1,
+-export([emit_storage_used_updated/3, emit_od_space_updated/1,
     emit_read_statistics/4, emit_write_statistics/4,
     emit_rtransfer_statistics/2, emit_rtransfer_statistics/3,
     aggregate_monitoring_events/2, handle_monitoring_events/2]).
@@ -48,9 +48,9 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
 %% Send event informing subscribed client about space info update.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_space_info_updated(datastore:id()) -> ok | {error, Reason :: term()}.
-emit_space_info_updated(SpaceId) ->
-    event:emit(#event{object = #space_info_updated{space_id = SpaceId}}).
+-spec emit_od_space_updated(datastore:id()) -> ok | {error, Reason :: term()}.
+emit_od_space_updated(SpaceId) ->
+    event:emit(#event{object = #od_space_updated{space_id = SpaceId}}).
 
 
 %%--------------------------------------------------------------------
@@ -149,8 +149,8 @@ aggregate_monitoring_events(#event{object = #storage_used_updated{} = O1} = E1,
         }
     };
 
-aggregate_monitoring_events(#event{object = #space_info_updated{} = O1} = E1,
-    #event{object = #space_info_updated{}} = E2) ->
+aggregate_monitoring_events(#event{object = #od_space_updated{} = O1} = E1,
+    #event{object = #od_space_updated{}} = E2) ->
     E1#event{
         counter = E1#event.counter + E2#event.counter,
         object = O1
@@ -219,7 +219,7 @@ handle_monitoring_event(#event{object = #storage_used_updated{} = Event}) ->
         secondary_subject_id = UserId
     }, #{size_difference => SizeDifference});
 
-handle_monitoring_event(#event{object = #space_info_updated{space_id = SpaceId}}) ->
+handle_monitoring_event(#event{object = #od_space_updated{space_id = SpaceId}}) ->
     monitoring_utils:create_and_update(SpaceId, #monitoring_id{
         main_subject_type = space,
         main_subject_id = SpaceId,

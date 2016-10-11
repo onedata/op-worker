@@ -395,7 +395,7 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
                         {ProvMap, Mapped};
                     _ ->
                         SpaceId = fslogic_spaces:get_space_id(Entry),
-                        {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessId, SpaceId, UserId),
+                        {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(SessId, SpaceId, UserId),
                         {maps:put(Entry, {erlang:system_time(seconds), ProviderIds}, ProvMap), ProviderIds}
                 end,
             case {ProviderIdsFinal, lists:member(oneprovider:get_provider_id(), ProviderIdsFinal)} of

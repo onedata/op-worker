@@ -140,8 +140,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
 
     UserDetails = case get_auth(SessionIdOrIdentity) of
         {ok, undefined} ->
-            case onedata_user:get(UserId) of
-                {ok, #document{value = #onedata_user{name = Name, alias = Alias,
+            case od_user:get(UserId) of
+                {ok, #document{value = #od_user{name = Name, alias = Alias,
                     email_list = EmailList, connected_accounts = ConnectedAccounts}}} ->
 
                     #user_details{
@@ -151,7 +151,7 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
                         email_list = EmailList,
                         id = UserId
                     };
-                {error, {not_found, onedata_user}} ->
+                {error, {not_found, od_user}} ->
                     #user_details{
                         name = <<"">>,
                         alias = <<"">>,
@@ -161,9 +161,9 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity, S
                     }
             end;
         {ok, Auth} ->
-            {ok, #document{value = #onedata_user{name = Name, alias = Alias,
+            {ok, #document{value = #od_user{name = Name, alias = Alias,
                 email_list = EmailList, connected_accounts = ConnectedAccounts}}} =
-                onedata_user:get_or_fetch(Auth, UserId),
+                od_user:get_or_fetch(Auth, UserId),
             #user_details{
                 name = Name,
                 alias = Alias,

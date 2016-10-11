@@ -164,8 +164,8 @@ run_and_catch_exceptions(Function, Context, Request, RequestType) ->
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
                     #fslogic_ctx{session_id = SessionId} = Context,
-                    {ok, #document{value = #space_info{providers = ProviderIds}}} =
-                        space_info:get_or_fetch(SessionId, SpaceId),
+                    {ok, #document{value = #od_space{providers = ProviderIds}}} =
+                        od_space:get_or_fetch(SessionId, SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             {Context, [oneprovider:get_provider_id()], Request};
@@ -239,7 +239,7 @@ resolve_provider_for_file(Context, Entry, Request, UserRootDir) ->
             #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
                 fslogic_context:set_space_and_share_id(Context, Entry),
 
-            {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessionId, SpaceId),
+            {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(SessionId, SpaceId),
             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                 {_, true} ->
                     {ok, Uuid} = file_meta:to_uuid(Entry),

@@ -25,7 +25,7 @@
 -export([apply_batch_changes/3, init_stream/3]).
 -export([bcast_status/0, on_status_received/3]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata]).
+-define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata, times]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
@@ -370,7 +370,7 @@ queue_push(QueueKey, {init_batch, Seq}, SpaceId) ->
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap),
                 until = queue_calculate_until(UntilToSet, Queue1)}
         end);
-queue_push(QueueKey, #change{seq = Until, doc = #document{key = ChangeKey}} = Change, SpaceId) ->
+queue_push(QueueKey, #change{model = ChangeModel, seq = Until, doc = #document{key = ChangeKey}} = Change, SpaceId) ->
     state_update({queue, QueueKey},
         fun(Queue) ->
             Queue1 =
@@ -383,8 +383,8 @@ queue_push(QueueKey, #change{seq = Until, doc = #document{key = ChangeKey}} = Ch
             Since = Queue1#queue.since,
             Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
             FilteredChanges = lists:filter(
-                fun(#change{doc = #document{key = Key}}) ->
-                    ChangeKey /= Key
+                fun(#change{model = Model, doc = #document{key = Key}}) ->
+                    ChangeKey /= Key orelse ChangeModel /= Model
                 end, Batch0#batch.changes),
             ?debug("Changes stream aggregation level: ~p", [length(FilteredChanges) / length(Batch0#batch.changes)]),
             Batch = Batch0#batch{changes = [Change | FilteredChanges], until = max(Until, Since)},
@@ -719,6 +719,8 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
 %%--------------------------------------------------------------------
 -spec get_sync_context(datastore:document()) ->
     datastore:key() | datastore:document().
+get_sync_context(#document{key = FileUUID, value = #times{}}) ->
+    FileUUID;
 get_sync_context(#document{value = #file_meta{}} = Doc) ->
     Doc;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->

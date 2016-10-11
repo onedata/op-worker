@@ -62,10 +62,10 @@ find(<<"share">>, ShareId) ->
     UserId = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
-        value = #share_info{
+        value = #od_share{
             name = Name,
-            root_file_id = RootFileId,
-            parent_space = ParentSpaceId,
+            root_file = RootFileId,
+            space = ParentSpaceId,
             public_url = PublicURL,
             handle = Handle
         }}} = share_logic:get(UserAuth, ShareId),
@@ -98,9 +98,9 @@ find(<<"share">>, ShareId) ->
 find(<<"file-shared">>, <<"containerDir.", ShareId/binary>>) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
-        value = #share_info{
+        value = #od_share{
             name = Name,
-            root_file_id = RootFileId
+            root_file = RootFileId
         }}} = share_logic:get(UserAuth, ShareId),
     FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
     Res = [
@@ -266,9 +266,9 @@ find_all(<<"share">>) ->
             case Authorized of
                 true ->
                     {ok, #document{
-                        value = #space_info{
+                        value = #od_space{
                             shares = Shares
-                        }}} = space_info:get(SpaceId),
+                        }}} = od_space:get(SpaceId),
                     Shares ++ Acc;
                 false ->
                     Acc

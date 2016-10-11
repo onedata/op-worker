@@ -84,7 +84,7 @@
 
 %% definition of an event triggered when any of spaces becomes (un)available
 -record(quota_exeeded_event, {
-   spaces = [] :: [space_info:id()]
+   spaces = [] :: [od_space:id()]
 }).
 
 %% definition of an event triggered when file is renamed
@@ -115,8 +115,8 @@
     size_difference :: integer()
 }).
 
-%% definition of event triggered when space info is changed
--record(space_info_updated, {
+%% definition of event triggered when space record has changed
+-record(od_space_updated, {
     space_id :: datastore:id()
 }).
 

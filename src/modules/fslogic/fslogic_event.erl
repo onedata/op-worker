@@ -186,7 +186,7 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 %% Send event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_renamed(file_meta:uuid(), space_info:id(), file_meta:path(),
+-spec emit_file_renamed(file_meta:uuid(), od_space:id(), file_meta:path(),
     session:id()) -> ok | {error, Reason :: term()}.
 emit_file_renamed(FileUUID, SpaceId, Path, SessionId) ->
     FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),

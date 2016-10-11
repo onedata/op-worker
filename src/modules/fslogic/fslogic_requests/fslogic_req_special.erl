@@ -39,13 +39,11 @@ mkdir(CTX, ParentFile, Name, Mode) ->
         name = Name,
         type = ?DIRECTORY_TYPE,
         mode = Mode,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
     case file_meta:create(ParentFile, File) of
         {ok, DirUUID} ->
+            {ok, _} = times:create(#document{key = DirUUID, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
             fslogic_times:update_mtime_ctime(ParentFile, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = fslogic_uuid:uuid_to_guid(DirUUID)}
@@ -76,8 +74,8 @@ read_dir(#fslogic_ctx{space_id = SpaceId, share_id = ShareId} = CTX, File, Offse
     UserRootUUID = fslogic_uuid:user_root_dir_uuid(UserId),
     case Key of
         UserRootUUID ->
-            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
-                onedata_user:get(UserId),
+            {ok, #document{value = #od_user{space_aliases = Spaces}}} =
+                od_user:get(UserId),
 
             Children =
                 case Offset < length(Spaces) of
