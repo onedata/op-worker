@@ -35,7 +35,7 @@
 %% Checks if given provider supports given space.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_space_access(ProviderId :: oneprovider:id(), SpaceId :: space_info:id()) ->
+-spec validate_space_access(ProviderId :: oneprovider:id(), SpaceId :: od_space:id()) ->
     ok | {error, space_not_supported_locally}.
 validate_space_access(ProviderId, SpaceId) ->
     IsMember = lists:member(ProviderId, get_providers_for_space(SpaceId)),
@@ -89,7 +89,7 @@ temp_get(Key) ->
     [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
     try
-        {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
+        {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(?ROOT_SESS_ID, SpaceId),
         ProviderIds
     catch
         _:{_, {error, 'No such file or directory'}} ->

@@ -31,10 +31,10 @@
 %% Provided client should be authorised to access handle_info details.
 %% @end
 %%--------------------------------------------------------------------
--spec get(oz_endpoint:auth(), HandleId :: handle_info:id()) ->
+-spec get(oz_endpoint:auth(), HandleId :: od_handle:id()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(Auth, HandleId) ->
-  handle_info:get_or_fetch(Auth, HandleId).
+  od_handle:get_or_fetch(Auth, HandleId).
 
 
 %%--------------------------------------------------------------------
@@ -42,11 +42,11 @@ get(Auth, HandleId) ->
 %% Creates a new handle for given user.
 %% @end
 %%--------------------------------------------------------------------
--spec create(oz_endpoint:auth(), HandleServiceId :: handle_service_info:id(),
-    ResourceType :: handle_info:resource_type(),
-    ResourceId :: handle_info:resource_id(),
-    Metadata :: handle_info:metadata()) ->
-    {ok, share_info:id()} | {error, Reason :: term()}.
+-spec create(oz_endpoint:auth(), HandleServiceId :: od_handle_service:id(),
+    ResourceType :: od_handle:resource_type(),
+    ResourceId :: od_handle:resource_id(),
+    Metadata :: od_handle:metadata()) ->
+    {ok, od_share:id()} | {error, Reason :: term()}.
 create(Auth, HandleServiceId, ResourceType, ResourceId, Metadata) ->
     oz_handles:create(Auth, [
         {<<"handleServiceId">>, HandleServiceId},

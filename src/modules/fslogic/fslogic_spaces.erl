@@ -110,7 +110,7 @@ get_space(FileEntry) ->
 %% Returns file_meta space document for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}, UserId :: onedata_user:id()) ->
+-spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}, UserId :: od_user:id()) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
 get_space({guid, FileGUID}, UserId) ->
     case fslogic_uuid:unpack_guid(FileGUID) of

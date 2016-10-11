@@ -107,20 +107,20 @@ should_update(HistoryRevs, UpdateRevs) ->
 %%--------------------------------------------------------------------
 -spec get_revisions(Model :: atom(), Record :: subscriptions:record()) ->
     Record2 :: subscriptions:record() | {error, term()}.
-get_revisions(space_info, Record) ->
-    Record#space_info.revision_history;
-get_revisions(share_info, Record) ->
-    Record#share_info.revision_history;
-get_revisions(onedata_user, Record) ->
-    Record#onedata_user.revision_history;
-get_revisions(onedata_group, Record) ->
-    Record#onedata_group.revision_history;
-get_revisions(provider_info, Record) ->
-    Record#provider_info.revision_history;
-get_revisions(handle_info, Record) ->
-    Record#handle_info.revision_history;
-get_revisions(handle_service_info, Record) ->
-    Record#handle_service_info.revision_history;
+get_revisions(od_space, Record) ->
+    Record#od_space.revision_history;
+get_revisions(od_share, Record) ->
+    Record#od_share.revision_history;
+get_revisions(od_user, Record) ->
+    Record#od_user.revision_history;
+get_revisions(od_group, Record) ->
+    Record#od_group.revision_history;
+get_revisions(od_provider, Record) ->
+    Record#od_provider.revision_history;
+get_revisions(od_handle, Record) ->
+    Record#od_handle.revision_history;
+get_revisions(od_handle_service, Record) ->
+    Record#od_handle_service.revision_history;
 get_revisions(_Model, _Record) ->
     {error, get_revisions_not_implemented}.
 
@@ -132,23 +132,23 @@ get_revisions(_Model, _Record) ->
 %%--------------------------------------------------------------------
 -spec set_revisions(Model :: atom(), Record :: subscriptions:record(),
     Revs :: [term()]) -> Record2 :: subscriptions:record().
-set_revisions(space_info, Record, Revisions) ->
-    Record#space_info{revision_history = Revisions};
-set_revisions(share_info, Record, Revisions) ->
-    Record#share_info{revision_history = Revisions};
-set_revisions(onedata_user, Record = #onedata_user{public_only = true}, _) ->
+set_revisions(od_space, Record, Revisions) ->
+    Record#od_space{revision_history = Revisions};
+set_revisions(od_share, Record, Revisions) ->
+    Record#od_share{revision_history = Revisions};
+set_revisions(od_user, Record = #od_user{public_only = true}, _) ->
     %% records with public data only do not have revisions
     %% thus always are overridden by "full" records
-    Record#onedata_user{revision_history = []};
-set_revisions(onedata_user, Record, Revisions) ->
-    Record#onedata_user{revision_history = Revisions};
-set_revisions(onedata_group, Record, Revisions) ->
-    Record#onedata_group{revision_history = Revisions};
-set_revisions(provider_info, Record, Revisions) ->
-    Record#provider_info{revision_history = Revisions};
-set_revisions(handle_info, Record, Revisions) ->
-    Record#handle_info{revision_history = Revisions};
-set_revisions(handle_service_info, Record, Revisions) ->
-    Record#handle_service_info{revision_history = Revisions};
+    Record#od_user{revision_history = []};
+set_revisions(od_user, Record, Revisions) ->
+    Record#od_user{revision_history = Revisions};
+set_revisions(od_group, Record, Revisions) ->
+    Record#od_group{revision_history = Revisions};
+set_revisions(od_provider, Record, Revisions) ->
+    Record#od_provider{revision_history = Revisions};
+set_revisions(od_handle, Record, Revisions) ->
+    Record#od_handle{revision_history = Revisions};
+set_revisions(od_handle_service, Record, Revisions) ->
+    Record#od_handle_service{revision_history = Revisions};
 set_revisions(_Model, _Record, _Revisions) ->
     {error, get_revisions_not_implemented}.

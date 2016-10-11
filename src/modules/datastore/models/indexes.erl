@@ -26,7 +26,7 @@
 -type view_name() :: binary().
 -type index_id() :: binary().
 -type view_function() :: binary().
--type index() :: #{name => indexes:view_name(), space_id => space_info:id(), function => indexes:view_function()}.
+-type index() :: #{name => indexes:view_name(), space_id => od_space:id(), function => indexes:view_function()}.
 
 -export_type([view_name/0, index_id/0, view_function/0]).
 
@@ -37,7 +37,7 @@
 %%--------------------------------------------------------------------
 %% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
 %%--------------------------------------------------------------------
--spec add_index(onedata_user:id(), view_name(), view_function(), space_info:id()) ->
+-spec add_index(od_user:id(), view_name(), view_function(), od_space:id()) ->
     {ok, index_id()} | {error, any()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId) ->
     add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
@@ -47,8 +47,8 @@ add_index(UserId, ViewName, ViewFunction, SpaceId) ->
 %% Add view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_index(onedata_user:id(), view_name() | undefined, view_function(),
-    space_info:id() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
+-spec add_index(od_user:id(), view_name() | undefined, view_function(),
+    od_space:id() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
     EscapedViewFunction = escape_js_function(ViewFunction),
     critical_section:run([?MODEL_NAME, UserId], fun() ->
@@ -91,7 +91,7 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
 %% Get index from db.
 %% @end
 %%--------------------------------------------------------------------
--spec get_index(onedata_user:id(), index_id()) -> {ok, index()} | {error, any()}.
+-spec get_index(od_user:id(), index_id()) -> {ok, index()} | {error, any()}.
 get_index(UserId, IndexId) ->
     case indexes:get(UserId) of
         {ok, #document{value = #indexes{value = Indexes}}} ->
@@ -112,7 +112,7 @@ get_index(UserId, IndexId) ->
 %% Change index js function.
 %% @end
 %%--------------------------------------------------------------------
--spec change_index_function(onedata_user:id(), index_id(), view_function()) -> {ok, index_id()} | {error, any()}.
+-spec change_index_function(od_user:id(), index_id(), view_function()) -> {ok, index_id()} | {error, any()}.
 change_index_function(UserId, IndexId, Function) ->
     add_index(UserId, undefined, Function, undefined, IndexId).
 
@@ -121,7 +121,7 @@ change_index_function(UserId, IndexId, Function) ->
 %% Get all indexes from db, with given space id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_all_indexes(onedata_user:id()) -> {ok, maps:map()} | {error, any()}.
+-spec get_all_indexes(od_user:id()) -> {ok, maps:map()} | {error, any()}.
 get_all_indexes(UserId) ->
     case indexes:get(UserId) of
         {ok, #document{value = #indexes{value = Indexes}}} ->
@@ -257,7 +257,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% with one argument function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_db_view(index_id(), space_info:id(), view_function()) -> ok.
+-spec add_db_view(index_id(), od_space:id(), view_function()) -> ok.
 add_db_view(IndexId, SpaceId, Function) ->
     RecordName = custom_metadata,
     RecordNameBin = atom_to_binary(RecordName, utf8),

@@ -34,7 +34,7 @@
 
 -record(configuration, {
     subscriptions = [] :: [#subscription{}],
-    disabled_spaces = [] :: [space_info:id()]
+    disabled_spaces = [] :: [od_space:id()]
 }).
 
 -endif.

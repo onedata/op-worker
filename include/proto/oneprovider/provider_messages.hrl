@@ -105,7 +105,7 @@
 }).
 
 -record(create_share, {
-    name :: share_info:name()
+    name :: od_share:name()
 }).
 
 -record(remove_share, {
@@ -155,8 +155,8 @@
 }).
 
 -record(share, {
-    share_id :: share_info:id(),
-    share_file_uuid ::share_info:share_guid()
+    share_id :: od_share:id(),
+    share_file_uuid :: od_share:share_guid()
 }).
 
 -type provider_response() ::

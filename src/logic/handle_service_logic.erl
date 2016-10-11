@@ -26,11 +26,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves handle_service_info document.
-%% Provided client should be authorised to access handle_service_info details.
+%% Retrieves od_handle_service document.
+%% Provided client should be authorised to access od_handle_service details.
 %% @end
 %%--------------------------------------------------------------------
--spec get(oz_endpoint:auth(), HandleServiceId :: handle_service_info:id()) ->
+-spec get(oz_endpoint:auth(), HandleServiceId :: od_handle_service:id()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(Auth, HandleServiceId) ->
-    handle_service_info:get_or_fetch(Auth, HandleServiceId).
+    od_handle_service:get_or_fetch(Auth, HandleServiceId).

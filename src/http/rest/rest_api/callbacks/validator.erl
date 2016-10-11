@@ -222,10 +222,10 @@ parse_callback(Req, State) ->
 parse_space_id(Req, State = #{auth := Auth}) ->
     {Id, NewReq} = cowboy_req:binding(sid, Req),
     {ok, UserId} = session:get_user_id(Auth),
-    case space_info:get(Id, UserId) of
+    case od_space:get(Id, UserId) of
         {ok, _} ->
             {State#{space_id => Id}, NewReq};
-        {error, {not_found, space_info}} ->
+        {error, {not_found, od_space}} ->
             throw(?ERROR_SPACE_NOT_FOUND)
     end.
 
