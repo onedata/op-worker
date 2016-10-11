@@ -31,7 +31,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([file_record/4]).
+-export([file_record/4, create_file/4]).
 
 %%%===================================================================
 %%% API functions
@@ -390,6 +390,53 @@ file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
     end.
 
 
+create_file(SessionId, Name, ParentId, Type) ->
+    try
+        SessionId = g_session:get_session_id(),
+        {ok, ParentPath} = logical_file_manager:get_file_path(
+            SessionId, ParentId),
+        Path = filename:join([ParentPath, Name]),
+        FileId = case Type of
+            <<"file">> ->
+                {ok, FId} = logical_file_manager:create(SessionId, Path),
+                FId;
+            <<"dir">> ->
+                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
+                DirId
+        end,
+        {ok, #file_attr{
+            name = Name,
+            size = SizeAttr,
+            mtime = ModificationTime,
+            mode = PermissionsAttr}} =
+            logical_file_manager:stat(SessionId, {guid, FileId}),
+        Size = case Type of
+            <<"dir">> -> null;
+            _ -> SizeAttr
+        end,
+        Permissions = integer_to_binary(PermissionsAttr, 8),
+        Res = [
+            {<<"id">>, FileId},
+            {<<"name">>, Name},
+            {<<"type">>, Type},
+            {<<"permissions">>, Permissions},
+            {<<"modificationTime">>, ModificationTime},
+            {<<"size">>, Size},
+            {<<"parent">>, ParentId},
+            {<<"children">>, []},
+            {<<"fileAcl">>, FileId}
+        ],
+        {ok, Res}
+    catch _:_ ->
+        case Type of
+            <<"dir">> ->
+                gui_error:report_warning(<<"Failed to create new directory.">>);
+            <<"file">> ->
+                gui_error:report_warning(<<"Failed to create new file.">>)
+        end
+    end.
+
+
 fetch_dir_children(DirId, CurrentChildrenCount) ->
     % Fetch total children count and number of chunks
     [{{DirId, size}, TotalChildrenCount}] = ets:lookup(
@@ -504,7 +551,7 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
     ets:insert(ls_sub_cache_name(), {{DirId, size}, TotalChildrenCount}),
     % Cache the total chunk count
     ets:insert(ls_sub_cache_name(), {{DirId, chunk_count}, ChunkCount}),
-    % Cache the placeholder for new files created during this session
+    % Cache a placeholder for new files created during this session
     ets:insert(ls_sub_cache_name(), {{DirId, 0}, []}),
     % Insert the chunks into the ETS
     lists:foldl(
@@ -517,7 +564,14 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
 
 
 add_new_file_to_cache(FileId, DirId) ->
-    % dodaj plik na poczatek i zwiekszyc size
+    [{{DirId, size}, CurrentSize}] = ets:lookup(
+        ls_sub_cache_name(), {DirId, size}
+    ),
+    ets:insert(ls_sub_cache_name(), {{DirId, size}, CurrentSize + 1}),
+    [{{DirId, 0}, CurrentNewFiles}] = ets:lookup(
+        ls_sub_cache_name(), {DirId, 0}
+    ),
+    ets:insert(ls_sub_cache_name(), {{DirId, 0}, [FileId | CurrentNewFiles]}),
     ok.
 
 

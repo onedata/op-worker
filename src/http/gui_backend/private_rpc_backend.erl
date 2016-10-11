@@ -94,6 +94,19 @@ handle(<<"getSharedFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
 %%--------------------------------------------------------------------
 %% File manipulation procedures
 %%--------------------------------------------------------------------
+handle(<<"createFile">>, Props) ->
+    SessionId = g_session:get_session_id(),
+    Name = proplists:get_value(<<"fileName">>, Props),
+    ParentId = proplists:get_value(<<"parentId">>, Props, null),
+    Type = proplists:get_value(<<"type">>, Props),
+    ?dump({Name, ParentId, Type}),
+    {ok, FileData} = file_data_backend:create_file(
+        SessionId, Name, ParentId, Type
+    ),
+    FileId = proplists:get_value(<<"id">>, FileData),
+    gui_async:push_created(<<"file">>, FileData),
+    {ok, FileId};
+
 handle(<<"fetchMoreDirChildren">>, Props) ->
     SessionId = g_session:get_session_id(),
     DirId = proplists:get_value(<<"dirId">>, Props),
