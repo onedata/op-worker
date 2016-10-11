@@ -17,6 +17,7 @@
 -author("Jakub Liput").
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("http/gui_common.hrl").
@@ -61,7 +62,7 @@ init() ->
 -spec terminate() -> ok.
 terminate() ->
     ?dump({terminate, self()}),
-    ets:delete_object(?LS_CACHE_ETS, self()),
+    ets:delete(?LS_CACHE_ETS, self()),
     ok.
 
 
@@ -73,6 +74,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, FileId) ->
+    cache_ls_result(a, b),
     SessionId = g_session:get_session_id(),
     try
         file_record(SessionId, FileId)
@@ -410,13 +412,45 @@ file_acl_record(SessionId, FileId) ->
 %% @private
 %% @doc
 %% Caches a LS result in ETS to optimize DB load and allow for pagination
-%% in GUI data view. Must be called by an async process. The whole cache is held
-%% under the key that is the pid of parent websocket process.
+%% in GUI data view. Input list of directory children should be unsorted.
+%% Must be called by an async process. The whole cache is held
+%% is an ETS dedicated for parent websocket process.
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_ls_result(DirId :: fslogic_worker:file_guid(),
-    SortedChildren :: [{fslogic_worker:file_guid(), file_meta:name()}]) -> ok.
-cache_ls_result(DirId, SortedChildren) ->
-    WSPid = gui_async:get_ws_process(),
+    DirChildren :: [{fslogic_worker:file_guid(), file_meta:name()}]) -> ok.
+cache_ls_result(DirId, DirChildren) ->
+    % Check LS limit
+    {ok, LsLimit} = application:get_env(?APP_NAME, gui_ls_limit),
+    % Cache result only if dir size is greater than LS limit
+    % (if smaller, frontend has already received the whole children list).
+    ChildrenLength = length(DirChildren),
+    case ChildrenLength > LsLimit of
+        false ->
+            ok;
+        true ->
+            ChildrenSorted = lists:keysort(2, DirChildren),
+            % Split the children list into parts of size equal to LS limit
+            Parts = split_into_parts(ChildrenSorted, LsLimit),
+            % Resolve ETS identifier
+            WSPid = gui_async:get_ws_process(),
+            [{WSPid, LsSubCache}] = ets:lookup(?LS_CACHE_ETS, WSPid),
+            % Insert the parts into the ETS
+            lists:foldl(
+                fun(Part, Counter) ->
+                    ets:insert(LsSubCache, {{DirId, Counter}, Part}),
+                    ?dump({{DirId, Counter}, length(Part)}),
+                    Counter + 1
+                end, 1, Parts),
+            ok
+    end.
 
-    ok.
+split_into_parts(List, PartSize) ->
+    split_into_parts(List, PartSize, []).
+
+split_into_parts(List, PartSize, ResultList) when PartSize >= length(List) ->
+    [List | ResultList];
+
+split_into_parts(List, PartSize, ResultList) ->
+    {Part, Tail} = lists:split(PartSize, List),
+    split_into_parts(Tail, PartSize, [Part | ResultList]).
