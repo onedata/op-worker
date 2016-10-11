@@ -17,6 +17,7 @@
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("http/rest/http_status.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -1286,10 +1287,12 @@ copy(Config) ->
         identifier = UserId1,
         aceflags = ?no_flags_mask,
         acemask = ?all_perms_mask}],
+    JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},
     Xattrs = [#xattr{name = <<"key1">>, value = <<"value1">>}, #xattr{name = <<"key2">>, value = <<"value2">>}],
-    set_acl(Config, FileName2, Acl),
-    add_xattrs(Config, FileName2, Xattrs),
-    write_to_file(Config, FileName2, FileData2, 0),
+    ok = set_acl(Config, FileName2, Acl),
+    ok = set_json_metadata(Config, FileName2, JsonMetadata),
+    ok = add_xattrs(Config, FileName2, Xattrs),
+    {ok, _} = write_to_file(Config, FileName2, FileData2, 0),
 
     % assert source file is created and destination does not exist
     NewFileName2 =  filename:join([binary_to_list(SpaceName), "copy_test_file2.txt"]),
@@ -1308,7 +1311,9 @@ copy(Config) ->
     ?assert(object_exists(Config, FileName2)),
     ?assert(object_exists(Config, NewFileName2)),
     ?assertEqual(FileData2, get_file_content(Config, NewFileName2)),
-    ?assertEqual({ok, Xattrs}, get_xattrs(Config, NewFileName2)),
+    ?assertEqual({ok, JsonMetadata}, get_json_metadata(Config, NewFileName2)),
+    ?assertEqual(Xattrs ++ [#xattr{name = ?JSON_METADATA_KEY, value = json_utils:encode_map(JsonMetadata)}],
+        get_xattrs(Config, NewFileName2)),
     ?assertEqual({ok, Acl}, get_acl(Config, NewFileName2)),
     %%------------------------------
 
@@ -1352,7 +1357,7 @@ copy(Config) ->
 
     % assert destination files have been created
     ?assert(object_exists(Config, NewDirName2)),
-    ?assertEqual({ok, Xattrs}, get_xattrs(Config, NewDirName2)),
+    ?assertEqual(Xattrs, get_xattrs(Config, NewDirName2)),
     ?assertEqual({ok, Acl}, get_acl(Config, NewDirName2)),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir1"))),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir2"))),
@@ -1863,9 +1868,21 @@ get_xattrs(Config, Path) ->
         fun
             (<<"cdmi_", _/binary>>) ->
                 false;
-            (Xattr) ->
-                {true, lfm_proxy:get_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, Xattr)}
+            (XattrName) ->
+                {ok, Xattr} = lfm_proxy:get_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, XattrName),
+                {true, Xattr}
         end, Xattrs).
+
+set_json_metadata(Config, Path, JsonTerm) ->
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, json, JsonTerm, []).
+
+get_json_metadata(Config, Path) ->
+    [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    lfm_proxy:get_metadata(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, json, [], false).
+
 
 absolute_binary_path(Path) ->
     list_to_binary(ensure_begins_with_slash(Path)).

@@ -174,8 +174,8 @@ mv(SessId, FileEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec cp(session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
     ok | error_reply().
-cp(Auth, FileEntry, TargetPath) ->
-    ?run(fun() -> lfm_files:cp(Auth, FileEntry, TargetPath) end).
+cp(SessId, FileEntry, TargetPath) ->
+    ?run(fun() -> lfm_files:cp(SessId, FileEntry, TargetPath) end).
 
 %%--------------------------------------------------------------------
 %% @doc

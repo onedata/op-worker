@@ -20,11 +20,11 @@
     <<"cdmi_dataobjects">> => <<"true">>,
     <<"cdmi_security_access_control">> => <<"true">>,
     <<"cdmi_object_move_from_local">> => <<"true">>,
-%%    <<"cdmi_object_copy_from_local">> => <<"true">>, %todo implement copy
+    <<"cdmi_object_copy_from_local">> => <<"true">>,
     <<"cdmi_object_access_by_ID">> => <<"true">>
 }).
 
-%% List of cdmi container capabilites
+%% List of cdmi object capabilites
 %% Documentation: chapters 12.1.2, 12.1.3 and tables 101, 102
 -define(dataobject_capability_list, #{
     <<"cdmi_acl">> => <<"true">>,
@@ -41,7 +41,7 @@
     <<"cdmi_delete_dataobject">> => <<"true">>
 }).
 
-%% List of cdmi object capabilites
+%% List of cdmi container capabilites
 %% Documentation: chapters 12.1.2, 12.1.4 and tables 101, 103
 -define(container_capability_list, #{
     <<"cdmi_acl">> => <<"true">>,
@@ -55,11 +55,11 @@
     <<"cdmi_modify_metadata">> => <<"true">>,
     <<"cdmi_create_dataobject">> => <<"true">>,
     <<"cdmi_create_container">> => <<"true">>,
-    <<"cdmi_delete_container">> => <<"true">>
-%%    <<"cdmi_move_container">> => <<"true">>,
-%%    <<"cdmi_copy_container">> => <<"true">>,
-%%    <<"cdmi_move_dataobject">> => <<"true">>,
-%%    <<"cdmi_copy_dataobject">> => <<"true">>
+    <<"cdmi_delete_container">> => <<"true">>,
+    <<"cdmi_move_container">> => <<"true">>,
+    <<"cdmi_copy_container">> => <<"true">>,
+    <<"cdmi_move_dataobject">> => <<"true">>,
+    <<"cdmi_copy_dataobject">> => <<"true">>
 }).
 
 %% Paths for all cdmi capability containers (they can be refered by those paths)
