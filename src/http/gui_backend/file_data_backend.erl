@@ -369,6 +369,8 @@ create_file(SessionId, Name, ParentId, Type) ->
                 {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
                 DirId
         end,
+        {ok, FileData} = add_new_file_to_cache(SessionId, FileId, ParentId),
+        gui_async:push_updated(<<"file">>, FileData),
         file_record(SessionId, FileId)
     catch Error:Message ->
         ?error_stacktrace(
@@ -403,6 +405,11 @@ fetch_dir_children(DirId, CurrentChildrenCount) ->
     FilesToFetch = CurrentChildrenCount + LsChunkSize - length(NewFiles),
     ChunksToFetch = min(FilesToFetch div LsChunkSize, ChunkCount),
     ?dump({FilesToFetch div LsChunkSize, ChunkCount, ChunksToFetch}),
+    % Cache the last served children count
+    ets:insert(
+        ls_sub_cache_name(),
+        {{DirId, last_children_count}, CurrentChildrenCount}
+    ),
     Result = lists:foldl(
         fun(Counter, Acc) ->
             [{{DirId, Counter}, Chunk}] = ets:lookup(
@@ -498,6 +505,8 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
     ets:insert(ls_sub_cache_name(), {{DirId, size}, TotalChildrenCount}),
     % Cache the total chunk count
     ets:insert(ls_sub_cache_name(), {{DirId, chunk_count}, ChunkCount}),
+    % Cache the last number of chunks served to gui
+    ets:insert(ls_sub_cache_name(), {{DirId, last_children_count}, 0}),
     % Cache a placeholder for new files created during this session
     ets:insert(ls_sub_cache_name(), {{DirId, 0}, []}),
     % Insert the chunks into the ETS
@@ -510,7 +519,7 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
     ok.
 
 
-add_new_file_to_cache(FileId, DirId) ->
+add_new_file_to_cache(SessionId, FileId, DirId) ->
     [{{DirId, size}, CurrentSize}] = ets:lookup(
         ls_sub_cache_name(), {DirId, size}
     ),
@@ -518,8 +527,11 @@ add_new_file_to_cache(FileId, DirId) ->
     [{{DirId, 0}, CurrentNewFiles}] = ets:lookup(
         ls_sub_cache_name(), {DirId, 0}
     ),
+    [{{DirId, last_children_count}, LastChildrenCount}] = ets:lookup(
+        ls_sub_cache_name(), {DirId, last_children_count}
+    ),
     ets:insert(ls_sub_cache_name(), {{DirId, 0}, [FileId | CurrentNewFiles]}),
-    ok.
+    file_record(SessionId, DirId, true, LastChildrenCount).
 
 
 % Resolve ETS identifier
