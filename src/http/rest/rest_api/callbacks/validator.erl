@@ -159,15 +159,10 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
 
     Json = json_utils:decode_map(Body),
     case {
-        maps:get(<<"name">>, Json, undefined),
-        maps:get(<<"value">>, Json, undefined),
+        maps:to_list(Json),
         Extended
     } of
-        {undefined, _, _} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
-        {_, undefined, _} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
-        {<<"mode">>, Value, false} ->
+        {[{<<"mode">>, Value}], false} ->
             try binary_to_integer(Value, 8) of
                 Mode ->
                     {State#{attribute_body => {<<"mode">>, Mode}}, Req2}
@@ -175,10 +170,14 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
                _:_ ->
                    throw(?ERROR_INVALID_MODE)
             end;
-        {_Attr, _Value, false} ->
+        {[{_Attr, _Value}], false} ->
             throw(?ERROR_INVALID_ATTRIBUTE);
-        {Attr, Value, true} ->
-            {State#{attribute_body => {Attr, Value}}, Req2}
+        {[{Attr, Value}], true} when not is_binary(Attr) ->
+            throw(?ERROR_INVALID_ATTRIBUTE_NAME);
+        {[{Attr, Value}], true} ->
+            {State#{attribute_body => {Attr, Value}}, Req2};
+        {_, _} ->
+            throw(?ERROR_INVALID_ATTRIBUTE_BODY)
     end.
 
 %%--------------------------------------------------------------------

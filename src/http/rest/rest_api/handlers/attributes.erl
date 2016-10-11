@@ -104,19 +104,19 @@ get_file_attributes(Req, State) ->
     case {Attribute, Extended} of
         {ModeOrUndefined, false} when ModeOrUndefined =:= <<"mode">> ; ModeOrUndefined =:= undefined ->
             {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
-            Response = json_utils:encode_map([#{<<"name">> => <<"mode">>, <<"value">> => <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
+            Response = json_utils:encode_map([#{<<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
             {Response, ReqWithAttribute, StateWithAttribute};
         {undefined, true} ->
             {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, Inherited, true),
             RawResponse = lists:map(fun(XattrName) ->
                 {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
-                #{<<"name">> => XattrName, <<"value">> => Value}
+                #{XattrName => Value}
             end, Xattrs),
             Response = json_utils:encode_map(RawResponse),
             {Response, ReqWithAttribute, StateWithAttribute};
         {XattrName, true} ->
             {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
-            Response = json_utils:encode_map([#{<<"name">> => XattrName, <<"value">> => Value}]),
+            Response = json_utils:encode_map(#{XattrName => Value}),
             {Response, ReqWithAttribute, StateWithAttribute}
     end.
 
@@ -141,9 +141,7 @@ set_file_attribute(Req, State) ->
         {<<"mode">>, false} ->
             ok = onedata_file_api:set_perms(Auth, {path, Path}, Value);
         {_, true} when is_binary(Attribute) ->
-            ok = onedata_file_api:set_xattr(Auth, {path, Path}, #xattr{name = Attribute, value = Value});
-        {_, _} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_NAME)
+            ok = onedata_file_api:set_xattr(Auth, {path, Path}, #xattr{name = Attribute, value = Value})
     end,
     {true, Req4, State4}.
 

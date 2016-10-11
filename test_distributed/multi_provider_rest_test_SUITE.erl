@@ -231,8 +231,7 @@ posix_mode_get(Config) ->
     DecodedBody = json_utils:decode_map(Body),
     ?assertEqual([
         #{
-            <<"value">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
-            <<"name">> => <<"mode">>
+            <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>
         }],
         DecodedBody
     ).
@@ -247,7 +246,7 @@ posix_mode_put(Config) ->
 
     % when
     NewMode = 8#777,
-    Body = json_utils:encode_map(#{<<"name">> => <<"mode">>, <<"value">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
+    Body = json_utils:encode_map(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
     {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary>>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
@@ -256,8 +255,7 @@ posix_mode_put(Config) ->
     DecodedBody = json_utils:decode_map(RespBody),
     ?assertEqual([
         #{
-            <<"value">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>,
-            <<"name">> => <<"mode">>
+            <<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>
         }],
         DecodedBody
     ).
@@ -277,8 +275,7 @@ xattr_get(Config) ->
     DecodedBody = json_utils:decode_map(Body),
     ?assertEqual([
         #{
-            <<"value">> => <<"v1">>,
-            <<"name">> => <<"k1">>
+            <<"k1">> => <<"v1">>
         }],
         DecodedBody
     ).
@@ -291,7 +288,7 @@ xattr_put(Config) ->
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
 
     % when
-    Body = json_utils:encode_map(#{<<"name">> => <<"k1">>, <<"value">> => <<"v1">>}),
+    Body = json_utils:encode_map(#{<<"k1">> => <<"v1">>}),
     {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
@@ -300,8 +297,7 @@ xattr_put(Config) ->
     DecodedBody = json_utils:decode_map(RespBody),
     ?assertEqual([
         #{
-            <<"value">> => <<"v1">>,
-            <<"name">> => <<"k1">>
+            <<"k1">> => <<"v1">>
         }],
         DecodedBody
     ).
@@ -322,8 +318,8 @@ xattr_list(Config) ->
     DecodedBody = json_utils:decode_map(Body),
     ?assertMatch(
         [
-            #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
-            #{<<"name">> := <<"k2">>, <<"value">> := <<"v2">>}
+            #{<<"k1">> := <<"v1">>},
+            #{<<"k2">> := <<"v2">>}
         ],
         DecodedBody
     ).
@@ -720,10 +716,10 @@ set_get_xattr_inherited(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
 
     % when
-    XattrSpace = json_utils:encode_map(#{<<"name">> => <<"k1">>, <<"value">> => <<"v1">>}),
-    XattrDir = json_utils:encode_map(#{<<"name">> => <<"k2">>, <<"value">> => <<"v2">>}),
-    XattrChild = json_utils:encode_map(#{<<"name">> => <<"k2">>, <<"value">> => <<"v22">>}),
-    XattrChild2 = json_utils:encode_map(#{<<"name">> => <<"k3">>, <<"value">> => <<"v3">>}),
+    XattrSpace = json_utils:encode_map(#{<<"k1">> => <<"value">>}),
+    XattrDir = json_utils:encode_map(#{<<"k2">> => <<"value">>}),
+    XattrChild = json_utils:encode_map(#{<<"k2">> => <<"value">>}),
+    XattrChild2 = json_utils:encode_map(#{<<"k3">> => <<"value">>}),
 
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
@@ -748,10 +744,10 @@ set_get_xattr_inherited(Config) ->
     DecodedBody = json_utils:decode_map(Body),
     ?assertMatch(
         [
-            #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
-            #{<<"name">> := <<"k2">>, <<"value">> := <<"v22">>},
-            #{<<"name">> := <<"k3">>, <<"value">> := <<"v3">>},
-            #{<<"name">> := <<"onedata_json">>, <<"value">> := 5} | _
+            #{<<"k1">> := <<"v1">>},
+            #{<<"k2">> := <<"v22">>},
+            #{<<"k3">> := <<"v3">>},
+            #{<<"onedata_json">> := 5} | _
         ],
         DecodedBody
     ).
