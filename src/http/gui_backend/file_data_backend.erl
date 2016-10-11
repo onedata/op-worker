@@ -399,9 +399,10 @@ fetch_dir_children(DirId, CurrentChildrenCount) ->
         ?APP_NAME, gui_file_children_chunk_size
     ),
     % Calculate how many children should be served from cache
-    ?dump({CurrentChildrenCount, LsChunkSize, NewFiles}),
+    ?dump({CurrentChildrenCount, LsChunkSize, length(NewFiles)}),
     FilesToFetch = CurrentChildrenCount + LsChunkSize - length(NewFiles),
     ChunksToFetch = min(FilesToFetch div LsChunkSize, ChunkCount),
+    ?dump({FilesToFetch div LsChunkSize, ChunkCount, ChunksToFetch}),
     Result = lists:foldl(
         fun(Counter, Acc) ->
             [{{DirId, Counter}, Chunk}] = ets:lookup(
@@ -492,7 +493,7 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
     % Split the children list into chunks of size equal to LS chunk size
     Chunks = split_into_chunks(ChildrenSorted, LsChunkSize),
     TotalChildrenCount = length(ChildrenSorted),
-    ChunkCount = TotalChildrenCount div LsChunkSize,
+    ChunkCount = length(Chunks),
     % Cache the total children count
     ets:insert(ls_sub_cache_name(), {{DirId, size}, TotalChildrenCount}),
     % Cache the total chunk count
