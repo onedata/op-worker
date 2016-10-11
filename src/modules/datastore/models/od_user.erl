@@ -27,6 +27,7 @@
 
 %% API
 -export([fetch/1, get_or_fetch/2, create_or_update/2]).
+-export([record_struct/1]).
 
 -export_type([doc/0, id/0, connected_account/0]).
 
@@ -42,6 +43,34 @@
 %%    {<<"email_list">>, [binary()]}
 %%]
 -type connected_account() :: proplists:proplist().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {name, binary},
+        {alias, binary},
+        {email_list, [binary]},
+        {connected_accounts, [[{binary, term}]]},
+        {default_space, binary},
+        {space_aliases, [{binary, binary}]},
+        {groups, [binary]},
+        {spaces, [binary]},
+        {handle_services, [binary]},
+        {handles, [binary]},
+        {eff_groups, [binary]},
+        {eff_spaces, [binary]},
+        {eff_shares, [binary]},
+        {eff_providers, [binary]},
+        {eff_handle_services, [binary]},
+        {eff_handles, [binary]},
+        {public_only, boolean},
+        {revision_history, [term]}
+    ]}.
 
 %%%===================================================================
 %%% model_behaviour callbacks

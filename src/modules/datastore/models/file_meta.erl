@@ -51,6 +51,7 @@
 -export([hidden_file_name/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_uuid/1]).
+-export([record_struct/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -69,6 +70,29 @@
 
 -export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
     size/0, mode/0, time/0, symlink_value/0, posix_permissions/0, file_meta/0]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {name, binary},
+        {type, atom},
+        {mode, integer},
+        {uid, binary},
+        {size, integer},
+        {version, integer},
+        {is_scope, boolean},
+        {scope, binary},
+        {provider_id, binary},
+        {link_value, binary},
+        {shares, [binary]}
+    ]}.
+
 
 %%%===================================================================
 %%% model_behaviour callbacks

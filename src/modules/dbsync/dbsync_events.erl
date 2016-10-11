@@ -93,7 +93,7 @@ links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) 
     #model_config{link_store_level = _LinkStoreLevel} = ModelName:model_init(),
     MyProvID = oneprovider:get_provider_id(),
     erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE),
-    erlang:put(other_scopes, system_internal),
+    erlang:put(other_scopes, <<"system_internal">>),
 
     maps:fold(
         fun(K, {Version, Targets}, AccIn) ->

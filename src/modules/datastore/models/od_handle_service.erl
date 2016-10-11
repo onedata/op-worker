@@ -30,6 +30,25 @@
 -export([save/1, get/1, get_or_fetch/2, list/0, exists/1, delete/1, update/2,
     create/1, model_init/0, 'after'/5, before/4]).
 -export([create_or_update/2]).
+-export([record_struct/1]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {name, binary},
+        {proxy_endpoint, binary},
+        {service_properties, [term]},
+        {users, [{binary, [atom]}]},
+        {groups, [{binary, [atom]}]},
+        {eff_users, [{binary, [atom]}]},
+        {eff_groups, [{binary, [atom]}]},
+        {revision_history, [term]}
+    ]}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
