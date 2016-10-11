@@ -48,7 +48,7 @@ handle(<<"fileUploadSuccess">>, Props) ->
         logical_file_manager:open(SessionId, {guid, FileId}, read),
     ok = logical_file_manager:fsync(FileHandle),
     ok = logical_file_manager:release(FileHandle),
-    {ok, FileData} = file_data_backend:file_record(SessionId, FileId, false, 0),
+    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
     gui_async:push_created(<<"file">>, FileData),
     % @todo end
     ok;
@@ -100,12 +100,14 @@ handle(<<"createFile">>, Props) ->
     ParentId = proplists:get_value(<<"parentId">>, Props, null),
     Type = proplists:get_value(<<"type">>, Props),
     ?dump({Name, ParentId, Type}),
-    {ok, FileData} = file_data_backend:create_file(
-        SessionId, Name, ParentId, Type
-    ),
-    FileId = proplists:get_value(<<"id">>, FileData),
-    gui_async:push_created(<<"file">>, FileData),
-    {ok, FileId};
+    case file_data_backend:create_file(SessionId, Name, ParentId, Type) of
+        {ok, FileData} ->
+            FileId = proplists:get_value(<<"id">>, FileData),
+            gui_async:push_created(<<"file">>, FileData),
+            {ok, [{<<"fileId">>, FileId}]};
+        Error ->
+            Error
+    end;
 
 handle(<<"fetchMoreDirChildren">>, Props) ->
     SessionId = g_session:get_session_id(),
@@ -206,9 +208,7 @@ handle(<<"createFileShare">>, Props) ->
     case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
         {ok, {ShareId, _}} ->
             % Push file data so GUI knows that is is shared
-            {ok, FileData} = file_data_backend:file_record(
-                SessionId, FileId, false, 0
-            ),
+            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
             gui_async:push_created(<<"file">>, FileData),
             {ok, [{<<"shareId">>, ShareId}]};
         {error, ?EACCES} ->

@@ -31,7 +31,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([file_record/4, create_file/4]).
+-export([file_record/2, file_record/4, create_file/4]).
 
 %%%===================================================================
 %%% API functions
@@ -144,54 +144,10 @@ find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"file">>, Data) ->
-    try
-        SessionId = g_session:get_session_id(),
-        Name = proplists:get_value(<<"name">>, Data),
-        Type = proplists:get_value(<<"type">>, Data),
-        ParentGUID = proplists:get_value(<<"parent">>, Data, null),
-        {ok, ParentPath} = logical_file_manager:get_file_path(
-            SessionId, ParentGUID),
-        Path = filename:join([ParentPath, Name]),
-        FileId = case Type of
-            <<"file">> ->
-                {ok, FId} = logical_file_manager:create(SessionId, Path),
-                FId;
-            <<"dir">> ->
-                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
-                DirId
-        end,
-        {ok, #file_attr{
-            name = Name,
-            size = SizeAttr,
-            mtime = ModificationTime,
-            mode = PermissionsAttr}} =
-            logical_file_manager:stat(SessionId, {guid, FileId}),
-        Size = case Type of
-            <<"dir">> -> null;
-            _ -> SizeAttr
-        end,
-        Permissions = integer_to_binary(PermissionsAttr, 8),
-        Res = [
-            {<<"id">>, FileId},
-            {<<"name">>, Name},
-            {<<"type">>, Type},
-            {<<"permissions">>, Permissions},
-            {<<"modificationTime">>, ModificationTime},
-            {<<"size">>, Size},
-            {<<"parent">>, ParentGUID},
-            {<<"children">>, []},
-            {<<"fileAcl">>, FileId}
-        ],
-        {ok, Res}
-    catch _:_ ->
-        case proplists:get_value(<<"type">>, Data, <<"dir">>) of
-            <<"dir">> ->
-                gui_error:report_warning(<<"Failed to create new directory.">>);
-            <<"file">> ->
-                gui_error:report_warning(<<"Failed to create new file.">>)
-        end
-    end;
+create_record(<<"file">>, _) ->
+    % File are created via an RPC call
+    gui_error:report_error(<<"Not implemented">>);
+
 create_record(<<"file-acl">>, Data) ->
     Id = proplists:get_value(<<"file">>, Data),
     case update_record(<<"file-acl">>, Id, Data) of
@@ -308,7 +264,17 @@ get_user_root_dir_uuid(SessionId) ->
 
 
 %%--------------------------------------------------------------------
-%% @private
+%% @doc
+%% Constructs a file record from given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_record(SessionId :: binary(), FileId :: binary()) ->
+    {ok, proplists:proplist()}.
+file_record(SessionId, FileId) ->
+    file_record(SessionId, FileId, false, 0).
+
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Constructs a file record from given FileId. The options ChildrenFromCache
 %% and ChildrenOffset (valid for dirs only) allow to specify that dir's
@@ -392,7 +358,6 @@ file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
 
 create_file(SessionId, Name, ParentId, Type) ->
     try
-        SessionId = g_session:get_session_id(),
         {ok, ParentPath} = logical_file_manager:get_file_path(
             SessionId, ParentId),
         Path = filename:join([ParentPath, Name]),
@@ -404,30 +369,11 @@ create_file(SessionId, Name, ParentId, Type) ->
                 {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
                 DirId
         end,
-        {ok, #file_attr{
-            name = Name,
-            size = SizeAttr,
-            mtime = ModificationTime,
-            mode = PermissionsAttr}} =
-            logical_file_manager:stat(SessionId, {guid, FileId}),
-        Size = case Type of
-            <<"dir">> -> null;
-            _ -> SizeAttr
-        end,
-        Permissions = integer_to_binary(PermissionsAttr, 8),
-        Res = [
-            {<<"id">>, FileId},
-            {<<"name">>, Name},
-            {<<"type">>, Type},
-            {<<"permissions">>, Permissions},
-            {<<"modificationTime">>, ModificationTime},
-            {<<"size">>, Size},
-            {<<"parent">>, ParentId},
-            {<<"children">>, []},
-            {<<"fileAcl">>, FileId}
-        ],
-        {ok, Res}
-    catch _:_ ->
+        file_record(SessionId, FileId)
+    catch Error:Message ->
+        ?error_stacktrace(
+            "Cannot create file via GUI - ~p:~p", [Error, Message]
+        ),
         case Type of
             <<"dir">> ->
                 gui_error:report_warning(<<"Failed to create new directory.">>);
