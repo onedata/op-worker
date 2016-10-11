@@ -293,7 +293,7 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                     };
                 <<"cdmi_owner">> ->
                     (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
-                        <<"cdmi_owner">> => integer_to_binary(Attrs#file_attr.uid)
+                        <<"cdmi_owner">> => Attrs#file_attr.owner_id
                     };
                 ?ACL_XATTR_NAME ->
                     case onedata_file_api:get_acl(Auth, FileKey) of

@@ -293,6 +293,7 @@ get_file(Config) ->
 metadata(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    UserId1 = ?config({user_id, <<"user1">>}, Config),
     FileName =  filename:join([binary_to_list(SpaceName), "metadataTest.txt"]),
     FileContent = <<"Some content...">>,
     DirName = filename:join([binary_to_list(SpaceName), "metadataTestDir"]) ++ "/",
@@ -322,7 +323,7 @@ metadata(Config) ->
     ?assert(ATime1 =< After),
     ?assert(MTime1 =< After),
     ?assert(CTime1 =< After),
-    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertMatch(UserId1, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(6, length(Metadata1)),
 
@@ -344,7 +345,7 @@ metadata(Config) ->
     CdmiResponse4 = json_utils:decode(Response4),
     ?assertEqual(1, length(CdmiResponse4)),
     Metadata4 = proplists:get_value(<<"metadata">>, CdmiResponse4),
-    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
+    ?assertMatch(UserId1, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {ok, 200, _Headers5, Response5} = do_request(Workers, FileName ++ "?metadata:cdmi_size", get, RequestHeaders1, []),
