@@ -27,6 +27,10 @@
 %% resource functions
 -export([get_file_attributes/2, set_file_attribute/2]).
 
+-define(ALL_BASIC_ATTRIBUTES, [<<"mode">>, <<"size">>, <<"atime">>, <<"ctime">>,
+    <<"mtime">>, <<"storage_group_id">>, <<"storage_user_id">>, <<"name">>,
+    <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -102,17 +106,23 @@ get_file_attributes(Req, State) ->
     #{auth := Auth, path := Path, attribute := Attribute, extended := Extended, inherited := Inherited} = StateWithAttribute,
 
     case {Attribute, Extended} of
-        {ModeOrUndefined, false} when ModeOrUndefined =:= <<"mode">> ; ModeOrUndefined =:= undefined ->
-            {ok, #file_attr{mode = Mode}} = onedata_file_api:stat(Auth, {path, Path}),
-            Response = json_utils:encode_map([#{<<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>}]),
+        {undefined, false} ->
+            {ok, Attrs} = onedata_file_api:stat(Auth, {path, Path}),
+            ResponseMap = add_attr(#{}, ?ALL_BASIC_ATTRIBUTES, Attrs),
+            Response = json_utils:encode_map(ResponseMap),
+            {Response, ReqWithAttribute, StateWithAttribute};
+        {Attribute, false} ->
+            {ok, Attrs} = onedata_file_api:stat(Auth, {path, Path}),
+            ResponseMap = add_attr(#{}, [Attribute], Attrs),
+            Response = json_utils:encode_map(ResponseMap),
             {Response, ReqWithAttribute, StateWithAttribute};
         {undefined, true} ->
             {ok, Xattrs} = onedata_file_api:list_xattr(Auth, {path, Path}, Inherited, true),
             RawResponse = lists:map(fun(XattrName) ->
                 {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
-                #{XattrName => Value}
+                {XattrName, Value}
             end, Xattrs),
-            Response = json_utils:encode_map(RawResponse),
+            Response = json_utils:encode_map(maps:from_list(RawResponse)),
             {Response, ReqWithAttribute, StateWithAttribute};
         {XattrName, true} ->
             {ok, #xattr{value = Value}} = onedata_file_api:get_xattr(Auth, {path, Path}, XattrName, Inherited),
@@ -148,3 +158,45 @@ set_file_attribute(Req, State) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds attributes listed in list, to given map.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_attr(maps:map(), list(), #file_attr{}) -> maps:map().
+add_attr(Map, [], _Attr) ->
+    Map;
+add_attr(Map, [<<"mode">> | Rest], Attr = #file_attr{mode = Mode}) ->
+    maps:put(<<"mode">>, <<"0", (integer_to_binary(Mode, 8))/binary>>, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"size">> | Rest], Attr = #file_attr{size = Size}) ->
+    maps:put(<<"size">>, Size, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"atime">> | Rest], Attr = #file_attr{atime = ATime}) ->
+    maps:put(<<"atime">>, ATime, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"ctime">> | Rest], Attr = #file_attr{ctime = CTime}) ->
+    maps:put(<<"ctime">>, CTime, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"mtime">> | Rest], Attr = #file_attr{mtime = MTime}) ->
+    maps:put(<<"mtime">>, MTime, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"storage_group_id">> | Rest], Attr = #file_attr{gid = Gid}) ->
+    maps:put(<<"storage_group_id">>, Gid, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"storage_user_id">> | Rest], Attr = #file_attr{uid = Gid}) ->
+    maps:put(<<"storage_user_id">>, Gid, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"name">> | Rest], Attr = #file_attr{name = Name}) ->
+    maps:put(<<"name">>, Name, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"owner_id">> | Rest], Attr = #file_attr{owner_id = OwnerId}) ->
+    maps:put(<<"owner_id">>, OwnerId, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"shares">> | Rest], Attr = #file_attr{shares = Shares}) ->
+    maps:put(<<"shares">>, Shares, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?REGULAR_FILE_TYPE}) ->
+    maps:put(<<"type">>, <<"reg">>, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?DIRECTORY_TYPE}) ->
+    maps:put(<<"type">>, <<"dir">>, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?SYMLINK_TYPE}) ->
+    maps:put(<<"type">>, <<"lnk">>, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"type">> | Rest], Attr = #file_attr{type = ?PHANTOM_TYPE}) ->
+    maps:put(<<"type">>, <<"phn">>, add_attr(Map, Rest, Attr));
+add_attr(Map, [<<"file_id">> | Rest], Attr = #file_attr{uuid = Uuid}) ->
+    {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
+    maps:put(<<"file_id">>, Id, add_attr(Map, Rest, Attr));
+add_attr(_Map, _List, _Attr) ->
+    throw(?ERROR_INVALID_ATTRIBUTE).

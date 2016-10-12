@@ -15,7 +15,6 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
--define(ALLOWED_ATTRIBUTES, [<<"mode">>, undefined]).
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
 -define(DEFAULT_EXTENDED, <<"false">>).
@@ -140,12 +139,7 @@ parse_attribute(Req, State = #{extended := true}) ->
     end;
 parse_attribute(Req, State) ->
     {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
-    case lists:member(Attribute, ?ALLOWED_ATTRIBUTES) of
-        true ->
-            {State#{attribute => Attribute}, NewReq};
-        false ->
-            throw(?ERROR_INVALID_ATTRIBUTE)
-    end.
+    {State#{attribute => Attribute}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
