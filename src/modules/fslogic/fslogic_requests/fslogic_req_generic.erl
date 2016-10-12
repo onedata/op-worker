@@ -211,8 +211,7 @@ get_xattr(CTX, FileEntry, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
 get_xattr(CTX, FileEntry, ?JSON_METADATA_KEY, Inherited) ->
     case get_metadata(CTX, FileEntry, json, [], Inherited) of
         #provider_response{status = #status{code = ?OK}, provider_response = #metadata{value = JsonTerm}} ->
-            Json = json_utils:encode_map(JsonTerm),
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?JSON_METADATA_KEY, value = Json}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?JSON_METADATA_KEY, value = JsonTerm}};
         Other ->
             Other
     end;
@@ -246,8 +245,7 @@ set_xattr(CTX, FileEntry, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding
 set_xattr(CTX, FileEntry, #xattr{name = ?CDMI_COMPLETION_STATUS_KEY, value = Completion}) ->
     set_cdmi_completion_status(CTX, FileEntry, Completion);
 set_xattr(CTX, FileEntry, #xattr{name = ?JSON_METADATA_KEY, value = Json}) ->
-    JsonTerm = json_utils:decode_map(Json),
-    set_metadata(CTX, FileEntry, json, JsonTerm, []);
+    set_metadata(CTX, FileEntry, json, Json, []);
 set_xattr(CTX, FileEntry, #xattr{name = ?RDF_METADATA_KEY, value = Rdf}) ->
     set_metadata(CTX, FileEntry, rdf, Rdf, []);
 set_xattr(_CTX, _, #xattr{name = <<?CDMI_PREFIX_STR, _/binary>>}) ->

@@ -754,14 +754,14 @@ set_get_xattr_inherited(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
 
     % when
-    XattrSpace = json_utils:encode_map(#{<<"k1">> => <<"value">>}),
-    XattrDir = json_utils:encode_map(#{<<"k2">> => <<"value">>}),
-    XattrChild = json_utils:encode_map(#{<<"k2">> => <<"value">>}),
-    XattrChild2 = json_utils:encode_map(#{<<"k3">> => <<"value">>}),
+    XattrSpace = json_utils:encode_map(#{<<"k1">> => <<"v1">>}),
+    XattrDir = json_utils:encode_map(#{<<"k2">> => <<"v2">>}),
+    XattrChild = json_utils:encode_map(#{<<"k2">> => <<"v22">>}),
+    XattrChild2 = json_utils:encode_map(#{<<"k3">> => <<"v3">>}),
 
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
-            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"5">>)),
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"a\":5}">>)),
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpace)),
@@ -780,15 +780,12 @@ set_get_xattr_inherited(Config) ->
         do_request(WorkerP1, <<"attributes/space3/dir_test/child?inherited=true&extended=true">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode_map(Body),
-    ?assertMatch(
-        [
-            #{<<"k1">> := <<"v1">>},
-            #{<<"k2">> := <<"v22">>},
-            #{<<"k3">> := <<"v3">>},
-            #{<<"onedata_json">> := 5} | _
-        ],
-        DecodedBody
-    ).
+    ?assertMatch(#{
+        <<"k1">> := <<"v1">>,
+        <<"k2">> := <<"v22">>,
+        <<"k3">> := <<"v3">>,
+        <<"onedata_json">> := #{<<"a">> := 5}
+    }, DecodedBody).
 
 set_get_json_metadata_using_filter(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
