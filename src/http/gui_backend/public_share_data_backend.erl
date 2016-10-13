@@ -63,9 +63,9 @@ terminate() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"share-public">>, ShareId) ->
     {ok, #document{
-        value = #share_info{
+        value = #od_share{
             name = Name,
-            root_file_id = RootFileId,
+            root_file = RootFileId,
             public_url = PublicURL,
             handle = Handle
         }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
@@ -84,9 +84,9 @@ find(<<"share-public">>, ShareId) ->
     ]};
 find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
     {ok, #document{
-        value = #share_info{
+        value = #od_share{
             name = Name,
-            root_file_id = RootFileId
+            root_file = RootFileId
         }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
     Res = [
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
@@ -219,7 +219,7 @@ find(<<"file-property-public">>, AssocId) ->
 
 find(<<"handle-public">>, HandleId) ->
     {ok, #document{
-        value = #handle_info{
+        value = #od_handle{
             public_handle = PublicHandle,
             metadata = Metadata
         }}} = handle_logic:get(?GUEST_SESS_ID, HandleId),

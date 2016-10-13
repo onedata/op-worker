@@ -31,11 +31,11 @@
 %% has permissions specified in 'OperationMask' (according to this ACL)
 %% @end
 %%--------------------------------------------------------------------
--spec check_permission(ACL :: [#accesscontrolentity{}], User :: #document{value :: #onedata_user{}}, OperationMask :: non_neg_integer()) -> ok | no_return().
+-spec check_permission(ACL :: [#accesscontrolentity{}], User :: #document{value :: #od_user{}}, OperationMask :: non_neg_integer()) -> ok | no_return().
 check_permission([], _User, ?no_flags_mask) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?EACCES);
 check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
-    #document{value = #onedata_user{group_ids = Groups}} = User, Operation)
+    #document{value = #od_user{eff_groups = Groups}} = User, Operation)
     when ?has_flag(Flags, ?identifier_group_mask) ->
     case is_list(Groups) andalso lists:member(GroupId, Groups) of
         false ->
@@ -139,7 +139,7 @@ uid_to_ace_name(?everyone) ->
 uid_to_ace_name(?group) ->
     ?group;
 uid_to_ace_name(Uid) ->
-    {ok, #document{value = #onedata_user{name = Name}}} = onedata_user:get(Uid),
+    {ok, #document{value = #od_user{name = Name}}} = od_user:get(Uid),
     <<Name/binary, "#", Uid/binary>>.
 
 %%--------------------------------------------------------------------
@@ -169,7 +169,7 @@ ace_name_to_uid(AceName) ->
 %%--------------------------------------------------------------------
 -spec gid_to_ace_name(GRGroupId :: binary()) -> binary().
 gid_to_ace_name(GroupId) ->
-    {ok, #document{value = #onedata_group{name = Name}}} = onedata_group:get(GroupId),
+    {ok, #document{value = #od_group{name = Name}}} = od_group:get(GroupId),
     <<Name/binary, "#", GroupId/binary>>.
 
 %%--------------------------------------------------------------------

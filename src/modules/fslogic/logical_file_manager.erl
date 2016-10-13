@@ -554,8 +554,8 @@ remove_symlink(FileKey) ->
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), file_key(), share_info:name()) ->
-    {ok, {share_info:id(), share_info:share_guid()}} | error_reply().
+-spec create_share(session:id(), file_key(), od_share:name()) ->
+    {ok, {od_share:id(), od_share:share_guid()}} | error_reply().
 create_share(SessId, FileKey, Name) ->
     ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
@@ -564,7 +564,7 @@ create_share(SessId, FileKey, Name) ->
 %% Removes file share by ShareID.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(session:id(), share_info:id()) -> ok | error_reply().
+-spec remove_share(session:id(), od_share:id()) -> ok | error_reply().
 remove_share(SessId, ShareID) ->
     ?run(fun() -> lfm_shares:remove_share(SessId, ShareID) end).
 
@@ -573,7 +573,7 @@ remove_share(SessId, ShareID) ->
 %% Removes file share by ShareGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), share_info:share_guid()) -> ok | error_reply().
+-spec remove_share_by_guid(session:id(), od_share:share_guid()) -> ok | error_reply().
 remove_share_by_guid(SessId, ShareGuid) ->
     ?run(fun() -> lfm_shares:remove_share_by_guid(SessId, ShareGuid) end).
 

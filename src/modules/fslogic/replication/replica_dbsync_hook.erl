@@ -30,7 +30,7 @@
 %% Handler for file_location changes which impacts local replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec on_file_location_change(space_info:id(), file_location:doc()) ->
+-spec on_file_location_change(od_space:id(), file_location:doc()) ->
     ok | {error, term()}.
 on_file_location_change(_SpaceId, ChangedLocationDoc =
     #document{value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->

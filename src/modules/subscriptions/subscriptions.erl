@@ -24,10 +24,10 @@
 
 -type(seq() :: non_neg_integer()).
 -type(rev() :: term()).
--type model() :: onedata_group | onedata_user | space_info | share_info |
-provider_info | handle_service_info | handle_info.
--type record() :: #space_info{} | #onedata_user{} | #onedata_group{} |
-#share_info{} | #provider_info{} | #handle_service_info{} | #handle_info{}.
+-type model() :: od_group | od_user | od_space | od_share |
+od_provider | od_handle_service | od_handle.
+-type record() :: #od_space{} | #od_user{} | #od_group{} |
+#od_share{} | #od_provider{} | #od_handle_service{} | #od_handle{}.
 -export_type([seq/0, rev/0, model/0, record/0]).
 
 %%--------------------------------------------------------------------
@@ -68,7 +68,7 @@ get_missing() ->
 %% Returns users currently qualified as working with that provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_users() -> [UserID :: onedata_user:id()].
+-spec get_users() -> [UserID :: od_user:id()].
 get_users() ->
     ensure_initialised(),
     {ok, #document{value = #subscriptions_state{users = UserIDs}}}
@@ -81,7 +81,7 @@ get_users() ->
 %% Should be invoked when first session for user is added.
 %% @end
 %%--------------------------------------------------------------------
--spec put_user(UserID :: onedata_user:id()) -> ok.
+-spec put_user(UserID :: od_user:id()) -> ok.
 put_user(?GUEST_USER_ID) ->
     ok;
 put_user(?ROOT_USER_ID) ->
@@ -166,7 +166,7 @@ get_refreshing_node() ->
 %% Returns users with sessions in the datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec get_users_with_session() -> [onedata_user:id()].
+-spec get_users_with_session() -> [od_user:id()].
 get_users_with_session() ->
     {ok, Docs} = session:all_with_user(),
     lists:filtermap(fun

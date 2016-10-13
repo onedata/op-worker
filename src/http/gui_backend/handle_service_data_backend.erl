@@ -57,7 +57,7 @@ terminate() ->
 find(<<"handle-service">>, HandleServiceId) ->
     Auth = op_gui_utils:get_user_auth(),
     {ok, #document{
-        value = #handle_service_info{
+        value = #od_handle_service{
             name = Name
         }}} = handle_service_logic:get(Auth, HandleServiceId),
     {ok, [

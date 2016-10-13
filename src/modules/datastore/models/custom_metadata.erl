@@ -403,7 +403,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Get space id of file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id(file_meta:uuid()) -> space_info:id().
+-spec get_space_id(file_meta:uuid()) -> od_space:id().
 get_space_id(FileUuid) ->
     {ok, #document{key = SpaceUUID}} = file_meta:get_scope({uuid, FileUuid}),
     fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID).

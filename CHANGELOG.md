@@ -4,6 +4,34 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc9
+
+* VFS-2609 Fix error 500 when specifying wrong url for transfer
+* VFS-2609 Fix query-index invalid parameters
+* VFS-2609 Fix error 500 when requesting nonexistent transfer
+* VFS-2609 Handle metadata filter errors
+* VFS-2609 Handle invalid json as error 400
+
+
+### 3.0.0-rc8
+
+* VFS-2625 Add tests for deletion and conflit resolving for handles and handle services
+* VFS-2625 Add support for public handles
+* VFS-2625 Do not use handle get or fetch
+* VFS-2625 Fix public share view not retrieving fiels correctly
+* VFS-2625 Fix handles not being properly retrieved via REST
+* VFS-2609 Add test of setting json primitives as metadata.
+* VFS-2524 Apply recommended changes.
+* VFS-2625 Add backends for handles and handle services
+* VFS-2524 Add move operation to cdmi, split move and copy tests.
+* VFS-2625 Add handle field to share record in data backend
+* VFS-2594 Make filters work with json metadata in arrays.
+* VFS-2625 Accound handles and handle_serives in subscriptions tests
+* VFS-2625 Set default value of service properties in handle services to empty list
+* VFS-2625 Add handles and handle_services to subscriptions
+* VFS-2626 Add handle field to share_info
+
+
 ### 3.0.0-rc7
 
 * VFS-2567 Use ShareId and FileId in getPublicFileDownloadUrl public rpc call

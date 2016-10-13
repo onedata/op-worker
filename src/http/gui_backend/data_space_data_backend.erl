@@ -143,12 +143,12 @@ delete_record(<<"data-space">>, _Id) ->
 %% Returns a client-compliant data space record based on space id.
 %% @end
 %%--------------------------------------------------------------------
--spec data_space_record(SpaceId :: space_info:id()) -> proplists:proplist().
+-spec data_space_record(SpaceId :: od_space:id()) -> proplists:proplist().
 data_space_record(SpaceId) ->
     UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
     {ok, #document{
-    value = #space_info{
+    value = #od_space{
         name = Name,
         providers_supports = Providers
     }}} = space_logic:get(UserAuth, SpaceId, UserId),

@@ -138,7 +138,7 @@ new_ctx(UserName, Password) ->
 %% Creates Openstack Swift user document.
 %% @end
 %%--------------------------------------------------------------------
--spec new(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+-spec new(UserId :: od_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
     UserDoc :: datastore:document().
 new(UserId, StorageId, #swift_user_ctx{} = UserCtx) ->
     #document{key = UserId, value = add_ctx(StorageId, UserCtx, #swift_user{})}.
@@ -167,7 +167,7 @@ get_all_ctx(#swift_user{ctx = Ctx}) ->
 %% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
 %% @end
 %%--------------------------------------------------------------------
--spec get_ctx(UserId :: onedata_user:id(), StorageId :: storage:id()) ->
+-spec get_ctx(UserId :: od_user:id(), StorageId :: storage:id()) ->
     UserCtx :: ctx() | undefined.
 get_ctx(UserId, StorageId) ->
     helpers_user:get_ctx(?MODULE, UserId, StorageId).
@@ -177,7 +177,7 @@ get_ctx(UserId, StorageId) ->
 %% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
 %% @end
 %%--------------------------------------------------------------------
--spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
-    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+-spec add(UserId :: od_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    {ok, UserId :: od_user:id()} | {error, Reason :: term()}.
 add(UserId, StorageId, UserCtx) ->
     helpers_user:add(?MODULE, UserId, StorageId, UserCtx).

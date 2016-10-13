@@ -117,8 +117,8 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = storage_quota} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
-    {ok, #document{value = #space_info{providers_supports = ProvSupport}}} =
-        space_info:get(SpaceId),
+    {ok, #document{value = #od_space{providers_supports = ProvSupport}}} =
+        od_space:get(SpaceId),
     SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, SupSize);
@@ -127,7 +127,7 @@ update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
 update(#monitoring_id{main_subject_type = space, main_subject_id = SpaceId,
     metric_type = connected_users} = MonitoringId, MonitoringState, UpdateTime, _UpdateValue) ->
 
-    {ok, #document{value = #space_info{users = Users}}} = space_info:get(SpaceId),
+    {ok, #document{value = #od_space{users = Users}}} = od_space:get(SpaceId),
     ConnectedUsers = length(Users),
 
     maybe_update(MonitoringId, MonitoringState, UpdateTime, ConnectedUsers);

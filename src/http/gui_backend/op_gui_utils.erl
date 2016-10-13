@@ -120,8 +120,8 @@ find_all_groups(UserAuth, UserId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary()].
+-spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(),
+    MaxRetries :: integer()) -> [SpaceId :: binary()].
 find_all_groups(_, _, 0) ->
     [];
 

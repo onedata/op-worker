@@ -134,7 +134,7 @@ create_record(<<"group">>, Data) ->
             gui_error:report_warning(
                 <<"Cannot create group with empty name.">>);
         _ ->
-            case group_logic:create(UserAuth, #onedata_group{name = Name}) of
+            case group_logic:create(UserAuth, #od_group{name = Name}) of
                 {ok, GroupId} ->
                     % This group was created by this user -> he has view privs.
                     GroupRecord = group_record(GroupId, true),
@@ -179,7 +179,7 @@ update_record(<<"group-user-permission">>, AssocId, Data) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {UserId, GroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #onedata_group{
+        value = #od_group{
             users = UsersAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
@@ -211,8 +211,8 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #onedata_group{
-            nested_groups = GroupsAndPerms
+        value = #od_group{
+            children = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
     GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
     NewGroupPerms = lists:foldl(
@@ -291,11 +291,11 @@ group_record(GroupId) ->
 group_record(GroupId, HasViewPrivileges) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
-        value = #onedata_group{
+        value = #od_group{
             name = Name,
             users = UsersAndPerms,
-            nested_groups = GroupsAndPerms,
-            parent_groups = ParentGroups
+            children = GroupsAndPerms,
+            parents = ParentGroups
         }}} = group_logic:get(UserAuth, GroupId),
 
     % Make sure that user is allowed to view requested group - he must have
@@ -344,7 +344,7 @@ group_user_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {UserId, GroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #onedata_group{
+        value = #od_group{
             users = UsersAndPerms
         }}} = group_logic:get(UserAuth, GroupId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
@@ -372,8 +372,8 @@ group_group_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {ChildGroupId, ParentGroupId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #onedata_group{
-            nested_groups = GroupsAndPerms
+        value = #od_group{
+            children = GroupsAndPerms
         }}} = group_logic:get(UserAuth, ParentGroupId),
     GroupPerms = proplists:get_value(ChildGroupId, GroupsAndPerms),
     PermsMapped = lists:map(

@@ -43,7 +43,7 @@ stress_test(Config) ->
         ]
     ).
 stress_test_base(Config) ->
-  performance:stress_test(Config).
+    ?STRESS_TEST_BASE(Config).
 
 %%%===================================================================
 

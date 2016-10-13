@@ -36,7 +36,7 @@
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
 -record(user_config, {
-    id :: onedata_user:id(),
+    id :: od_user:id(),
     name :: binary(),
     default_space :: binary(),
     spaces :: [],
@@ -297,7 +297,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, fetch, [#token_auth{macaroon = Macaroon}]),
+    {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -327,7 +327,7 @@ teardown_sesion(Worker, Config) ->
             end, SpaceIds),
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, od_user, delete, [UserId])),
             ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:user_root_dir_uuid(UserId)])),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
@@ -624,7 +624,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
 
     lists:foreach(fun({SpaceId, _}) ->
-        rpc:multicall(MasterWorkers, space_info, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
+        rpc:multicall(MasterWorkers, od_space, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
     end, Spaces),
 
     %% Set expiration time for session to 1d.
