@@ -26,7 +26,8 @@
 -export([bcast_status/0, on_status_received/3]).
 -export([has_sync_context/1, get_space_id/1]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata, change_propagation_controller]).
+-define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata,
+    change_propagation_controller, times]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
@@ -720,6 +721,8 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
 %%--------------------------------------------------------------------
 -spec get_sync_context(datastore:document()) ->
     datastore:key() | datastore:document().
+get_sync_context(#document{key = FileUUID, value = #times{}}) ->
+    FileUUID;
 get_sync_context(#document{value = #file_meta{}} = Doc) ->
     Doc;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->

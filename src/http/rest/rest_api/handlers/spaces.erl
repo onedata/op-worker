@@ -83,7 +83,7 @@ content_types_provided(Req, State) ->
 -spec list_spaces(req(), maps:map()) -> {term(), req(), maps:map()}.
 list_spaces(Req, State = #{auth := Auth}) ->
     {ok, UserId} = session:get_user_id(Auth),
-    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get_or_fetch(Auth, UserId),
+    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get_or_fetch(Auth, UserId),
     RawResponse =
         lists:map(fun({SpaceId, SpaceName}) ->
             #{<<"name">> => SpaceName, <<"spaceId">> => SpaceId}

@@ -5,48 +5,31 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc
-%%% @doc Cache for handle details fetched from OZ.
+%%% @doc Cache for handle service details fetched from OZ.
 %%% @end
 %%%-------------------------------------------------------------------
--module(handle_info).
+-module(od_handle_service).
 -author("Lukasz Opiola").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/oz/oz_handles.hrl").
--include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/oz/oz_handle_services.hrl").
 
+-type doc() :: datastore:document().
+-type info() :: #od_handle_service{}.
 -type id() :: binary().
--type resource_type() :: binary().
--type resource_id() :: binary().
--type public_handle() :: binary().
--type metadata() :: binary().
--type timestamp() :: calendar:datetime().
+-type name() :: binary().
+-type proxy_endpoint() :: binary().
+-type service_properties() :: proplists:proplist().  % JSON proplist
 
--export_type([id/0, resource_type/0, resource_id/0, public_handle/0, metadata/0,
-    timestamp/0]).
-
-%% API
--export([actual_timestamp/0]).
+-export_type([doc/0, info/0, id/0]).
+-export_type([name/0, proxy_endpoint/0, service_properties/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, get_or_fetch/2, list/0, exists/1, delete/1, update/2,
     create/1, model_init/0, 'after'/5, before/4]).
 -export([create_or_update/2]).
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @equiv universaltime().
-%%--------------------------------------------------------------------
--spec actual_timestamp() -> timestamp().
-actual_timestamp() ->
-    erlang:universaltime().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -106,12 +89,12 @@ get(Key) ->
 %% fetches it from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), HandleId :: id()) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), HandleServiceId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, HandleId) ->
-    case ?MODULE:get(HandleId) of
+get_or_fetch(Auth, HandleServiceId) ->
+    case ?MODULE:get(HandleServiceId) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Auth, HandleId);
+        {error, {not_found, _}} -> fetch(Auth, HandleServiceId);
         {error, Reason} -> {error, Reason}
     end.
 
@@ -150,7 +133,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     StoreLevel = ?DISK_ONLY_LEVEL,
-    ?MODEL_CONFIG(handle_info_bucket, [], StoreLevel).
+    ?MODEL_CONFIG(handle_service_info_bucket, [], StoreLevel).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -183,43 +166,19 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetches space info from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth(), HandleId :: id()) ->
+-spec fetch(Auth :: oz_endpoint:auth(), HandleServiceId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(?GUEST_SESS_ID = Auth, HandleId) ->
-    {ok, #handle_details{
-        public_handle = PublicHandle,
-        metadata = Metadata
-    }} = oz_handles:get_public_details(Auth, HandleId),
+fetch(Auth, HandleServiceId) ->
+    {ok, #handle_service_details{
+        name = Name,
+        proxy_endpoint = ProxyEndpoint,
+        service_properties = ServiceProperties
+    }} = oz_handle_services:get_details(Auth, HandleServiceId),
 
-    Doc = #document{key = HandleId, value = #handle_info{
-        public_handle = PublicHandle,
-        metadata = Metadata
-    }},
-
-    case create(Doc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    {ok, Doc};
-
-fetch(Auth, HandleId) ->
-    {ok, #handle_details{
-        handle_service_id = HandleServiceId,
-        public_handle = PublicHandle,
-        resource_type = ResourceType,
-        resource_id = ResourceId,
-        metadata = Metadata,
-        timestamp = Timestamp
-    }} = oz_handles:get_details(Auth, HandleId),
-
-    Doc = #document{key = HandleId, value = #handle_info{
-        handle_service_id = HandleServiceId,
-        public_handle = PublicHandle,
-        resource_type = ResourceType,
-        resource_id = ResourceId,
-        metadata = Metadata,
-        timestamp = Timestamp
+    Doc = #document{key = HandleServiceId, value = #od_handle_service{
+        name = Name,
+        proxy_endpoint = ProxyEndpoint,
+        service_properties = ServiceProperties
     }},
 
     case create(Doc) of

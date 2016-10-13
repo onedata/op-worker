@@ -95,8 +95,8 @@ get_metric(Req, State) ->
     #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := SpaceId, user_id := UId} = State3,
 
     space_membership:check_with_auth(Auth, SpaceId),
-    case space_info:get_or_fetch(Auth, SpaceId) of
-        {ok, #document{value = #space_info{providers = Providers}}} ->
+    case od_space:get_or_fetch(Auth, SpaceId) of
+        {ok, #document{value = #od_space{providers = Providers}}} ->
             Json =
                 lists:map(fun(ProviderId) ->
                     case onedata_metrics_api:get_metric(Auth, SubjectType, SpaceId, SecondarySubjectType, UId,

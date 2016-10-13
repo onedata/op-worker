@@ -139,7 +139,7 @@ fetch(#'OTPCertificate'{}) ->
 fetch(Auth) ->
     try
         {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
-        {ok, #document{key = Id}} = onedata_user:get_or_fetch(Auth, UserId),
+        {ok, #document{key = Id}} = od_user:get_or_fetch(Auth, UserId),
         NewDoc = #document{key = Auth, value = #user_identity{user_id = Id}},
         case user_identity:create(NewDoc) of
             {ok, _} -> ok;

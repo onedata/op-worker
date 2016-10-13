@@ -9,7 +9,7 @@
 %%% OZ group data cache
 %%% @end
 %%%-------------------------------------------------------------------
--module(onedata_group).
+-module(od_group).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
@@ -159,11 +159,11 @@ fetch(Auth, GroupId) ->
             public ->
                 % Only public info about this group was discoverable
                 OnedataGroupDoc = #document{
-                    key = Id, value = #onedata_group{
+                    key = Id, value = #od_group{
                         name = Name,
                         type = Type
                     }},
-                case onedata_group:create(OnedataGroupDoc) of
+                case od_group:create(OnedataGroupDoc) of
                     {ok, _} -> ok;
                     {error, already_exists} -> ok
                 end,
@@ -193,13 +193,13 @@ fetch(Auth, GroupId) ->
                     {UID, Privileges}
                 end, EffectiveUserIds),
 
-                %todo consider getting user_details for each group member and storing it as onedata_user
-                OnedataGroupDoc = #document{key = Id, value = #onedata_group{
+                %todo consider getting user_details for each group member and storing it as od_user
+                OnedataGroupDoc = #document{key = Id, value = #od_group{
                     users = UsersWithPrivileges, spaces = SpaceIds, name = Name,
-                    effective_users = EffectiveUsersWithPrivileges, type = Type,
-                    parent_groups = ParentIds, nested_groups = NestedGroupsWithPrivileges}},
+                    eff_users = EffectiveUsersWithPrivileges, type = Type,
+                    parents = ParentIds, children = NestedGroupsWithPrivileges}},
 
-                case onedata_group:create(OnedataGroupDoc) of
+                case od_group:create(OnedataGroupDoc) of
                     {ok, _} -> ok;
                     {error, already_exists} -> ok
                 end,
@@ -215,10 +215,10 @@ fetch(Auth, GroupId) ->
 %% Get group from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), GroupId :: onedata_group:id()) ->
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), GroupId :: od_group:id()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Auth, GroupId) ->
-    case onedata_group:get(GroupId) of
+    case od_group:get(GroupId) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Auth, GroupId);
         Error -> Error

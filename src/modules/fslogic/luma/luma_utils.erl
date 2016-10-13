@@ -29,7 +29,7 @@
 %% Get user_id from identity or session_id
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(session:id() | session:identity()) -> onedata_user:id().
+-spec get_user_id(session:id() | session:identity()) -> od_user:id().
 get_user_id(#user_identity{user_id = UserId}) ->
     UserId;
 get_user_id(SessionId) ->

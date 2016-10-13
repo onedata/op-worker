@@ -27,8 +27,8 @@
 %% Creates a share for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), logical_file_manager:file_key(), share_info:name()) ->
-    {ok, {share_info:id(), share_info:share_guid()}} | logical_file_manager:error_reply().
+-spec create_share(session:id(), logical_file_manager:file_key(), od_share:name()) ->
+    {ok, {od_share:id(), od_share:share_guid()}} | logical_file_manager:error_reply().
 create_share(SessId, FileKey, Name) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
@@ -42,11 +42,11 @@ create_share(SessId, FileKey, Name) ->
 %% Removes file share by ShareID.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(session:id(), share_info:id()) ->
+-spec remove_share(session:id(), od_share:id()) ->
     ok | logical_file_manager:error_reply().
 remove_share(SessId, ShareID) ->
     case share_logic:get(provider, ShareID) of
-        {ok, #document{value = #share_info{root_file_id = ShareGuid}}} ->
+        {ok, #document{value = #od_share{root_file = ShareGuid}}} ->
             remove_share_by_guid(SessId, ShareGuid);
         Error ->
             Error
@@ -57,7 +57,7 @@ remove_share(SessId, ShareID) ->
 %% Removes file share by ShareGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), share_info:share_guid()) ->
+-spec remove_share_by_guid(session:id(), od_share:share_guid()) ->
     ok | logical_file_manager:error_reply().
 remove_share_by_guid(SessId, ShareGuid) ->
     lfm_utils:call_fslogic(SessId, provider_request, ShareGuid,

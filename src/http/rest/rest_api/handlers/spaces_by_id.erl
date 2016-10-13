@@ -88,11 +88,11 @@ get_space(Req, State) ->
     #{auth := Auth, space_id := SpaceId} = State2,
 
     space_membership:check_with_auth(Auth, SpaceId),
-    {ok, #document{value = #space_info{name = Name, providers = Providers}}} =
-        space_info:get_or_fetch(Auth, SpaceId),
+    {ok, #document{value = #od_space{name = Name, providers = Providers}}} =
+        od_space:get_or_fetch(Auth, SpaceId),
     ProvidersRawResponse = lists:map(fun(ProviderId) ->
-        {ok, #document{value = #provider_info{client_name = ProviderName}}} =
-            provider_info:get_or_fetch(ProviderId),
+        {ok, #document{value = #od_provider{client_name = ProviderName}}} =
+            od_provider:get_or_fetch(ProviderId),
         #{
             <<"providerId">> => ProviderId,
             <<"providerName">> => ProviderName

@@ -58,8 +58,8 @@ terminate() ->
 find(<<"handle">>, HandleId) ->
     Auth = op_gui_utils:get_user_auth(),
     {ok, #document{
-        value = #handle_info{
-            handle_service_id = HandleServiceId,
+        value = #od_handle{
+            handle_service = HandleServiceId,
             public_handle = PublicHandle,
             resource_id = ShareId,
             metadata = Metadata

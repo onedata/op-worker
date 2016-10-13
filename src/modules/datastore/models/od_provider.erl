@@ -1,47 +1,32 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Michal Zmuda
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc
-%%% OZ user data cache
+%%% @doc Cache for space details fetched from Global Registry.
 %%% @end
 %%%-------------------------------------------------------------------
--module(onedata_user).
--author("Tomasz Lichon").
+-module(od_provider).
+-author("Michal Zmuda").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("proto/common/credentials.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
-
-%% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, create_or_update/2]).
+-export([create_or_update/2, get_or_fetch/1, fetch/1]).
 
--export_type([doc/0, id/0, connected_account/0]).
+%% model_behaviour callbacks
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
+    'after'/5, before/4]).
 
--type doc() :: datastore:document().
 -type id() :: binary().
 
-%% Oauth connected accounts in form of proplist:
-%%[
-%%    {<<"provider_id">>, binary()},
-%%    {<<"user_id">>, binary()},
-%%    {<<"login">>, binary()},
-%%    {<<"name">>, binary()},
-%%    {<<"email_list">>, [binary()]}
-%%]
--type connected_account() :: proplists:proplist().
+-export_type([id/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -52,7 +37,7 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
@@ -61,8 +46,8 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
@@ -71,7 +56,7 @@ update(Key, Diff) ->
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
 create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
@@ -80,20 +65,25 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
-get(?GUEST_USER_ID) ->
-    {ok, #document{key = ?GUEST_USER_ID, value = #onedata_user{name = <<"nobody">>, spaces = []}}};
+-spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
+-spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
@@ -102,7 +92,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
+-spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
@@ -113,8 +103,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [{?MODEL_NAME, create}, {?MODEL_NAME, save},
-        {?MODEL_NAME, create_or_update}, {?MODEL_NAME, update}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(provider_info_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,14 +113,6 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(?MODEL_NAME, create, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, save, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
-    ok = permissions_cache:invalidate_permissions_cache();
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -160,77 +141,54 @@ before(_ModelName, _Method, _Level, _Context) ->
 create_or_update(Doc, Diff) ->
     datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Fetch user from OZ and save it in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(Auth :: oz_endpoint:auth()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(Auth) ->
-    {ok, #user_details{
-        id = UserId, name = Name, connected_accounts = ConnectedAccounts,
-        alias = Alias, email_list = EmailList}
-    } = oz_users:get_details(Auth),
-    {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-        oz_users:get_spaces(Auth),
-    {ok, GroupIds} = oz_users:get_groups(Auth),
-    {ok, EffectiveGroupIds} = oz_users:get_effective_groups(Auth),
-
-    Spaces = utils:pmap(fun(SpaceId) ->
-        {ok, #space_details{name = SpaceName}} =
-            oz_spaces:get_details(Auth, SpaceId),
-        {SpaceId, SpaceName}
-    end, SpaceIds),
-
-    OnedataUser = #onedata_user{
-        name = Name,
-        spaces = Spaces,
-        default_space = DefaultSpaceId,
-        group_ids = GroupIds,
-        effective_group_ids = EffectiveGroupIds,
-        connected_accounts = ConnectedAccounts,
-        alias = Alias,
-        email_list = EmailList
-    },
-    OnedataUserDoc = #document{key = UserId, value = OnedataUser},
-
-    case onedata_user:create(OnedataUserDoc) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    utils:pforeach(fun(SpaceId) ->
-        space_info:get_or_fetch(Auth, SpaceId, UserId)
-    end, SpaceIds),
-
-    utils:pforeach(fun(GroupId) ->
-        onedata_group:get_or_fetch(Auth, GroupId)
-    end, GroupIds),
-
-    {ok, OnedataUserDoc}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get user from cache or fetch from OZ and save in cache.
+%% Get provider from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Auth :: oz_endpoint:auth(), UserId :: id()) ->
+-spec get_or_fetch(ProviderId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Auth, UserId) ->
-    try
-        case onedata_user:get(UserId) of
-            {ok, Doc} -> {ok, Doc};
-            {error, {not_found, _}} -> fetch(Auth);
-            Error -> Error
-        end
-    catch
-        _:Reason ->
-            ?error_stacktrace("Cannot get or fetch details of onedata user ~p due to: ~p",
-                [UserId, Reason]),
-            {error, Reason}
+get_or_fetch(ProviderId) ->
+    case od_provider:get(ProviderId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(ProviderId);
+        Error -> Error
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetch provider from OZ and save it in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(ProviderId :: id()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(ProviderId) ->
+    try
+        {ok, #provider_details{name = Name, urls = URLs}} =
+            oz_providers:get_details(provider, ProviderId),
+        {PublicOnly, SpaceIDs} = case oz_providers:get_spaces(provider) of
+            {ok, SIDs} -> {false, SIDs};
+            {error, Res} ->
+                ?warning("Unable to fecth public info for provider ~p due to ~p", [
+                    ProviderId, Res]),
+                {true, []}
+        end,
+
+        Doc = #document{key = ProviderId, value = #od_provider{
+            client_name = Name,
+            urls = URLs,
+            spaces = SpaceIDs,
+            public_only = PublicOnly
+        }},
+
+        case od_provider:create(Doc) of
+            {ok, _} -> ok;
+            {error, already_exists} -> ok
+        end,
+        {ok, Doc}
+    catch
+        _:Reason ->
+            {error, Reason}
+    end.

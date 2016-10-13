@@ -1,39 +1,70 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Wrona
+%%% @author Lukasz Opiola
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Cache that maps onedata user to POSIX user.
+%%% @doc Cache for handle details fetched from OZ.
 %%% @end
 %%%-------------------------------------------------------------------
--module(posix_user).
--author("Michal Wrona").
+-module(od_handle).
+-author("Lukasz Opiola").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("modules/fslogic/helpers.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/oz/oz_handles.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+-type doc() :: datastore:document().
+-type info() :: #od_handle{}.
+-type id() :: binary().
+-type resource_type() :: binary().
+-type resource_id() :: binary().
+-type public_handle() :: binary().
+-type metadata() :: binary().
+-type timestamp() :: calendar:datetime().
+
+-export_type([doc/0, info/0, id/0]).
+-export_type([resource_type/0, resource_id/0, public_handle/0, metadata/0,
+    timestamp/0]).
 
 %% API
--export([new_ctx/2, new/3, add_ctx/3, add/3, get_all_ctx/1, get_ctx/2]).
+-export([actual_timestamp/0]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4]).
+-export([save/1, get/1, get_or_fetch/2, list/0, exists/1, delete/1, update/2,
+    create/1, model_init/0, 'after'/5, before/4]).
+-export([create_or_update/2]).
 
--type uid() :: non_neg_integer().
--type gid() :: non_neg_integer().
--type ctx() :: #posix_user_ctx{}.
--type type() :: #posix_user{}.
+%%%===================================================================
+%%% API
+%%%===================================================================
 
--export_type([uid/0, gid/0, ctx/0, type/0]).
+%%--------------------------------------------------------------------
+%% @equiv universaltime().
+%%--------------------------------------------------------------------
+-spec actual_timestamp() -> timestamp().
+actual_timestamp() ->
+    erlang:universaltime().
 
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -74,6 +105,30 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Gets space info from the database in user context. If space info is not found
+%% fetches it from onezone and stores it in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Auth :: oz_endpoint:auth(), HandleId :: id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Auth, HandleId) ->
+    case ?MODULE:get(HandleId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Auth, HandleId);
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -97,7 +152,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(posix_user_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    StoreLevel = ?DISK_ONLY_LEVEL,
+    ?MODEL_CONFIG(handle_info_bucket, [], StoreLevel).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -121,63 +177,57 @@ before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
 %%%===================================================================
-%%% API
+%%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Creates POSIX user context.
+%% Fetches space info from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ctx(Uid :: uid(), Gid :: gid()) -> UserCtx :: ctx().
-new_ctx(Uid, Gid) ->
-    #posix_user_ctx{uid = Uid, gid = Gid}.
+-spec fetch(Auth :: oz_endpoint:auth(), HandleId :: id()) ->
+    {ok, datastore:document()} | datastore:get_error().
+fetch(?GUEST_SESS_ID = Auth, HandleId) ->
+    {ok, #handle_details{
+        public_handle = PublicHandle,
+        metadata = Metadata
+    }} = oz_handles:get_public_details(Auth, HandleId),
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates POSIX user document.
-%% @end
-%%--------------------------------------------------------------------
--spec new(UserId :: od_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
-    UserDoc :: datastore:document().
-new(UserId, StorageId, #posix_user_ctx{} = UserCtx) ->
-    #document{key = UserId, value = add_ctx(StorageId, UserCtx, #posix_user{})}.
+    Doc = #document{key = HandleId, value = #od_handle{
+        public_handle = PublicHandle,
+        metadata = Metadata
+    }},
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds POSIX storage context to onedata user.
-%% @end
-%%--------------------------------------------------------------------
--spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #posix_user{}) ->
-    User :: #posix_user{}.
-add_ctx(StorageId, UserCtx, #posix_user{ctx = Ctx} = User) ->
-    User#posix_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
+    case create(Doc) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns all POSIX storage contexts for onedata user.
-%% @end
-%%--------------------------------------------------------------------
--spec get_all_ctx(User :: #posix_user{}) -> Ctx :: #{storage:id() => ctx()}.
-get_all_ctx(#posix_user{ctx = Ctx}) ->
-    Ctx.
+    {ok, Doc};
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
-%% @end
-%%--------------------------------------------------------------------
--spec get_ctx(UserId :: od_user:id(), StorageId :: storage:id()) ->
-    UserCtx :: ctx() | undefined.
-get_ctx(UserId, StorageId) ->
-    helpers_user:get_ctx(?MODULE, UserId, StorageId).
+fetch(Auth, HandleId) ->
+    {ok, #handle_details{
+        handle_service = HandleService,
+        public_handle = PublicHandle,
+        resource_type = ResourceType,
+        resource_id = ResourceId,
+        metadata = Metadata,
+        timestamp = Timestamp
+    }} = oz_handles:get_details(Auth, HandleId),
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
-%% @end
-%%--------------------------------------------------------------------
--spec add(UserId :: od_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
-    {ok, UserId :: od_user:id()} | {error, Reason :: term()}.
-add(UserId, StorageId, UserCtx) ->
-    helpers_user:add(?MODULE, UserId, StorageId, UserCtx).
+    Doc = #document{key = HandleId, value = #od_handle{
+        handle_service = HandleService,
+        public_handle = PublicHandle,
+        resource_type = ResourceType,
+        resource_id = ResourceId,
+        metadata = Metadata,
+        timestamp = Timestamp
+    }},
+
+    case create(Doc) of
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
+    end,
+
+    {ok, Doc}.

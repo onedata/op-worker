@@ -200,9 +200,9 @@ init_per_testcase(Case, Config) ->
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
     test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
         fun(_) -> <<"spaceid">> end),
-    test_utils:mock_new(Workers, space_info),
-    test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, od_space),
+    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
+        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]),
     test_utils:mock_expect(Worker, file_meta, get, fun
@@ -245,7 +245,7 @@ end_per_testcase(Case, Config) ->
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:clear_assume_all_files_in_space(Config),
-    test_utils:mock_unload(Workers, space_info),
+    test_utils:mock_unload(Workers, od_space),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================

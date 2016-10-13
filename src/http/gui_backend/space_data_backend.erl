@@ -136,7 +136,7 @@ create_record(<<"space">>, Data) ->
             gui_error:report_warning(
                 <<"Cannot create space with empty name.">>);
         _ ->
-            case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
+            case space_logic:create_user_space(UserAuth, #od_space{name = Name}) of
                 {ok, SpaceId} ->
                     % This space was created by this user -> he has view privs.
                     SpaceRecord = space_record(SpaceId, true),
@@ -199,7 +199,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     CurrentUser = g_session:get_user_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #space_info{
+        value = #od_space{
             users = UsersAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
@@ -232,7 +232,7 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
     CurrentUser = g_session:get_user_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #space_info{
+        value = #od_space{
             groups = GroupsAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
@@ -313,7 +313,7 @@ space_record(SpaceId, HasViewPrivileges) ->
     UserId = g_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
-        value = #space_info{
+        value = #od_space{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
@@ -365,7 +365,7 @@ space_user_permission_record(AssocId) ->
     CurrentUser = g_session:get_user_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #space_info{
+        value = #od_space{
             users = UsersAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     UserPermsAtoms = proplists:get_value(UserId, UsersAndPerms),
@@ -395,7 +395,7 @@ space_group_permission_record(AssocId) ->
     CurrentUser = g_session:get_user_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
-        value = #space_info{
+        value = #od_space{
             groups = GroupsAndPerms
         }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     GroupPermsAtoms = proplists:get_value(GroupId, GroupsAndPerms),
