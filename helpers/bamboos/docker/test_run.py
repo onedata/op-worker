@@ -75,13 +75,9 @@ parser.add_argument(
     '--test-type', '-tt',
     action='store',
     default="acceptance",
-    help="Type of test (cucumber, acceptance, performance, packaging, gui). Default is: acceptance",
+    help="Type of test (acceptance, env_up, performance, packaging, gui)",
     dest='test_type')
 
-parser.add_argument(
-    '--runxfail',
-    help="Causes test cases marked with xfail to be started normally"
-)
 
 parser.add_argument(
     '--copy-etc-hosts',
@@ -95,6 +91,8 @@ parser.add_argument(
 command = '''
 import os, subprocess, sys, stat
 
+{additional_code}
+
 if {shed_privileges}:
     os.environ['HOME'] = '/tmp'
     docker_gid = os.stat('/var/run/docker.sock').st_gid
@@ -102,8 +100,6 @@ if {shed_privileges}:
     os.setgroups([docker_gid])
     os.setregid({gid}, {gid})
     os.setreuid({uid}, {uid})
-
-{additional_code}
 
 command = ['py.test'] + {args} + ['--test-type={test_type}'] + ['{test_dir}'] + ['--junitxml={report_path}']
 ret = subprocess.call(command)
