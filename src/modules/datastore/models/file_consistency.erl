@@ -28,9 +28,7 @@
 model_init/0, 'after'/5, before/4]).
 
 -type id() :: file_meta:id().
-%%-type component() :: file_meta | local_file_location | parent_links | links | link_to_parent
-%%    | {link_to_child, file_meta:name(), file_meta:uuid()}.
--type component() :: file_meta | local_file_location | parent_links | link_to_parent | custom_metadata
+-type component() :: file_meta | local_file_location | parent_links | link_to_parent | custom_metadata | times
     | {link_to_child, file_meta:name(), file_meta:uuid()} | {rev, Module :: atom(), Rev :: non_neg_integer()}.
 -type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
 -type restart_posthook() :: Args:: list() | {Module :: atom(), Function:: atom(), Args:: list()}.
@@ -48,7 +46,7 @@ model_init/0, 'after'/5, before/4]).
 %% the change after system restart
 %% @end
 %%--------------------------------------------------------------------
--spec wait(file_meta:uuid(), space_info:id(), [file_consistency:component()], restart_posthook()) -> ok.
+-spec wait(file_meta:uuid(), od_space:id(), [file_consistency:component()], restart_posthook()) -> ok.
 wait(FileUuid, SpaceId, WaitFor, RestartPosthookData) ->
     {NeedsToWait, WaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
@@ -106,10 +104,10 @@ wait(FileUuid, SpaceId, WaitFor, RestartPosthookData) ->
             ok;
         [parent_links] ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(FileUuid, SpaceId),
-            file_consistency:wait(ParentUuid, SpaceId, [file_meta, link_to_parent, parent_links],
+            file_consistency:wait(ParentUuid, SpaceId, [file_meta, times, link_to_parent, parent_links],
                 RestartPosthookData);
         [parent_links, {NewUuid, WaitName, ChildUuid}] ->
-            file_consistency:wait(NewUuid, SpaceId, [file_meta, link_to_parent, parent_links,
+            file_consistency:wait(NewUuid, SpaceId, [file_meta, times, link_to_parent, parent_links,
                 {link_to_child, WaitName, ChildUuid}], RestartPosthookData)
     end.
 
@@ -192,7 +190,7 @@ notify_waiting(Doc = #document{key = FileUuid,
 %% notify waiting processes.
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_add_components(file_meta:uuid(), space_info:id(), [component()]) -> ok.
+-spec check_and_add_components(file_meta:uuid(), od_space:id(), [component()]) -> ok.
 check_and_add_components(FileUuid, SpaceId, Components) ->
     FoundComponents = check_missing_components(FileUuid, SpaceId, Components),
     add_components_and_notify(FileUuid, FoundComponents).
@@ -202,7 +200,7 @@ check_and_add_components(FileUuid, SpaceId, Components) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id()) ->
+-spec check_missing_components(file_meta:uuid(), od_space:id()) ->
     [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}].
 check_missing_components(FileUuid, SpaceId) ->
     check_missing_components(FileUuid, SpaceId, [file_meta, local_file_location, link_to_parent, parent_links]).
@@ -212,7 +210,7 @@ check_missing_components(FileUuid, SpaceId) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id(), [component()]) ->
+-spec check_missing_components(file_meta:uuid(), od_space:id(), [component()]) ->
     [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}].
 check_missing_components(FileUuid, SpaceId, Missing) ->
     check_missing_components(FileUuid, SpaceId, Missing, []).
@@ -222,7 +220,7 @@ check_missing_components(FileUuid, SpaceId, Missing) ->
 %% Checks if components of file are present.
 %% @end
 %%--------------------------------------------------------------------
--spec check_missing_components(file_meta:uuid(), space_info:id(), [component()], [component()]) ->
+-spec check_missing_components(file_meta:uuid(), od_space:id(), [component()], [component()]) ->
     [component() | {parent_links_partial, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}].
 check_missing_components(_FileUuid, _SpaceId, [], Found) ->
     Found;
@@ -230,6 +228,13 @@ check_missing_components(FileUuid, SpaceId, [file_meta | RestMissing], Found) ->
     case catch file_meta:get(FileUuid) of
         {ok, _} ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [file_meta | Found]);
+        _ ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, Found)
+    end;
+check_missing_components(FileUuid, SpaceId, [times | RestMissing], Found) ->
+    case catch times:get(FileUuid) of
+        {ok, _} ->
+            check_missing_components(FileUuid, SpaceId, RestMissing, [times | Found]);
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
