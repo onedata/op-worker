@@ -31,7 +31,7 @@
 %% has permissions specified in 'OperationMask' (according to this ACL)
 %% @end
 %%--------------------------------------------------------------------
--spec check_permission(ACL :: [#accesscontrolentity{}], User :: #document{value :: #od_user{}}, OperationMask :: non_neg_integer()) -> ok | no_return().
+-spec check_permission(ACL :: [#accesscontrolentity{}], User :: od_user:doc(), OperationMask :: non_neg_integer()) -> ok | no_return().
 check_permission([], _User, ?no_flags_mask) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?EACCES);
 check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
@@ -74,8 +74,8 @@ check_permission([#accesscontrolentity{} | Rest], User = #document{}, Operation)
 %% Parses list of access control entities to format suitable for jiffy:encode
 %% @end
 %%--------------------------------------------------------------------
--spec from_acl_to_json_format(Acl :: [#accesscontrolentity{}]) -> Result when
-    Result :: list().
+-spec from_acl_to_json_format(Acl :: [#accesscontrolentity{}]) ->
+    custom_metadata:json_array().
 from_acl_to_json_format(Acl) ->
     [ace_to_map(Ace) || Ace <- Acl].
 
@@ -84,14 +84,14 @@ from_acl_to_json_format(Acl) ->
 %% list of access control entities
 %% @end
 %%--------------------------------------------------------------------
--spec from_json_format_to_acl(JsonAcl :: list()) -> [#accesscontrolentity{}].
+-spec from_json_format_to_acl(custom_metadata:json_array()) -> [#accesscontrolentity{}].
 from_json_format_to_acl(JsonAcl) ->
     [map_to_ace(AceProplist) || AceProplist <- JsonAcl].
 
 %%--------------------------------------------------------------------
 %% @doc Parses access control entity to format suitable for jiffy:encode
 %%--------------------------------------------------------------------
--spec ace_to_map(#accesscontrolentity{}) -> maps:map().
+-spec ace_to_map(#accesscontrolentity{}) -> custom_metadata:json_object().
 ace_to_map(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
     #{
         <<"acetype">> => bitmask_to_binary(Type),
@@ -109,7 +109,7 @@ ace_to_map(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = W
 %% access control entity
 %% @end
 %%--------------------------------------------------------------------
--spec map_to_ace(Map :: maps:map()) -> #accesscontrolentity{}.
+-spec map_to_ace(custom_metadata:json_object()) -> #accesscontrolentity{}.
 map_to_ace(Map) ->
     Type = maps:get(<<"acetype">>, Map, undefined),
     Flags = maps:get(<<"aceflags">>, Map, undefined),

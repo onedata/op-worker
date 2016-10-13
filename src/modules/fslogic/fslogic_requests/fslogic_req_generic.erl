@@ -183,7 +183,7 @@ delete(CTX, File, Silent) ->
 get_xattr(CTX, FileEntry, ?ACL_KEY, _Inherited) ->
     case get_acl(CTX, FileEntry) of
         #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Acl}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?ACL_KEY, value = Acl}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?ACL_KEY, value = fslogic_acl:from_acl_to_json_format(Acl)}};
         Other ->
             Other
     end;
@@ -237,7 +237,7 @@ get_xattr(CTX, FileEntry, XattrName, Inherited) ->
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
     #provider_response{} | no_return().
 set_xattr(CTX, FileEntry, #xattr{name = ?ACL_KEY, value = Acl}) ->
-    set_acl(CTX, FileEntry, #acl{value = Acl});
+    set_acl(CTX, FileEntry, #acl{value = fslogic_acl:from_json_format_to_acl(Acl)});
 set_xattr(CTX, FileEntry, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}) ->
     set_mimetype(CTX, FileEntry, Mimetype);
 set_xattr(CTX, FileEntry, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}) ->
@@ -308,7 +308,7 @@ list_xattr(_CTX, {uuid, FileUuid}, Inherited, ShowInternal) ->
 get_acl(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?ACL_KEY) of
         {ok, Val} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Val}};
+            #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = fslogic_acl:from_json_format_to_acl(Val)}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
@@ -320,7 +320,7 @@ get_acl(_CTX, {uuid, FileUuid}) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
-    case xattr:save(FileUuid, ?ACL_KEY, Val) of
+    case xattr:save(FileUuid, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of
         {ok, _} ->
             ok = permissions_cache:invalidate_permissions_cache(),
             ok = chmod_storage_files(

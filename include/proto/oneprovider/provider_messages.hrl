@@ -14,6 +14,7 @@
 
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 -record(get_xattr, {
     name :: xattr:name(),
@@ -37,7 +38,7 @@
 }).
 
 -record(acl, {
-    value :: binary()
+    value :: [#accesscontrolentity{}]
 }).
 
 -record(get_acl, {

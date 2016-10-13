@@ -19,7 +19,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
-acl_conversion_test() ->
+bitmask_acl_conversion_test() ->
     UserId = <<"UserId">>,
     UserName = <<"UserName">>,
     GroupId = <<"GroupId">>,
@@ -59,6 +59,59 @@ acl_conversion_test() ->
                 <<"identifier">> => AceName2,
                 <<"aceflags">> => fslogic_acl:bitmask_to_binary(?identifier_group_mask),
                 <<"acemask">> => fslogic_acl:bitmask_to_binary(?write_mask)
+            }
+        ]
+    ),
+
+    % then
+    ?assertEqual(Acl, [
+        #accesscontrolentity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ]),
+    meck:validate(od_user),
+    meck:validate(od_group),
+    meck:unload().
+
+binary_acl_conversion_test() ->
+    UserId = <<"UserId">>,
+    UserName = <<"UserName">>,
+    GroupId = <<"GroupId">>,
+    GroupName = <<"GroupName">>,
+    meck:new(od_user),
+    meck:expect(od_user, get,
+        fun(Id) when Id =:= UserId ->
+            {ok, #document{value = #od_user{name = UserName}}}
+        end
+    ),
+    meck:new(od_group),
+    meck:expect(od_group, get,
+        fun(Id) when Id =:= GroupId ->
+            {ok, #document{value = #od_group{name = GroupName}}}
+        end
+    ),
+
+    % when
+    AceName1 = fslogic_acl:uid_to_ace_name(UserId),
+    AceName2 = fslogic_acl:gid_to_ace_name(GroupId),
+
+    % then
+    ?assert(is_binary(AceName1)),
+    ?assert(is_binary(AceName2)),
+
+    % when
+    Acl = fslogic_acl:from_json_format_to_acl(
+        [
+            #{
+                <<"acetype">> => <<"ALLOW">>,
+                <<"identifier">> => AceName1,
+                <<"aceflags">> => <<"NO_FLAGS">>,
+                <<"acemask">> => <<"READ, WRITE">>
+            },
+            #{
+                <<"acetype">> => <<"DENY">>,
+                <<"identifier">> => AceName2,
+                <<"aceflags">> => <<"IDENTIFIER_GROUP">>,
+                <<"acemask">> => <<"WRITE">>
             }
         ]
     ),

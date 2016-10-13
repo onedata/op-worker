@@ -78,8 +78,7 @@ get_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, GUID, #get_acl{},
-        fun(#acl{value = Json}) ->
-            Acl = fslogic_acl:from_json_format_to_acl(Json),
+        fun(#acl{value = Acl}) ->
             {ok, Acl}
         end).
 
@@ -98,9 +97,8 @@ set_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = Se
 set_acl(SessId, FileKey, Acl) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    Json = fslogic_acl:from_acl_to_json_format(Acl),
     lfm_utils:call_fslogic(SessId, provider_request, GUID,
-        #set_acl{acl = #acl{value = Json}},
+        #set_acl{acl = #acl{value = Acl}},
         fun(_) -> ok end).
 
 

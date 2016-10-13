@@ -443,10 +443,16 @@ metadata(Config) ->
         {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
     ],
+    Ace3Full = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?write}
+    ],
 
     create_file(Config, FileName2),
     write_to_file(Config, FileName2, <<"data">>, 0),
-    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
+    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3Full]}]}],
     RawRequestBody15 = json_utils:encode(RequestBody15),
     RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
@@ -1472,11 +1478,23 @@ acl(Config) ->
         {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
     ],
+    ReadFull = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?read}
+    ],
     Write = [
         {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
+    ],
+    ReadWriteVerbose = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, <<(?read)/binary, ", ", (?write)/binary>>}
     ],
     Execute = [
         {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
@@ -1497,11 +1515,12 @@ acl(Config) ->
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?delete_mask)}
     ],
 
-    MetadataAclRead = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, WriteAcl]}]}]),
+    MetadataAclReadFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadFull, WriteAcl]}]}]),
     MetadataAclReadExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, Execute, WriteAcl]}]}]),
     MetadataAclDelete = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Delete]}]}]),
     MetadataAclWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
     MetadataAclReadWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
+    MetadataAclReadWriteFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadWriteVerbose]}]}]),
     MetadataAclReadWriteExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read, Execute]}]}]),
 
     %%----- read file test ---------
@@ -1518,7 +1537,7 @@ acl(Config) ->
     ?assertEqual({error, ?EACCES}, open_file(WorkerP1, Config, Filename1, read)),
 
     % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
-    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
+    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadWriteFull),
     {ok, 200, _, _} = do_request(WorkerP2, Filename1, get, RequestHeaders1, []),
     {ok, 200, _, _} = do_request(WorkerP2, Filename1, get, [user_1_token_header(Config)], []),
     %%------------------------------
@@ -1535,7 +1554,7 @@ acl(Config) ->
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
 
     % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
-    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclRead),
+    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadFull),
     RequestBody6 = json_utils:encode([{<<"value">>, <<"new_data3">>}]),
     {ok, 403, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, RequestBody6),
     {ok, 403, _, _} = do_request(Workers, Filename1, put, [user_1_token_header(Config)], <<"new_data4">>),
