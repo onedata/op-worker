@@ -45,7 +45,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    ?dump({init, self()}),
     NewETS = ets:new(?LS_SUB_CACHE_ETS, [
         set, public,
         {read_concurrency, true},
@@ -62,7 +61,6 @@ init() ->
 %%--------------------------------------------------------------------
 -spec terminate() -> ok.
 terminate() ->
-    ?dump({terminate, self()}),
     ets:delete(?LS_CACHE_ETS, self()),
     ok.
 
@@ -220,8 +218,10 @@ update_record(<<"file-acl">>, FileId, Data) ->
     ok | gui_error:error_result().
 delete_record(<<"file">>, FileId) ->
     SessionId = g_session:get_session_id(),
+    ParentId = get_parent(SessionId, FileId),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
+            modify_ls_cache(SessionId, remove, FileId, ParentId),
             ok;
         {error, ?EACCES} ->
             gui_error:report_warning(
@@ -287,13 +287,10 @@ file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
                 ?DIRECTORY_TYPE ->
                     {ChildrenList, TotalCount} = case ChildrenFromCache of
                         false ->
-                            ?dump({ls_dir, Name}),
                             ls_dir(SessionId, FileId);
                         true ->
-                            ?dump({fetch_dir_children, Name}),
                             fetch_dir_children(FileId, ChildrenOffset)
                     end,
-                    ?dump(ChildrenList),
                     {<<"dir">>, 0, ChildrenList, TotalCount};
                 _ ->
                     {<<"file">>, SizeAttr, [], 0}
@@ -353,7 +350,7 @@ create_file(SessionId, Name, ParentId, Type) ->
                 {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
                 DirId
         end,
-        {ok, FileData} = add_new_file_to_cache(SessionId, FileId, ParentId),
+        {ok, FileData} = modify_ls_cache(SessionId, add, FileId, ParentId),
         gui_async:push_updated(<<"file">>, FileData),
         {ok, FileId}
     catch Error:Message ->
@@ -372,61 +369,6 @@ create_file(SessionId, Name, ParentId, Type) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns the GUID of parent of given file, or null if the file resides in
-%% space's root dir.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(SessionId :: session:id(), fslogic_worker:file_guid()) ->
-    binary() | null.
-get_parent(SessionId, FileGuid) ->
-    {ok, #file_attr{uuid = UserRootDirGuid}} = logical_file_manager:stat(
-        SessionId, {path, <<"/">>}),
-    {ok, ParentGuid} = logical_file_manager:get_parent(
-        SessionId, {guid, FileGuid}
-    ),
-    case ParentGuid of
-        UserRootDirGuid -> null;
-        _ -> ParentGuid
-    end.
-
-
-fetch_dir_children(DirId, CurrentChildrenCount) ->
-    LsSubCacheName = ls_sub_cache_name(),
-    % Fetch total children count and number of chunks
-    [{{DirId, size}, TotalChildrenCount}] = ets:lookup(
-        LsSubCacheName, {DirId, size}
-    ),
-    [{{DirId, chunk_count}, ChunkCount}] = ets:lookup(
-        LsSubCacheName, {DirId, chunk_count}
-    ),
-    % First, get all new files that have been created during this session
-    % (they are prepended at the beginning of the files list).
-    [{{DirId, 0}, NewFiles}] = ets:lookup(LsSubCacheName, {DirId, 0}),
-    % Check LS chunk size
-    {ok, LsChunkSize} = application:get_env(
-        ?APP_NAME, gui_file_children_chunk_size
-    ),
-    % Calculate how many children should be served from cache
-    FilesToFetch = CurrentChildrenCount + LsChunkSize - length(NewFiles),
-    ChunksToFetch = min(FilesToFetch div LsChunkSize, ChunkCount),
-    ?dump({FilesToFetch div LsChunkSize, ChunkCount, ChunksToFetch}),
-    % Cache the last served children count
-    ets:insert(
-        LsSubCacheName, {{DirId, last_children_count}, CurrentChildrenCount}
-    ),
-    Result = lists:foldl(
-        fun(Counter, Acc) ->
-            [{{DirId, Counter}, Chunk}] = ets:lookup(
-                LsSubCacheName, {DirId, Counter}
-            ),
-            Acc ++ Chunk
-        end, NewFiles, lists:seq(1, ChunksToFetch)),
-    {Result, TotalChildrenCount}.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -453,20 +395,74 @@ file_acl_record(SessionId, FileId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Returns the GUID of parent of given file, or null if the file resides in
+%% space's root dir.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(SessionId :: session:id(), fslogic_worker:file_guid()) ->
+    binary() | null.
+get_parent(SessionId, FileGuid) ->
+    {ok, #file_attr{uuid = UserRootDirGuid}} = logical_file_manager:stat(
+        SessionId, {path, <<"/">>}),
+    {ok, ParentGuid} = logical_file_manager:get_parent(
+        SessionId, {guid, FileGuid}
+    ),
+    case ParentGuid of
+        UserRootDirGuid -> null;
+        _ -> ParentGuid
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Lists all children of given directory, sorts them by name, caches the result
+%% and returns the first chunk of file children.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_dir_children(DirId :: fslogic_worker:file_guid(),
+    CurrentChildrenCount :: non_neg_integer()) ->
+    [{fslogic_worker:file_guid(), ChildrenCount :: non_neg_integer()}].
+fetch_dir_children(DirId, CurrentChildrenCount) ->
+    LsSubCacheName = ls_sub_cache_name(),
+    % Fetch total children count and number of chunks
+    [{{DirId, size}, TotalChildrenCount}] = ets:lookup(
+        LsSubCacheName, {DirId, size}
+    ),
+    % Check LS chunk size
+    {ok, ChildrenChunkSize} = application:get_env(
+        ?APP_NAME, gui_file_children_chunk_size
+    ),
+    % Cache the last known client's children count
+    ets:insert(
+        LsSubCacheName, {{DirId, last_children_count}, CurrentChildrenCount}
+    ),
+    [{{DirId, children}, Children}] = ets:lookup(
+        LsSubCacheName, {DirId, children}
+    ),
+    {
+        lists:sublist(Children, CurrentChildrenCount + ChildrenChunkSize),
+        TotalChildrenCount
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Lists all children of given directory, sorts them by name, caches the result
 %% and returns the first chunk of file children.
 %% @end
 %%--------------------------------------------------------------------
 -spec ls_dir(SessionId :: session:id(), DirId :: fslogic_worker:file_guid()) ->
-    [fslogic_worker:file_guid()].
+    [{fslogic_worker:file_guid(), ChildrenCount :: non_neg_integer()}].
 ls_dir(SessionId, DirId) ->
-    % Check LS chunk size and configurable limit of single LS operation
-    {ok, LsChunkSize} = application:get_env(
+    % Check LS chunk size
+    {ok, ChildrenChunkSize} = application:get_env(
         ?APP_NAME, gui_file_children_chunk_size
     ),
-    {ok, LsLimit} = application:get_env(?APP_NAME, gui_ls_limit),
+    {ok, LsChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
     % LS the dir
-    Children = ls_dir_chunked(SessionId, DirId, 0, LsLimit, []),
+    Children = ls_dir_chunked(SessionId, DirId, 0, LsChunkSize, []),
     % File names must be converted to strings and to lowercase for
     % proper comparison.
     ChildrenStrings = lists:map(
@@ -478,15 +474,21 @@ ls_dir(SessionId, DirId) ->
     % from fileattr later.
     {ChildrenSorted, _} = lists:unzip(ChildrenSortedTuples),
     % Cache the results
-    cache_ls_result(DirId, ChildrenSorted, LsChunkSize),
+    cache_ls_result(DirId, ChildrenSorted),
     ChildrenSortedLength = length(ChildrenSorted),
-    case ChildrenSortedLength > LsChunkSize of
+    case ChildrenSortedLength > ChildrenChunkSize of
         false ->
             % Return the whole list
-            {ChildrenSorted, ChildrenSortedLength};
+            {
+                ChildrenSorted,
+                ChildrenSortedLength
+            };
         true ->
             % Return the first chunk of the list
-            {lists:sublist(ChildrenSorted, LsChunkSize), ChildrenSortedLength}
+            {
+                lists:sublist(ChildrenSorted, ChildrenChunkSize),
+                ChildrenSortedLength
+            }
     end.
 
 
@@ -521,28 +523,15 @@ ls_dir_chunked(SessionId, DirId, Offset, Limit, Result) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_ls_result(DirId :: fslogic_worker:file_guid(),
-    DirChildren :: [{fslogic_worker:file_guid(), file_meta:name()}],
-    LsChunkSize :: non_neg_integer()) -> ok.
-cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
-    % Split the children list into chunks of size equal to LS chunk size
-    Chunks = split_into_chunks(ChildrenSorted, LsChunkSize),
-    TotalChildrenCount = length(ChildrenSorted),
-    ChunkCount = length(Chunks),
+    DirChildren :: [{fslogic_worker:file_guid(), file_meta:name()}]) -> ok.
+cache_ls_result(DirId, ChildrenSorted) ->
     LsSubCacheName = ls_sub_cache_name(),
+    % Cache dir's children
+    ets:insert(LsSubCacheName, {{DirId, children}, ChildrenSorted}),
     % Cache the total children count
-    ets:insert(LsSubCacheName, {{DirId, size}, TotalChildrenCount}),
-    % Cache the total chunk count
-    ets:insert(LsSubCacheName, {{DirId, chunk_count}, ChunkCount}),
-    % Cache the last number of chunks served to gui
+    ets:insert(LsSubCacheName, {{DirId, size}, length(ChildrenSorted)}),
+    % Cache the last children count known to the client.
     ets:insert(LsSubCacheName, {{DirId, last_children_count}, 0}),
-    % Cache a placeholder for new files created during this session
-    ets:insert(LsSubCacheName, {{DirId, 0}, []}),
-    % Insert the chunks into the ETS
-    lists:foldl(
-        fun(Chunk, Counter) ->
-            ets:insert(LsSubCacheName, {{DirId, Counter}, Chunk}),
-            Counter + 1
-        end, 1, Chunks),
     ok.
 
 
@@ -554,44 +543,38 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
 %% session is initialized (user refreshes the page).
 %% @end
 %%--------------------------------------------------------------------
--spec add_new_file_to_cache(SessionId :: session:id(),
+-spec modify_ls_cache(SessionId :: session:id(), Operation :: add | remove,
     FileId :: fslogic_worker:file_guid(),
     DirId :: fslogic_worker:file_guid()) -> integer().
-add_new_file_to_cache(SessionId, FileId, DirId) ->
+modify_ls_cache(SessionId, Operation, FileId, DirId) ->
     LsSubCacheName = ls_sub_cache_name(),
+    % Lookup current values in cache
+    [{{DirId, children}, CurrentChildren}] = ets:lookup(
+        LsSubCacheName, {DirId, children}
+    ),
+    [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
+        LsSubCacheName, {DirId, last_children_count}
+    ),
     [{{DirId, size}, CurrentSize}] = ets:lookup(
         LsSubCacheName, {DirId, size}
     ),
-    ets:insert(LsSubCacheName, {{DirId, size}, CurrentSize + 1}),
-    [{{DirId, 0}, CurrentNewFiles}] = ets:lookup(
-        LsSubCacheName, {DirId, 0}
-    ),
-    ets:insert(LsSubCacheName, {{DirId, 0}, [FileId | CurrentNewFiles]}),
-    [{{DirId, last_children_count}, LastChildrenCount}] = ets:lookup(
-        LsSubCacheName, {DirId, last_children_count}
-    ),
+    % Modify the values according to operation
+    {NewChildren, NewSize, NewLastChildrenCount} = case Operation of
+        add ->
+            {[FileId | CurrentChildren], CurrentSize + 1, LastChCount + 1};
+        remove ->
+            {CurrentChildren -- [FileId], CurrentSize - 1, LastChCount - 1}
+    end,
+
+    ets:insert(LsSubCacheName, {{DirId, children}, NewChildren}),
+    % Update directory size
+    ets:insert(LsSubCacheName, {{DirId, size}, NewSize}),
+    % Update last known children count
     ets:insert(
-        LsSubCacheName, {{DirId, last_children_count}, LastChildrenCount + 1}
+        LsSubCacheName, {{DirId, last_children_count}, NewLastChildrenCount}
     ),
-    file_record(SessionId, DirId, true, LastChildrenCount + 1).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Splits a list into a list of chunks, each of ChunkSize (except the last one).
-%% @end
-%%--------------------------------------------------------------------
--spec split_into_chunks(List :: [term()], ChunkSize :: non_neg_integer()) -> ok.
-split_into_chunks(List, ChunkSize) ->
-    split_into_chunks(List, ChunkSize, []).
-
-split_into_chunks(List, ChunkSize, ResultList) when ChunkSize >= length(List) ->
-    lists:reverse([List | ResultList]);
-
-split_into_chunks(List, ChunkSize, ResultList) ->
-    {Chunk, Tail} = lists:split(ChunkSize, List),
-    split_into_chunks(Tail, ChunkSize, [Chunk | ResultList]).
+    % Return the directory record that accounts the changes.
+    file_record(SessionId, DirId, true, NewLastChildrenCount).
 
 
 %%--------------------------------------------------------------------
