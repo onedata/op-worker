@@ -30,7 +30,7 @@ model_init/0, 'after'/5, before/4]).
 -type id() :: file_meta:id().
 %%-type component() :: file_meta | local_file_location | parent_links | links | link_to_parent
 %%    | {link_to_child, file_meta:name(), file_meta:uuid()}.
--type component() :: file_meta | local_file_location | parent_links | link_to_parent | xattr
+-type component() :: file_meta | local_file_location | parent_links | link_to_parent | custom_metadata
     | {link_to_child, file_meta:name(), file_meta:uuid()} | {rev, Module :: atom(), Rev :: non_neg_integer()}.
 -type waiting() :: {[component()], pid(), PosthookArguments :: list()}.
 -type restart_posthook() :: Args:: list() | {Module :: atom(), Function:: atom(), Args:: list()}.
@@ -157,36 +157,14 @@ notify_waiting(Doc = #document{key = FileUuid,
     NewWaiting = lists:filter(fun({Missing, Pid, RestartPosthookData}) ->
         case Missing -- Components of
             [] ->
-                Pid ! file_is_now_consistent,
-                case is_process_alive(Pid) of
-                    true ->
-                        ok;
-                    _ ->
-                        case RestartPosthookData of
-                            {M, F, Args} ->
-                                spawn(M, F, Args);
-                            _ ->
-                                spawn(dbsync_events, change_replicated, RestartPosthookData)
-                        end
-                end,
+                notify_pid(Pid, RestartPosthookData),
                 false;
             [{link_to_child, WaitName, ChildUuid}] ->
                 case catch file_meta:get_child({uuid, FileUuid}, WaitName) of
                     {ok, ChildrenUUIDs} ->
                         case lists:member(ChildUuid, ChildrenUUIDs) of
                             true ->
-                                Pid ! file_is_now_consistent,
-                                case is_process_alive(Pid) of
-                                    true ->
-                                        ok;
-                                    _ ->
-                                        case RestartPosthookData of
-                                            {M, F, Args} ->
-                                                spawn(M, F, Args);
-                                            _ ->
-                                                spawn(dbsync_events, change_replicated, RestartPosthookData)
-                                        end
-                                end,
+                                notify_pid(Pid, RestartPosthookData),
                                 false;
                             false ->
                                 true
@@ -197,18 +175,7 @@ notify_waiting(Doc = #document{key = FileUuid,
             [{rev, Model, Rev}] ->
                 case verify_revision(FileUuid, Model, Rev) of
                     ok ->
-                        Pid ! file_is_now_consistent,
-                        case is_process_alive(Pid) of
-                            true ->
-                                ok;
-                            _ ->
-                                case RestartPosthookData of
-                                    {M, F, Args} ->
-                                        spawn(M, F, Args);
-                                    _ ->
-                                        spawn(dbsync_events, change_replicated, RestartPosthookData)
-                                end
-                        end,
+                        notify_pid(Pid, RestartPosthookData),
                         false;
                     _ ->
                         true
@@ -218,7 +185,6 @@ notify_waiting(Doc = #document{key = FileUuid,
         end
     end, Waiting),
     Doc#document{value = FC#file_consistency{waiting = NewWaiting}}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -438,3 +404,25 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Notifies waiting process that file is consistent.
+%% @end
+%%--------------------------------------------------------------------
+-spec notify_pid(pid(), restart_posthook()) -> ok.
+notify_pid(Pid, RestartPosthookData) ->
+    Pid ! file_is_now_consistent,
+    case is_process_alive(Pid) of
+        true ->
+            ok;
+        _ ->
+            case RestartPosthookData of
+                {M, F, Args} ->
+                    spawn(M, F, Args);
+                _ ->
+                    spawn(dbsync_events, change_replicated, RestartPosthookData)
+            end
+    end,
+    ok.

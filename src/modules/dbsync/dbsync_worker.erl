@@ -750,13 +750,13 @@ get_space_id(#document{value = #change_propagation_controller{space_id = SpaceId
 get_space_id(#document{key = Key} = Doc) ->
     try state_get({sid, Key}) of
         undefined ->
-            get_space_id_not_cached(Key, Doc);
+            get_not_cached_space_id(Key, Doc);
         SpaceId ->
             {ok, SpaceId}
     catch
         _:Reason ->
             ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Key, Reason]),
-            get_space_id_not_cached(Key, Doc)
+            get_not_cached_space_id(Key, Doc)
     end.
 
 
@@ -766,9 +766,9 @@ get_space_id(#document{key = Key} = Doc) ->
 %% This cache may be used later on by get_space_id/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
+-spec get_not_cached_space_id(KeyToCache :: term(), datastore:document()) ->
     {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
-get_space_id_not_cached(KeyToCache, #document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
+get_not_cached_space_id(KeyToCache, #document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
     #model_config{store_level = StoreLevel} = change_propagation_controller:model_init(),
     case datastore:get(StoreLevel, change_propagation_controller, DocKey) of
     {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
@@ -777,7 +777,7 @@ get_space_id_not_cached(KeyToCache, #document{value = #links{doc_key = DocKey, m
     {error, Reason} ->
         {error, Reason}
     end;
-get_space_id_not_cached(KeyToCache, #document{key = Key} = Doc) ->
+get_not_cached_space_id(KeyToCache, #document{key = Key} = Doc) ->
     Context = get_sync_context(Doc),
     case file_meta:get_scope(Context) of
         {ok, #document{key = <<"">> = Root}} ->

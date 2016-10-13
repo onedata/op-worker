@@ -200,11 +200,11 @@ cache_permission(Rule, Value) ->
 -spec invalidate_permissions_cache() -> ok.
 invalidate_permissions_cache() ->
     CurrentModel = case get(?STATUS_UUID) of
-                       {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
-                           Model;
-                       {error, {not_found, _}} ->
-                           ?MODULE
-                   end,
+        {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
+            Model;
+        {error, {not_found, _}} ->
+            ?MODULE
+    end,
 
     case CurrentModel of
         clearing ->
@@ -216,10 +216,10 @@ invalidate_permissions_cache() ->
                         {ok, Uuids} = erlang:apply(CurrentModel, list, []),
                         lists:foreach(fun(Uuid) ->
                             ok = erlang:apply(CurrentModel, delete, [Uuid])
-                                      end, Uuids),
+                        end, Uuids),
                         ok = stop_clearing(CurrentModel),
                         ok
-                                            end, ?CLUSTER_LEVEL);
+                    end, ?CLUSTER_LEVEL);
                 {error, parallel_cleaning} ->
                     ok
             end

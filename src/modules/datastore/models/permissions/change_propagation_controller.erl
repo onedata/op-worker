@@ -158,7 +158,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save_change(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(), Rev :: non_neg_integer(),
-    SpaceId :: binary(), VefifyModule :: atom(), VerifyFun :: atom()) -> ok | no_return().
+    SpaceId :: space_info:id(), VefifyModule :: atom(), VerifyFun :: atom()) -> ok | no_return().
 save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
     MyId = oneprovider:get_provider_id(),
@@ -200,7 +200,7 @@ mark_change_propagated(#document{key = ControllerKey, value = #change_propagatio
 %% Verifies if change was propagated to all providers.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: binary()) -> {ok, boolean()} | no_return().
+-spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: space_info:id()) -> {ok, boolean()} | no_return().
 verify_propagation(ControllerKey, SpaceId) ->
     MyId = oneprovider:get_provider_id(),
     ListFun = fun(LinkName, _LinkTarget, Acc) ->
