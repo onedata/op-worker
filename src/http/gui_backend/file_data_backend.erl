@@ -347,8 +347,6 @@ create_file(SessionId, Name, ParentId, Type) ->
         Path = filename:join([ParentPath, Name]),
         FileId = case Type of
             <<"file">> ->
-                ?dump(SessionId),
-                ?dump(Path),
                 {ok, FId} = logical_file_manager:create(SessionId, Path),
                 FId;
             <<"dir">> ->
@@ -413,7 +411,6 @@ fetch_dir_children(DirId, CurrentChildrenCount) ->
         ?APP_NAME, gui_file_children_chunk_size
     ),
     % Calculate how many children should be served from cache
-    ?dump({CurrentChildrenCount, LsChunkSize, length(NewFiles)}),
     FilesToFetch = CurrentChildrenCount + LsChunkSize - length(NewFiles),
     ChunksToFetch = min(FilesToFetch div LsChunkSize, ChunkCount),
     ?dump({FilesToFetch div LsChunkSize, ChunkCount, ChunksToFetch}),
@@ -544,7 +541,6 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
     lists:foldl(
         fun(Chunk, Counter) ->
             ets:insert(LsSubCacheName, {{DirId, Counter}, Chunk}),
-            ?dump({{DirId, Counter}, length(Chunk)}),
             Counter + 1
         end, 1, Chunks),
     ok.
@@ -553,7 +549,7 @@ cache_ls_result(DirId, ChildrenSorted, LsChunkSize) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% ADds a newly created file to LS cache. New files are always prepended to the
+%% Adds a newly created file to LS cache. New files are always prepended to the
 %% beginning of the file list. The file stay at this place till new websocket
 %% session is initialized (user refreshes the page).
 %% @end
@@ -574,7 +570,10 @@ add_new_file_to_cache(SessionId, FileId, DirId) ->
     [{{DirId, last_children_count}, LastChildrenCount}] = ets:lookup(
         LsSubCacheName, {DirId, last_children_count}
     ),
-    file_record(SessionId, DirId, true, LastChildrenCount).
+    ets:insert(
+        LsSubCacheName, {{DirId, last_children_count}, LastChildrenCount + 1}
+    ),
+    file_record(SessionId, DirId, true, LastChildrenCount + 1).
 
 
 %%--------------------------------------------------------------------

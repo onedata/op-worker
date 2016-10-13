@@ -126,7 +126,7 @@ find(<<"file-public">>, AssocId) ->
                 [ShareId] ->
                     % Check if this is the root dir
                     <<"containerDir.", ShareId/binary>>;
-                [] ->
+                _ ->
                     op_gui_utils:ids_to_association(
                         ShareId, get_parent(SessionId, FileId)
                     )

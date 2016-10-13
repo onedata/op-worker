@@ -99,7 +99,6 @@ handle(<<"createFile">>, Props) ->
     Name = proplists:get_value(<<"fileName">>, Props),
     ParentId = proplists:get_value(<<"parentId">>, Props, null),
     Type = proplists:get_value(<<"type">>, Props),
-    ?dump({Name, ParentId, Type}),
     case file_data_backend:create_file(SessionId, Name, ParentId, Type) of
         {ok, FileId} ->
             {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
