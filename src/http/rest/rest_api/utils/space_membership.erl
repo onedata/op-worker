@@ -27,7 +27,7 @@
 %% Check if user is in space using his auth.
 %% @end
 %%--------------------------------------------------------------------
--spec check_with_auth(onedata_auth_api:auth(), space_info:id()) -> ok | no_return().
+-spec check_with_auth(onedata_auth_api:auth(), od_space:id()) -> ok | no_return().
 check_with_auth(Auth, SpaceId) ->
     {ok, UserId} = session:get_user_id(Auth),
     check_with_user(UserId, SpaceId).
@@ -37,9 +37,9 @@ check_with_auth(Auth, SpaceId) ->
 %% Check if user is in space.
 %% @end
 %%--------------------------------------------------------------------
--spec check_with_user(onedata_user:id(), space_info:id()) -> ok | no_return().
+-spec check_with_user(od_user:id(), od_space:id()) -> ok | no_return().
 check_with_user(UserId, SpaceId) ->
-    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
+    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
     case lists:any(fun({Id, _}) -> SpaceId =:= Id end, Spaces) of
         true ->
             ok;

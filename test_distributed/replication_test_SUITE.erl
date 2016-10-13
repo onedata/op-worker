@@ -99,12 +99,10 @@ dbsync_trigger_should_create_local_file_location(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = UserId
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     %when
     ?rpc(dbsync_events, change_replicated,
@@ -129,12 +127,11 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         mode = 8#777,
         name = <<"local_file_location_should_have_correct_uid_for_local_user">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = UserId
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
+
     {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
     FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
 
@@ -166,22 +163,19 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears1">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = ExternalUser
     },
     FileMeta2 = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears2">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = ExternalUser
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
     {ok, FileUuid2} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid2, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
+
     {ok, FileToCompareGUID} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
     FileToCompareUUID = fslogic_uuid:guid_to_uuid(FileToCompareGUID),
 
@@ -194,7 +188,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid2, value = FileMeta2}}]),
-    ?rpc(onedata_user, create, [#document{key = ExternalUser, value = #onedata_user{name = <<"User">>, spaces = [{SpaceId, SpaceName}]}}]),
+    ?rpc(od_user, create, [#document{key = ExternalUser, value = #od_user{name = <<"User">>, space_aliases = [{SpaceId, SpaceName}]}}]),
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
 
 
@@ -811,14 +805,12 @@ external_file_location_notification_should_wait_for_local_file_location(Config) 
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = UserId
     },
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     % prepare external location
     ExternalLocationId = <<"external_location_id">>,
@@ -861,15 +853,13 @@ external_file_location_notification_should_wait_for_links(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = UserId
     },
     ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(W1)),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     % prepare external location
     ExternalLocationId = <<"external_location_id">>,
@@ -934,9 +924,6 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = UserId
     }},
     ExternalProviderId = <<"external_provider_id">>,
@@ -959,6 +946,8 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
+
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = FileMeta}]),
     timer:sleep(timer:seconds(2)),
@@ -983,14 +972,12 @@ changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = UserId
     },
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     % prepare external location
     ExternalLocationId = <<"external_location_id">>,
@@ -1051,18 +1038,19 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = UserId
     }},
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, Dir2Uuid}, FileMeta])),
+    ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
 
     % delete grandparent file_meta
-    ModelConfig = ?rpc(file_meta, model_init, []),
-    FM_SL = ModelConfig#model_config.store_level,
-    {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FM_SL, file_meta, Dir1Uuid]),
-    ok = ?rpc(datastore, delete, [FM_SL, file_meta, Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
+    FileMetaModelConfig = ?rpc(file_meta, model_init, []),
+    FileMetaStoreLevel = FileMetaModelConfig#model_config.store_level,
+    {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FileMetaStoreLevel, file_meta, Dir1Uuid]),
+    TimesModelConfig = ?rpc(times, model_init, []),
+    TimesStoreLevel = TimesModelConfig#model_config.store_level,
+    {ok, #document{value = Dir1Times}} = ?rpc(datastore, get, [TimesStoreLevel, times, Dir1Uuid]),
+    ok = ?rpc(datastore, delete, [FileMetaStoreLevel, file_meta, Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
     timer:sleep(1000), % wait for posthook that deletes file_consistency record
 
     %when
@@ -1074,7 +1062,8 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
     ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, _} = ?rpc(datastore, save, [FM_SL, #document{key = Dir1Uuid, value = Dir1Meta}]),
+    {ok, _} = ?rpc(datastore, save, [FileMetaStoreLevel, #document{key = Dir1Uuid, value = Dir1Meta}]),
+    {ok, _} = ?rpc(datastore, save, [FileMetaStoreLevel, #document{key = Dir1Uuid, value = Dir1Times}]),
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = Dir1Uuid, value = Dir1Meta}}]),
     timer:sleep(timer:seconds(2)),

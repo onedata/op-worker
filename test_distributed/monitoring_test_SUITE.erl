@@ -143,7 +143,7 @@ monitoring_test(Config) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
     ?assertEqual(0, length(Docs)),
 
-    rpc:call(Worker, monitoring_event, emit_space_info_updated, [?SPACE_ID]),
+    rpc:call(Worker, monitoring_event, emit_od_space_updated, [?SPACE_ID]),
 
     rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 950000]),
     rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 50000]),

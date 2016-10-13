@@ -28,7 +28,7 @@
 
 -export_type([id/0]).
 
--type id() :: onedata_user:id().
+-type id() :: od_user:id().
 
 %%%===================================================================
 %%% API
@@ -39,7 +39,7 @@
 %% Add file that need to be chowned in future.
 %% @end
 %%--------------------------------------------------------------------
--spec add(onedata_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec add(od_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
 add(UserId, FileUuid) ->
     %todo add create_or_update operation to datastore
     UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
@@ -59,7 +59,7 @@ add(UserId, FileUuid) ->
 %% Chown specific file according to given UserId and SpaceId
 %% @end
 %%--------------------------------------------------------------------
--spec chown_file(file_meta:uuid(), onedata_user:id(), space_info:id()) -> ok.
+-spec chown_file(file_meta:uuid(), od_user:id(), od_space:id()) -> ok.
 chown_file(FileUuid, UserId, SpaceId) ->
     LocalLocations = fslogic_utils:get_local_storage_file_locations({uuid, FileUuid}),
     lists:foreach(fun({StorageId, FileId}) ->
@@ -141,8 +141,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files_to_chown_bucket, [{onedata_user, create}, {onedata_user, save},
-        {onedata_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(files_to_chown_bucket, [{od_user, create}, {od_user, save},
+        {od_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -152,11 +152,11 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     chown_pending_files(UUID);
-'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     chown_pending_files(UUID);
-'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     chown_pending_files(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -180,7 +180,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Chown all pending files of given user
 %% @end
 %%--------------------------------------------------------------------
--spec chown_pending_files(onedata_user:id()) -> ok.
+-spec chown_pending_files(od_user:id()) -> ok.
 chown_pending_files(UserId) ->
     case files_to_chown:get(UserId) of
         {ok, #document{value = #files_to_chown{file_uuids = FileUuids}}} ->

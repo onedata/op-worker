@@ -25,21 +25,21 @@
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
 models() -> [
+    od_user,
+    od_group,
+    od_space,
+    od_share,
+    od_provider,
+    od_handle_service,
+    od_handle,
     subscriptions_state,
     subscription,
     file_subscription,
     session,
-    onedata_user,
-    onedata_group,
     user_identity,
     file_meta,
     storage,
     file_location,
-    provider_info,
-    space_info,
-    share_info,
-    handle_info,
-    handle_service_info,
     space_storage,
     ceph_user,
     s3_user,
@@ -57,5 +57,6 @@ models() -> [
     indexes,
     file_consistency,
     permissions_cache,
-    permissions_cache_helper
+    permissions_cache_helper,
+    times
 ].

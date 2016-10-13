@@ -50,6 +50,7 @@
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
 -export([hidden_file_name/1]).
 -export([add_share/2, remove_share/2]).
+-export([get_uuid/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -148,21 +149,23 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                     FileDoc0#document{value = FM1}
             end,
         false = is_snapshot(FileName),
-        critical_section:run([?MODEL_NAME, ParentUUID],
+        critical_section:run_on_mnesia([?MODEL_NAME, ParentUUID],
             fun() ->
                 case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                     {error, {not_found, _}} ->
-                        case create(FileDoc) of
-                            {ok, UUID} ->
-                                SavedDoc = FileDoc#document{key = UUID},
-                                set_link_context(Scope),
-                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
-                                ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
-                                {ok, UUID};
-                            {error, Reason} ->
-                                {error, Reason}
-                        end;
+                        datastore:run_transaction(fun() ->
+                            case create(FileDoc) of
+                                {ok, UUID} ->
+                                    SavedDoc = FileDoc#document{key = UUID},
+                                    set_link_context(Scope),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
+                                    {ok, UUID};
+                                {error, Reason} ->
+                                    {error, Reason}
+                            end
+                        end);
                     {ok, _} ->
                         {error, already_exists}
                 end
@@ -196,9 +199,11 @@ fix_parent_links(Parent, Entry) ->
     {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
     {ok, Scope} = get_scope(Parent),
     set_link_context(Scope),
-    ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
-    ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
-    ok = datastore:set_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}]),
+    datastore:run_transaction(fun() ->
+        ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
+        ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
+        ok = datastore:set_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}])
+    end),
     ok = set_scope(FileDoc, Scope#document.key).
 
 %%--------------------------------------------------------------------
@@ -326,7 +331,7 @@ get_child(Doc, Name) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+    ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update}, {od_user, save}, {od_user, update}],
         ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
@@ -338,13 +343,13 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
-'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(od_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -433,7 +438,8 @@ tag_children(LinkName, Targets) ->
         fun({Scope, _VH, _Key, _Model}) ->
             Scope
         end, Targets),
-    LongestPrefix = max(4, binary:longest_common_prefix(Scopes)),
+    MinScope = lists:min([4 | lists:map(fun size/1, Scopes)]),
+    LongestPrefix = max(MinScope, binary:longest_common_prefix(Scopes)),
     lists:map(
         fun({Scope, VH, Key, _}) ->
             case MPID of
@@ -442,7 +448,7 @@ tag_children(LinkName, Targets) ->
                 _ ->
                     case LongestPrefix >= size(Scope) of
                         true ->
-                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, LongestPrefix + 1), Key};
+                            {links_utils:make_scoped_link_name(LinkName, Scope, VH, size(Scope)), Key};
                         false ->
                             {links_utils:make_scoped_link_name(LinkName, Scope, undefined, LongestPrefix + 1), Key}
                     end
@@ -514,7 +520,7 @@ get_parent_uuid(Entry) ->
 %% Returns file's parent uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_uuid(file_meta:uuid(), space_info:id()) -> {ok, datastore:key()} | datastore:get_error().
+-spec get_parent_uuid(file_meta:uuid(), od_space:id()) -> {ok, datastore:key()} | datastore:get_error().
 get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
     ?ROOT_DIR_UUID;
 get_parent_uuid(FileUuid, SpaceId) ->
@@ -654,12 +660,12 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(oz_endpoint:auth(), UserId :: onedata_user:id()) -> ok.
+-spec setup_onedata_user(oz_endpoint:auth(), UserId :: od_user:id()) -> ok.
 setup_onedata_user(_Client, UserId) ->
     ?info("setup_onedata_user ~p as ~p", [_Client, UserId]),
-    critical_section:run([onedata_user, UserId], fun() ->
-        {ok, #document{value = #onedata_user{spaces = Spaces}}} =
-            onedata_user:get(UserId),
+    critical_section:run([od_user, UserId], fun() ->
+        {ok, #document{value = #od_user{space_aliases = Spaces}}} =
+            od_user:get(UserId),
 
         CTime = erlang:system_time(seconds),
 
@@ -667,15 +673,18 @@ setup_onedata_user(_Client, UserId) ->
             fslogic_spaces:make_space_exist(SpaceId)
         end, Spaces),
 
+        FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
         case create({uuid, ?ROOT_DIR_UUID},
-            #document{key = fslogic_uuid:user_root_dir_uuid(UserId),
+            #document{key = FileUuid,
                 value = #file_meta{
                     name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                    is_scope = true
+                   uid = ?ROOT_USER_ID, is_scope = true
                 }
             }) of
-            {ok, _RootUUID} -> ok;
+            {ok, _RootUUID} ->
+                {ok, _} = times:save(#document{key = FileUuid, value =
+                    #times{mtime = CTime, atime = CTime, ctime = CTime}}),
+                ok;
             {error, already_exists} -> ok
         end
     end).
@@ -693,8 +702,10 @@ attach_location(Entry, #document{key = LocId}, ProviderId) ->
 attach_location(Entry, LocId, ProviderId) ->
     {ok, #document{key = FileId} = FDoc} = get(Entry),
     set_link_context(FDoc),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}}).
+    datastore:run_transaction(fun() ->
+        ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}})
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc Get space dir document for given SpaceId
@@ -792,7 +803,7 @@ set_link_context_for_space(SpaceId) ->
 %% Add shareId to file meta
 %% @end
 %%--------------------------------------------------------------------
--spec add_share(uuid(), share_info:id()) -> {ok, uuid()}  | datastore:generic_error().
+-spec add_share(uuid(), od_share:id()) -> {ok, uuid()}  | datastore:generic_error().
 add_share(FileUuid, ShareId) ->
     update({uuid, FileUuid},
         fun(FileMeta = #file_meta{shares = Shares}) ->
@@ -804,7 +815,7 @@ add_share(FileUuid, ShareId) ->
 %% Remove shareId from file meta
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(uuid(), share_info:id()) -> {ok, uuid()} | datastore:generic_error().
+-spec remove_share(uuid(), od_share:id()) -> {ok, uuid()} | datastore:generic_error().
 remove_share(FileUuid, ShareId) ->
     update({uuid, FileUuid},
         fun(FileMeta = #file_meta{shares = Shares}) ->
@@ -849,7 +860,7 @@ delete_child_link_in_parent(ParentUUID, ChildName, ChildUUID) ->
     ok | datastore:generic_error().
 rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-        critical_section:run([?MODEL_NAME, ParentUUID], fun() ->
+        critical_section:run_on_mnesia([?MODEL_NAME, ParentUUID], fun() ->
             {ok, FileUUID} = update(Subject, #{name => NewName}),
             ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
         end)
@@ -868,8 +879,8 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
                 %% Sort keys to avoid deadlock with rename from target to source
                 [Key1, Key2] = lists:sort([OldParentUUID, NewParentUUID]),
 
-                critical_section:run([?MODEL_NAME, Key1], fun() ->
-                    critical_section:run([?MODEL_NAME, Key2], fun() ->
+                critical_section:run_on_mnesia([?MODEL_NAME, Key1], fun() ->
+                    critical_section:run_on_mnesia([?MODEL_NAME, Key2], fun() ->
                         {ok, #document{key = NewScopeUUID} = NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName, scope => NewScopeUUID}),
                         set_link_context(NewScope),
@@ -1141,3 +1152,25 @@ is_hidden(FileName) ->
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
         _ -> false
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get uuid of file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_uuid(uuid() | entry()) -> {ok, uuid()} | datastore:get_file_error().
+get_uuid({uuid, Key}) ->
+    {ok, Key};
+get_uuid(#document{key = Uuid, value = #file_meta{}}) ->
+    {ok, Uuid};
+get_uuid({path, Path}) ->
+    case get({path, Path}) of
+        {ok, #document{key = Uuid}} ->
+            {ok, Uuid};
+        Error ->
+            Error
+    end;
+get_uuid(?ROOT_DIR_UUID) ->
+    {ok, ?ROOT_DIR_UUID};
+get_uuid(Uuid) ->
+    {ok, Uuid}.

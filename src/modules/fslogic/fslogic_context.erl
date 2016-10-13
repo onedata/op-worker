@@ -59,7 +59,7 @@ set_space_and_share_id(#fslogic_ctx{} = CTX, Entry) ->
 %% @doc Retrieves user ID from fslogic context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(Ctx :: fslogic_worker:ctx()) -> UserId :: onedata_user:id().
+-spec get_user_id(Ctx :: fslogic_worker:ctx()) -> UserId :: od_user:id().
 get_user_id(#fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}}}) ->
     UserId.
 

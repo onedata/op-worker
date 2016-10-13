@@ -450,6 +450,7 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
+            {ok, {ATime, CTime, MTime}} = times:get_or_default(SourceUUID),
 
             case Doc of
                 #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} ->
@@ -459,10 +460,9 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
                 #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
                     {ok, TargetGuid} = logical_file_manager:mkdir(SessId, NewPath, 8#777)
             end,
-            {Acc, {TargetGuid, NewPath}}
+            {Acc, {TargetGuid, NewPath, {ATime, CTime, MTime}}}
         end,
-        fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
-            mtime = MTime, ctime = CTime, mode = Mode}}, Acc, {TargetGuid, NewPath}) ->
+        fun(#document{key = SourceUuid, value = #file_meta{mode = Mode}}, Acc, {TargetGuid, NewPath, {ATime, CTime, MTime}}) ->
             SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, {guid, TargetGuid}, Mode),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, {guid, TargetGuid}),
@@ -673,10 +673,10 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
 %% @doc Returns list of ids of providers supporting
 %%--------------------------------------------------------------------
 -spec get_supporting_providers(SpaceUUID :: binary(),
-    Auth :: oz_endpoint:auth(), UserId :: onedata_user:id()) -> [binary()].
+    Auth :: oz_endpoint:auth(), UserId :: od_user:id()) -> [binary()].
 get_supporting_providers(SpaceId, Auth, UserId) ->
-    {ok, #document{value = #space_info{providers = Providers}}} =
-        space_info:get_or_fetch(Auth, SpaceId, UserId),
+    {ok, #document{value = #od_space{providers = Providers}}} =
+        od_space:get_or_fetch(Auth, SpaceId, UserId),
     ordsets:from_list(Providers).
 
 
