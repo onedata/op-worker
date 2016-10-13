@@ -75,7 +75,7 @@ terminate() ->
 find(<<"file">>, FileId) ->
     SessionId = g_session:get_session_id(),
     try
-        file_record(SessionId, FileId, false, 0)
+        file_record(SessionId, FileId)
     catch T:M ->
         ?warning_stacktrace("Cannot get file-meta for file (~p). ~p:~p", [
             FileId, T, M
@@ -335,7 +335,7 @@ file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file(SessionId :: session:id(), Name :: binary(),
-    fslogic_worker:file_guid(), Type :: binary()) ->
+    ParentId :: fslogic_worker:file_guid(), Type :: binary()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 create_file(SessionId, Name, ParentId, Type) ->
     try
@@ -583,7 +583,7 @@ modify_ls_cache(SessionId, Operation, FileId, DirId) ->
 %% Resolves LS cache ETS identifier for current process.
 %% @end
 %%--------------------------------------------------------------------
--spec ls_sub_cache_name() -> integer().
+-spec ls_sub_cache_name() -> ets:tid().
 ls_sub_cache_name() ->
     WSPid = gui_async:get_ws_process(),
     [{WSPid, LsSubCache}] = ets:lookup(?LS_CACHE_ETS, WSPid),

@@ -101,8 +101,6 @@ handle(<<"createFile">>, Props) ->
     Type = proplists:get_value(<<"type">>, Props),
     case file_data_backend:create_file(SessionId, Name, ParentId, Type) of
         {ok, FileId} ->
-            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
-            gui_async:push_created(<<"file">>, FileData),
             {ok, [{<<"fileId">>, FileId}]};
         Error ->
             Error
