@@ -149,21 +149,23 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                     FileDoc0#document{value = FM1}
             end,
         false = is_snapshot(FileName),
-        critical_section:run([?MODEL_NAME, ParentUUID],
+        critical_section:run_on_mnesia([?MODEL_NAME, ParentUUID],
             fun() ->
                 case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                     {error, {not_found, _}} ->
-                        case create(FileDoc) of
-                            {ok, UUID} ->
-                                SavedDoc = FileDoc#document{key = UUID},
-                                set_link_context(Scope),
-                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
-                                ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
-                                {ok, UUID};
-                            {error, Reason} ->
-                                {error, Reason}
-                        end;
+                        datastore:run_transaction(fun() ->
+                            case create(FileDoc) of
+                                {ok, UUID} ->
+                                    SavedDoc = FileDoc#document{key = UUID},
+                                    set_link_context(Scope),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
+                                    ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
+                                    {ok, UUID};
+                                {error, Reason} ->
+                                    {error, Reason}
+                            end
+                        end);
                     {ok, _} ->
                         {error, already_exists}
                 end
@@ -197,9 +199,11 @@ fix_parent_links(Parent, Entry) ->
     {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
     {ok, Scope} = get_scope(Parent),
     set_link_context(Scope),
-    ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
-    ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
-    ok = datastore:set_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}]),
+    datastore:run_transaction(fun() ->
+        ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
+        ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
+        ok = datastore:set_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}])
+    end),
     ok = set_scope(FileDoc, Scope#document.key).
 
 %%--------------------------------------------------------------------
@@ -698,8 +702,10 @@ attach_location(Entry, #document{key = LocId}, ProviderId) ->
 attach_location(Entry, LocId, ProviderId) ->
     {ok, #document{key = FileId} = FDoc} = get(Entry),
     set_link_context(FDoc),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}}).
+    datastore:run_transaction(fun() ->
+        ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}})
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc Get space dir document for given SpaceId
@@ -854,7 +860,7 @@ delete_child_link_in_parent(ParentUUID, ChildName, ChildUUID) ->
     ok | datastore:generic_error().
 rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-        critical_section:run([?MODEL_NAME, ParentUUID], fun() ->
+        critical_section:run_on_mnesia([?MODEL_NAME, ParentUUID], fun() ->
             {ok, FileUUID} = update(Subject, #{name => NewName}),
             ok = update_links_in_parents(ParentUUID, ParentUUID, OldName, NewName, V, {uuid, FileUUID})
         end)
@@ -873,8 +879,8 @@ rename3(#document{key = FileUUID, value = #file_meta{name = OldName, version = V
                 %% Sort keys to avoid deadlock with rename from target to source
                 [Key1, Key2] = lists:sort([OldParentUUID, NewParentUUID]),
 
-                critical_section:run([?MODEL_NAME, Key1], fun() ->
-                    critical_section:run([?MODEL_NAME, Key2], fun() ->
+                critical_section:run_on_mnesia([?MODEL_NAME, Key1], fun() ->
+                    critical_section:run_on_mnesia([?MODEL_NAME, Key2], fun() ->
                         {ok, #document{key = NewScopeUUID} = NewScope} = get_scope(NewParent),
                         {ok, FileUUID} = update(Subject, #{name => NewName, scope => NewScopeUUID}),
                         set_link_context(NewScope),
