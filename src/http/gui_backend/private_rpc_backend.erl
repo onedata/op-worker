@@ -116,7 +116,7 @@ handle(<<"fetchMoreDirChildren">>, Props) ->
         FileModelType, SessionId, DirId, true, CurrentChCount
     ),
     NewChCount = proplists:get_value(<<"children">>, FileData),
-    gui_async:push_updated(<<"file">>, FileData),
+    gui_async:push_updated(FileModelType, FileData),
     {ok, [{<<"newChildrenCount">>, length(NewChCount)}]};
 
 %%--------------------------------------------------------------------

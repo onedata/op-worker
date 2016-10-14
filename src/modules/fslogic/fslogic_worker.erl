@@ -287,14 +287,17 @@ change_file_in_request(Request, _) ->
     LogLevel :: debug | warning | error) ->
     #fuse_response{} | #provider_response{} | #proxyio_response{}.
 report_error(Request, RequestType, Error, LogLevel) ->
+    Stacktrace = erlang:get_stacktrace(),
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
-    MsgFormat = "Cannot process request ~p due to error: ~p (code: ~p)",
+    MsgFormat =
+        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace: ~p",
+    FormatArgs = [Request, Description, Code, Stacktrace],
     case LogLevel of
-        debug -> ?debug_stacktrace(MsgFormat, [Request, Description, Code]);
-%%      info -> ?info(MsgFormat, [Request, Description, Code]);  %% Not used right now
-        warning -> ?warning_stacktrace(MsgFormat, [Request, Description, Code]);
-        error -> ?error_stacktrace(MsgFormat, [Request, Description, Code])
+        debug -> ?debug_stacktrace(MsgFormat, FormatArgs);
+%%      info -> ?info(MsgFormat, FormatArgs);  %% Not used right now
+        warning -> ?warning_stacktrace(MsgFormat, FormatArgs);
+        error -> ?error_stacktrace(MsgFormat, FormatArgs)
     end,
     error_response(RequestType, Status).
 

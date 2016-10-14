@@ -13,7 +13,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(public_share_data_backend).
--behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 -author("Tomasz Lichon").
@@ -32,7 +31,7 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
-%%% data_backend_behaviour callbacks
+%%% API functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -83,100 +82,6 @@ find(<<"share-public">>, ShareId) ->
         {<<"publicUrl">>, PublicURL},
         {<<"handle">>, HandleVal}
     ]};
-find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
-    {ok, #document{
-        value = #od_share{
-            name = Name,
-            root_file = RootFileId
-        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
-    Res = [
-        {<<"id">>, <<"containerDir.", ShareId/binary>>},
-        {<<"name">>, Name},
-        {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
-        {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
-        {<<"parent">>, null},
-        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFileId)]},
-        {<<"fileAcl">>, null},
-        {<<"share">>, null},
-        {<<"provider">>, null},
-        {<<"fileProperty">>, null}
-    ],
-    {ok, Res};
-
-find(<<"file-public">>, AssocId) ->
-    SessionId = ?GUEST_SESS_ID,
-    {ShareId, FileId} = op_gui_utils:association_to_ids(AssocId),
-    case logical_file_manager:stat(SessionId, {guid, FileId}) of
-        {error, ?ENOENT} ->
-            gui_error:report_error(<<"No such file or directory.">>);
-        {ok, FileAttr} ->
-            #file_attr{
-                name = Name,
-                type = TypeAttr,
-                size = SizeAttr,
-                mtime = ModificationTime,
-                mode = PermissionsAttr,
-                shares = Shares,
-                provider_id = ProviderId
-            } = FileAttr,
-
-            ParentUUID = case Shares of
-                [ShareId] ->
-                    % Check if this is the root dir
-                    <<"containerDir.", ShareId/binary>>;
-                _ ->
-                    op_gui_utils:ids_to_association(
-                        ShareId, get_parent(SessionId, FileId)
-                    )
-            end,
-
-            {Type, Size} = case TypeAttr of
-                ?DIRECTORY_TYPE -> {<<"dir">>, null};
-                _ -> {<<"file">>, SizeAttr}
-            end,
-            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
-            Children = case Type of
-                <<"file">> ->
-                    [];
-                <<"dir">> ->
-                    case logical_file_manager:ls(
-                        SessionId, {guid, FileId}, 0, 1000) of
-                        {ok, List} ->
-                            List;
-                        _ ->
-                            []
-                    end
-            end,
-            ChildrenIds = [
-                op_gui_utils:ids_to_association(ShareId, ChId) ||
-                {ChId, _} <- Children
-            ],
-            {ok, HasCustomMetadata} = logical_file_manager:has_custom_metadata(
-                SessionId, {guid, FileId}
-            ),
-            Metadata = case HasCustomMetadata of
-                false -> null;
-                true -> AssocId
-            end,
-            Res = [
-                {<<"id">>, AssocId},
-                {<<"name">>, Name},
-                {<<"type">>, Type},
-                {<<"permissions">>, Permissions},
-                {<<"modificationTime">>, ModificationTime},
-                {<<"size">>, Size},
-                {<<"parent">>, ParentUUID},
-                {<<"children">>, ChildrenIds},
-                {<<"fileAcl">>, FileId},
-                {<<"share">>, null},
-                {<<"provider">>, ProviderId},
-                {<<"fileProperty">>, Metadata}
-            ],
-            {ok, Res}
-    end;
-
 
 find(<<"file-property-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
@@ -285,20 +190,3 @@ update_record(_, _Id, _Data) ->
     ok | gui_error:error_result().
 delete_record(_, _Id) ->
     gui_error:report_error(<<"Not implemented">>).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns the UUID of parent of given file. This is needed because
-%% spaces dir has two different UUIDs, should be removed when this is fixed.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(SessionId :: binary(), FileGUID :: binary()) -> binary().
-get_parent(SessionId, FileGUID) ->
-    {ok, ParentGUID} = logical_file_manager:get_parent(SessionId, {guid, FileGUID}),
-    ParentGUID.

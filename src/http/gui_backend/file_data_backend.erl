@@ -83,66 +83,17 @@ find(<<"file">>, FileId) ->
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
     end;
-
-find(<<"file-shared">>, <<"containerDir.", ShareId/binary>>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{
-        value = #od_share{
-            name = Name,
-            root_file = RootFileId
-        }}} = share_logic:get(UserAuth, ShareId),
-    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
-    Res = [
-        {<<"id">>, <<"containerDir.", ShareId/binary>>},
-        {<<"name">>, Name},
-        {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
-        {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
-        {<<"totalChildrenCount">>, 1},
-        {<<"parent">>, null},
-        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
-        {<<"fileAcl">>, null},
-        {<<"share">>, null},
-        {<<"provider">>, null},
-        {<<"fileProperty">>, null}
-    ],
-    {ok, Res};
-
 find(<<"file-shared">>, AssocId) ->
     SessionId = g_session:get_session_id(),
     file_record(<<"file-shared">>, SessionId, AssocId);
-
-find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
-    {ok, #document{
-        value = #od_share{
-            name = Name,
-            root_file = RootFile
-        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
-    Res = [
-        {<<"id">>, <<"containerDir.", ShareId/binary>>},
-        {<<"name">>, Name},
-        {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
-        {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
-        {<<"totalChildrenCount">>, 1},
-        {<<"parent">>, null},
-        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
-        {<<"fileAcl">>, null},
-        {<<"share">>, null},
-        {<<"provider">>, null},
-        {<<"fileProperty">>, null}
-    ],
-    {ok, Res};
-
 find(<<"file-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
     file_record(<<"file-public">>, SessionId, AssocId);
-
 find(<<"file-acl">>, FileId) ->
     SessionId = g_session:get_session_id(),
-    file_acl_record(SessionId, FileId).
+    file_acl_record(SessionId, FileId);
+find(<<"file-distribution">>, _Id) ->
+    gui_error:report_error(<<"Not iplemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -154,7 +105,13 @@ find(<<"file-acl">>, FileId) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"file">>) ->
     gui_error:report_error(<<"Not iplemented">>);
+find_all(<<"file-shared">>) ->
+    gui_error:report_error(<<"Not iplemented">>);
+find_all(<<"file-public">>) ->
+    gui_error:report_error(<<"Not iplemented">>);
 find_all(<<"file-acl">>) ->
+    gui_error:report_error(<<"Not iplemented">>);
+find_all(<<"file-distribution">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -167,6 +124,10 @@ find_all(<<"file-acl">>) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
+find_query(<<"file-shared">>, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
+find_query(<<"file-public">>, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
 find_query(<<"file-acl">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
@@ -203,10 +164,15 @@ find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"file">>, _) ->
-    % File are created via an RPC call
+create_record(<<"file">>, _Data) ->
+    % Files are created via an RPC call
     gui_error:report_error(<<"Not implemented">>);
-
+create_record(<<"file-shared">>, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
+create_record(<<"file-public">>, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
+create_record(<<"file-distribution">>, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
 create_record(<<"file-acl">>, Data) ->
     Id = proplists:get_value(<<"file">>, Data),
     case update_record(<<"file-acl">>, Id, Data) of
@@ -225,6 +191,12 @@ create_record(<<"file-acl">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
+update_record(<<"file-shared">>, _Id, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
+update_record(<<"file-public">>, _Id, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
+update_record(<<"file-distribution">>, _Id, _Data) ->
+    gui_error:report_error(<<"Not iplemented">>);
 update_record(<<"file">>, FileId, Data) ->
     try
         SessionId = g_session:get_session_id(),
@@ -274,9 +246,15 @@ update_record(<<"file-acl">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
+delete_record(<<"file-shared">>, _Id) ->
+    gui_error:report_error(<<"Not iplemented">>);
+delete_record(<<"file-public">>, _Id) ->
+    gui_error:report_error(<<"Not iplemented">>);
+delete_record(<<"file-distribution">>, _Id) ->
+    gui_error:report_error(<<"Not iplemented">>);
 delete_record(<<"file">>, FileId) ->
     SessionId = g_session:get_session_id(),
-    ParentId = get_parent(SessionId, FileId),
+    {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
             modify_ls_cache(SessionId, remove, FileId, ParentId),
@@ -312,7 +290,8 @@ file_record(SessionId, FileId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs a file record from given FileId.
+%% Constructs a file record from given FileId and ModelName. ModelName can be
+%% one of: file, file-shared, file-public.
 %% @end
 %%--------------------------------------------------------------------
 -spec file_record(ModelName :: binary, SessionId :: session:id(),
@@ -327,12 +306,60 @@ file_record(ModelName, SessionId, FileId) ->
 %% and ChildrenOffset (valid for dirs only) allow to specify that dir's
 %% children should be server from cache and what is the current offset in
 %% directory (essentially how many files from the dir are currently displayed
-%% in gui).
+%% in gui). ModelName can be one of: file, file-shared, file-public.
 %% @end
 %%--------------------------------------------------------------------
 -spec file_record(ModelName :: binary(), SessionId :: session:id(),
-    ResouceId :: binary(), ChildrenFromCache :: boolean(),
+    ResourceId :: binary(), ChildrenFromCache :: boolean(),
     ChildrenOffset :: non_neg_integer()) -> {ok, proplists:proplist()}.
+file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{
+        value = #od_share{
+            name = Name,
+            root_file = RootFileId
+        }}} = share_logic:get(UserAuth, ShareId),
+    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
+    Res = [
+        {<<"id">>, <<"containerDir.", ShareId/binary>>},
+        {<<"name">>, Name},
+        {<<"type">>, <<"dir">>},
+        {<<"permissions">>, 0},
+        {<<"modificationTime">>, 0},
+        {<<"size">>, 0},
+        {<<"totalChildrenCount">>, 1},
+        {<<"parent">>, null},
+        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
+        {<<"fileAcl">>, null},
+        {<<"share">>, null},
+        {<<"provider">>, null},
+        {<<"fileProperty">>, null}
+    ],
+    {ok, Res};
+
+file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
+    {ok, #document{
+        value = #od_share{
+            name = Name,
+            root_file = RootFile
+        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
+    Res = [
+        {<<"id">>, <<"containerDir.", ShareId/binary>>},
+        {<<"name">>, Name},
+        {<<"type">>, <<"dir">>},
+        {<<"permissions">>, 0},
+        {<<"modificationTime">>, 0},
+        {<<"size">>, 0},
+        {<<"totalChildrenCount">>, 1},
+        {<<"parent">>, null},
+        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
+        {<<"fileAcl">>, null},
+        {<<"share">>, null},
+        {<<"provider">>, null},
+        {<<"fileProperty">>, null}
+    ],
+    {ok, Res};
+
 file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
     % Record Ids are different for different file models
     ?dump(ResId),
@@ -356,9 +383,16 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
                 provider_id = ProviderId
             } = FileAttr,
 
-            ParentGuid = case ModelName of
+            {ok, ParentGuid} = logical_file_manager:get_parent(
+                SessionId, {guid, FileId}
+            ),
+            Parent = case ModelName of
                 <<"file">> ->
-                    get_parent(SessionId, FileId);
+                    % Space root dir has no parent (null)
+                    case get_user_root_dir_uuid() of
+                        ParentGuid -> null;
+                        _ -> ParentGuid
+                    end;
 
                 <<"file-", _/binary>> -> % Covers file-shared and file-public
                     case Shares of
@@ -366,16 +400,13 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
                             % Check if this is the root dir of given share
                             <<"containerDir.", ShareId/binary>>;
                         _ ->
-                            ?dump({get_parent, FileId}),
-                            op_gui_utils:ids_to_association(
-                                ShareId, get_parent(SessionId, FileId)
-                            )
+                            op_gui_utils:ids_to_association(ShareId, ParentGuid)
                     end
             end,
 
             Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
 
-            {Type, Size, Children, TotalChildrenCount} = case TypeAttr of
+            {Type, Size, ChildrenIds, TotalChildrenCount} = case TypeAttr of
                 ?DIRECTORY_TYPE ->
                     {ChildrenList, TotalCount} = case ChildrenFromCache of
                         false ->
@@ -388,14 +419,14 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
                     {<<"file">>, SizeAttr, [], 0}
             end,
             % Depending on model name, convert IDs to associations
-            ChildrenIds = case ModelName of
+            Children = case ModelName of
                 <<"file">> ->
-                    Children;
+                    ChildrenIds;
                 <<"file-", _/binary>> ->
                     lists:map(
                         fun(FId) ->
                             op_gui_utils:ids_to_association(ShareId, FId)
-                        end, Children)
+                        end, ChildrenIds)
             end,
 
             % Currently only one share per file is allowed.
@@ -415,15 +446,15 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
                 true -> ResId
             end,
             Res = [
-                {<<"id">>, FileId},
+                {<<"id">>, ResId},
                 {<<"name">>, Name},
                 {<<"type">>, Type},
                 {<<"permissions">>, Permissions},
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
                 {<<"totalChildrenCount">>, TotalChildrenCount},
-                {<<"parent">>, ParentGuid},
-                {<<"children">>, ChildrenIds},
+                {<<"parent">>, Parent},
+                {<<"children">>, Children},
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
@@ -501,22 +532,12 @@ file_acl_record(SessionId, FileId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns the GUID of parent of given file, or null if the file resides in
-%% space's root dir.
+%% Returns the GUID of user's root space (the one that contains all spaces).
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessionId :: session:id(), fslogic_worker:file_guid()) ->
-    binary() | null.
-get_parent(SessionId, FileGuid) ->
-    {ok, #file_attr{uuid = UserRootDirGuid}} = logical_file_manager:stat(
-        SessionId, {path, <<"/">>}),
-    {ok, ParentGuid} = logical_file_manager:get_parent(
-        SessionId, {guid, FileGuid}
-    ),
-    case ParentGuid of
-        UserRootDirGuid -> null;
-        _ -> ParentGuid
-    end.
+-spec get_user_root_dir_uuid() -> fslogic_worker:file_guid().
+get_user_root_dir_uuid() ->
+    fslogic_uuid:user_root_dir_uuid(g_session:get_user_id()).
 
 
 %%--------------------------------------------------------------------
