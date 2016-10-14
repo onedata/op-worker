@@ -195,7 +195,7 @@ props_to_value(od_handle, Props) ->
         resource_type = proplists:get_value(<<"resource_type">>, Props),
         resource_id = proplists:get_value(<<"resource_id">>, Props),
         metadata = proplists:get_value(<<"metadata">>, Props),
-        timestamp = deserialize_timestamp(
+        timestamp = timestamp_utils:datestamp_to_datetime(
             proplists:get_value(<<"timestamp">>, Props)),
 
         % Direct relations to other entities
@@ -242,15 +242,3 @@ process_ids_with_privileges(Raw) ->
             binary_to_atom(Bin, latin1)
         end, Binaries)}
     end, Raw).
-
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @private
-%% Translates list of integers that come from subscriptions into
-%% erlang datetime format.
-%% @end
-%%-------------------------------------------------------------------
--spec deserialize_timestamp([integer()]) -> calendar:datetime().
-deserialize_timestamp([A, B, C, D, E, F]) ->
-    {{A, B, C}, {D, E, F}}.

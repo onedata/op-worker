@@ -23,7 +23,8 @@
     list/0, model_init/0, 'after'/5, before/4]).
 
 %% API
--export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0]).
+-export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate_permissions_cache/2,
+    remote_invalitation/4]).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
@@ -223,6 +224,62 @@ invalidate_permissions_cache() ->
                     ok
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears all permissions from cache and inits process of invalidating permissions by other providers
+%% when change of a document is propagated.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_permissions_cache(Model :: model_behaviour:model_type(), Key :: datastore:ext_key()) -> ok.
+invalidate_permissions_cache(Model, Key) ->
+    invalidate_permissions_cache(),
+
+    MC = Model:model_init(),
+    Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
+    {Rev, Document} = case MC#model_config.store_level of
+        ?DISK_ONLY_LEVEL ->
+            {ok, Doc} = erlang:apply(Driver, get, [MC, Key]),
+            {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
+        _ ->
+            A1 = erlang:apply(Driver, get, [MC, Key]),
+            Driver2 = datastore:driver_to_module(datastore:level_to_driver(
+                caches_controller:cache_to_datastore_level(Model))),
+            A2 = erlang:apply(Driver2, get, [MC, Key]),
+            case {A1, A2} of
+                {{ok, Doc}, {ok, Doc2}} ->
+                    case Doc2#document.value =:= Doc#document.value of
+                        true ->
+                            {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
+                        _ ->
+                            {couchdb_datastore_driver:rev_to_number(Doc#document.rev) + 1, Doc}
+                    end;
+                {{ok, Doc}, _} ->
+                    {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
+                {_, {ok, Doc}} ->
+                    {0, Doc}
+            end
+    end,
+
+    case dbsync_worker:has_sync_context(Document) of
+        true ->
+            {ok, SpaceId} = dbsync_worker:get_space_id(Document),
+            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalitation);
+        _ ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waits until cache invalidation by remote provider can be done and invalidates cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec remote_invalitation(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(),
+    Rev :: non_neg_integer(), SpaceId :: binary()) -> ok.
+remote_invalitation(Model, Key, Rev, SpaceId) ->
+    ok = file_consistency:wait(Key, SpaceId, [{rev, Model, Rev}],
+        {?MODULE, remote_invalitation, [Model, Key, Rev, SpaceId]}),
+    invalidate_permissions_cache().
 
 
 %%%===================================================================
