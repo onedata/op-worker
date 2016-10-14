@@ -83,7 +83,7 @@ chmod(CTX, File, Mode) ->
     {ok, FileUuid} = file_meta:to_uuid(File),
     xattr:delete_by_name(FileUuid, ?ACL_KEY),
     {ok, _} = file_meta:update(File, #{mode => Mode}),
-    ok = permissions_cache:invalidate_permissions_cache(),
+    ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid),
 
     fslogic_times:update_ctime(File, fslogic_context:get_user_id(CTX)),
     spawn(
@@ -277,7 +277,7 @@ get_acl(_CTX, {uuid, FileUuid}) ->
 set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
     case xattr:save(FileUuid, ?ACL_KEY, Val) of
         {ok, _} ->
-            ok = permissions_cache:invalidate_permissions_cache(),
+            ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid),
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
                 {uuid, FileUuid}, 8#000
@@ -297,7 +297,7 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
 remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
     case xattr:delete_by_name(FileUuid, ?ACL_KEY) of
         ok ->
-            ok = permissions_cache:invalidate_permissions_cache(),
+            ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid),
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
@@ -540,7 +540,7 @@ remove_share(Ctx = #fslogic_ctx{share_id = ShareId}, {uuid, FileUuid}) ->
 
     ok = share_logic:delete(Auth, ShareId),
     {ok, _} = file_meta:remove_share(FileUuid, ShareId),
-    ok = permissions_cache:invalidate_permissions_cache(),
+    ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid),
 
     #provider_response{status = #status{code = ?OK}}.
 

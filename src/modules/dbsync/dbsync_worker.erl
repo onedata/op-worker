@@ -24,8 +24,10 @@
 -export([state_get/1, state_put/2]).
 -export([apply_batch_changes/3, init_stream/3]).
 -export([bcast_status/0, on_status_received/3]).
+-export([has_sync_context/1, get_space_id/1]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata, times]).
+-define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata,
+    change_propagation_controller, times]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
@@ -729,6 +731,8 @@ get_sync_context(#document{value = #links{doc_key = DocKey, model = file_locatio
     #model_config{store_level = StoreLevel} = file_location:model_init(),
     {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
     get_sync_context(Doc);
+get_sync_context(#document{key = Key, value = #custom_metadata{}}) ->
+    Key;
 get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
     FileUUID.
 
@@ -744,16 +748,18 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
 get_space_id(#document{value = #monitoring_state{monitoring_id = MonitoringId}}) ->
     #monitoring_id{main_subject_type = space, main_subject_id = SpaceId} = MonitoringId,
     {ok, SpaceId};
+get_space_id(#document{value = #change_propagation_controller{space_id = SpaceId}}) ->
+    {ok, SpaceId};
 get_space_id(#document{key = Key} = Doc) ->
     try state_get({sid, Key}) of
         undefined ->
-            get_space_id_not_cached(Key, Doc);
+            get_not_cached_space_id(Key, Doc);
         SpaceId ->
             {ok, SpaceId}
     catch
         _:Reason ->
             ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Key, Reason]),
-            get_space_id_not_cached(Key, Doc)
+            get_not_cached_space_id(Key, Doc)
     end.
 
 
@@ -763,9 +769,18 @@ get_space_id(#document{key = Key} = Doc) ->
 %% This cache may be used later on by get_space_id/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
+-spec get_not_cached_space_id(KeyToCache :: term(), datastore:document()) ->
     {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
-get_space_id_not_cached(KeyToCache, #document{key = Key} = Doc) ->
+get_not_cached_space_id(KeyToCache, #document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
+    #model_config{store_level = StoreLevel} = change_propagation_controller:model_init(),
+    case datastore:get(StoreLevel, change_propagation_controller, DocKey) of
+    {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
+        state_put({sid, KeyToCache}, SpaceId),
+        {ok, SpaceId};
+    {error, Reason} ->
+        {error, Reason}
+    end;
+get_not_cached_space_id(KeyToCache, #document{key = Key} = Doc) ->
     Context = get_sync_context(Doc),
     case file_meta:get_scope(Context) of
         {ok, #document{key = <<"">> = Root}} ->

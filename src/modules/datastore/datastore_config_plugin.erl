@@ -58,5 +58,6 @@ models() -> [
     file_consistency,
     permissions_cache,
     permissions_cache_helper,
+    change_propagation_controller,
     times
 ].
