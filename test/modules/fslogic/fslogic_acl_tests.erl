@@ -105,13 +105,13 @@ binary_acl_conversion_test() ->
                 <<"acetype">> => <<"ALLOW">>,
                 <<"identifier">> => AceName1,
                 <<"aceflags">> => <<"NO_FLAGS">>,
-                <<"acemask">> => <<"READ, WRITE">>
+                <<"acemask">> => <<"READ_ALL, WRITE_ALL">>
             },
             #{
                 <<"acetype">> => <<"DENY">>,
                 <<"identifier">> => AceName2,
                 <<"aceflags">> => <<"IDENTIFIER_GROUP">>,
-                <<"acemask">> => <<"WRITE">>
+                <<"acemask">> => <<"WRITE_ALL">>
             }
         ]
     ),
