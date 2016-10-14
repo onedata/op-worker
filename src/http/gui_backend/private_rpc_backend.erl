@@ -110,8 +110,10 @@ handle(<<"fetchMoreDirChildren">>, Props) ->
     SessionId = g_session:get_session_id(),
     DirId = proplists:get_value(<<"dirId">>, Props),
     CurrentChCount = proplists:get_value(<<"currentChildrenCount">>, Props),
+    % FileModelType is one of file, file-shared or file-public
+    FileModelType = proplists:get_value(<<"fileModelType">>, Props),
     {ok, FileData} = file_data_backend:file_record(
-        SessionId, DirId, true, CurrentChCount
+        FileModelType, SessionId, DirId, true, CurrentChCount
     ),
     NewChCount = proplists:get_value(<<"children">>, FileData),
     gui_async:push_updated(<<"file">>, FileData),

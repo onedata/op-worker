@@ -32,7 +32,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([file_record/2, file_record/4, create_file/4]).
+-export([file_record/2, file_record/3, file_record/5, create_file/4]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -45,6 +45,7 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    ?dump({init, g_session:get_session_id()}),
     NewETS = ets:new(?LS_SUB_CACHE_ETS, [
         set, public,
         {read_concurrency, true},
@@ -82,6 +83,63 @@ find(<<"file">>, FileId) ->
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
     end;
+
+find(<<"file-shared">>, <<"containerDir.", ShareId/binary>>) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{
+        value = #od_share{
+            name = Name,
+            root_file = RootFileId
+        }}} = share_logic:get(UserAuth, ShareId),
+    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
+    Res = [
+        {<<"id">>, <<"containerDir.", ShareId/binary>>},
+        {<<"name">>, Name},
+        {<<"type">>, <<"dir">>},
+        {<<"permissions">>, 0},
+        {<<"modificationTime">>, 0},
+        {<<"size">>, 0},
+        {<<"totalChildrenCount">>, 1},
+        {<<"parent">>, null},
+        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
+        {<<"fileAcl">>, null},
+        {<<"share">>, null},
+        {<<"provider">>, null},
+        {<<"fileProperty">>, null}
+    ],
+    {ok, Res};
+
+find(<<"file-shared">>, AssocId) ->
+    SessionId = g_session:get_session_id(),
+    file_record(<<"file-shared">>, SessionId, AssocId);
+
+find(<<"file-public">>, <<"containerDir.", ShareId/binary>>) ->
+    {ok, #document{
+        value = #od_share{
+            name = Name,
+            root_file = RootFile
+        }}} = share_logic:get(?GUEST_SESS_ID, ShareId),
+    Res = [
+        {<<"id">>, <<"containerDir.", ShareId/binary>>},
+        {<<"name">>, Name},
+        {<<"type">>, <<"dir">>},
+        {<<"permissions">>, 0},
+        {<<"modificationTime">>, 0},
+        {<<"size">>, 0},
+        {<<"totalChildrenCount">>, 1},
+        {<<"parent">>, null},
+        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
+        {<<"fileAcl">>, null},
+        {<<"share">>, null},
+        {<<"provider">>, null},
+        {<<"fileProperty">>, null}
+    ],
+    {ok, Res};
+
+find(<<"file-public">>, AssocId) ->
+    SessionId = ?GUEST_SESS_ID,
+    file_record(<<"file-public">>, SessionId, AssocId);
+
 find(<<"file-acl">>, FileId) ->
     SessionId = g_session:get_session_id(),
     file_acl_record(SessionId, FileId).
@@ -250,7 +308,17 @@ delete_record(<<"file-acl">>, FileId) ->
 -spec file_record(SessionId :: session:id(), fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()}.
 file_record(SessionId, FileId) ->
-    file_record(SessionId, FileId, false, 0).
+    file_record(<<"file">>, SessionId, FileId, false, 0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs a file record from given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_record(ModelName :: binary, SessionId :: session:id(),
+    fslogic_worker:file_guid()) -> {ok, proplists:proplist()}.
+file_record(ModelName, SessionId, FileId) ->
+    file_record(ModelName, SessionId, FileId, false, 0).
 
 
 %%--------------------------------------------------------------------
@@ -262,10 +330,18 @@ file_record(SessionId, FileId) ->
 %% in gui).
 %% @end
 %%--------------------------------------------------------------------
--spec file_record(SessionId :: session:id(), fslogic_worker:file_guid(),
-    ChildrenFromCache :: boolean(), ChildrenOffset :: non_neg_integer()) ->
-    {ok, proplists:proplist()}.
-file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
+-spec file_record(ModelName :: binary(), SessionId :: session:id(),
+    ResouceId :: binary(), ChildrenFromCache :: boolean(),
+    ChildrenOffset :: non_neg_integer()) -> {ok, proplists:proplist()}.
+file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
+    % Record Ids are different for different file models
+    ?dump(ResId),
+    {ShareId, FileId} = case ModelName of
+        <<"file">> ->
+            {undefined, ResId};
+        <<"file-", _/binary>> -> % Covers file-shared and file-public
+            op_gui_utils:association_to_ids(ResId)
+    end,
     case logical_file_manager:stat(SessionId, {guid, FileId}) of
         {error, ?ENOENT} ->
             gui_error:report_error(<<"No such file or directory.">>);
@@ -280,7 +356,23 @@ file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
                 provider_id = ProviderId
             } = FileAttr,
 
-            ParentGuid = get_parent(SessionId, FileId),
+            ParentGuid = case ModelName of
+                <<"file">> ->
+                    get_parent(SessionId, FileId);
+
+                <<"file-", _/binary>> -> % Covers file-shared and file-public
+                    case Shares of
+                        [ShareId] ->
+                            % Check if this is the root dir of given share
+                            <<"containerDir.", ShareId/binary>>;
+                        _ ->
+                            ?dump({get_parent, FileId}),
+                            op_gui_utils:ids_to_association(
+                                ShareId, get_parent(SessionId, FileId)
+                            )
+                    end
+            end,
+
             Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
 
             {Type, Size, Children, TotalChildrenCount} = case TypeAttr of
@@ -295,18 +387,32 @@ file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
                 _ ->
                     {<<"file">>, SizeAttr, [], 0}
             end,
+            % Depending on model name, convert IDs to associations
+            ChildrenIds = case ModelName of
+                <<"file">> ->
+                    Children;
+                <<"file-", _/binary>> ->
+                    lists:map(
+                        fun(FId) ->
+                            op_gui_utils:ids_to_association(ShareId, FId)
+                        end, Children)
+            end,
 
-            % Currently only one share per file is allowed
-            Share = case Shares of
-                [] -> null;
-                [ShareId] -> ShareId
+            % Currently only one share per file is allowed.
+            % Share is always null for file-shared and file-public so as not to
+            % show nested shares.
+            Share = case {ModelName, Shares} of
+                {<<"file">>, [ShareId]} ->
+                    ShareId;
+                _ ->
+                    null
             end,
             {ok, HasCustomMetadata} = logical_file_manager:has_custom_metadata(
                 SessionId, {guid, FileId}
             ),
             Metadata = case HasCustomMetadata of
                 false -> null;
-                true -> FileId
+                true -> ResId
             end,
             Res = [
                 {<<"id">>, FileId},
@@ -317,7 +423,7 @@ file_record(SessionId, FileId, ChildrenFromCache, ChildrenOffset) ->
                 {<<"size">>, Size},
                 {<<"totalChildrenCount">>, TotalChildrenCount},
                 {<<"parent">>, ParentGuid},
-                {<<"children">>, Children},
+                {<<"children">>, ChildrenIds},
                 {<<"fileAcl">>, FileId},
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
@@ -574,7 +680,7 @@ modify_ls_cache(SessionId, Operation, FileId, DirId) ->
         LsSubCacheName, {{DirId, last_children_count}, NewLastChildrenCount}
     ),
     % Return the directory record that accounts the changes.
-    file_record(SessionId, DirId, true, NewLastChildrenCount).
+    file_record(<<"file">>, SessionId, DirId, true, NewLastChildrenCount).
 
 
 %%--------------------------------------------------------------------
