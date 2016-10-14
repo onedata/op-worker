@@ -231,10 +231,10 @@ posix_mode_get(Config) ->
 
     % then
     DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual([
+    ?assertEqual(
         #{
             <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>
-        }],
+        },
         DecodedBody
     ).
 
@@ -255,10 +255,10 @@ posix_mode_put(Config) ->
     % then
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(RespBody),
-    ?assertEqual([
+    ?assertEqual(
         #{
             <<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>
-        }],
+        },
         DecodedBody
     ).
 
@@ -553,7 +553,7 @@ changes_stream_json_metadata_test(Config) ->
             end, AllChanges),
 
     ?assert(lists:any(fun(Change) ->
-        Json == maps:get(<<"onedata_json">>, maps:get(<<"xattrs">>, maps:get(<<"changes">>, Change)))
+        Json == maps:get(<<"onedata_json">>, maps:get(<<"xattrs">>, maps:get(<<"changes">>, Change)), undefined)
     end, DecodedChanges)).
 
 list_spaces(Config) ->

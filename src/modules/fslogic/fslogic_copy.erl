@@ -12,6 +12,7 @@
 -module(fslogic_copy).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
@@ -22,8 +23,8 @@
 %% API
 -export([copy/3]).
 
--define(COPY_BUFFER_SIZE, 33554432). % 32*1024*1024
--define(COPY_LS_SIZE, 1000).
+-define(COPY_BUFFER_SIZE, application:get_env(?APP_NAME, rename_file_chunk_size, 8388608)). % 8*1024*1024
+-define(COPY_LS_SIZE, application:get_env(?APP_NAME, ls_chunk_size, 5000)).
 
 %%%===================================================================
 %%% API
@@ -36,6 +37,7 @@
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
 copy(CTX, SourceEntry, LogicalTargetPath) ->
+
     case file_meta:get(SourceEntry) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = SourceDoc} ->
             copy_dir(CTX, SourceDoc, LogicalTargetPath);
@@ -103,7 +105,7 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Copy file content from source to handle
+%% Copy children of file
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_children(fslogic_worker:ctx(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
@@ -123,7 +125,7 @@ copy_children(CTX = #fslogic_ctx{session_id = SessId}, ParentGuid, TargetPath, O
 
 %%--------------------------------------------------------------------
 %% @doc
-%%
+%% Copy metadata of file
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),

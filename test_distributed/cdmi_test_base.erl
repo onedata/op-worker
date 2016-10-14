@@ -1319,7 +1319,7 @@ copy(Config) ->
     ?assert(object_exists(Config, NewFileName2)),
     ?assertEqual(FileData2, get_file_content(Config, NewFileName2)),
     ?assertEqual({ok, JsonMetadata}, get_json_metadata(Config, NewFileName2)),
-    ?assertEqual(Xattrs ++ [#xattr{name = ?JSON_METADATA_KEY, value = json_utils:encode_map(JsonMetadata)}],
+    ?assertEqual(Xattrs ++ [#xattr{name = ?JSON_METADATA_KEY, value = JsonMetadata}],
         get_xattrs(Config, NewFileName2)),
     ?assertEqual({ok, Acl}, get_acl(Config, NewFileName2)),
     %%------------------------------
