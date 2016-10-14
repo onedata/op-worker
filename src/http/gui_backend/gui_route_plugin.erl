@@ -84,7 +84,7 @@ route(_) -> ?INDEX.
 data_backend(true, <<"file">>) -> file_data_backend;
 data_backend(true, <<"file-shared">>) -> file_data_backend;
 data_backend(_, <<"file-public">>) -> file_data_backend;
-data_backend(true, <<"file-acl">>) -> file_data_backend;
+data_backend(true, <<"file-acl">>) -> file_acl_data_backend;
 data_backend(true, <<"file-distribution">>) -> file_data_backend;
 data_backend(true, <<"file-property">>) -> metadata_data_backend;
 data_backend(true, <<"data-space">>) -> data_space_data_backend;

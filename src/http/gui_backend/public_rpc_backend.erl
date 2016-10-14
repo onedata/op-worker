@@ -20,9 +20,8 @@
 %% API
 -export([handle/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% rpc_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -50,6 +49,9 @@ handle(<<"getPublicFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
         _ ->
             gui_error:internal_server_error()
     end;
+
+handle(<<"fetchMoreDirChildren">>, Props) ->
+    file_data_backend:fetch_more_dir_children(?ROOT_SESS_ID, Props);
 
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).

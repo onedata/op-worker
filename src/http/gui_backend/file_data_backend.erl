@@ -26,13 +26,14 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
 
-%% API
+%% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([file_record/2, file_record/3, file_record/5, create_file/4]).
+%% API
+-export([file_record/2, file_record/3, file_record/5]).
+-export([create_file/4, fetch_more_dir_children/2]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -501,6 +502,19 @@ create_file(SessionId, Name, ParentId, Type) ->
                 gui_error:report_warning(<<"Failed to create new file.">>)
         end
     end.
+
+
+fetch_more_dir_children(SessionId, Props) ->
+    DirId = proplists:get_value(<<"dirId">>, Props),
+    CurrentChCount = proplists:get_value(<<"currentChildrenCount">>, Props),
+    % FileModelType is one of file, file-shared or file-public
+    FileModelType = proplists:get_value(<<"fileModelType">>, Props),
+    {ok, FileData} = file_data_backend:file_record(
+        FileModelType, SessionId, DirId, true, CurrentChCount
+    ),
+    NewChCount = proplists:get_value(<<"children">>, FileData),
+    gui_async:push_updated(FileModelType, FileData),
+    {ok, [{<<"newChildrenCount">>, length(NewChCount)}]}.
 
 
 %%%===================================================================

@@ -22,9 +22,8 @@
 %% API
 -export([handle/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% rpc_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -108,16 +107,7 @@ handle(<<"createFile">>, Props) ->
 
 handle(<<"fetchMoreDirChildren">>, Props) ->
     SessionId = g_session:get_session_id(),
-    DirId = proplists:get_value(<<"dirId">>, Props),
-    CurrentChCount = proplists:get_value(<<"currentChildrenCount">>, Props),
-    % FileModelType is one of file, file-shared or file-public
-    FileModelType = proplists:get_value(<<"fileModelType">>, Props),
-    {ok, FileData} = file_data_backend:file_record(
-        FileModelType, SessionId, DirId, true, CurrentChCount
-    ),
-    NewChCount = proplists:get_value(<<"children">>, FileData),
-    gui_async:push_updated(FileModelType, FileData),
-    {ok, [{<<"newChildrenCount">>, length(NewChCount)}]};
+    file_data_backend:fetch_more_dir_children(SessionId, Props);
 
 %%--------------------------------------------------------------------
 %% Space related procedures
