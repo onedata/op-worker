@@ -284,7 +284,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         type = FileAttr#'FileAttr'.type,
         size = FileAttr#'FileAttr'.size,
         provider_id = FileAttr#'FileAttr'.provider_id,
-        shares = FileAttr#'FileAttr'.shares
+        shares = FileAttr#'FileAttr'.shares,
+        owner_id = FileAttr#'FileAttr'.owner_id
     };
 translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
     #file_children{child_links = lists:map(
@@ -407,7 +408,7 @@ translate_from_protobuf(#'ProviderResponse'{status = Status}) ->
         status = translate_from_protobuf(Status)
     };
 translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
-    #xattr{name = Name, value = Value};
+    #xattr{name = Name, value = json_utils:decode_map(Value)};
 translate_from_protobuf(#'XattrList'{names = Names}) ->
     #xattr_list{names = Names};
 translate_from_protobuf(#'TransferEncoding'{value = Value}) ->
@@ -417,7 +418,7 @@ translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
 translate_from_protobuf(#'Mimetype'{value = Value}) ->
     #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
-    #acl{value = Value};
+    #acl{value = fslogic_acl:from_json_format_to_acl(json_utils:decode_map(Value))};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
 translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, blocks = Blocks}) ->
@@ -438,6 +439,10 @@ translate_from_protobuf(#'RemoveShare'{}) ->
     #remove_share{};
 translate_from_protobuf(#'Share'{share_id = ShareId, share_file_uuid = ShareGuid}) ->
     #share{share_id = ShareId, share_file_uuid = ShareGuid};
+translate_from_protobuf(#'Copy'{target_path = TargetPath}) ->
+    #copy{target_path = TargetPath};
+translate_from_protobuf(#'FileCopied'{new_uuid = NewUuid}) ->
+    #file_copied{new_uuid = NewUuid};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -682,7 +687,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         type = FileAttr#file_attr.type,
         size = FileAttr#file_attr.size,
         provider_id = FileAttr#file_attr.provider_id,
-        shares = FileAttr#file_attr.shares
+        shares = FileAttr#file_attr.shares,
+        owner_id = FileAttr#file_attr.owner_id
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
@@ -805,7 +811,7 @@ translate_to_protobuf(#provider_response{status = Status, provider_response = Pr
         provider_response = translate_to_protobuf(ProviderResponse)
     }};
 translate_to_protobuf(#xattr{name = Name, value = Value}) ->
-    {xattr, #'Xattr'{name = Name, value = Value}};
+    {xattr, #'Xattr'{name = Name, value = json_utils:encode_map(Value)}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
 translate_to_protobuf(#transfer_encoding{value = Value}) ->
@@ -815,7 +821,7 @@ translate_to_protobuf(#cdmi_completion_status{value = Value}) ->
 translate_to_protobuf(#mimetype{value = Value}) ->
     {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
-    {acl, #'Acl'{value = Value}};
+    {acl, #'Acl'{value = json_utils:encode_map(fslogic_acl:from_acl_to_json_format(Value))}};
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
 translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
@@ -836,7 +842,10 @@ translate_to_protobuf(#remove_share{}) ->
     {remove_share, #'RemoveShare'{}};
 translate_to_protobuf(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
     {share, #'Share'{share_id = ShareId, share_file_uuid = ShareGuid}};
-
+translate_to_protobuf(#copy{target_path = TargetPath}) ->
+    {copy, #'Copy'{target_path = TargetPath}};
+translate_to_protobuf(#file_copied{new_uuid = NewUuid}) ->
+    {file_copied, #'FileCopied'{new_uuid = NewUuid}};
 
 %% DBSYNC
 translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->

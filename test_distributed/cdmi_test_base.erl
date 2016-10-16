@@ -17,6 +17,7 @@
 -include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include("http/rest/http_status.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -292,6 +293,7 @@ get_file(Config) ->
 metadata(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    UserId1 = ?config({user_id, <<"user1">>}, Config),
     FileName =  filename:join([binary_to_list(SpaceName), "metadataTest.txt"]),
     FileContent = <<"Some content...">>,
     DirName = filename:join([binary_to_list(SpaceName), "metadataTestDir"]) ++ "/",
@@ -321,7 +323,7 @@ metadata(Config) ->
     ?assert(ATime1 =< After),
     ?assert(MTime1 =< After),
     ?assert(CTime1 =< After),
-    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertMatch(UserId1, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(6, length(Metadata1)),
 
@@ -343,7 +345,7 @@ metadata(Config) ->
     CdmiResponse4 = json_utils:decode(Response4),
     ?assertEqual(1, length(CdmiResponse4)),
     Metadata4 = proplists:get_value(<<"metadata">>, CdmiResponse4),
-    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
+    ?assertMatch(UserId1, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
     ?assertEqual(1, length(Metadata4)),
 
     {ok, 200, _Headers5, Response5} = do_request(Workers, FileName ++ "?metadata:cdmi_size", get, RequestHeaders1, []),
@@ -441,10 +443,16 @@ metadata(Config) ->
         {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
     ],
+    Ace3Full = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?write}
+    ],
 
     create_file(Config, FileName2),
     write_to_file(Config, FileName2, <<"data">>, 0),
-    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
+    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3Full]}]}],
     RawRequestBody15 = json_utils:encode(RequestBody15),
     RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header(Config)],
 
@@ -1286,10 +1294,12 @@ copy(Config) ->
         identifier = UserId1,
         aceflags = ?no_flags_mask,
         acemask = ?all_perms_mask}],
+    JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},
     Xattrs = [#xattr{name = <<"key1">>, value = <<"value1">>}, #xattr{name = <<"key2">>, value = <<"value2">>}],
-    set_acl(Config, FileName2, Acl),
-    add_xattrs(Config, FileName2, Xattrs),
-    write_to_file(Config, FileName2, FileData2, 0),
+    ok = set_acl(Config, FileName2, Acl),
+    ok = set_json_metadata(Config, FileName2, JsonMetadata),
+    ok = add_xattrs(Config, FileName2, Xattrs),
+    {ok, _} = write_to_file(Config, FileName2, FileData2, 0),
 
     % assert source file is created and destination does not exist
     NewFileName2 =  filename:join([binary_to_list(SpaceName), "copy_test_file2.txt"]),
@@ -1308,7 +1318,9 @@ copy(Config) ->
     ?assert(object_exists(Config, FileName2)),
     ?assert(object_exists(Config, NewFileName2)),
     ?assertEqual(FileData2, get_file_content(Config, NewFileName2)),
-    ?assertEqual({ok, Xattrs}, get_xattrs(Config, NewFileName2)),
+    ?assertEqual({ok, JsonMetadata}, get_json_metadata(Config, NewFileName2)),
+    ?assertEqual(Xattrs ++ [#xattr{name = ?JSON_METADATA_KEY, value = JsonMetadata}],
+        get_xattrs(Config, NewFileName2)),
     ?assertEqual({ok, Acl}, get_acl(Config, NewFileName2)),
     %%------------------------------
 
@@ -1352,7 +1364,7 @@ copy(Config) ->
 
     % assert destination files have been created
     ?assert(object_exists(Config, NewDirName2)),
-    ?assertEqual({ok, Xattrs}, get_xattrs(Config, NewDirName2)),
+    ?assertEqual(Xattrs, get_xattrs(Config, NewDirName2)),
     ?assertEqual({ok, Acl}, get_acl(Config, NewDirName2)),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir1"))),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir2"))),
@@ -1466,11 +1478,23 @@ acl(Config) ->
         {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
     ],
+    ReadFull = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?read}
+    ],
     Write = [
         {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
+    ],
+    ReadWriteVerbose = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, <<(?read)/binary, ", ", (?write)/binary>>}
     ],
     Execute = [
         {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
@@ -1491,11 +1515,12 @@ acl(Config) ->
         {<<"acemask">>, fslogic_acl:bitmask_to_binary(?delete_mask)}
     ],
 
-    MetadataAclRead = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, WriteAcl]}]}]),
+    MetadataAclReadFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadFull, WriteAcl]}]}]),
     MetadataAclReadExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, Execute, WriteAcl]}]}]),
     MetadataAclDelete = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Delete]}]}]),
     MetadataAclWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
     MetadataAclReadWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
+    MetadataAclReadWriteFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadWriteVerbose]}]}]),
     MetadataAclReadWriteExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read, Execute]}]}]),
 
     %%----- read file test ---------
@@ -1512,7 +1537,7 @@ acl(Config) ->
     ?assertEqual({error, ?EACCES}, open_file(WorkerP1, Config, Filename1, read)),
 
     % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
-    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
+    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadWriteFull),
     {ok, 200, _, _} = do_request(WorkerP2, Filename1, get, RequestHeaders1, []),
     {ok, 200, _, _} = do_request(WorkerP2, Filename1, get, [user_1_token_header(Config)], []),
     %%------------------------------
@@ -1529,7 +1554,7 @@ acl(Config) ->
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
 
     % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
-    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclRead),
+    {ok, 204, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, MetadataAclReadFull),
     RequestBody6 = json_utils:encode([{<<"value">>, <<"new_data3">>}]),
     {ok, 403, _, _} = do_request(Workers, Filename1, put, RequestHeaders1, RequestBody6),
     {ok, 403, _, _} = do_request(Workers, Filename1, put, [user_1_token_header(Config)], <<"new_data4">>),
@@ -1863,9 +1888,21 @@ get_xattrs(Config, Path) ->
         fun
             (<<"cdmi_", _/binary>>) ->
                 false;
-            (Xattr) ->
-                {true, lfm_proxy:get_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, Xattr)}
+            (XattrName) ->
+                {ok, Xattr} = lfm_proxy:get_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, XattrName),
+                {true, Xattr}
         end, Xattrs).
+
+set_json_metadata(Config, Path, JsonTerm) ->
+    [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, json, JsonTerm, []).
+
+get_json_metadata(Config, Path) ->
+    [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    lfm_proxy:get_metadata(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, json, [], false).
+
 
 absolute_binary_path(Path) ->
     list_to_binary(ensure_begins_with_slash(Path)).

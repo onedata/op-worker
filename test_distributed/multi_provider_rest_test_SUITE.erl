@@ -35,6 +35,7 @@
     replicate_dir/1,
     posix_mode_get/1,
     posix_mode_put/1,
+    attributes_list/1,
     xattr_get/1,
     xattr_put/1,
     xattr_list/1,
@@ -67,6 +68,7 @@ all() ->
         replicate_dir,
         posix_mode_get,
         posix_mode_put,
+        attributes_list,
         xattr_get,
         xattr_put,
         xattr_list,
@@ -229,11 +231,10 @@ posix_mode_get(Config) ->
 
     % then
     DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual([
+    ?assertEqual(
         #{
-            <<"value">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
-            <<"name">> => <<"mode">>
-        }],
+            <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>
+        },
         DecodedBody
     ).
 
@@ -247,18 +248,56 @@ posix_mode_put(Config) ->
 
     % when
     NewMode = 8#777,
-    Body = json_utils:encode_map(#{<<"name">> => <<"mode">>, <<"value">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
+    Body = json_utils:encode_map(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
     {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary>>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
     % then
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=mode">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(RespBody),
-    ?assertEqual([
+    ?assertEqual(
         #{
-            <<"value">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>,
-            <<"name">> => <<"mode">>
-        }],
+            <<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>
+        },
+        DecodedBody
+    ).
+
+attributes_list(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    UserId1 = ?config({user_id, <<"user1">>}, Config),
+    File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+
+    % when
+    {ok, 200, _, Body} = do_request(WorkerP1, <<"attributes", File/binary>>, get, [user_1_token_header(Config)], []),
+
+    % then
+    {ok, #file_attr{
+        atime = ATime,
+        ctime = CTime,
+        mtime = MTime,
+        gid = Gid,
+        uid = Uid
+    }} = lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}),
+    {ok, CdmiObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
+    DecodedBody = json_utils:decode_map(Body),
+    ?assertEqual(
+        #{
+            <<"mode">> => <<"0700">>,
+            <<"size">> => 0,
+            <<"atime">> => ATime,
+            <<"ctime">> => CTime,
+            <<"mtime">> => MTime,
+            <<"storage_group_id">> => Gid,
+            <<"storage_user_id">> => Uid,
+            <<"name">> => <<"file1">>,
+            <<"owner_id">> => UserId1,
+            <<"shares">> => [],
+            <<"type">> => <<"reg">>,
+            <<"file_id">> => CdmiObjectId
+        },
         DecodedBody
     ).
 
@@ -275,11 +314,10 @@ xattr_get(Config) ->
 
     % then
     DecodedBody = json_utils:decode_map(Body),
-    ?assertEqual([
+    ?assertEqual(
         #{
-            <<"value">> => <<"v1">>,
-            <<"name">> => <<"k1">>
-        }],
+            <<"k1">> => <<"v1">>
+        },
         DecodedBody
     ).
 
@@ -291,18 +329,17 @@ xattr_put(Config) ->
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
 
     % when
-    Body = json_utils:encode_map(#{<<"name">> => <<"k1">>, <<"value">> => <<"v1">>}),
+    Body = json_utils:encode_map(#{<<"k1">> => <<"v1">>}),
     {ok, 204, _, _} = do_request(WorkerP1, <<"attributes", File/binary, "?extended=true">>, put,
         [user_1_token_header(Config), {<<"Content-Type">>, <<"application/json">>}], Body),
 
     % then
     {ok, 200, _, RespBody} = do_request(WorkerP1, <<"attributes", File/binary, "?attribute=k1&extended=true">>, get, [user_1_token_header(Config)], []),
     DecodedBody = json_utils:decode_map(RespBody),
-    ?assertEqual([
+    ?assertEqual(
         #{
-            <<"value">> => <<"v1">>,
-            <<"name">> => <<"k1">>
-        }],
+            <<"k1">> => <<"v1">>
+        },
         DecodedBody
     ).
 
@@ -320,13 +357,10 @@ xattr_list(Config) ->
 
     % then
     DecodedBody = json_utils:decode_map(Body),
-    ?assertMatch(
-        [
-            #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
-            #{<<"name">> := <<"k2">>, <<"value">> := <<"v2">>}
-        ],
-        DecodedBody
-    ).
+    ?assertMatch(#{
+        <<"k1">> := <<"v1">>,
+        <<"k2">> := <<"v2">>
+    }, DecodedBody).
 
 metric_get(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -519,7 +553,7 @@ changes_stream_json_metadata_test(Config) ->
             end, AllChanges),
 
     ?assert(lists:any(fun(Change) ->
-        Json == maps:get(<<"onedata_json">>, maps:get(<<"xattrs">>, maps:get(<<"changes">>, Change)))
+        Json == maps:get(<<"onedata_json">>, maps:get(<<"xattrs">>, maps:get(<<"changes">>, Change)), undefined)
     end, DecodedChanges)).
 
 list_spaces(Config) ->
@@ -720,14 +754,14 @@ set_get_xattr_inherited(Config) ->
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space3/dir_test/child">>),
 
     % when
-    XattrSpace = json_utils:encode_map(#{<<"name">> => <<"k1">>, <<"value">> => <<"v1">>}),
-    XattrDir = json_utils:encode_map(#{<<"name">> => <<"k2">>, <<"value">> => <<"v2">>}),
-    XattrChild = json_utils:encode_map(#{<<"name">> => <<"k2">>, <<"value">> => <<"v22">>}),
-    XattrChild2 = json_utils:encode_map(#{<<"name">> => <<"k3">>, <<"value">> => <<"v3">>}),
+    XattrSpace = json_utils:encode_map(#{<<"k1">> => <<"v1">>}),
+    XattrDir = json_utils:encode_map(#{<<"k2">> => <<"v2">>}),
+    XattrChild = json_utils:encode_map(#{<<"k2">> => <<"v22">>}),
+    XattrChild2 = json_utils:encode_map(#{<<"k3">> => <<"v3">>}),
 
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"metadata/space3?metadata_type=json">>, put,
-            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"5">>)),
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], <<"{\"a\":5}">>)),
     ?assertMatch({ok, 204, _, _},
         do_request(WorkerP1, <<"attributes/space3?extended=true">>, put,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/json">>}], XattrSpace)),
@@ -746,15 +780,12 @@ set_get_xattr_inherited(Config) ->
         do_request(WorkerP1, <<"attributes/space3/dir_test/child?inherited=true&extended=true">>, get,
             [user_1_token_header(Config), {<<"accept">>,<<"application/json">>}], [])),
     DecodedBody = json_utils:decode_map(Body),
-    ?assertMatch(
-        [
-            #{<<"name">> := <<"k1">>, <<"value">> := <<"v1">>},
-            #{<<"name">> := <<"k2">>, <<"value">> := <<"v22">>},
-            #{<<"name">> := <<"k3">>, <<"value">> := <<"v3">>},
-            #{<<"name">> := <<"onedata_json">>, <<"value">> := 5} | _
-        ],
-        DecodedBody
-    ).
+    ?assertMatch(#{
+        <<"k1">> := <<"v1">>,
+        <<"k2">> := <<"v22">>,
+        <<"k3">> := <<"v3">>,
+        <<"onedata_json">> := #{<<"a">> := 5}
+    }, DecodedBody).
 
 set_get_json_metadata_using_filter(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

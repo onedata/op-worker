@@ -80,8 +80,8 @@ all() ->
         errors_test,
         accept_header_test,
         move_copy_conflict_test,
-        move_test
-%%        copy_test %todo implement copy
+        move_test,
+        copy_test
 ]).
 
 -define(TIMEOUT, timer:seconds(5)).

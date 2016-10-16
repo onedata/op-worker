@@ -137,19 +137,19 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     % create dir using mkdir/cp/mv
     RequestedCopyURI = maps:get(<<"copy">>, Body, undefined),
     RequestedMoveURI = maps:get(<<"move">>, Body, undefined),
-    {ok, OperationPerformed} =
+    {ok, OperationPerformed, Guid} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {ok, _} = onedata_file_api:mkdir(Auth, Path),
-                {ok, created};
-            {#file_attr{}, undefined, undefined} ->
-                {ok, none};
+                {ok, NewGuid} = onedata_file_api:mkdir(Auth, Path),
+                {ok, created, NewGuid};
+            {#file_attr{uuid = NewGuid}, undefined, undefined} ->
+                {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
-                ok = onedata_file_api:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
-                {ok, copied};
+                {ok, NewGuid} = onedata_file_api:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),
+                {ok, copied, NewGuid};
             {undefined, undefined, MoveURI} ->
-                ok = onedata_file_api:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
-                {ok, moved}
+                {ok, NewGuid} = onedata_file_api:mv(Auth, {path, filepath_utils:ensure_begins_with_slash(MoveURI)}, Path),
+                {ok, moved, NewGuid}
         end,
 
     %update metadata and return result
@@ -157,12 +157,11 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     case OperationPerformed of
         none ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
-            ok = cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
+            ok = cdmi_metadata:update_user_metadata(Auth, {guid, Guid}, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
         _ ->
-            {ok, NewAttrs = #file_attr{uuid = FileGUID}} = onedata_file_api:stat(Auth, {path, Path}),
-            ok = cdmi_metadata:update_user_metadata(Auth, {guid, FileGUID}, RequestedUserMetadata),
-            Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, options => ?DEFAULT_GET_DIR_OPTS}),
+            ok = cdmi_metadata:update_user_metadata(Auth, {guid, Guid}, RequestedUserMetadata),
+            Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{guid => Guid, options => ?DEFAULT_GET_DIR_OPTS}),
             Response = json_utils:encode_map(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}

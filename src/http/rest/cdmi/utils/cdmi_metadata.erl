@@ -18,7 +18,7 @@
 -include_lib("http/rest/cdmi/cdmi_errors.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
--export([prepare_metadata/3, prepare_metadata/4]).
+-export([prepare_metadata/2, prepare_metadata/3, prepare_metadata/4]).
 -export([get_mimetype/2, get_encoding/2, get_cdmi_completion_status/2,
     update_mimetype/3, update_encoding/3, update_cdmi_completion_status/3,
     set_cdmi_completion_status_according_to_partial_flag/3]).
@@ -113,18 +113,27 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @equiv prepare_metadata(Auth, FileKey, <<>>).
+%%--------------------------------------------------------------------
+-spec prepare_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
+    maps:map().
+prepare_metadata(Auth, FileKey) ->
+    prepare_metadata(Auth, FileKey, <<>>).
+
+%%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata.
 %%--------------------------------------------------------------------
--spec prepare_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(), #file_attr{}) ->
+-spec prepare_metadata(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
     maps:map().
-prepare_metadata(Auth, FileKey, Attrs) ->
-    prepare_metadata(Auth, FileKey, <<"">>, Attrs).
+prepare_metadata(Auth, FileKey, Prefix) ->
+    {ok, Attrs} = onedata_file_api:stat(Auth, FileKey),
+    prepare_metadata(Auth, FileKey, Prefix, Attrs).
 
 %%--------------------------------------------------------------------
 %% @doc Prepares cdmi user and storage system metadata with given prefix.
 %%--------------------------------------------------------------------
--spec prepare_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(), Prefix :: binary(),
-    #file_attr{}) -> maps:map().
+-spec prepare_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(),
+    Prefix :: binary(), #file_attr{}) -> maps:map().
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
     StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
     UserMetadata = maps:filter(fun(Name, _Value) ->
@@ -284,7 +293,7 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                     };
                 <<"cdmi_owner">> ->
                     (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
-                        <<"cdmi_owner">> => integer_to_binary(Attrs#file_attr.uid)
+                        <<"cdmi_owner">> => Attrs#file_attr.owner_id
                     };
                 ?ACL_XATTR_NAME ->
                     case onedata_file_api:get_acl(Auth, FileKey) of

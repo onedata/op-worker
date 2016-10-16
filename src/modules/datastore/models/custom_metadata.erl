@@ -192,7 +192,7 @@ remove_rdf_metadata(FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Get extended attribute metadata
 %%--------------------------------------------------------------------
--spec get_xattr_metadata(file_meta:uuid(), xattr:name(), boolean()) ->
+-spec get_xattr_metadata(file_meta:uuid(), xattr:name(), Inherited :: boolean()) ->
     {ok, xattr:value()} | datastore:get_error().
 get_xattr_metadata(?ROOT_DIR_UUID, Name, true) ->
     get_xattr_metadata(?ROOT_DIR_UUID, Name, false);

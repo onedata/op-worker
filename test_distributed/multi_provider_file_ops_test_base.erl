@@ -19,13 +19,13 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
-
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 %% export for tests
 -export([
     basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4,
-    file_consistency_test_skeleton/5, get_links/1
+    file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1
 ]).
 
 % for file consistency testing
@@ -43,10 +43,81 @@
 -define(rpc(W, Module, Function, Args), rpc:call(W, Module, Function, Args)).
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
+-define(deny_user(UserId),
+    #accesscontrolentity{
+        acetype = ?deny_mask,
+        aceflags = ?no_flags_mask,
+        identifier = UserId,
+        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
+    }).
 
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
+
+permission_cache_invalidate_test_base(Config, Attempts) ->
+    InvalidateFun = fun(Worker, SessId, TestDir) ->
+        ?assertMatch(ok, lfm_proxy:set_perms(Worker, SessId, {path, TestDir}, 0))
+    end,
+
+    InvalidateFun2 = fun(Worker, SessId, TestDir) ->
+        ?assertEqual(ok, lfm_proxy:set_acl(Worker, SessId, {path, TestDir}, [?deny_user(<<"user1">>)]))
+    end,
+
+    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun).
+%%    permission_cache_invalidate_test_skeleton(Config, Attempts, custom_metadata, InvalidateFun2).
+
+permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, InvalidateFun) ->
+    [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
+    [SessId1 | _] = SessIds = lists:map(fun(Worker) ->
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)
+    end, Workers),
+    WS = lists:zip(Workers, SessIds),
+
+    [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
+        NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
+        [NewDir | Acc]
+    end, [<<"/space1">>], lists:seq(1,10)),
+    [_ | TreeDirs] = lists:reverse(TreeDirsReversed),
+
+    lists:foreach(fun(D) ->
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId1, D, 8#755))
+    end, TreeDirs),
+
+    [_, _, TestDir | _] = TreeDirs,
+
+    lists:foreach(fun({Worker, SessId}) ->
+        ?assertEqual({ok, []}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+    end, WS),
+
+    StatAns = lfm_proxy:stat(Worker1, SessId1, {path, TestDir}),
+    ?assertMatch({ok, #file_attr{}}, StatAns),
+    {ok, #file_attr{uuid = FileGUID}} = StatAns,
+    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUUID})),
+
+    InvalidateFun(Worker1, SessId1, TestDir),
+    lists:foreach(fun({Worker, SessId}) ->
+%%        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+        % TODO - repair
+        ?assertEqual({error,{badmatch,{error,eacces}}}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+    end, WS),
+
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
+            [ControllerUUID]), Attempts * length(Workers))
+        % TODO - uncomment after VFS-2678
+%%        ListFun = fun(LinkName, _LinkTarget, Acc) ->
+%%            [LinkName | Acc]
+%%                  end,
+%%        MC = change_propagation_controller:model_init(),
+%%        LSL = MC#model_config.link_store_level,
+%%        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
+%%            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
+    end, Workers),
+
+    ok.
+
 
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);

@@ -87,21 +87,23 @@ update(Key, Diff) ->
 create(#storage{} = S) ->
     create(#document{value = S});
 create(#document{value = #storage{name = Name}} = Document) ->
-    critical_section:run([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
+    critical_section:run_on_mnesia([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
         case datastore:fetch_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, Name) of
             {ok, _} ->
                 {error, already_exists};
             {error, link_not_found} ->
-                _ = datastore:create(?STORE_LEVEL, #document{key = ?ROOT_STORAGE, value = #storage{}}),
-                case datastore:create(?STORE_LEVEL, Document) of
-                    {error, Reason} ->
-                        {error, Reason};
-                    {ok, Key} ->
-                        ok = datastore:add_links(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
-                        {ok, Key}
-                end
+                datastore:run_transaction(fun() ->
+                    _ = datastore:create(?STORE_LEVEL, #document{key = ?ROOT_STORAGE, value = #storage{}}),
+                    case datastore:create(?STORE_LEVEL, Document) of
+                        {error, Reason} ->
+                            {error, Reason};
+                        {ok, Key} ->
+                            ok = datastore:add_links(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
+                            {ok, Key}
+                    end
+                end)
         end
-                                                              end).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
