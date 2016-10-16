@@ -15,7 +15,6 @@
 -include("http/http_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
--define(ALLOWED_ATTRIBUTES, [<<"mode">>, undefined]).
 -define(ALLOWED_METADATA_TYPES, [<<"json">>, <<"rdf">>, undefined]).
 
 -define(DEFAULT_EXTENDED, <<"false">>).
@@ -140,12 +139,7 @@ parse_attribute(Req, State = #{extended := true}) ->
     end;
 parse_attribute(Req, State) ->
     {Attribute, NewReq} = cowboy_req:qs_val(<<"attribute">>, Req),
-    case lists:member(Attribute, ?ALLOWED_ATTRIBUTES) of
-        true ->
-            {State#{attribute => Attribute}, NewReq};
-        false ->
-            throw(?ERROR_INVALID_ATTRIBUTE)
-    end.
+    {State#{attribute => Attribute}, NewReq}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -159,15 +153,10 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
 
     Json = json_utils:decode_map(Body),
     case {
-        maps:get(<<"name">>, Json, undefined),
-        maps:get(<<"value">>, Json, undefined),
+        maps:to_list(Json),
         Extended
     } of
-        {undefined, _, _} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
-        {_, undefined, _} ->
-            throw(?ERROR_INVALID_ATTRIBUTE_BODY);
-        {<<"mode">>, Value, false} ->
+        {[{<<"mode">>, Value}], false} ->
             try binary_to_integer(Value, 8) of
                 Mode ->
                     {State#{attribute_body => {<<"mode">>, Mode}}, Req2}
@@ -175,10 +164,14 @@ parse_attribute_body(Req, State = #{extended := Extended}) ->
                _:_ ->
                    throw(?ERROR_INVALID_MODE)
             end;
-        {_Attr, _Value, false} ->
+        {[{_Attr, _Value}], false} ->
             throw(?ERROR_INVALID_ATTRIBUTE);
-        {Attr, Value, true} ->
-            {State#{attribute_body => {Attr, Value}}, Req2}
+        {[{Attr, Value}], true} when not is_binary(Attr) ->
+            throw(?ERROR_INVALID_ATTRIBUTE_NAME);
+        {[{Attr, Value}], true} ->
+            {State#{attribute_body => {Attr, Value}}, Req2};
+        {_, _} ->
+            throw(?ERROR_INVALID_ATTRIBUTE_BODY)
     end.
 
 %%--------------------------------------------------------------------

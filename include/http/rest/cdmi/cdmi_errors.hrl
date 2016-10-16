@@ -44,6 +44,8 @@
     <<"error_description">> => <<"Request's query string is malformed.">>}}).
 -define(ERROR_INVALID_JSON, {?BAD_REQUEST, #{<<"error">> => <<"invalid_json">>,
     <<"error_description">> => <<"Could not parse json.">>}}).
+-define(ERROR_EXISTS, {?BAD_REQUEST, #{<<"error">> => <<"already_exists">>,
+    <<"error_description">> => <<"The resource already exists.">>}}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, #{<<"error">> => <<"unauthorized">>,
