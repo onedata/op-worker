@@ -34,6 +34,24 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4, list/0]).
+-export([record_struct/1]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {name, binary},
+        {helpers, [{record, 1, [
+            {name, binary},
+            {args, #{binary => binary}}
+        ]}]}
+    ]}.
+
 
 %%%===================================================================
 %%% model_behaviour callbacks

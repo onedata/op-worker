@@ -22,11 +22,33 @@
     'after'/5, before/4]).
 -export([critical_section/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
     validate_block_data/3]).
+-export([record_struct/1]).
 
 -type id() :: binary().
 -type doc() :: datastore:document().
 
 -export_type([id/0, doc/0]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {uuid, binary},
+        {provider_id, binary},
+        {storage_id, binary},
+        {file_id, binary},
+        {blocks, [term]},
+        {version_vector, #{term => integer}},
+        {size, integer},
+        {handle_id, binary},
+        {space_id, binary},
+        {recent_changes, {[term], [term]}},
+        {last_rename, {{binary, binary}, integer}}
+    ]}.
 
 %%%===================================================================
 %%% API

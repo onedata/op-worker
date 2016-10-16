@@ -20,8 +20,23 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, create_or_update/2,
     list/0, model_init/0, 'after'/5, before/4]).
+-export([record_struct/1]).
 %% export API
 -export([save_change/6, mark_change_propagated/1, verify_propagation/2]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {change_revision, integer},
+        {space_id, binary},
+        {verify_module, atom},
+        {verify_function, atom}
+    ]}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
