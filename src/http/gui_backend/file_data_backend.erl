@@ -551,7 +551,9 @@ file_acl_record(SessionId, FileId) ->
 %%--------------------------------------------------------------------
 -spec get_user_root_dir_uuid() -> fslogic_worker:file_guid().
 get_user_root_dir_uuid() ->
-    fslogic_uuid:user_root_dir_uuid(g_session:get_user_id()).
+    fslogic_uuid:uuid_to_guid(
+        fslogic_uuid:user_root_dir_uuid(
+            g_session:get_user_id())).
 
 
 %%--------------------------------------------------------------------
