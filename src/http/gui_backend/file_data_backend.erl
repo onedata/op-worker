@@ -434,8 +434,8 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
             % Share is always null for file-shared and file-public so as not to
             % show nested shares.
             Share = case {ModelName, Shares} of
-                {<<"file">>, [ShareId]} ->
-                    ShareId;
+                {<<"file">>, [ShId]} ->
+                    ShId;
                 _ ->
                     null
             end,
