@@ -37,9 +37,9 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {client_name, binary},
-        {urls, [binary]},
-        {spaces, [binary]},
+        {client_name, string},
+        {urls, [string]},
+        {spaces, [string]},
         {public_only, boolean},
         {revision_history, [term]}
     ]}.

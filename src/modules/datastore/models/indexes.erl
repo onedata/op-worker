@@ -39,7 +39,7 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {value, #{binary => #{atom => binary}}}
+        {value, #{string => #{atom => string}}}
     ]}.
 
 %%%===================================================================

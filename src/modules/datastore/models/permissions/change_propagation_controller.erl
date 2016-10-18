@@ -33,7 +33,7 @@
 record_struct(1) ->
     {record, [
         {change_revision, integer},
-        {space_id, binary},
+        {space_id, string},
         {verify_module, atom},
         {verify_function, atom}
     ]}.

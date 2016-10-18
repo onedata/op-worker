@@ -80,17 +80,17 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {name, binary},
+        {name, string},
         {type, atom},
         {mode, integer},
-        {uid, binary},
+        {uid, string},
         {size, integer},
         {version, integer},
         {is_scope, boolean},
-        {scope, binary},
-        {provider_id, binary},
-        {link_value, binary},
-        {shares, [binary]}
+        {scope, string},
+        {provider_id, string},
+        {link_value, string},
+        {shares, [string]}
     ]}.
 
 

@@ -37,17 +37,17 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {uuid, binary},
-        {provider_id, binary},
-        {storage_id, binary},
-        {file_id, binary},
+        {uuid, string},
+        {provider_id, string},
+        {storage_id, string},
+        {file_id, string},
         {blocks, [term]},
         {version_vector, #{term => integer}},
         {size, integer},
-        {handle_id, binary},
-        {space_id, binary},
+        {handle_id, string},
+        {space_id, string},
         {recent_changes, {[term], [term]}},
-        {last_rename, {{binary, binary}, integer}}
+        {last_rename, {{string, string}, integer}}
     ]}.
 
 %%%===================================================================
