@@ -4,6 +4,15 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc9
+
+* VFS-2609 Fix error 500 when specifying wrong url for transfer
+* VFS-2609 Fix query-index invalid parameters
+* VFS-2609 Fix error 500 when requesting nonexistent transfer
+* VFS-2609 Handle metadata filter errors
+* VFS-2609 Handle invalid json as error 400
+
+
 ### 3.0.0-rc8
 
 * VFS-2625 Add tests for deletion and conflit resolving for handles and handle services

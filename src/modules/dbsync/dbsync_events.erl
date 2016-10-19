@@ -77,6 +77,18 @@ change_replicated_internal(SpaceId, #change{model = file_meta, doc = #document{v
 change_replicated_internal(_SpaceId, #change{model = times, doc = #document{key = FileUUID, value = #times{}}}) ->
     ?info("change_replicated_internal: changed times ~p", [FileUUID]),
     ok = file_consistency:add_components_and_notify(FileUUID, [times]);
+change_replicated_internal(SpaceId, #change{model = change_propagation_controller,
+    doc = #document{deleted = false, value = #links{model = change_propagation_controller, doc_key = DocKey}}}) ->
+    ?info("change_replicated_internal: change_propagation_controller links ~p", [DocKey]),
+    {ok, _} = change_propagation_controller:verify_propagation(DocKey, SpaceId);
+change_replicated_internal(_SpaceId, #change{model = change_propagation_controller,
+    doc = #document{deleted = false, key = Key} = Doc}) ->
+    ?info("change_replicated_internal: change_propagation_controller ~p", [Key]),
+    ok = change_propagation_controller:mark_change_propagated(Doc);
+change_replicated_internal(_SpaceId, #change{model = custom_metadata,
+    doc = #document{key = FileUUID, value = #custom_metadata{}}}) ->
+    ?info("change_replicated_internal: changed custom_metadata ~p", [FileUUID]),
+    ok = file_consistency:add_components_and_notify(FileUUID, [custom_metadata]);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
@@ -84,16 +96,17 @@ change_replicated_internal(_SpaceId, _Change) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Hook that runs while link change is replicated from remote provider to apply it to local link trees.
+%% Important - providers' IDs must be used as scope IDs
 %% @end
 %%--------------------------------------------------------------------
 -spec links_changed(Origin :: links_utils:scope(), ModelName :: model_behaviour:model_type(),
     MainDocKey :: datastore:ext_key(), AddedMap :: #{}, DeletedMap :: #{}) ->
     ok.
-links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) ->
+links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
     #model_config{link_store_level = _LinkStoreLevel} = ModelName:model_init(),
     MyProvID = oneprovider:get_provider_id(),
     erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE),
-    erlang:put(other_scopes, system_internal),
+    erlang:put(other_scopes, <<"system_internal">>),
 
     maps:fold(
         fun(K, {Version, Targets}, AccIn) ->
@@ -153,8 +166,6 @@ links_changed(_Origin, ModelName = file_meta, MainDocKey, AddedMap, DeletedMap) 
                 end, DelTargets)
         end, [], DeletedMap),
 
-    ok;
-links_changed(_, _, _, _, _) ->
     ok.
 
 %%%===================================================================

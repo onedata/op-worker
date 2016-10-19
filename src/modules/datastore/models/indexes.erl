@@ -22,6 +22,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4, create_or_update/2]).
+-export([record_struct/1]).
 
 -type view_name() :: binary().
 -type index_id() :: binary().
@@ -29,6 +30,17 @@
 -type index() :: #{name => indexes:view_name(), space_id => od_space:id(), function => indexes:view_function()}.
 
 -export_type([view_name/0, index_id/0, view_function/0]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {value, #{string => #{atom => string}}}
+    ]}.
 
 %%%===================================================================
 %%% API
@@ -261,9 +273,9 @@ before(_ModelName, _Method, _Level, _Context) ->
 add_db_view(IndexId, SpaceId, Function) ->
     RecordName = custom_metadata,
     RecordNameBin = atom_to_binary(RecordName, utf8),
-    DbViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['RECORD::'] == '", RecordNameBin/binary, "' && doc['ATOM::space_id'] == '", SpaceId/binary , "') { "
+    DbViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['<record_type>'] == '", RecordNameBin/binary, "' && doc['space_id'] == '", SpaceId/binary , "') { "
         "var key = eval.call(null, '(", Function/binary, ")'); ",
-        "var key_to_emit = key(doc['ATOM::value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
+        "var key_to_emit = key(doc['value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
     ok = couchdb_datastore_driver:add_view(RecordName, IndexId, DbViewFunction).
 
 %%--------------------------------------------------------------------

@@ -430,6 +430,8 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
     fslogic_req_generic:create_share(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Name);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #remove_share{}}) ->
     fslogic_req_generic:remove_share(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #copy{target_path = TargetPath}}) ->
+    fslogic_copy:copy(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, TargetPath);
 handle_provider_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

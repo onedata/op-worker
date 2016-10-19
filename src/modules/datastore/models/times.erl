@@ -26,6 +26,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     create_or_update/2, 'after'/5, before/4]).
+-export([record_struct/1]).
 
 -type a_time() :: time().
 -type c_time() :: time().
@@ -33,6 +34,19 @@
 -type time() :: non_neg_integer().
 
 -export_type([time/0, a_time/0, c_time/0, m_time/0]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {atime, integer},
+        {ctime, integer},
+        {mtime, integer}
+    ]}.
 
 %%%===================================================================
 %%% API

@@ -188,7 +188,7 @@
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
     metadata :: od_handle:metadata() | undefined,
-    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
+    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp() | undefined,
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,
@@ -406,6 +406,14 @@
 %% Helper model for caching files' permissions
 -record(permissions_cache_helper, {
     value = undefined :: term()
+}).
+
+%% Record that controls change propagation
+-record(change_propagation_controller, {
+    change_revision = 0 :: non_neg_integer(),
+    space_id = <<"">> :: binary(),
+    verify_module :: atom(),
+    verify_function :: atom()
 }).
 
 %% Model that holds file timestamps

@@ -15,7 +15,7 @@
 -export([get_by_name/2, get_by_name/3, delete_by_name/2, exists_by_name/2, save/3, list/1, list/2]).
 
 -type name() :: binary().
--type value() :: binary().
+-type value() :: custom_metadata:json_term().
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().

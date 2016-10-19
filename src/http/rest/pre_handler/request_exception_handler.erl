@@ -59,6 +59,8 @@ handle(Req, State, error, {error, ?EACCES}) ->
     handle(Req, State, error, ?ERROR_PERMISSION_DENIED);
 handle(Req, State, error, {error, ?EPERM}) ->
     handle(Req, State, error, ?ERROR_FORBIDDEN);
+handle(Req, State, error, {error, ?EEXIST}) ->
+    handle(Req, State, error, ?ERROR_EXISTS);
 handle(Req, State, _Type, Status) when is_integer(Status) ->
     {ok, Req2} = cowboy_req:reply(Status, [], [], Req),
     {halt, Req2, State};
