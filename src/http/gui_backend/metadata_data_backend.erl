@@ -111,7 +111,7 @@ create_record(<<"file-property-public">>, _Data) ->
 create_record(ModelType, Data) ->
     ResourceId = proplists:get_value(<<"file">>, Data),
     ok = update_record(ModelType, ResourceId, Data),
-    metadata_record(g_session:get_session_id(), ResourceId).
+    metadata_record(ModelType, g_session:get_session_id(), ResourceId).
 
 
 %%--------------------------------------------------------------------
