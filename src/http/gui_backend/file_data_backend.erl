@@ -89,9 +89,7 @@ find(<<"file-shared">>, AssocId) ->
     file_record(<<"file-shared">>, SessionId, AssocId);
 find(<<"file-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
-    file_record(<<"file-public">>, SessionId, AssocId);
-find(<<"file-distribution">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    file_record(<<"file-public">>, SessionId, AssocId).
 
 
 %%--------------------------------------------------------------------
@@ -106,8 +104,6 @@ find_all(<<"file">>) ->
 find_all(<<"file-shared">>) ->
     gui_error:report_error(<<"Not iplemented">>);
 find_all(<<"file-public">>) ->
-    gui_error:report_error(<<"Not iplemented">>);
-find_all(<<"file-distribution">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -123,32 +119,7 @@ find_query(<<"file">>, _Data) ->
 find_query(<<"file-shared">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 find_query(<<"file-public">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
-find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
-    SessionId = g_session:get_session_id(),
-    {ok, Distributions} = logical_file_manager:get_file_distribution(
-        SessionId, {guid, FileId}
-    ),
-    Res = lists:map(
-        fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks}) ->
-            BlocksList =
-                case Blocks of
-                    [] ->
-                        [0, 0];
-                    _ ->
-                        lists:foldl(
-                            fun([Offset, Size], Acc) ->
-                                Acc ++ [Offset, Offset + Size]
-                            end, [], Blocks)
-                end,
-            [
-                {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
-                {<<"fileId">>, FileId},
-                {<<"provider">>, ProviderId},
-                {<<"blocks">>, BlocksList}
-            ]
-        end, Distributions),
-    {ok, Res}.
+    gui_error:report_error(<<"Not iplemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -164,8 +135,6 @@ create_record(<<"file">>, _Data) ->
 create_record(<<"file-shared">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 create_record(<<"file-public">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
-create_record(<<"file-distribution">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -180,8 +149,6 @@ create_record(<<"file-distribution">>, _Data) ->
 update_record(<<"file-shared">>, _Id, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 update_record(<<"file-public">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
-update_record(<<"file-distribution">>, _Id, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 update_record(<<"file">>, FileId, Data) ->
     try
@@ -221,8 +188,6 @@ delete_record(<<"file-shared">>, _Id) ->
     gui_error:report_error(<<"Not iplemented">>);
 delete_record(<<"file-public">>, _Id) ->
     gui_error:report_error(<<"Not iplemented">>);
-delete_record(<<"file-distribution">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>);
 delete_record(<<"file">>, FileId) ->
     SessionId = g_session:get_session_id(),
     {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),
@@ -242,7 +207,7 @@ delete_record(<<"file">>, FileId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs a file record from given FileId.
+%% Constructs a file record for given FileId.
 %% @end
 %%--------------------------------------------------------------------
 -spec file_record(SessionId :: session:id(), fslogic_worker:file_guid()) ->
@@ -252,7 +217,7 @@ file_record(SessionId, FileId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs a file record from given FileId and ModelName. ModelName can be
+%% Constructs a file record for given FileId and ModelName. ModelName can be
 %% one of: file, file-shared, file-public.
 %% @end
 %%--------------------------------------------------------------------
@@ -264,14 +229,14 @@ file_record(ModelName, SessionId, FileId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs a file record from given FileId. The options ChildrenFromCache
+%% Constructs a file record for given ResourceId. The options ChildrenFromCache
 %% and ChildrenOffset (valid for dirs only) allow to specify that dir's
 %% children should be server from cache and what is the current offset in
 %% directory (essentially how many files from the dir are currently displayed
-%% in gui). ModelName can be one of: file, file-shared, file-public.
+%% in gui). ModelType can be one of: file, file-shared, file-public.
 %% @end
 %%--------------------------------------------------------------------
--spec file_record(ModelName :: binary(), SessionId :: session:id(),
+-spec file_record(ModelType :: binary(), SessionId :: session:id(),
     ResourceId :: binary(), ChildrenFromCache :: boolean(),
     ChildrenOffset :: non_neg_integer()) -> {ok, proplists:proplist()}.
 file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
@@ -322,10 +287,10 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
     ],
     {ok, Res};
 
-file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
+file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
     % Record Ids are different for different file models
     ?dump(ResId),
-    {ShareId, FileId} = case ModelName of
+    {ShareId, FileId} = case ModelType of
         <<"file">> ->
             {undefined, ResId};
         <<"file-", _/binary>> -> % Covers file-shared and file-public
@@ -348,7 +313,7 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
             {ok, ParentGuid} = logical_file_manager:get_parent(
                 SessionId, {guid, FileId}
             ),
-            Parent = case ModelName of
+            Parent = case ModelType of
                 <<"file">> ->
                     % Space root dir has no parent (null)
                     case get_user_root_dir_uuid() of
@@ -381,7 +346,7 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
                     {<<"file">>, SizeAttr, [], 0}
             end,
             % Depending on model name, convert IDs to associations
-            Children = case ModelName of
+            Children = case ModelType of
                 <<"file">> ->
                     ChildrenIds;
                 <<"file-", _/binary>> ->
@@ -394,7 +359,7 @@ file_record(ModelName, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
             % Currently only one share per file is allowed.
             % Share is always null for file-shared and file-public so as not to
             % show nested shares.
-            Share = case {ModelName, Shares} of
+            Share = case {ModelType, Shares} of
                 {<<"file">>, [ShId]} ->
                     ShId;
                 _ ->
@@ -481,28 +446,6 @@ fetch_more_dir_children(SessionId, Props) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Constructs a file acl record for given FileId.
-%% @end
-%%--------------------------------------------------------------------
--spec file_acl_record(SessionId :: session:id(), fslogic_worker:file_guid()) ->
-    {ok, proplists:proplist()}.
-file_acl_record(SessionId, FileId) ->
-    case logical_file_manager:get_acl(SessionId, {guid, FileId}) of
-        {error, ?ENOENT} ->
-            gui_error:report_error(<<"No such file or directory.">>);
-        {error, ?ENOATTR} ->
-            gui_error:report_error(<<"No ACL defined.">>);
-        {error, ?EACCES} ->
-            gui_error:report_error(<<"Cannot read ACL - access denied.">>);
-        {ok, Acl} ->
-            Res = acl_utils:acl_to_json(FileId, Acl),
-            {ok, Res}
-    end.
-
 
 %%--------------------------------------------------------------------
 %% @private
