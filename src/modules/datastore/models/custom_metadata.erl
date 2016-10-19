@@ -66,7 +66,7 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {space_id, binary},
+        {space_id, string},
         {value, {custom_value, {json_utils, encode_map, decode_map}}}
     ]}.
 

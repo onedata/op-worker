@@ -47,13 +47,13 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {name, binary},
-        {public_url, binary},
-        {space, binary},
-        {handle, binary},
-        {root_file, binary},
-        {eff_users, [binary]},
-        {eff_groups, [binary]},
+        {name, string},
+        {public_url, string},
+        {space, string},
+        {handle, string},
+        {root_file, string},
+        {eff_users, [string]},
+        {eff_groups, [string]},
         {revision_history, [term]}
     ]}.
 
