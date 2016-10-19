@@ -220,7 +220,7 @@ file_record(SessionId, FileId) ->
 %% one of: file, file-shared, file-public.
 %% @end
 %%--------------------------------------------------------------------
--spec file_record(ModelName :: binary, SessionId :: session:id(),
+-spec file_record(ModelName :: binary(), SessionId :: session:id(),
     fslogic_worker:file_guid()) -> {ok, proplists:proplist()}.
 file_record(ModelName, SessionId, FileId) ->
     file_record(ModelName, SessionId, FileId, false, 0).
@@ -475,7 +475,7 @@ get_user_root_dir_uuid() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ls_dir(SessionId :: session:id(), DirId :: fslogic_worker:file_guid()) ->
-    [{fslogic_worker:file_guid(), ChildrenCount :: non_neg_integer()}].
+    {[fslogic_worker:file_guid()], ChildrenCount :: non_neg_integer()}.
 ls_dir(SessionId, DirId) ->
     % Check LS chunk size
     {ok, ChildrenChunkSize} = application:get_env(
@@ -564,7 +564,7 @@ cache_ls_result(DirId, ChildrenSorted) ->
 %%--------------------------------------------------------------------
 -spec fetch_dir_children(DirId :: fslogic_worker:file_guid(),
     CurrentChildrenCount :: non_neg_integer()) ->
-    [{fslogic_worker:file_guid(), ChildrenCount :: non_neg_integer()}].
+    {[fslogic_worker:file_guid()], ChildrenCount :: non_neg_integer()}.
 fetch_dir_children(DirId, CurrentChildrenCount) ->
     LsSubCacheName = ls_sub_cache_name(),
     % Fetch total children count and number of chunks
