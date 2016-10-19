@@ -110,8 +110,21 @@ create_record(<<"file-acl">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"file-acl">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+update_record(<<"file-acl">>, FileId, Data) ->
+    try
+        SessionId = g_session:get_session_id(),
+        Acl = acl_utils:json_to_acl(Data),
+        case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
+            ok ->
+                ok;
+            {error, ?EACCES} ->
+                gui_error:report_warning(
+                    <<"Cannot change ACL - access denied.">>
+                )
+        end
+    catch _:_ ->
+        gui_error:report_warning(<<"Cannot change ACL.">>)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -121,8 +134,15 @@ update_record(<<"file-acl">>, _Id, _Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file-acl">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>).
+delete_record(<<"file-acl">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
+        ok ->
+            ok;
+        {error, ?EACCES} ->
+            gui_error:report_warning(
+                <<"Cannot remove ACL - access denied.">>)
+    end.
 
 
 %%%===================================================================

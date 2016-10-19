@@ -90,9 +90,6 @@ find(<<"file-shared">>, AssocId) ->
 find(<<"file-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
     file_record(<<"file-public">>, SessionId, AssocId);
-find(<<"file-acl">>, FileId) ->
-    SessionId = g_session:get_session_id(),
-    file_acl_record(SessionId, FileId);
 find(<<"file-distribution">>, _Id) ->
     gui_error:report_error(<<"Not iplemented">>).
 
@@ -109,8 +106,6 @@ find_all(<<"file">>) ->
 find_all(<<"file-shared">>) ->
     gui_error:report_error(<<"Not iplemented">>);
 find_all(<<"file-public">>) ->
-    gui_error:report_error(<<"Not iplemented">>);
-find_all(<<"file-acl">>) ->
     gui_error:report_error(<<"Not iplemented">>);
 find_all(<<"file-distribution">>) ->
     gui_error:report_error(<<"Not iplemented">>).
@@ -129,8 +124,6 @@ find_query(<<"file-shared">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 find_query(<<"file-public">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
-find_query(<<"file-acl">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = g_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(
@@ -173,15 +166,7 @@ create_record(<<"file-shared">>, _Data) ->
 create_record(<<"file-public">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 create_record(<<"file-distribution">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
-create_record(<<"file-acl">>, Data) ->
-    Id = proplists:get_value(<<"file">>, Data),
-    case update_record(<<"file-acl">>, Id, Data) of
-        ok ->
-            file_acl_record(?ROOT_SESS_ID, Id);
-        Error ->
-            Error
-    end.
+    gui_error:report_error(<<"Not iplemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -222,21 +207,6 @@ update_record(<<"file">>, FileId, Data) ->
         end
     catch _:_ ->
         gui_error:report_warning(<<"Cannot change permissions.">>)
-    end;
-update_record(<<"file-acl">>, FileId, Data) ->
-    try
-        SessionId = g_session:get_session_id(),
-        Acl = acl_utils:json_to_acl(Data),
-        case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
-            ok ->
-                ok;
-            {error, ?EACCES} ->
-                gui_error:report_warning(
-                    <<"Cannot change ACL - access denied.">>
-                )
-        end
-    catch _:_ ->
-        gui_error:report_warning(<<"Cannot change ACL.">>)
     end.
 
 
@@ -263,15 +233,6 @@ delete_record(<<"file">>, FileId) ->
         {error, ?EACCES} ->
             gui_error:report_warning(
                 <<"Cannot remove file or directory - access denied.">>)
-    end;
-delete_record(<<"file-acl">>, FileId) ->
-    SessionId = g_session:get_session_id(),
-    case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
-        ok ->
-            ok;
-        {error, ?EACCES} ->
-            gui_error:report_warning(
-                <<"Cannot remove ACL - access denied.">>)
     end.
 
 
