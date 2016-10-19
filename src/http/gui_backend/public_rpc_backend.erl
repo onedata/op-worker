@@ -55,4 +55,3 @@ handle(<<"fetchMoreDirChildren">>, Props) ->
 
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).
-

@@ -166,7 +166,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
             case share_logic:set_name(UserAuth, ShareId, NewName) of
                 ok ->
                     % Push container dir as its name has also changed.
-                    {ok, FileData} = find(
+                    {ok, FileData} = file_data_backend:find(
                         <<"file-shared">>, <<"containerDir.", ShareId/binary>>
                     ),
                     FileDataNewName = lists:keyreplace(

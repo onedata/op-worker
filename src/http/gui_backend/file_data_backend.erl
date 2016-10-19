@@ -46,7 +46,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    ?dump({init, g_session:get_session_id()}),
     NewETS = ets:new(?LS_SUB_CACHE_ETS, [
         set, public,
         {read_concurrency, true},
@@ -289,7 +288,6 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
 
 file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
     % Record Ids are different for different file models
-    ?dump(ResId),
     {ShareId, FileId} = case ModelType of
         <<"file">> ->
             {undefined, ResId};
@@ -392,7 +390,6 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Creates a new file. Automatically adds the file to LS cache of parent dir
 %% and pushes the update of parent dir children list to the client.
@@ -430,6 +427,16 @@ create_file(SessionId, Name, ParentId, Type) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns directory record with more children than was returned recently.
+%% This mechanism allows to dynamically load files when scrolling rather than
+%% return the whole list at once.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_more_dir_children(SessionId :: session:id(),
+    Props :: proplists:proplist()) ->
+    {ok, proplists:proplist()} | {error, term()}.
 fetch_more_dir_children(SessionId, Props) ->
     DirId = proplists:get_value(<<"dirId">>, Props),
     CurrentChCount = proplists:get_value(<<"currentChildrenCount">>, Props),
@@ -458,39 +465,6 @@ get_user_root_dir_uuid() ->
     fslogic_uuid:uuid_to_guid(
         fslogic_uuid:user_root_dir_uuid(
             g_session:get_user_id())).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Lists all children of given directory, sorts them by name, caches the result
-%% and returns the first chunk of file children.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_dir_children(DirId :: fslogic_worker:file_guid(),
-    CurrentChildrenCount :: non_neg_integer()) ->
-    [{fslogic_worker:file_guid(), ChildrenCount :: non_neg_integer()}].
-fetch_dir_children(DirId, CurrentChildrenCount) ->
-    LsSubCacheName = ls_sub_cache_name(),
-    % Fetch total children count and number of chunks
-    [{{DirId, size}, TotalChildrenCount}] = ets:lookup(
-        LsSubCacheName, {DirId, size}
-    ),
-    % Check LS chunk size
-    {ok, ChildrenChunkSize} = application:get_env(
-        ?APP_NAME, gui_file_children_chunk_size
-    ),
-    % Cache the last known client's children count
-    ets:insert(
-        LsSubCacheName, {{DirId, last_children_count}, CurrentChildrenCount}
-    ),
-    [{{DirId, children}, Children}] = ets:lookup(
-        LsSubCacheName, {DirId, children}
-    ),
-    {
-        lists:sublist(Children, CurrentChildrenCount + ChildrenChunkSize),
-        TotalChildrenCount
-    }.
 
 
 %%--------------------------------------------------------------------
@@ -548,7 +522,7 @@ ls_dir(SessionId, DirId) ->
 -spec ls_dir_chunked(SessionId :: session:id(),
     DirId :: fslogic_worker:file_guid(), Offset :: non_neg_integer(),
     Limit :: non_neg_integer(), Result :: [fslogic_worker:file_guid()]) ->
-    [fslogic_worker:file_guid()].
+    [{fslogic_worker:file_guid(), file_meta:name()}].
 ls_dir_chunked(SessionId, DirId, Offset, Limit, Result) ->
     {ok, LS} = logical_file_manager:ls(SessionId, {guid, DirId}, Offset, Limit),
     NewResult = Result ++ LS,
@@ -585,9 +559,43 @@ cache_ls_result(DirId, ChildrenSorted) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Adds a newly created file to LS cache. New files are always prepended to the
-%% beginning of the file list. The file stay at this place till new websocket
-%% session is initialized (user refreshes the page).
+%% Fetches a list of dir children from LS cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_dir_children(DirId :: fslogic_worker:file_guid(),
+    CurrentChildrenCount :: non_neg_integer()) ->
+    [{fslogic_worker:file_guid(), ChildrenCount :: non_neg_integer()}].
+fetch_dir_children(DirId, CurrentChildrenCount) ->
+    LsSubCacheName = ls_sub_cache_name(),
+    % Fetch total children count and number of chunks
+    [{{DirId, size}, TotalChildrenCount}] = ets:lookup(
+        LsSubCacheName, {DirId, size}
+    ),
+    % Check LS chunk size
+    {ok, ChildrenChunkSize} = application:get_env(
+        ?APP_NAME, gui_file_children_chunk_size
+    ),
+    % Cache the last known client's children count
+    ets:insert(
+        LsSubCacheName, {{DirId, last_children_count}, CurrentChildrenCount}
+    ),
+    [{{DirId, children}, Children}] = ets:lookup(
+        LsSubCacheName, {DirId, children}
+    ),
+    {
+        lists:sublist(Children, CurrentChildrenCount + ChildrenChunkSize),
+        TotalChildrenCount
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Modifies LS cache by adding a newly created file or deleting a recently
+%% removed file.
+%% New files are always prepended to the beginning of the file list.
+%% The file stay at this place till new websocket session is initialized
+%% (user refreshes the page).
 %% @end
 %%--------------------------------------------------------------------
 -spec modify_ls_cache(SessionId :: session:id(), Operation :: add | remove,
