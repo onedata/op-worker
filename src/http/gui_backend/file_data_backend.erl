@@ -592,7 +592,7 @@ cache_ls_result(DirId, ChildrenSorted) ->
 %%--------------------------------------------------------------------
 -spec modify_ls_cache(SessionId :: session:id(), Operation :: add | remove,
     FileId :: fslogic_worker:file_guid(),
-    DirId :: fslogic_worker:file_guid()) -> integer().
+    DirId :: fslogic_worker:file_guid()) -> {ok, proplists:proplist()}.
 modify_ls_cache(SessionId, Operation, FileId, DirId) ->
     LsSubCacheName = ls_sub_cache_name(),
     % Lookup current values in cache
