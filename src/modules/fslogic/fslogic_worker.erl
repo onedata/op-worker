@@ -42,7 +42,7 @@
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 -type request_type() :: fuse_request | file_request | provider_request
-    | proxyio_request.
+| proxyio_request.
 
 -export_type([ctx/0, file/0, ext_file/0, open_flags/0, posix_permissions/0,
     file_guid/0, file_guid_or_path/0, request_type/0]).
@@ -94,14 +94,14 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
     Request ::
-        ping |
-        healthcheck |
-        {fuse_request, SessId :: session:id(), FuseRequest :: #fuse_request{}} |
-        {file_request, SessId :: session:id(), FileRequest :: #file_request{}} |
-        {provider_request, SessId :: session:id(), ProviderRequest :: #provider_request{}} |
-        {proxyio_request, SessId :: session:id(), ProxyIORequest :: #proxyio_request{}},
+    ping |
+    healthcheck |
+    {fuse_request, SessId :: session:id(), FuseRequest :: #fuse_request{}} |
+    {file_request, SessId :: session:id(), FileRequest :: #file_request{}} |
+    {provider_request, SessId :: session:id(), ProviderRequest :: #provider_request{}} |
+    {proxyio_request, SessId :: session:id(), ProxyIORequest :: #proxyio_request{}},
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
-        {error, Reason} | pong,
+    {error, Reason} | pong,
     Response :: term(),
     Reason :: term().
 handle(ping) ->
@@ -202,23 +202,24 @@ run_and_catch_exceptions(Function, Context, Request, RequestType) ->
                             {error, {Type, Reason0}}
                     end,
                 case fslogic_remote:postrouting(NextCTX, PrePostProcessResponse, UpdatedRequest) of
-                    undefined -> throw({unable_to_reroute_message, PrePostProcessResponse});
+                    undefined ->
+                        throw({unable_to_reroute_message, PrePostProcessResponse});
                     LocalResponse -> LocalResponse
                 end
         end
     catch
         Reason ->
             %% Manually thrown error, normal interrupt case.
-            report_error(Request, RequestType, Reason, debug);
+            report_error(Request, RequestType, Reason, debug, erlang:get_stacktrace());
         error:{badmatch, Reason} ->
             %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
-            report_error(Request, RequestType, Reason, warning);
+            report_error(Request, RequestType, Reason, warning, erlang:get_stacktrace());
         error:{case_clause, Reason} ->
             %% Case Clause assertion - something went seriously wrong and we should know about it.
-            report_error(Request, RequestType, Reason, error);
+            report_error(Request, RequestType, Reason, error, erlang:get_stacktrace());
         error:Reason ->
             %% Something went horribly wrong. This should not happen.
-            report_error(Request, RequestType, Reason, error)
+            report_error(Request, RequestType, Reason, error, erlang:get_stacktrace())
     end.
 
 %%--------------------------------------------------------------------
@@ -284,10 +285,9 @@ change_file_in_request(Request, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec report_error(Request :: any(), Type :: request_type(), Error :: term(),
-    LogLevel :: debug | warning | error) ->
+    LogLevel :: debug | warning | error, Stacktrace :: term()) ->
     #fuse_response{} | #provider_response{} | #proxyio_response{}.
-report_error(Request, RequestType, Error, LogLevel) ->
-    Stacktrace = erlang:get_stacktrace(),
+report_error(Request, RequestType, Error, LogLevel, Stacktrace) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
     MsgFormat =
@@ -475,7 +475,8 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     end, Evts),
 
     case Ctx of
-        #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?OK}});
+        #{notify := NotifyFun} ->
+            NotifyFun(#server_message{message_body = #status{code = ?OK}});
         _ -> ok
     end,
 
@@ -494,32 +495,32 @@ handle_write_event(Event, SessId) ->
     #event{object = #write_event{size = Size, blocks = Blocks,
         file_uuid = FileGUID, file_size = FileSize}, counter = Counter} = Event,
 
-        {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
-        {ok, #document{value = #session{identity = #user_identity{
-            user_id = UserId}}}} = session:get(SessId),
-        monitoring_event:emit_write_statistics(SpaceId, UserId, Size, Counter),
+    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
+    {ok, #document{value = #session{identity = #user_identity{
+        user_id = UserId}}}} = session:get(SessId),
+    monitoring_event:emit_write_statistics(SpaceId, UserId, Size, Counter),
 
-        UpdatedBlocks = lists:map(fun(#file_block{file_id = FileId, storage_id = StorageId} = Block) ->
-            {ValidFileId, ValidStorageId} = file_location:validate_block_data(FileUUID, FileId, StorageId),
-            Block#file_block{file_id = ValidFileId, storage_id = ValidStorageId}
-        end, Blocks),
+    UpdatedBlocks = lists:map(fun(#file_block{file_id = FileId, storage_id = StorageId} = Block) ->
+        {ValidFileId, ValidStorageId} = file_location:validate_block_data(FileUUID, FileId, StorageId),
+        Block#file_block{file_id = ValidFileId, storage_id = ValidStorageId}
+    end, Blocks),
 
-        case replica_updater:update(FileUUID, UpdatedBlocks, FileSize, true, undefined) of
-            {ok, size_changed} ->
-                {ok, #document{value = #session{identity = #user_identity{
-                    user_id = UserId}}}} = session:get(SessId),
-                fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
-                fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
-                fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
-            {ok, size_not_changed} ->
-                {ok, #document{value = #session{identity = #user_identity{
-                    user_id = UserId}}}} = session:get(SessId),
-                fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
-                fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
-            {error, Reason} ->
-                ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason]),
-                {error, Reason}
-        end.
+    case replica_updater:update(FileUUID, UpdatedBlocks, FileSize, true, undefined) of
+        {ok, size_changed} ->
+            {ok, #document{value = #session{identity = #user_identity{
+                user_id = UserId}}}} = session:get(SessId),
+            fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
+            fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
+            fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
+        {ok, size_not_changed} ->
+            {ok, #document{value = #session{identity = #user_identity{
+                user_id = UserId}}}} = session:get(SessId),
+            fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
+            fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
+        {error, Reason} ->
+            ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason]),
+            {error, Reason}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -581,7 +582,7 @@ handle_file_accessed_events(Evts, #{session_id := SessId}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{}
-    | #file_request{} | #provider_request{} | #proxyio_request{}) ->
+| #file_request{} | #provider_request{} | #proxyio_request{}) ->
     {file, file_meta:entry() | {guid, fslogic_worker:file_guid()}} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
