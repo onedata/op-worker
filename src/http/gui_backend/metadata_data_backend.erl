@@ -83,7 +83,7 @@ find(ModelType, ResourceId) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 %% ModelType covers: file-property, file-property-shared.
 find_all(_ModelType) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------

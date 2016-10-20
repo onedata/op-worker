@@ -99,11 +99,11 @@ find(<<"file-public">>, AssocId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"file">>) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 find_all(<<"file-shared">>) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 find_all(<<"file-public">>) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -116,9 +116,9 @@ find_all(<<"file-public">>) ->
 find_query(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 find_query(<<"file-shared">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 find_query(<<"file-public">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -132,9 +132,9 @@ create_record(<<"file">>, _Data) ->
     % Files are created via an RPC call
     gui_error:report_error(<<"Not implemented">>);
 create_record(<<"file-shared">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 create_record(<<"file-public">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -146,9 +146,9 @@ create_record(<<"file-public">>, _Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(<<"file-shared">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file-public">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file">>, FileId, Data) ->
     try
         SessionId = g_session:get_session_id(),
@@ -184,9 +184,9 @@ update_record(<<"file">>, FileId, Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"file-shared">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"file-public">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"file">>, FileId) ->
     SessionId = g_session:get_session_id(),
     {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),

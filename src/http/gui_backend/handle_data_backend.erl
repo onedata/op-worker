@@ -75,7 +75,7 @@ find(ModelType, HandleId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(_) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -86,7 +86,7 @@ find_all(_) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(_, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -97,7 +97,7 @@ find_query(_, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"handle-public">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 create_record(<<"handle">>, Data) ->
     Auth = op_gui_utils:get_user_auth(),
     HandleServiceId = proplists:get_value(<<"handleService">>, Data, <<"">>),
@@ -132,7 +132,7 @@ create_record(<<"handle">>, Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(_, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -143,7 +143,7 @@ update_record(_, _Id, _Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(_, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 handle_record(ModelType, Auth, HandleId) ->

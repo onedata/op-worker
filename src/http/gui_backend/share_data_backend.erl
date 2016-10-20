@@ -91,7 +91,7 @@ find(ModelType, ShareId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"share-public">>) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 find_all(<<"share">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
@@ -130,7 +130,7 @@ find_all(<<"share">>) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(_, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -141,7 +141,7 @@ find_query(_, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(_, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -153,7 +153,7 @@ create_record(_, _Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(<<"share-public">>, _ShareId, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
     UserAuth = op_gui_utils:get_user_auth(),
     case Name of
@@ -192,7 +192,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"share-public">>, _ShareId) ->
-    gui_error:report_error(<<"Not iplemented">>);
+    gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"share">>, ShareId) ->
     SessionId = g_session:get_session_id(),
     case logical_file_manager:remove_share(SessionId, ShareId) of
