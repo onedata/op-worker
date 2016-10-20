@@ -22,9 +22,11 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1, many_files_creation_tree_test_base/1]).
+-export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1, many_files_creation_tree_test_base/1,
+    single_dir_creation_test/1, single_dir_creation_test_base/1]).
+-export([create_single_call/3]).
 
--define(STRESS_CASES, []).
+-define(STRESS_CASES, [single_dir_creation_test]).
 -define(STRESS_NO_CLEARING_CASES, [
     many_files_creation_tree_test
 ]).
@@ -49,6 +51,54 @@ stress_test_base(Config) ->
     ?STRESS_TEST_BASE(Config).
 
 %%%===================================================================
+
+single_dir_creation_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {parameters, [
+            [{name, files_num}, {value, 10000}, {description, ""}]
+        ]},
+        {description, ""}
+    ]).
+single_dir_creation_test_base(Config) ->
+    FilesNum = ?config(files_num, Config),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    User = <<"user1">>,
+
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+
+    MainDir = generator:gen_name(),
+    Dir = <<SpaceName/binary, "/", MainDir/binary>>,
+
+    case lfm_proxy:mkdir(Worker, SessId, Dir, 8#755) of
+        {ok, _} ->
+            {SaveOk, SaveTime, SError, SErrorTime} =
+                rpc:call(Worker, ?MODULE, create_single_call, [SessId, Dir, FilesNum]),
+
+            {DelOk, DelTime, DError, DErrorTime} = lists:foldl(fun(N, {OkNum, OkTime, ErrorNum, ErrorTime}) ->
+                {T, A} = measure_execution_time(fun() ->
+                    N2 = integer_to_binary(N),
+                    File = <<Dir/binary, "/", N2/binary>>,
+                    lfm_proxy:unlink(Worker, SessId, File)
+                end),
+                case A of
+                    {ok, _} ->
+                        {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
+                    _ ->
+                        {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
+                end
+            end, {0,0,0,0}, lists:seq(1,FilesNum)),
+
+            SaveAvgTime = get_avg(SaveOk, SaveTime),
+            SErrorAvgTime = get_avg(SError, SErrorTime),
+            DelAvgTime = get_avg(DelOk, DelTime),
+            DErrorAvgTime = get_avg(DError, DErrorTime),
+
+            get_final_ans(SaveOk, SaveAvgTime, SError, SErrorAvgTime, DelOk, DelAvgTime, DError, DErrorAvgTime, 0);
+        _ ->
+            get_final_ans(0,0,0,0,0,0,0,0,1)
+    end.
 
 many_files_creation_tree_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -183,7 +233,7 @@ many_files_creation_tree_test_base(Config) ->
             DirsAvgTime = get_avg(DirsSaved, DirsTime),
             {OtherAns, OtherTime} = proplists:get_value(other, Ans, {0,0}),
             OtherAvgTime = get_avg(OtherAns, OtherTime),
-            FinalAns = get_final_ans(Worker, FilesSaved, FilesAvgTime, DirsSaved,
+            FinalAns = get_final_ans_tree(Worker, FilesSaved, FilesAvgTime, DirsSaved,
                 DirsAvgTime, OtherAns, OtherAvgTime, 0, Timeout),
 
             case NewLevels of
@@ -195,7 +245,7 @@ many_files_creation_tree_test_base(Config) ->
             end;
         _ ->
             timer:sleep(timer:seconds(10)),
-            get_final_ans(Worker, 0, 0, 0, 0, 0,0, 1, 0)
+            get_final_ans_tree(Worker, 0, 0, 0, 0, 0,0, 1, 0)
     end.
 
 %%%===================================================================
@@ -300,7 +350,7 @@ get_avg(Num, Timw) ->
         _ -> Timw/Num
     end.
 
-get_final_ans(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, InitFailed, Timeout) ->
+get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, InitFailed, Timeout) ->
     Mem = case rpc:call(Worker, monitoring, get_memory_stats, []) of
         [{<<"mem">>, MemUsage}] ->
             MemUsage;
@@ -322,3 +372,36 @@ get_final_ans(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, Othe
         #parameter{name = init_failed, value = InitFailed, description = ""},
         #parameter{name = timeout, value = Timeout, description = ""}
     ].
+
+get_final_ans(Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed) ->
+    ct:print("Repeat log: ~p", [{Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed}]),
+    [
+        #parameter{name = saved, value = Saved, description = ""},
+        #parameter{name = save_avg_time, value = SaveTime, unit = "us",
+            description = ""},
+        #parameter{name = save_error_ans_count, value = SErrors, description = ""},
+        #parameter{name = save_error_ans_count_avg_time, value = SErrorsTime, unit = "us",
+            description = ""},
+        #parameter{name = deleted, value = Deleted, description = ""},
+        #parameter{name = del_avg_time, value = DelTime, unit = "us",
+            description = ""},
+        #parameter{name = del_error_ans_count, value = DErrors, description = ""},
+        #parameter{name = del_error_ans_count_avg_time, value = DErrorsTime, unit = "us",
+            description = ""},
+        #parameter{name = init_failed, value = InitFailed, description = ""}
+    ].
+
+create_single_call(SessId, Dir, FilesNum) ->
+    lists:foldl(fun(N, {OkNum, OkTime, ErrorNum, ErrorTime}) ->
+        {T, A} = measure_execution_time(fun() ->
+            N2 = integer_to_binary(N),
+            File = <<Dir/binary, "/", N2/binary>>,
+            logical_file_manager:create(SessId, File)
+        end),
+        case A of
+            {ok, _} ->
+                {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
+            _ ->
+                {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
+        end
+    end, {0,0,0,0}, lists:seq(1,FilesNum)).
