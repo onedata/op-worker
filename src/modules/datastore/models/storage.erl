@@ -47,8 +47,8 @@ record_struct(1) ->
     {record, [
         {name, binary},
         {helpers, [{record, 1, [
-            {name, binary},
-            {args, #{binary => binary}}
+            {name, string},
+            {args, #{string => string}}
         ]}]}
     ]}.
 

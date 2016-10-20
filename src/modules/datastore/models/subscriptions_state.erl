@@ -34,7 +34,7 @@ record_struct(1) ->
         {refreshing_node, atom},
         {largest, integer},
         {missing, [integer]},
-        {users, {set, binary}}
+        {users, {set, string}}
     ]}.
 
 
