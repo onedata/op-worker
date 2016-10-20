@@ -80,10 +80,10 @@ single_dir_creation_test_base(Config) ->
                 {T, A} = measure_execution_time(fun() ->
                     N2 = integer_to_binary(N),
                     File = <<Dir/binary, "/", N2/binary>>,
-                    lfm_proxy:unlink(Worker, SessId, File)
+                    lfm_proxy:unlink(Worker, SessId, {path, File})
                 end),
                 case A of
-                    {ok, _} ->
+                    ok ->
                         {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
                     _ ->
                         {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
