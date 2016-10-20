@@ -146,6 +146,14 @@ delete_record(_, _Id) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a handle record for given HandleId, depending on given Auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_record(ModelType :: binary(), Auth :: term(),
+    HandleId :: binary()) -> {ok, proplists:proplist()}.
 handle_record(ModelType, Auth, HandleId) ->
     {ok, #document{value = #od_handle{
         handle_service = HandleServiceId,

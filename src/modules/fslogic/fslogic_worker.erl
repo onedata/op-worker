@@ -41,8 +41,8 @@
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
--type request_type() :: fuse_request | file_request | provider_request
-| proxyio_request.
+-type request_type() :: fuse_request | file_request | provider_request |
+    proxyio_request.
 
 -export_type([ctx/0, file/0, ext_file/0, open_flags/0, posix_permissions/0,
     file_guid/0, file_guid_or_path/0, request_type/0]).
