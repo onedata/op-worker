@@ -55,9 +55,9 @@ stress_test_base(Config) ->
 single_dir_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, files_num}, {value, 10000}, {description, ""}]
+            [{name, files_num}, {value, 10000}, {description, "Numer of files in dir"}]
         ]},
-        {description, ""}
+        {description, "Creates files in dir using single process"}
     ]).
 single_dir_creation_test_base(Config) ->
     FilesNum = ?config(files_num, Config),
@@ -103,13 +103,13 @@ single_dir_creation_test_base(Config) ->
 many_files_creation_tree_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, spawn_beg_level}, {value, 4}, {description, ""}],
-            [{name, spawn_end_level}, {value, 5}, {description, ""}],
+            [{name, spawn_beg_level}, {value, 4}, {description, "Level of tree to start spawning processes"}],
+            [{name, spawn_end_level}, {value, 5}, {description, "Level of tree to stop spawning processes"}],
             [{name, dir_level}, {value, 6}, {description, "Level of last test directory"}],
-            [{name, dirs_per_parent}, {value, 6}, {description, ""}],
+            [{name, dirs_per_parent}, {value, 6}, {description, "Child directories in single dir"}],
             [{name, files_per_dir}, {value, 40}, {description, "Number of files in single directory"}]
         ]},
-        {description, ""}
+        {description, "Creates directories' and files' tree using multiple process"}
     ]).
 many_files_creation_tree_test_base(Config) ->
     % Get test and environment description
@@ -357,38 +357,38 @@ get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns,
         _ ->
             -1
     end,
-    ct:print("Repeat log: ~p", [{FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, Mem, InitFailed, Timeout}]),
+%%    ct:print("Repeat log: ~p", [{FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, Mem, InitFailed, Timeout}]),
     [
-        #parameter{name = files_saved, value = FilesSaved, description = ""},
+        #parameter{name = files_saved, value = FilesSaved, description = "Number of files saved"},
         #parameter{name = file_save_avg_time, value = FilesTime, unit = "us",
-            description = ""},
-        #parameter{name = dirs_saved, value = DirsSaved, description = ""},
+            description = "Average time of file save operation"},
+        #parameter{name = dirs_saved, value = DirsSaved, description = "Number of dirs saved"},
         #parameter{name = dirs_save_avg_time, value = DirsTime, unit = "us",
-            description = ""},
-        #parameter{name = error_ans_count, value = OtherAns, description = ""},
+            description = "Average time of dir save operation"},
+        #parameter{name = error_ans_count, value = OtherAns, description = "Number of errors"},
         #parameter{name = error_ans_count_avg_time, value = OtherTime, unit = "us",
-            description = ""},
-        #parameter{name = memory, value = Mem, description = ""},
-        #parameter{name = init_failed, value = InitFailed, description = ""},
-        #parameter{name = timeout, value = Timeout, description = ""}
+            description = "Average time of operation that ended with error"},
+        #parameter{name = memory, value = Mem, description = "Memory usage after the test"},
+        #parameter{name = init_failed, value = InitFailed, description = "Has first phase of test failed (1 = true)"},
+        #parameter{name = timeout, value = Timeout, description = "Has any timeout appeared (1 = true)"}
     ].
 
 get_final_ans(Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed) ->
-    ct:print("Repeat log: ~p", [{Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed}]),
+%%    ct:print("Repeat log: ~p", [{Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed}]),
     [
-        #parameter{name = saved, value = Saved, description = ""},
+        #parameter{name = saved, value = Saved, description = "Number of save operations that succed"},
         #parameter{name = save_avg_time, value = SaveTime, unit = "us",
-            description = ""},
-        #parameter{name = save_error_ans_count, value = SErrors, description = ""},
+            description = "Average time of successful save operation"},
+        #parameter{name = save_error_ans_count, value = SErrors, description = "Number of save errors"},
         #parameter{name = save_error_ans_count_avg_time, value = SErrorsTime, unit = "us",
-            description = ""},
-        #parameter{name = deleted, value = Deleted, description = ""},
+            description = "Average time of save operation that ended with error"},
+        #parameter{name = deleted, value = Deleted, description = "Number of del operations that succed"},
         #parameter{name = del_avg_time, value = DelTime, unit = "us",
-            description = ""},
-        #parameter{name = del_error_ans_count, value = DErrors, description = ""},
+            description = "Average time of successful del operation"},
+        #parameter{name = del_error_ans_count, value = DErrors, description = "Number of del errors"},
         #parameter{name = del_error_ans_count_avg_time, value = DErrorsTime, unit = "us",
-            description = ""},
-        #parameter{name = init_failed, value = InitFailed, description = ""}
+            description = "Average time of del operation that ended with error"},
+        #parameter{name = init_failed, value = InitFailed, description = "Has first phase of test failed (1 = true)"}
     ].
 
 create_single_call(SessId, Dir, FilesNum) ->
