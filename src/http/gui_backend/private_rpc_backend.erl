@@ -38,19 +38,14 @@
 %%--------------------------------------------------------------------
 handle(<<"fileUploadSuccess">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
+    ParentId = proplists:get_value(<<"parentId">>, Props),
     FileId = upload_handler:upload_map_lookup(UploadId),
     upload_handler:upload_map_delete(UploadId),
-    % @todo VFS-2051 temporary solution for model pushing during upload
-    SessionId = g_session:get_session_id(),
-    % This is sent to the client via sessionDetails object
-    {ok, FileHandle} =
-        logical_file_manager:open(SessionId, {guid, FileId}, read),
-    ok = logical_file_manager:fsync(FileHandle),
-    ok = logical_file_manager:release(FileHandle),
-    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
-    gui_async:push_created(<<"file">>, FileData),
-    % @todo end
-    ok;
+    file_data_backend:report_file_upload(FileId, ParentId);
+
+handle(<<"fileBatchUploadComplete">>, Props) ->
+    ParentId = proplists:get_value(<<"parentId">>, Props),
+    file_data_backend:report_file_batch_complete(ParentId);
 
 handle(<<"fileUploadFailure">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),

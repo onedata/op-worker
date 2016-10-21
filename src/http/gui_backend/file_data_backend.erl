@@ -33,7 +33,8 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 %% API
 -export([file_record/2, file_record/3, file_record/5]).
--export([create_file/4, fetch_more_dir_children/2]).
+-export([create_file/4, report_file_upload/2, report_file_batch_complete/1]).
+-export([fetch_more_dir_children/2]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -192,7 +193,7 @@ delete_record(<<"file">>, FileId) ->
     {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
-            modify_ls_cache(SessionId, remove, FileId, ParentId),
+            modify_ls_cache(remove, FileId, ParentId),
             ok;
         {error, ?EACCES} ->
             gui_error:report_warning(
@@ -286,7 +287,7 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
     ],
     {ok, Res};
 
-file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
+file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
     % Record Ids are different for different file models
     {ShareId, FileId} = case ModelType of
         <<"file">> ->
@@ -337,7 +338,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenOffset) ->
                         false ->
                             ls_dir(SessionId, FileId);
                         true ->
-                            fetch_dir_children(FileId, ChildrenOffset)
+                            fetch_dir_children(FileId, ChildrenLimit)
                     end,
                     {<<"dir">>, 0, ChildrenList, TotalCount};
                 _ ->
@@ -411,7 +412,10 @@ create_file(SessionId, Name, ParentId, Type) ->
                 {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
                 DirId
         end,
-        {ok, FileData} = modify_ls_cache(SessionId, add, FileId, ParentId),
+        NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
+        {ok, FileData} = file_record(
+            <<"file">>, SessionId, FileId, true, NewChildrenCount
+        ),
         gui_async:push_updated(<<"file">>, FileData),
         {ok, FileId}
     catch Error:Message ->
@@ -429,6 +433,39 @@ create_file(SessionId, Name, ParentId, Type) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates LS cache, should be called after a file has been
+%% successfully uploaded.
+%% @end
+%%--------------------------------------------------------------------
+-spec report_file_upload(FileId :: fslogic_worker:file_guid(),
+    ParentId :: fslogic_worker:file_guid()) -> ok.
+report_file_upload(FileId, ParentId) ->
+    modify_ls_cache(add, FileId, ParentId),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Should be called after a whole upload has finished, pushes new parent
+%% dir children to the client.
+%% @end
+%%--------------------------------------------------------------------
+-spec report_file_batch_complete(DirId :: fslogic_worker:file_guid()) -> ok.
+report_file_batch_complete(DirId) ->
+    SessionId = g_session:get_session_id(),
+    LsSubCacheName = ls_sub_cache_name(),
+    [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
+        LsSubCacheName, {DirId, last_children_count}
+    ),
+    {ok, FileData} = file_record(
+        <<"file">>, SessionId, DirId, true, LastChCount
+    ),
+    gui_async:push_updated(<<"file">>, FileData),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns directory record with more children than was returned recently.
 %% This mechanism allows to dynamically load files when scrolling rather than
 %% return the whole list at once.
@@ -442,8 +479,12 @@ fetch_more_dir_children(SessionId, Props) ->
     CurrentChCount = proplists:get_value(<<"currentChildrenCount">>, Props),
     % FileModelType is one of file, file-shared or file-public
     FileModelType = proplists:get_value(<<"fileModelType">>, Props),
+    % Check LS chunk size
+    {ok, ChChunkSize} = application:get_env(
+        ?APP_NAME, gui_file_children_chunk_size
+    ),
     {ok, FileData} = file_data_backend:file_record(
-        FileModelType, SessionId, DirId, true, CurrentChCount
+        FileModelType, SessionId, DirId, true, CurrentChCount + ChChunkSize
     ),
     NewChCount = proplists:get_value(<<"children">>, FileData),
     gui_async:push_updated(FileModelType, FileData),
@@ -563,27 +604,23 @@ cache_ls_result(DirId, ChildrenSorted) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_dir_children(DirId :: fslogic_worker:file_guid(),
-    CurrentChildrenCount :: non_neg_integer()) ->
+    ChildrenLimit :: non_neg_integer()) ->
     {[fslogic_worker:file_guid()], ChildrenCount :: non_neg_integer()}.
-fetch_dir_children(DirId, CurrentChildrenCount) ->
+fetch_dir_children(DirId, ChildrenLimit) ->
     LsSubCacheName = ls_sub_cache_name(),
     % Fetch total children count and number of chunks
     [{{DirId, size}, TotalChildrenCount}] = ets:lookup(
         LsSubCacheName, {DirId, size}
     ),
-    % Check LS chunk size
-    {ok, ChildrenChunkSize} = application:get_env(
-        ?APP_NAME, gui_file_children_chunk_size
-    ),
     % Cache the last known client's children count
     ets:insert(
-        LsSubCacheName, {{DirId, last_children_count}, CurrentChildrenCount}
+        LsSubCacheName, {{DirId, last_children_count}, ChildrenLimit}
     ),
     [{{DirId, children}, Children}] = ets:lookup(
         LsSubCacheName, {DirId, children}
     ),
     {
-        lists:sublist(Children, CurrentChildrenCount + ChildrenChunkSize),
+        lists:sublist(Children, ChildrenLimit),
         TotalChildrenCount
     }.
 
@@ -598,10 +635,10 @@ fetch_dir_children(DirId, CurrentChildrenCount) ->
 %% (user refreshes the page).
 %% @end
 %%--------------------------------------------------------------------
--spec modify_ls_cache(SessionId :: session:id(), Operation :: add | remove,
+-spec modify_ls_cache(Operation :: add | remove,
     FileId :: fslogic_worker:file_guid(),
-    DirId :: fslogic_worker:file_guid()) -> {ok, proplists:proplist()}.
-modify_ls_cache(SessionId, Operation, FileId, DirId) ->
+    DirId :: fslogic_worker:file_guid()) -> non_neg_integer().
+modify_ls_cache(Operation, FileId, DirId) ->
     LsSubCacheName = ls_sub_cache_name(),
     % Lookup current values in cache
     [{{DirId, children}, CurrentChildren}] = ets:lookup(
@@ -628,8 +665,7 @@ modify_ls_cache(SessionId, Operation, FileId, DirId) ->
     ets:insert(
         LsSubCacheName, {{DirId, last_children_count}, NewLastChildrenCount}
     ),
-    % Return the directory record that accounts the changes.
-    file_record(<<"file">>, SessionId, DirId, true, NewLastChildrenCount).
+    NewLastChildrenCount.
 
 
 %%--------------------------------------------------------------------
