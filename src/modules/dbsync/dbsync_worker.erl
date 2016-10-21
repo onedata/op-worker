@@ -523,7 +523,7 @@ forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewR
             end,
             forign_links_get(ModelConfig, Key);
         Error ->
-            ?error("Unable to save forign links document (key ~p) due to ~p", [Key, Error]),
+            ?error("Unable to save forign links document ~p due to ~p", [Doc, Error]),
             Error
     end.
 
