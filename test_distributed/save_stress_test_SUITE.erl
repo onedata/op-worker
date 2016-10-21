@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This SUITE contains stress test for single provider.
+%%% This SUITE contains save stress test for single provider. SUITE tests
+%%% creation of large dir by single process and tree of dirs by many processes.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(save_stress_test_SUITE).
