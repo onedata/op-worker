@@ -106,14 +106,14 @@ echo_loop_test(Config) ->
         {repeats, ?REPEATS},
         {success_rate, ?SUCCESS_RATE},
         {parameters, [
-            [{name, writes_num}, {value, 1000}, {description, ""}]
+            [{name, writes_num}, {value, 1000}, {description, "Number of write operations during "}]
         ]},
-        {description, ""},
+        {description, "Simulates loop of echo operations done by client"},
         {config, [{name, performance},
             {parameters, [
-                [{name, writes_num}, {value, 10000}, {description, ""}]
+                [{name, writes_num}, {value, 10000}]
             ]},
-            {description, ""}
+            {description, "Basic performance configuration"}
         ]}
     ]).
 echo_loop_test_base(Config) ->
@@ -140,8 +140,8 @@ echo_loop_test_base(Config) ->
         end, 0, lists:seq(1, WritesNum))
     end),
 
-    #parameter{name = write_time, value = WriteTime, unit = "us",
-        description = ""}.
+    #parameter{name = echo_time, value = WriteTime, unit = "us",
+        description = "Aggregated time of all operations"}.
 
 ls_with_stats_test(Config) ->
     ?PERFORMANCE(Config, [
