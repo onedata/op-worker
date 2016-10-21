@@ -49,7 +49,8 @@
     share_child_getattr_test/1,
     share_child_list_test/1,
     share_child_read_test/1,
-    share_permission_denied_test/1
+    share_permission_denied_test/1,
+    echo_loop_test/1, echo_loop_test_base/1
 ]).
 
 -define(TEST_CASES, [
@@ -73,11 +74,12 @@
     share_child_getattr_test,
     share_child_list_test,
     share_child_read_test,
-    share_permission_denied_test
+    share_permission_denied_test,
+    echo_loop_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
-    ls_test, ls_with_stats_test
+    ls_test, ls_with_stats_test, echo_loop_test
 ]).
 
 all() ->
@@ -98,6 +100,48 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+echo_loop_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, ?REPEATS},
+        {success_rate, ?SUCCESS_RATE},
+        {parameters, [
+            [{name, writes_num}, {value, 1000}, {description, ""}]
+        ]},
+        {description, ""},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, writes_num}, {value, 10000}, {description, ""}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+echo_loop_test_base(Config) ->
+    WritesNum = ?config(writes_num, Config),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    File = generator:gen_name(),
+    FilePath = <<"/space_name1/", File/binary, "/">>,
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#755)),
+
+    {WriteTime, _} = measure_execution_time(fun() ->
+        lists:foldl(fun(N, Offset) ->
+            OpenAns = lfm_proxy:open(Worker, SessId1, {path, FilePath}, write),
+            ?assertMatch({ok, _}, OpenAns),
+            {ok, Handle} = OpenAns,
+            Bytes = integer_to_binary(N),
+            BufSize = size(Bytes),
+            ?assertMatch({ok, BufSize}, lfm_proxy:write(Worker, Handle, Offset, Bytes)),
+            lfm_proxy:close(Worker, Handle),
+            Offset + BufSize
+        end, 0, lists:seq(1, WritesNum))
+    end),
+
+    #parameter{name = write_time, value = WriteTime, unit = "us",
+        description = ""}.
 
 ls_with_stats_test(Config) ->
     ?PERFORMANCE(Config, [
