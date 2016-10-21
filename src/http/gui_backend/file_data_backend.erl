@@ -536,22 +536,15 @@ ls_dir(SessionId, DirId) ->
     % from fileattr later.
     {ChildrenSorted, _} = lists:unzip(ChildrenSortedTuples),
     % Cache the results
-    cache_ls_result(DirId, ChildrenSorted),
     ChildrenSortedLength = length(ChildrenSorted),
-    case ChildrenSortedLength > ChildrenChunkSize of
-        false ->
-            % Return the whole list
-            {
-                ChildrenSorted,
-                ChildrenSortedLength
-            };
+    FirstChunk = case ChildrenSortedLength > ChildrenChunkSize of
         true ->
-            % Return the first chunk of the list
-            {
-                lists:sublist(ChildrenSorted, ChildrenChunkSize),
-                ChildrenSortedLength
-            }
-    end.
+            lists:sublist(ChildrenSorted, ChildrenChunkSize);
+        false ->
+            ChildrenSorted
+    end,
+    cache_ls_result(DirId, ChildrenSorted, length(FirstChunk)),
+    {FirstChunk, ChildrenSortedLength}.
 
 
 %%--------------------------------------------------------------------
@@ -585,15 +578,16 @@ ls_dir_chunked(SessionId, DirId, Offset, Limit, Result) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_ls_result(DirId :: fslogic_worker:file_guid(),
-    DirChildren :: [{fslogic_worker:file_guid(), file_meta:name()}]) -> ok.
-cache_ls_result(DirId, ChildrenSorted) ->
+    DirChildren :: [{fslogic_worker:file_guid(), file_meta:name()}],
+    LastChildrenCount :: non_neg_integer()) -> ok.
+cache_ls_result(DirId, ChildrenSorted, LastChildrenCount) ->
     LsSubCacheName = ls_sub_cache_name(),
     % Cache dir's children
     ets:insert(LsSubCacheName, {{DirId, children}, ChildrenSorted}),
     % Cache the total children count
     ets:insert(LsSubCacheName, {{DirId, size}, length(ChildrenSorted)}),
     % Cache the last children count known to the client.
-    ets:insert(LsSubCacheName, {{DirId, last_children_count}, 0}),
+    ets:insert(LsSubCacheName, {{DirId, last_children_count}, LastChildrenCount}),
     ok.
 
 
