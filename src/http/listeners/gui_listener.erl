@@ -54,7 +54,10 @@ start() ->
         application:get_env(?APP_NAME, gui_max_keepalive),
     {ok, Timeout} =
         application:get_env(?APP_NAME, gui_socket_timeout_seconds),
-    {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
+    {ok, KeyFile} = application:get_env(?APP_NAME, web_ssl_key_file),
+    {ok, CertFile} = application:get_env(?APP_NAME, web_ssl_cert_file),
+    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CaCerts} = file_utils:read_files({dir, CaCertsDir}),
 
     % Resolve static files root. First, check if there is a non-empty dir
     % located in gui_custom_static_root. If not, use default.
@@ -94,10 +97,11 @@ start() ->
     % Start the listener for web gui and nagios handler
     Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
         ranch_etls, [
-            {ip, {127, 0, 0, 1}},
             {port, GuiPort},
-            {certfile, Cert},
-            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
+            {keyfile, KeyFile},
+            {certfile, CertFile},
+            {cacerts, CaCerts},
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()},
             {versions, ['tlsv1.2', 'tlsv1.1']}
         ], cowboy_protocol, [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
@@ -145,17 +149,3 @@ healthcheck() ->
         {ok, _, _, _} -> ok;
         _ -> {error, server_not_responding}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list of weak ciphers.
-%% @end
--spec weak_ciphers() -> list().
-%%--------------------------------------------------------------------
-weak_ciphers() ->
-    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

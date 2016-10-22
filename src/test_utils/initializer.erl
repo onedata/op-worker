@@ -409,9 +409,9 @@ enable_grpca_based_communication(Config) ->
         KeyPath = re:replace(KeyPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return,list}]),
 
 
-        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_cert_path,
+        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_cert_file,
             fun() -> CertPath end),
-        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_key_path,
+        test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_key_file,
             fun() -> KeyPath end),
 
         {ok, PEMBin} = file:read_file(CertPath0),

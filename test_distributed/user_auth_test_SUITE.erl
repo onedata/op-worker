@@ -173,7 +173,7 @@ mock_oz_certificates(Config) ->
     SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
     test_utils:mock_new(Workers, oz_endpoint),
-    test_utils:mock_expect(Workers, oz_endpoint, auth_request,
+    test_utils:mock_expect(Workers, oz_endpoint, provider_request,
         fun
             % @todo for now, in rest we only use the root macaroon
             (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
