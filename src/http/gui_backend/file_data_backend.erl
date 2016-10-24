@@ -414,7 +414,7 @@ create_file(SessionId, Name, ParentId, Type) ->
         end,
         NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
         {ok, FileData} = file_record(
-            <<"file">>, SessionId, FileId, true, NewChildrenCount
+            <<"file">>, SessionId, ParentId, true, NewChildrenCount
         ),
         gui_async:push_updated(<<"file">>, FileData),
         {ok, FileId}
