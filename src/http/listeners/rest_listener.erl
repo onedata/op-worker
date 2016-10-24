@@ -55,9 +55,9 @@ start() ->
     {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
     {ok, CaCerts} = file_utils:read_files({dir, CaCertsDir}),
 
-    RestDispatch = [
+    Dispatch = cowboy_router:compile([
         {'_', rest_router:top_level_routing()}
-    ],
+    ]),
 
     % Start the listener for REST handler
     Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
@@ -69,7 +69,7 @@ start() ->
             {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()},
             {versions, ['tlsv1.2', 'tlsv1.1']}
         ], cowboy_protocol, [
-            {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
+            {env, [{dispatch, Dispatch}]},
             {max_keepalive, 1},
             {timeout, timer:seconds(Timeout)}
         ]),

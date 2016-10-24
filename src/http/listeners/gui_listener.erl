@@ -70,7 +70,7 @@ start() ->
     end,
 
     % Setup GUI dispatch opts for cowboy
-    GUIDispatch = [
+    Dispatch = cowboy_router:compile([
         % Matching requests will be redirected
         % to the same address without leading 'www.'
         % Cowboy does not have a mechanism to match
@@ -82,15 +82,16 @@ start() ->
             {'_', redirector_handler, []}
         ]},
         % Proper requests are routed to handler modules
-        {'_', [
+        {'_', lists:flatten([
             {?provider_id_path, get_provider_id_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {"/upload", upload_handler, []},
             {"/download/:id", download_handler, []},
             {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
+            rest_router:top_level_routing(),
             {"/[...]", gui_static_handler, {dir, DocRoot}}
-        ]}
-    ],
+        ])}
+    ]),
 
     % Call gui init, which will call init on all modules that might need state.
     gui:init(),
@@ -104,7 +105,7 @@ start() ->
             {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()},
             {versions, ['tlsv1.2', 'tlsv1.1']}
         ], cowboy_protocol, [
-            {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
+            {env, [{dispatch, Dispatch}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, timer:seconds(Timeout)},
             % On every request, add headers that improve
