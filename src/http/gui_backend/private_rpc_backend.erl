@@ -43,14 +43,14 @@ handle(<<"fileUploadSuccess">>, Props) ->
     upload_handler:upload_map_delete(UploadId),
     file_data_backend:report_file_upload(FileId, ParentId);
 
-handle(<<"fileBatchUploadComplete">>, Props) ->
-    ParentId = proplists:get_value(<<"parentId">>, Props),
-    file_data_backend:report_file_batch_complete(ParentId);
-
 handle(<<"fileUploadFailure">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     upload_handler:upload_map_delete(UploadId),
     ok;
+
+handle(<<"fileBatchUploadComplete">>, Props) ->
+    ParentId = proplists:get_value(<<"parentId">>, Props),
+    file_data_backend:report_file_batch_complete(ParentId);
 
 % Checks if file can be downloaded (i.e. can be read by the user) and if so,
 % returns download URL.
