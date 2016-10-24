@@ -39,7 +39,7 @@
 handle(<<"fileUploadSuccess">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     ParentId = proplists:get_value(<<"parentId">>, Props),
-    FileId = upload_handler:upload_map_lookup(UploadId),
+    FileId = upload_handler:wait_for_file_new_file_id(UploadId),
     upload_handler:upload_map_delete(UploadId),
     file_data_backend:report_file_upload(FileId, ParentId);
 
