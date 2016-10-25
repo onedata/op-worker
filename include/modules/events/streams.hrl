@@ -15,6 +15,7 @@
 
 -include("types.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %% definition of an event stream
 %% id                - unique stream ID
@@ -89,7 +90,23 @@
 %% Default file attr event stream specialization
 -define(FILE_ATTR_EVENT_STREAM, #event_stream_definition{
     id = file_attr_event_stream,
-    event_handler = event_utils:send_events_handler()
+    event_handler = event_utils:send_events_handler(),
+    aggregation_rule = fun(#event{object = O1} = E1, #event{object = O2} = E2) ->
+        OldAttr = O1#update_event.object,
+        NewAttr = O2#update_event.object,
+        AggregatedAttr = NewAttr#file_attr{
+            % Use the new attrs, but preserve the size update if new attrs don't
+            % change the size
+            size = case NewAttr#file_attr.size of
+                undefined -> OldAttr#file_attr.size;
+                X -> X
+            end
+        },
+        E1#event{
+            counter = E1#event.counter + E2#event.counter,
+            object = O2#update_event{object = AggregatedAttr}
+        }
+    end
 }).
 
 %% Default file location event stream specialization
