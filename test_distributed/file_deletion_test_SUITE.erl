@@ -251,7 +251,7 @@ init_per_testcase(Case, Config) when
     ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(Worker, file_deletion_worker),
+    test_utils:mock_new(Worker, file_deletion_worker, [passthrough]),
     test_utils:mock_expect(Worker, file_deletion_worker, handle,
         fun({open_file_deletion_request, ?FILE_UUID}) -> ok end),
     Config;
@@ -265,12 +265,12 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, [storage_file_manager, fslogic_rename,
-        worker_proxy]),
+        worker_proxy], [passthrough]),
     test_utils:mock_expect(Worker, worker_proxy, cast,
         fun(W, A) -> worker_proxy:call(W, A) end),
 
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
-        ?TEST_FILE(Config, "env_desc.json"), Config),
+        ?TEST_FILE(Config, "env_desc.json"), [{file_meta_mock_options, [passthrough]} | Config]),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(Case, Config) when

@@ -33,6 +33,13 @@
             Host ! {self(), Result}
         end)).
 
+-define(EXEC_TIMEOUT(Worker, Function, Timeout),
+    exec(Worker,
+        fun(Host) ->
+            Result = Function,
+            Host ! {self(), Result}
+        end, Timeout)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -117,7 +124,7 @@ close(Worker, TestHandle) ->
 
 -spec close_all(node()) -> ok.
 close_all(Worker) ->
-    ?EXEC(Worker,
+    ?EXEC_TIMEOUT(Worker,
         begin
             lists:foreach(fun({_, Handle}) ->
                 logical_file_manager:fsync(Handle),
@@ -125,7 +132,7 @@ close_all(Worker) ->
             end, ets:tab2list(lfm_handles)),
             true = ets:delete_all_objects(lfm_handles),
             ok
-        end).
+        end, timer:minutes(5)).
 
 -spec read(node(), logical_file_manager:handle(), integer(), integer()) ->
     {ok, binary()} | logical_file_manager:error_reply().
@@ -335,6 +342,9 @@ remove_share_by_guid(Worker, SessId, ShareGuid) ->
 %%%===================================================================
 
 exec(Worker, Fun) ->
+    exec(Worker, Fun, timer:seconds(60)).
+
+exec(Worker, Fun, Timeout) ->
     Host = self(),
     Pid = spawn_link(Worker,
         fun() ->
@@ -347,7 +357,7 @@ exec(Worker, Fun) ->
         end),
     receive
         {Pid, Result} -> Result
-    after timer:seconds(60) ->
+    after Timeout ->
         {error, test_timeout}
     end.
 

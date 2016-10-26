@@ -98,6 +98,7 @@ single_dir_creation_test_base(Config) ->
 
             get_final_ans(SaveOk, SaveAvgTime, SError, SErrorAvgTime, DelOk, DelAvgTime, DError, DErrorAvgTime, 0);
         _ ->
+            timer:sleep(timer:seconds(60)),
             get_final_ans(0,0,0,0,0,0,0,0,1)
     end.
 
@@ -245,7 +246,7 @@ many_files_creation_tree_test_base(Config) ->
 
             end;
         _ ->
-            timer:sleep(timer:seconds(10)),
+            timer:sleep(timer:seconds(60)),
             get_final_ans_tree(Worker, 0, 0, 0, 0, 0,0, 1, 0)
     end.
 

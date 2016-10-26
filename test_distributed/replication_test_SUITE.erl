@@ -355,7 +355,7 @@ read_should_synchronize_file(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock rtransfer
-    test_utils:mock_new(Workers, rtransfer),
+    test_utils:mock_new(Workers, rtransfer, [passthrough]),
     test_utils:mock_expect(Workers, rtransfer, prepare_request,
         fun(_ProvId, _Uuid, 1, Size) when Size >= 3 ->
             ref
@@ -604,7 +604,7 @@ remote_change_of_size_should_notify_clients(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
-    test_utils:mock_new(W1, [fslogic_event]),
+    test_utils:mock_new(W1, [fslogic_event], [passthrough]),
     test_utils:mock_expect(W1, fslogic_event, emit_file_attr_update,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
@@ -650,7 +650,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
-    test_utils:mock_new(W1, [fslogic_event]),
+    test_utils:mock_new(W1, [fslogic_event], [passthrough]),
     test_utils:mock_expect(W1, fslogic_event, emit_file_location_update,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
@@ -701,7 +701,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
-    test_utils:mock_new(W1, [fslogic_event]),
+    test_utils:mock_new(W1, [fslogic_event], [passthrough]),
     test_utils:mock_expect(W1, fslogic_event, emit_file_location_update,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
