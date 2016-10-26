@@ -240,7 +240,7 @@
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
     connections = [] :: [pid()],
-    proxy_via :: session:id() | undefined,
+    proxy_via :: oneprovider:id() | undefined,
     response_map = #{} :: maps:map(),
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
