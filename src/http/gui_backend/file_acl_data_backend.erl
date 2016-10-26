@@ -7,19 +7,22 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the handle_service model used in Ember application.
+%%% the file-acl model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(handle_service_data_backend).
+-module(file_acl_data_backend).
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
--include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
+%% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
@@ -55,16 +58,9 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"handle-service">>, HandleServiceId) ->
-    Auth = op_gui_utils:get_user_auth(),
-    {ok, #document{
-        value = #od_handle_service{
-            name = Name
-        }}} = handle_service_logic:get(Auth, HandleServiceId),
-    {ok, [
-        {<<"id">>, HandleServiceId},
-        {<<"name">>, Name}
-    ]}.
+find(<<"file-acl">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    file_acl_record(SessionId, FileId).
 
 
 %%--------------------------------------------------------------------
@@ -74,18 +70,8 @@ find(<<"handle-service">>, HandleServiceId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"handle-service">>) ->
-    Auth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
-    {ok, HandleServiceIds} = user_logic:get_effective_handle_services(
-        Auth, UserId
-    ),
-    Res = lists:map(
-        fun(HandleServiceId) ->
-            {ok, Data} = find(<<"handle-service">>, HandleServiceId),
-            Data
-        end, HandleServiceIds),
-    {ok, Res}.
+find_all(<<"file-acl">>) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -95,7 +81,7 @@ find_all(<<"handle-service">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"handle-service">>, _Data) ->
+find_query(<<"file-acl">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -106,8 +92,14 @@ find_query(<<"handle-service">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"handle-service">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+create_record(<<"file-acl">>, Data) ->
+    Id = proplists:get_value(<<"file">>, Data),
+    case update_record(<<"file-acl">>, Id, Data) of
+        ok ->
+            file_acl_record(?ROOT_SESS_ID, Id);
+        Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -118,8 +110,21 @@ create_record(<<"handle-service">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"handle-service">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+update_record(<<"file-acl">>, FileId, Data) ->
+    try
+        SessionId = g_session:get_session_id(),
+        Acl = acl_utils:json_to_acl(Data),
+        case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
+            ok ->
+                ok;
+            {error, ?EACCES} ->
+                gui_error:report_warning(
+                    <<"Cannot change ACL - access denied.">>
+                )
+        end
+    catch _:_ ->
+        gui_error:report_warning(<<"Cannot change ACL.">>)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -129,5 +134,38 @@ update_record(<<"handle-service">>, _Id, _Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"handle-service">>, _Id) ->
-    gui_error:report_error(<<"Not implemented">>).
+delete_record(<<"file-acl">>, FileId) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
+        ok ->
+            ok;
+        {error, ?EACCES} ->
+            gui_error:report_warning(
+                <<"Cannot remove ACL - access denied.">>)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a file acl record for given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_acl_record(SessionId :: session:id(), fslogic_worker:file_guid()) ->
+    {ok, proplists:proplist()}.
+file_acl_record(SessionId, FileId) ->
+    case logical_file_manager:get_acl(SessionId, {guid, FileId}) of
+        {error, ?ENOENT} ->
+            gui_error:report_error(<<"No such file or directory.">>);
+        {error, ?ENOATTR} ->
+            gui_error:report_error(<<"No ACL defined.">>);
+        {error, ?EACCES} ->
+            gui_error:report_error(<<"Cannot read ACL - access denied.">>);
+        {ok, Acl} ->
+            Res = acl_utils:acl_to_json(FileId, Acl),
+            {ok, Res}
+    end.
