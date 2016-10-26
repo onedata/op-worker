@@ -60,7 +60,7 @@ is_authorized(Req, State) ->
 -spec content_types_provided(req(), maps:map()) -> {[{binary(), atom()}], req(), maps:map()}.
 content_types_provided(Req, State) ->
     {[
-        {<<"text/javascript">>, get_index}
+        {<<"application/javascript">>, get_index}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -70,7 +70,7 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"text/javascript">>, modify_index}
+        {<<"application/javascript">>, modify_index}
     ], Req, State}.
 
 %%%===================================================================
@@ -124,7 +124,7 @@ get_index(Req, State) ->
 %% **Get list of indexes for space**
 %% &#x60;&#x60;&#x60;bash
 %% curl --tlsv1.2 -H \&quot;X-Auth-Token: $TOKEN\&quot; -X PUT \\
-%% -H \&quot;Content-type: text/javascript\&quot; \\
+%% -H \&quot;Content-type: application/javascript\&quot; \\
 %% -d \&quot;@./my_improved_index1.js\&quot; \\
 %% https://$HOST:8443/api/v1/oneprovider/index/f209c965-e212-4149-af72-860faea4187a
 %% &#x60;&#x60;&#x60;
