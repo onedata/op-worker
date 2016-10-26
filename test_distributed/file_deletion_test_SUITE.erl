@@ -270,7 +270,7 @@ init_per_testcase(Case, Config) when
         fun(W, A) -> worker_proxy:call(W, A) end),
 
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
-        ?TEST_FILE(Config, "env_desc.json"), Config),
+        ?TEST_FILE(Config, "env_desc.json"), [{file_meta_mock_options, [passthrough]} | Config]),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(Case, Config) when
