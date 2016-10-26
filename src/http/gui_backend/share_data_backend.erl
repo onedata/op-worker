@@ -11,6 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(share_data_backend).
+-behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 
@@ -28,7 +29,7 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
-%%% API functions
+%%% data_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -58,191 +59,28 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"share">>, ShareId) ->
-    UserId = g_session:get_user_id(),
-    UserAuth = op_gui_utils:get_user_auth(),
+find(ModelType, ShareId) ->
     {ok, #document{
         value = #od_share{
-            name = Name,
-            root_file = RootFileId,
-            space = ParentSpaceId,
-            public_url = PublicURL,
-            handle = Handle
-        }}} = share_logic:get(UserAuth, ShareId),
+            space = SpaceId
+        } = ShareRecord}} = share_logic:get(provider, ShareId),
     % Make sure that user is allowed to view requested share - he must have
-    % view privileges in this space.
-    Authorized = space_logic:has_effective_privilege(
-        ParentSpaceId, UserId, space_view_data
-    ),
-    HandleVal = case Handle of
-        undefined -> null;
-        <<"undefined">> -> null;
-        _ -> Handle
+    % view privileges in this space, or view the share in public view.
+    Authorized = case ModelType of
+        <<"share">> ->
+            UserId = g_session:get_user_id(),
+            space_logic:has_effective_privilege(
+                SpaceId, UserId, space_view_data
+            );
+        <<"share-public">> ->
+            true
     end,
     case Authorized of
         false ->
             gui_error:unauthorized();
         true ->
-            FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
-            {ok, [
-                {<<"id">>, ShareId},
-                {<<"name">>, Name},
-                {<<"file">>, FileId},
-                {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
-                {<<"dataSpace">>, ParentSpaceId},
-                {<<"publicUrl">>, PublicURL},
-                {<<"handle">>, HandleVal}
-            ]}
-    end;
-
-find(<<"file-shared">>, <<"containerDir.", ShareId/binary>>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{
-        value = #od_share{
-            name = Name,
-            root_file = RootFileId
-        }}} = share_logic:get(UserAuth, ShareId),
-    FileId = fslogic_uuid:share_guid_to_guid(RootFileId),
-    Res = [
-        {<<"id">>, <<"containerDir.", ShareId/binary>>},
-        {<<"name">>, Name},
-        {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
-        {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
-        {<<"parent">>, null},
-        {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
-        {<<"fileAcl">>, null},
-        {<<"share">>, null},
-        {<<"provider">>, null},
-        {<<"fileProperty">>, null}
-    ],
-    {ok, Res};
-
-find(<<"file-shared">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
-    {ShareId, FileId} = op_gui_utils:association_to_ids(AssocId),
-    case logical_file_manager:stat(SessionId, {guid, FileId}) of
-        {error, ?ENOENT} ->
-            gui_error:report_error(<<"No such file or directory.">>);
-        {ok, FileAttr} ->
-            #file_attr{
-                name = Name,
-                type = TypeAttr,
-                size = SizeAttr,
-                mtime = ModificationTime,
-                mode = PermissionsAttr,
-                shares = Shares,
-                provider_id = ProviderId
-            } = FileAttr,
-
-            ParentUUID = case Shares of
-                [ShareId] ->
-                    % Check if this is the root dir
-                    <<"containerDir.", ShareId/binary>>;
-                [] ->
-                    op_gui_utils:ids_to_association(
-                        ShareId, get_parent(SessionId, FileId)
-                    )
-            end,
-
-            {Type, Size} = case TypeAttr of
-                ?DIRECTORY_TYPE -> {<<"dir">>, null};
-                _ -> {<<"file">>, SizeAttr}
-            end,
-            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
-            Children = case Type of
-                <<"file">> ->
-                    [];
-                <<"dir">> ->
-                    case logical_file_manager:ls(
-                        SessionId, {guid, FileId}, 0, 1000) of
-                        {ok, List} ->
-                            List;
-                        _ ->
-                            []
-                    end
-            end,
-            ChildrenIds = [
-                op_gui_utils:ids_to_association(ShareId, ChId) ||
-                {ChId, _} <- Children
-            ],
-            {ok, HasCustomMetadata} = logical_file_manager:has_custom_metadata(
-                SessionId, {guid, FileId}
-            ),
-            Metadata = case HasCustomMetadata of
-                false -> null;
-                true -> AssocId
-            end,
-            Res = [
-                {<<"id">>, AssocId},
-                {<<"name">>, Name},
-                {<<"type">>, Type},
-                {<<"permissions">>, Permissions},
-                {<<"modificationTime">>, ModificationTime},
-                {<<"size">>, Size},
-                {<<"parent">>, ParentUUID},
-                {<<"children">>, ChildrenIds},
-                {<<"fileAcl">>, FileId},
-                {<<"share">>, null},
-                {<<"provider">>, ProviderId},
-                {<<"fileProperty">>, Metadata}
-            ],
-            {ok, Res}
-    end;
-
-find(<<"file-property-shared">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
-    {_, FileId} = op_gui_utils:association_to_ids(AssocId),
-    {ok, XattrKeys} = logical_file_manager:list_xattr(
-        SessionId, {guid, FileId}, false, false
-    ),
-    Basic = lists:map(
-        fun(Key) ->
-            {ok, #xattr{value = Value}} = logical_file_manager:get_xattr(
-                SessionId, {guid, FileId}, Key, false
-            ),
-            {Key, Value}
-        end, XattrKeys),
-    BasicVal = case Basic of
-        [] -> null;
-        _ -> Basic
-    end,
-    GetJSONResult = logical_file_manager:get_metadata(
-        SessionId, {guid, FileId}, json, [], false
-    ),
-    JSONVal = case GetJSONResult of
-        {error, ?ENOATTR} -> null;
-        {ok, Map} when map_size(Map) =:= 0 -> <<"{}">>;
-        {ok, JSON} -> json_utils:decode(json_utils:encode_map(JSON))
-    end,
-    GetRDFResult = logical_file_manager:get_metadata(
-        SessionId, {guid, FileId}, rdf, [], false
-    ),
-    RDFVal = case GetRDFResult of
-        {error, ?ENOATTR} -> null;
-        {ok, RDF} -> RDF
-    end,
-    {ok, [
-        {<<"id">>, AssocId},
-        {<<"file">>, AssocId},
-        {<<"basic">>, BasicVal},
-        {<<"json">>, JSONVal},
-        {<<"rdf">>, RDFVal}
-    ]}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns the UUID of parent of given file. This is needed because
-%% spaces dir has two different UUIDs, should be removed when this is fixed.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(SessionId :: binary(), FileGUID :: binary()) -> binary().
-get_parent(SessionId, FileGUID) ->
-    {ok, ParentGUID} = logical_file_manager:get_parent(SessionId, {guid, FileGUID}),
-    ParentGUID.
+            share_record(ModelType, ShareId, ShareRecord)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -252,6 +90,8 @@ get_parent(SessionId, FileGUID) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
+find_all(<<"share-public">>) ->
+    gui_error:report_error(<<"Not implemented">>);
 find_all(<<"share">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
     UserId = g_session:get_user_id(),
@@ -289,8 +129,8 @@ find_all(<<"share">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"share">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+find_query(_, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -300,13 +140,8 @@ find_query(<<"share">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"share">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>);
-
-create_record(<<"file-property-shared">>, Data) ->
-    AssocId = proplists:get_value(<<"file">>, Data),
-    ok = update_record(<<"file-property-shared">>, AssocId, Data),
-    find(<<"file-property-shared">>, AssocId).
+create_record(_, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -317,6 +152,8 @@ create_record(<<"file-property-shared">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
+update_record(<<"share-public">>, _ShareId, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
 update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
     UserAuth = op_gui_utils:get_user_auth(),
     case Name of
@@ -329,7 +166,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
             case share_logic:set_name(UserAuth, ShareId, NewName) of
                 ok ->
                     % Push container dir as its name has also changed.
-                    {ok, FileData} = find(
+                    {ok, FileData} = file_data_backend:find(
                         <<"file-shared">>, <<"containerDir.", ShareId/binary>>
                     ),
                     FileDataNewName = lists:keyreplace(
@@ -344,66 +181,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
                     gui_error:report_warning(
                         <<"Cannot change share name due to unknown error.">>)
             end
-    end;
-
-
-update_record(<<"file-property-shared">>, AssocId, Data) ->
-    SessionId = g_session:get_session_id(),
-    {_, FileId} = op_gui_utils:association_to_ids(AssocId),
-    case proplists:get_value(<<"basic">>, Data) of
-        undefined ->
-            ok;
-        NewXattrs ->
-            NewXattrsKeys = proplists:get_keys(NewXattrs),
-            % Get current xattrs
-            {ok, CurrentXattrs} = logical_file_manager:list_xattr(
-                SessionId, {guid, FileId}, false, false
-            ),
-            KeysToBeRemoved = CurrentXattrs -- NewXattrsKeys,
-            % Remove xattrs that no longer exist
-            lists:foreach(
-                fun(Key) ->
-                    ok = logical_file_manager:remove_xattr(
-                        SessionId, {guid, FileId}, Key
-                    )
-                end, KeysToBeRemoved),
-            % Update all xattrs that were sent by the client
-            lists:foreach(
-                fun({K, V}) ->
-                    ok = logical_file_manager:set_xattr(
-                        SessionId, {guid, FileId}, #xattr{name = K, value = V}
-                    )
-                end, NewXattrs)
-    end,
-    case proplists:get_value(<<"json">>, Data) of
-        undefined ->
-            ok;
-        null ->
-            ok = logical_file_manager:remove_metadata(
-                SessionId, {guid, FileId}, json
-            );
-        JSON ->
-            JSONMap = case JSON of
-                [] -> #{};
-                _ -> json_utils:decode_map(json_utils:encode(JSON))
-            end,
-            ok = logical_file_manager:set_metadata(
-                SessionId, {guid, FileId}, json, JSONMap, []
-            )
-    end,
-    case proplists:get_value(<<"rdf">>, Data) of
-        undefined ->
-            ok;
-        null ->
-            ok = logical_file_manager:remove_metadata(
-                SessionId, {guid, FileId}, rdf
-            );
-        RDF ->
-            ok = logical_file_manager:set_metadata(
-                SessionId, {guid, FileId}, rdf, RDF, []
-            )
-    end,
-    ok.
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -413,6 +191,8 @@ update_record(<<"file-property-shared">>, AssocId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
+delete_record(<<"share-public">>, _ShareId) ->
+    gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"share">>, ShareId) ->
     SessionId = g_session:get_session_id(),
     case logical_file_manager:remove_share(SessionId, ShareId) of
@@ -424,24 +204,40 @@ delete_record(<<"share">>, ShareId) ->
         _ ->
             gui_error:report_warning(
                 <<"Cannot remove share due to unknown error.">>)
-    end;
+    end.
 
-delete_record(<<"file-property-shared">>, AssocId) ->
-    {_, FileId} = op_gui_utils:association_to_ids(AssocId),
-    SessionId = g_session:get_session_id(),
-    {ok, XattrKeys} = logical_file_manager:list_xattr(
-        SessionId, {guid, FileId}, false, false
-    ),
-    lists:foreach(
-        fun(Key) ->
-            ok = logical_file_manager:remove_xattr(
-                SessionId, {guid, FileId}, Key
-            )
-        end, XattrKeys),
-    ok = logical_file_manager:remove_metadata(
-        SessionId, {guid, FileId}, json
-    ),
-    ok = logical_file_manager:remove_metadata(
-        SessionId, {guid, FileId}, rdf
-    ),
-    ok.
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs a share record for given ShareId.
+%% @end
+%%--------------------------------------------------------------------
+-spec share_record(ModelType :: binary(), ShareId :: od_share:id(),
+    ShareRecord :: od_share:info()) -> {ok, proplists:proplist()}.
+share_record(ModelType, ShareId, ShareRecord) ->
+    #od_share{
+        name = Name,
+        root_file = RootFileId,
+        space = SpaceId,
+        public_url = PublicURL,
+        handle = Handle
+    } = ShareRecord,
+    HandleVal = case Handle of
+        undefined -> null;
+        <<"undefined">> -> null;
+        _ -> Handle
+    end,
+    FileId = case ModelType of
+        <<"share">> ->
+            fslogic_uuid:share_guid_to_guid(RootFileId);
+        <<"share-public">> ->
+            RootFileId
+    end,
+    {ok, [
+        {<<"id">>, ShareId},
+        {<<"name">>, Name},
+        {<<"file">>, FileId},
+        {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
+        {<<"dataSpace">>, SpaceId},
+        {<<"publicUrl">>, PublicURL},
+        {<<"handle">>, HandleVal}
+    ]}.

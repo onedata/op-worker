@@ -71,7 +71,7 @@
  {<<"gpb">>,{pkg,<<"gpb">>,<<"3.25.2">>},1},
  {<<"gui">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/gui.git",
-       {ref,"e4a09c344ed14550bb5fe7d3bf3df5746856b742"}},
+       {ref,"89b6135a4fadaffe7f239fd805a7315b51563ea4"}},
   0},
  {<<"hackney">>,{pkg,<<"hackney">>,<<"1.6.1">>},2},
  {<<"idna">>,{pkg,<<"idna">>,<<"1.2.0">>},3},
