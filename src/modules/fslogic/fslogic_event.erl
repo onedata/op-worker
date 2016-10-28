@@ -186,14 +186,18 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 %% Send event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_renamed(file_meta:uuid(), od_space:id(), file_meta:path(),
+-spec emit_file_renamed(file_meta:uuid(), od_space:id(), file_meta:name(),
     session:id()) -> ok | {error, Reason :: term()}.
-emit_file_renamed(FileUUID, SpaceId, Path, SessionId) ->
+emit_file_renamed(FileUUID, SpaceId, NewName, SessionId) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    {ok, ParentUUID} = fslogic_uuid:parent_uuid({uuid, FileUUID}, UserId),
+    ParentGUID = fslogic_uuid:uuid_to_guid(ParentUUID, SpaceId),
     FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
         old_uuid = FileGUID,
         new_uuid = FileGUID,
-        new_path = Path
+        new_parent_uuid = ParentGUID,
+        new_name = NewName
     }}, SessionId).
 
 %%%===================================================================

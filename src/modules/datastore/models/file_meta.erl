@@ -41,8 +41,9 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    get_parent_uuid/1, get_parent_uuid/2, get_parent_uuid_in_context/1, rename/2, setup_onedata_user/2]).
+-export([resolve_path/1, resolve_path/2, create/2, get_scope/1, list_children/3, get_parent/1,
+    get_parent_uuid/1, get_parent_uuid/2, get_parent_uuid_in_context/1, rename/2, setup_onedata_user/2,
+    get_name/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1, set_link_context/1, set_link_context_for_space/1,
@@ -196,6 +197,21 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
             end)
 
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves name of the file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_name(entry()) -> {ok, file_meta:name()} | {datastore:get_error()}.
+get_name(Entry) ->
+    case get(Entry) of
+        {ok, #document{value = #file_meta{name = Name}}} ->
+            {ok, Name};
+
+        {error, Reason} -> {error, Reason}
+    end.
 
 
 %%--------------------------------------------------------------------

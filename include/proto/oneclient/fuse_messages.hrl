@@ -26,6 +26,10 @@
 -record(get_file_attr, {
 }).
 
+-record(get_child_attr, {
+    name :: file_meta:name()
+}).
+
 -record(get_file_children, {
     offset :: file_meta:offset(),
     size :: file_meta:size()
@@ -51,7 +55,8 @@
 }).
 
 -record(rename, {
-    target_path :: file_meta:path()
+    target_parent_uuid :: fslogic_worker:file_guid(),
+    target_name :: file_meta:name()
 }).
 
 -record(get_new_file_location, {

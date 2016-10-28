@@ -340,6 +340,8 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequ
 
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_file_attr{}}) ->
     fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_child_attr{name = Name}}) ->
+    fslogic_req_special:get_child_attr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Name);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #delete_file{silent = Silent}}) ->
     fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Silent);
 handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #create_dir{name = Name, mode = Mode}}) ->
@@ -348,8 +350,9 @@ handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_
     fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Offset, Size);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #change_mode{mode = Mode}}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Mode);
-handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #rename{target_path = TargetPath}}) ->
-    fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, TargetPath);
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
+    TargetDirUUID = fslogic_uuid:guid_to_uuid(TargetParentGuid),
+    fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, TargetDirUUID, TargetName);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #get_new_file_location{name = Name,

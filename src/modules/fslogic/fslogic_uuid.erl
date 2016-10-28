@@ -18,7 +18,7 @@
 
 %% API
 -export([user_root_dir_uuid/1, gen_file_uuid/0, ensure_guid/2]).
--export([path_to_uuid/2, uuid_to_path/2]).
+-export([path_to_uuid/2, uuid_to_path/2, parent_uuid/2]).
 -export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1, unpack_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1]).
 -export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
@@ -28,6 +28,28 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns UUID file's parent.
+%% If the file is a child of the top level (i.e. a space directory), user's
+%% root dir UUID is returned as in {@link user_root_dir_uuid}.
+%% If the file is a root directory itself, returns undefined.
+%% @end
+%%--------------------------------------------------------------------
+-spec parent_uuid(file_meta:entry(), onedata_user:id()) -> file_meta:uuid() | undefined.
+parent_uuid(Entry, UserId) ->
+    UserRootUuid = user_root_dir_uuid(UserId),
+    case file_meta:get(Entry) of
+        {ok, #document{key = ?ROOT_DIR_UUID}} -> undefined;
+        {ok, #document{key = UserRootUuid}} -> undefined;
+        {ok, FileDoc} ->
+            case file_meta:get_parent_uuid(FileDoc) of
+                {ok, ?ROOT_DIR_UUID} -> {ok, UserRootUuid};
+                {ok, ParentUuid} -> {ok, ParentUuid}
+            end
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns UUID of user's root directory.
