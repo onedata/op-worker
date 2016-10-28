@@ -37,6 +37,7 @@
 
 -export([
     rename_file_test/1,
+    rename_dbsync_test/1,
     rename_file_test_with_failing_link/1,
     rename_file_test_with_failing_link_and_mv/1,
     move_file_test/1,
@@ -67,6 +68,7 @@
 
 all() ->
     ?ALL([
+        rename_dbsync_test,
         rename_file_test,
         rename_file_test_with_failing_link,
         rename_file_test_with_failing_link_and_mv,
@@ -139,6 +141,25 @@ rename_file_test(Config) ->
         <<"renamed_file3">>
     ]),
     ?assertEqual(ExpectedLs, ActualLs),
+
+    ok.
+
+rename_dbsync_test(Config) ->
+    [W1, W2] = sorted_workers(Config),
+    TestDir = ?config(test_dir, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W2)}}, Config),
+
+    {_, _BaseDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, ""))),
+    {_, _NastedDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, "/nasted"))),
+    {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(4, TestDir, "/renamed_file1"), 8#770)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId1, {guid, File1Guid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle1, 0, <<"test1">>)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, File1Guid}, filename(4, TestDir, "/nasted/renamed_file1_target"))),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, filename(4, TestDir, "/nasted/renamed_file1_target")}, read), 30),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10)),
+
 
     ok.
 

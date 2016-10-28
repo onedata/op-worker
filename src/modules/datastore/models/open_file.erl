@@ -38,7 +38,7 @@
 record_struct(1) ->
     {record, [
         {is_removed, boolean},
-        {active_descriptors, #{binary => integer}}
+        {active_descriptors, #{string => integer}}
     ]}.
 
 %%%===================================================================

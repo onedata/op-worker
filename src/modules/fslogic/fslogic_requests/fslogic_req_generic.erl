@@ -119,8 +119,30 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, provider_id = ProviderId, uid = UserID,
-            name = Name, shares = Shares}} = FileDoc} ->
-
+            name = FileMetaName, shares = Shares, is_scope = IsScope}} = FileDoc} ->
+            UserId = fslogic_context:get_user_id(CTX),
+            % If the file is a space dir and the request is in user context,
+            % set proper space name according to users aliases.
+            Name = case {SessId, fslogic_uuid:user_root_dir_uuid(UserId), IsScope} of
+                {?ROOT_SESS_ID, _, _} ->
+                    FileMetaName;
+                {_, UUID, _} ->
+                    FileMetaName;
+                {_, _, true} ->
+                    SpId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+                    {ok, #document{
+                        value = #od_user{
+                            space_aliases = SpaceAliases
+                        }}} = od_user:get(UserId),
+                    case proplists:get_value(SpId, SpaceAliases) of
+                        undefined ->
+                            throw(space_alias_not_found);
+                        SpaceName ->
+                            SpaceName
+                    end;
+                {_, _, false} ->
+                    FileMetaName
+            end,
 
             {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),

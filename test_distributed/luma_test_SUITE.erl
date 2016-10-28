@@ -258,7 +258,7 @@ end_per_suite(Config) ->
 init_per_testcase(posix_user_provider_test = Case, Config) ->
     ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, file_meta),
+    test_utils:mock_new(Worker, file_meta, [passthrough]),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?POSIX_SPACE_NAME}}} end),
     Config;
@@ -276,10 +276,10 @@ init_per_testcase(posix_user_proxy_test = Case, Config) ->
         [?SWIFT_SPACE_NAME]),
 
     %% mock LUMA server response for posix ctx
-    test_utils:mock_new(Worker, http_client),
+    test_utils:mock_new(Worker, http_client, [passthrough]),
     test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
         {ok, 200, [], json_utils:encode([{<<"uid">>, ?UID}])} end),
-    test_utils:mock_new(Worker, file_meta),
+    test_utils:mock_new(Worker, file_meta, [passthrough]),
     %% return different space name for each space uuid
     test_utils:mock_expect(Worker, file_meta, get,
         fun({uuid, SpaceUUID}) when SpaceUUID == PosixSpaceUUID ->
@@ -296,7 +296,7 @@ init_per_testcase(posix_user_proxy_test = Case, Config) ->
 init_per_testcase(ceph_user_provider_test = Case, Config) ->
     ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, file_meta),
+    test_utils:mock_new(Worker, file_meta, [passthrough]),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?CEPH_SPACE_NAME}}} end),
     Config;
@@ -306,7 +306,7 @@ init_per_testcase(ceph_user_proxy_test = Case, Config) ->
     ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     %% mock LUMA server response for ceph ctx
-    test_utils:mock_new(Worker, [file_meta, http_client]),
+    test_utils:mock_new(Worker, [file_meta, http_client], [passthrough]),
     test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
         {ok, 200, [], json_utils:encode([{<<"userName">>, ?USER_NAME},
             {<<"userKey">>, ?USER_KEY}])} end),
@@ -318,7 +318,7 @@ init_per_testcase(s3_user_provider_test = Case, Config) ->
     ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     %% mock invocation of amazonaws_iam API calls
-    test_utils:mock_new(Worker, amazonaws_iam),
+    test_utils:mock_new(Worker, amazonaws_iam, [passthrough]),
     test_utils:mock_expect(Worker, amazonaws_iam, create_user,
         fun(_, _, _, _, _, _) -> ok end),
     test_utils:mock_expect(Worker, amazonaws_iam, create_access_key,
@@ -326,7 +326,7 @@ init_per_testcase(s3_user_provider_test = Case, Config) ->
     test_utils:mock_expect(Worker, amazonaws_iam, allow_access_to_bucket,
         fun(_, _, _, _, _, _, _) -> ok end),
 
-    test_utils:mock_new(Worker, file_meta),
+    test_utils:mock_new(Worker, file_meta, [passthrough]),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
     Config;
@@ -334,7 +334,7 @@ init_per_testcase(s3_user_provider_test = Case, Config) ->
 init_per_testcase(s3_user_proxy_test = Case, Config) ->
     ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [file_meta, http_client]),
+    test_utils:mock_new(Worker, [file_meta, http_client], [passthrough]),
     test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
         {ok, 200, [], json_utils:encode([{<<"accessKey">>, ?ACCESS_KEY},
                     {<<"secretKey">>, ?SECRET_KEY}])} end),
@@ -345,7 +345,7 @@ init_per_testcase(s3_user_proxy_test = Case, Config) ->
 init_per_testcase(swift_user_proxy_test = Case, Config) ->
     ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [file_meta, http_client]),
+    test_utils:mock_new(Worker, [file_meta, http_client], [passthrough]),
     test_utils:mock_expect(Worker, http_client, post, fun( _, _, _) ->
         {ok, 200, [], json_utils:encode([{<<"userName">>, ?USER_NAME},
                     {<<"password">>, ?PASSWORD}])} end),

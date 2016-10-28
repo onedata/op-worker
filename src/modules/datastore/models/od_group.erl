@@ -40,22 +40,22 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {name, binary},
+        {name, string},
         {type, atom},
-        {parents, [binary]},
-        {children, [{binary, [atom]}]},
-        {eff_parents, [binary]},
-        {eff_children, [{binary, [atom]}]},
-        {users, [{binary, [atom]}]},
-        {spaces, [binary]},
-        {handle_services, [binary]},
-        {handles, [binary]},
-        {eff_users, [{binary, [atom]}]},
-        {eff_spaces, [binary]},
-        {eff_shares, [binary]},
-        {eff_providers, [binary]},
-        {eff_handle_services, [binary]},
-        {eff_handles, [binary]},
+        {parents, [string]},
+        {children, [{string, [atom]}]},
+        {eff_parents, [string]},
+        {eff_children, [{string, [atom]}]},
+        {users, [{string, [atom]}]},
+        {spaces, [string]},
+        {handle_services, [string]},
+        {handles, [string]},
+        {eff_users, [{string, [atom]}]},
+        {eff_spaces, [string]},
+        {eff_shares, [string]},
+        {eff_providers, [string]},
+        {eff_handle_services, [string]},
+        {eff_handles, [string]},
         {revision_history, [term]}
     ]}.
 

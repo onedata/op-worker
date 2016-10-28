@@ -187,7 +187,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
+    test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(Case, Config) ->
     ?CASE_START(Case),

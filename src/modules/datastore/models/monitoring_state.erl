@@ -39,7 +39,7 @@ record_struct(1) ->
             {secondary_subject_id, binary},
             {provider_id, binary}
         ]}},
-        {rrd_path, binary},
+        {rrd_path, string},
         {state_buffer, #{term => term}},
         {last_update_time, integer}
     ]}.

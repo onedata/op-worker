@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(private_rpc_backend).
--author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
+-author("Lukasz Opiola").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -22,9 +22,8 @@
 %% API
 -export([handle/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% rpc_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -39,24 +38,19 @@
 %%--------------------------------------------------------------------
 handle(<<"fileUploadSuccess">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
-    FileId = upload_handler:upload_map_lookup(UploadId),
+    ParentId = proplists:get_value(<<"parentId">>, Props),
+    FileId = upload_handler:wait_for_file_new_file_id(UploadId),
     upload_handler:upload_map_delete(UploadId),
-    % @todo VFS-2051 temporary solution for model pushing during upload
-    SessionId = g_session:get_session_id(),
-    % This is sent to the client via sessionDetails object
-    {ok, FileHandle} =
-        logical_file_manager:open(SessionId, {guid, FileId}, read),
-    ok = logical_file_manager:fsync(FileHandle),
-    ok = logical_file_manager:release(FileHandle),
-    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
-    gui_async:push_created(<<"file">>, FileData),
-    % @todo end
-    ok;
+    file_data_backend:report_file_upload(FileId, ParentId);
 
 handle(<<"fileUploadFailure">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     upload_handler:upload_map_delete(UploadId),
     ok;
+
+handle(<<"fileBatchUploadComplete">>, Props) ->
+    ParentId = proplists:get_value(<<"parentId">>, Props),
+    file_data_backend:report_file_batch_complete(ParentId);
 
 % Checks if file can be downloaded (i.e. can be read by the user) and if so,
 % returns download URL.
@@ -92,6 +86,25 @@ handle(<<"getSharedFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
     end;
 
 %%--------------------------------------------------------------------
+%% File manipulation procedures
+%%--------------------------------------------------------------------
+handle(<<"createFile">>, Props) ->
+    SessionId = g_session:get_session_id(),
+    Name = proplists:get_value(<<"fileName">>, Props),
+    ParentId = proplists:get_value(<<"parentId">>, Props, null),
+    Type = proplists:get_value(<<"type">>, Props),
+    case file_data_backend:create_file(SessionId, Name, ParentId, Type) of
+        {ok, FileId} ->
+            {ok, [{<<"fileId">>, FileId}]};
+        Error ->
+            Error
+    end;
+
+handle(<<"fetchMoreDirChildren">>, Props) ->
+    SessionId = g_session:get_session_id(),
+    file_data_backend:fetch_more_dir_children(SessionId, Props);
+
+%%--------------------------------------------------------------------
 %% Space related procedures
 %%--------------------------------------------------------------------
 handle(<<"getTokenUserJoinSpace">>, [{<<"spaceId">>, SpaceId}]) ->
@@ -110,7 +123,7 @@ handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            gui_async:push_created(<<"space">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -144,7 +157,7 @@ handle(<<"groupJoinSpace">>, Props) ->
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            gui_async:push_created(<<"space">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -210,7 +223,7 @@ handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
         {ok, GroupId} ->
             GroupRecord = group_data_backend:group_record(GroupId),
             GroupName = proplists:get_value(<<"name">>, GroupRecord),
-            gui_async:push_created(<<"group">>, GroupRecord, self()),
+            gui_async:push_created(<<"group">>, GroupRecord),
             {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
@@ -245,8 +258,8 @@ handle(<<"groupJoinGroup">>, Props) ->
         {ok, ParentGroupId} ->
             ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
             ChildGroupRecord = group_data_backend:group_record(ChildGroupId),
-            gui_async:push_updated(<<"group">>, ParentGroupRecord, self()),
-            gui_async:push_updated(<<"group">>, ChildGroupRecord, self()),
+            gui_async:push_updated(<<"group">>, ParentGroupRecord),
+            gui_async:push_updated(<<"group">>, ChildGroupRecord),
             PrntGroupName = proplists:get_value(<<"name">>, ParentGroupRecord),
             {ok, [{<<"groupName">>, PrntGroupName}]};
         {error, _} ->
