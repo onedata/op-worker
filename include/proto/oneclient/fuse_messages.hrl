@@ -144,8 +144,9 @@
     file_content :: binary()
 }).
 
--record(checksum, {
-    value :: binary()
+-record(sync_response, {
+    checksum :: binary(),
+    file_location :: #file_location{}
 }).
 
 -record(file_renamed, {
@@ -155,7 +156,7 @@
 
 -type fuse_response() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
-    #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{} | undefined.
+    #storage_test_file{} | #dir{} | #sync_response{} | #file_renamed{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},
