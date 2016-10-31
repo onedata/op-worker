@@ -26,8 +26,6 @@
 -export([bcast_status/0, on_status_received/3]).
 -export([has_sync_context/1, get_space_id/1]).
 
--define(MODELS_TO_SYNC, [file_meta, file_location, monitoring_state, custom_metadata,
-    change_propagation_controller, times]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
 -define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
@@ -227,7 +225,7 @@ handle({flush_queue, QueueKey}) ->
             case dbsync_utils:temp_get(last_global_flush) of
                 FTime when is_integer(FTime),
                     FTime + FlushInterval / 2 > CTime ->
-                    ?info("[ DBSync ] Flush loop is too fast, breaking this one."),
+                    ?debug("[ DBSync ] Flush loop is too fast, breaking this one."),
                     throw({too_many_flush_loops, {flush_queue, QueueKey}});
                 _ ->
                     dbsync_utils:temp_put(last_global_flush, CTime, 0),
@@ -432,7 +430,6 @@ queue_calculate_until(NewUntil, Queue) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{since = Since, until = Until, changes = Changes} = Batch0) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch0]),
-    ?info("Pre-Apply changes from ~p ~p: ~p:~p", [FromProvider, SpaceId, Since, Until]),
 
     %% Both providers have to support this space
     ok = dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId),
@@ -466,7 +463,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
             ok;
         false ->
             ok = apply_changes(SpaceId, Changes),
-            ?info("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
+            ?debug("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
             update_current_seq(FromProvider, SpaceId, Until),
             retrieve_stashed_batch(FromProvider, SpaceId, Batch)
     end.
@@ -701,18 +698,12 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
 -spec has_sync_context(datastore:document()) ->
     boolean().
 has_sync_context(#document{value = #links{model = ModelName}}) ->
-    lists:member(ModelName, ?MODELS_TO_SYNC);
-has_sync_context(#document{value = #monitoring_state{monitoring_id = MonitoringId}}) ->
-    case MonitoringId of
-        #monitoring_id{main_subject_type = space} ->
-            true;
-        _ ->
-            false
-    end;
+    #model_config{sync_enabled = HasSyncCtx} = ModelName:model_init(),
+    HasSyncCtx;
 has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     ModelName = element(1, Value),
-    lists:member(ModelName, ?MODELS_TO_SYNC).
-
+    #model_config{sync_enabled = HasSyncCtx} = ModelName:model_init(),
+    HasSyncCtx.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1117,7 +1108,7 @@ ensure_global_stream_active() ->
             ok;
         LastFlushTime ->
             %% Initialize new flush loop
-            ?info("[ DBSync ] Flush loop is too slow (last timestamp: ~p vs current: ~p), starting new one.", [LastFlushTime, CTime]),
+            ?debug("[ DBSync ] Flush loop is too slow (last timestamp: ~p vs current: ~p), starting new one.", [LastFlushTime, CTime]),
             timer:send_after(0, whereis(dbsync_worker), {timer, {flush_queue, global}})
     end,
 
