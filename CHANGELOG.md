@@ -6,6 +6,14 @@ CHANGELOG
 
 ### 3.0.0-rc10
 
+* VFS-2742 Fix aggregation for update_attr events.
+* VFS-2494 Updating GUI frontend reference
+* VFS-2703 Update mocking
+* VFS-2662 Account uploaded files in LS cache
+* VFS-2662 Fix a badly stacktrace in fslogic worker
+* VFS-2662 Append new files to the beginning of the files list
+* VFS-2662 Implement file creation compatible with pagination model
+* VFS-2662 Add ETS for LS results caching
 * VFS-2665 Add proper deserialization of handle timestamp in subscriptions.
 * VFS-2665 Update ctool and change handle timestamp type definition.
 * VFS-2524 Fix problems with acl protocol encoding, add tests for acl conversion.
