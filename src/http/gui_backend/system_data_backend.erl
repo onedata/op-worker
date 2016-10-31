@@ -19,6 +19,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(system_data_backend).
+-behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
 -include("proto/common/credentials.hrl").
@@ -33,9 +34,8 @@
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% data_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -101,7 +101,7 @@ find(<<"system-group">>, GroupId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(_ResourceType) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -112,7 +112,7 @@ find_all(_ResourceType) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -123,7 +123,7 @@ find_query(_ResourceType, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -135,7 +135,7 @@ create_record(_ResourceType, _Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(_ResourceType, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -146,5 +146,5 @@ update_record(_ResourceType, _Id, _Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(_ResourceType, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not implemented">>).
 

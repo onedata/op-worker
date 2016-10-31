@@ -7,19 +7,22 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the handle_service model used in Ember application.
+%%% the file-acl model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(handle_service_data_backend).
+-module(file_distribution_data_backend).
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
--include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
+%% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
@@ -55,16 +58,8 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"handle-service">>, HandleServiceId) ->
-    Auth = op_gui_utils:get_user_auth(),
-    {ok, #document{
-        value = #od_handle_service{
-            name = Name
-        }}} = handle_service_logic:get(Auth, HandleServiceId),
-    {ok, [
-        {<<"id">>, HandleServiceId},
-        {<<"name">>, Name}
-    ]}.
+find(<<"file-distribution">>, _Id) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -74,18 +69,8 @@ find(<<"handle-service">>, HandleServiceId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"handle-service">>) ->
-    Auth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
-    {ok, HandleServiceIds} = user_logic:get_effective_handle_services(
-        Auth, UserId
-    ),
-    Res = lists:map(
-        fun(HandleServiceId) ->
-            {ok, Data} = find(<<"handle-service">>, HandleServiceId),
-            Data
-        end, HandleServiceIds),
-    {ok, Res}.
+find_all(<<"file-distribution">>) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -95,8 +80,31 @@ find_all(<<"handle-service">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"handle-service">>, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
+    SessionId = g_session:get_session_id(),
+    {ok, Distributions} = logical_file_manager:get_file_distribution(
+        SessionId, {guid, FileId}
+    ),
+    Res = lists:map(
+        fun(#{<<"providerId">> := ProviderId, <<"blocks">> := Blocks}) ->
+            BlocksList =
+                case Blocks of
+                    [] ->
+                        [0, 0];
+                    _ ->
+                        lists:foldl(
+                            fun([Offset, Size], Acc) ->
+                                Acc ++ [Offset, Offset + Size]
+                            end, [], Blocks)
+                end,
+            [
+                {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
+                {<<"fileId">>, FileId},
+                {<<"provider">>, ProviderId},
+                {<<"blocks">>, BlocksList}
+            ]
+        end, Distributions),
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------
@@ -106,7 +114,7 @@ find_query(<<"handle-service">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"handle-service">>, _Data) ->
+create_record(<<"file-distribution">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -118,7 +126,7 @@ create_record(<<"handle-service">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"handle-service">>, _Id, _Data) ->
+update_record(<<"file-distribution">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -129,5 +137,5 @@ update_record(<<"handle-service">>, _Id, _Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"handle-service">>, _Id) ->
+delete_record(<<"file-distribution">>, _Id) ->
     gui_error:report_error(<<"Not implemented">>).

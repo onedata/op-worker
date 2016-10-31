@@ -64,8 +64,8 @@ permission_cache_invalidate_test_base(Config, Attempts) ->
         ?assertEqual(ok, lfm_proxy:set_acl(Worker, SessId, {path, TestDir}, [?deny_user(<<"user1">>)]))
     end,
 
-    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun).
-%%    permission_cache_invalidate_test_skeleton(Config, Attempts, custom_metadata, InvalidateFun2).
+    permission_cache_invalidate_test_skeleton(Config, Attempts, file_meta, InvalidateFun),
+    permission_cache_invalidate_test_skeleton(Config, Attempts, custom_metadata, InvalidateFun2).
 
 permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, InvalidateFun) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),

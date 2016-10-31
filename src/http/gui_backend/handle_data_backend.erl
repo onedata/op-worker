@@ -11,8 +11,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(handle_data_backend).
+-behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -25,7 +27,7 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
-%%% API functions
+%%% data_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -55,22 +57,14 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"handle">>, HandleId) ->
-    Auth = op_gui_utils:get_user_auth(),
-    {ok, #document{
-        value = #od_handle{
-            handle_service = HandleServiceId,
-            public_handle = PublicHandle,
-            resource_id = ShareId,
-            metadata = Metadata
-        }}} = handle_logic:get(Auth, HandleId),
-    {ok, [
-        {<<"id">>, HandleId},
-        {<<"handleService">>, HandleServiceId},
-        {<<"share">>, ShareId},
-        {<<"metadataString">>, Metadata},
-        {<<"publicHandle">>, PublicHandle}
-    ]}.
+find(ModelType, HandleId) ->
+    Auth = case ModelType of
+        <<"handle">> ->
+            op_gui_utils:get_user_auth();
+        <<"handle-public">> ->
+            ?GUEST_SESS_ID
+    end,
+    handle_record(ModelType, Auth, HandleId).
 
 
 %%--------------------------------------------------------------------
@@ -80,8 +74,8 @@ find(<<"handle">>, HandleId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"handle">>) ->
-    gui_error:report_error(<<"Not iplemented">>).
+find_all(_) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -91,8 +85,8 @@ find_all(<<"handle">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"handle">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+find_query(_, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -102,6 +96,8 @@ find_query(<<"handle">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
+create_record(<<"handle-public">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
 create_record(<<"handle">>, Data) ->
     Auth = op_gui_utils:get_user_auth(),
     HandleServiceId = proplists:get_value(<<"handleService">>, Data, <<"">>),
@@ -135,8 +131,8 @@ create_record(<<"handle">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"handle">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+update_record(_, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -146,5 +142,36 @@ update_record(<<"handle">>, _Id, _Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"handle">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>).
+delete_record(_, _Id) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a handle record for given HandleId, depending on given Auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_record(ModelType :: binary(), Auth :: term(),
+    HandleId :: binary()) -> {ok, proplists:proplist()}.
+handle_record(ModelType, Auth, HandleId) ->
+    {ok, #document{value = #od_handle{
+        handle_service = HandleServiceId,
+        public_handle = PublicHandle,
+        resource_id = ShareId,
+        metadata = Metadata
+    }}} = handle_logic:get(Auth, HandleId),
+    % Hide some information in public view
+    {HandleService, Share} = case ModelType of
+        <<"handle">> ->
+            {HandleServiceId, ShareId};
+        <<"handle-public">> ->
+            {null, null}
+    end,
+    {ok, [
+        {<<"id">>, HandleId},
+        {<<"handleService">>, HandleService},
+        {<<"share">>, Share},
+        {<<"metadataString">>, Metadata},
+        {<<"publicHandle">>, PublicHandle}
+    ]}.

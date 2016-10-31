@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(logout_backend).
--author("Lukasz Opiola").
 -behaviour(page_backend_behaviour).
+-author("Lukasz Opiola").
 
 %% API
 -export([page_init/0]).
