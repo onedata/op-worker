@@ -618,7 +618,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
-    file_meta_mock_setup(AllWorkers),
+    file_meta_mock_setup(AllWorkers, Config),
     oz_users_mock_setup(AllWorkers, Users),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
@@ -785,10 +785,15 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
 %% @private
 %% @doc Mocks file_meta module, so that creation of onedata user sends notification.
 %%--------------------------------------------------------------------
--spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
-file_meta_mock_setup(Workers) ->
+-spec file_meta_mock_setup(Workers :: node() | [node()], Config :: list()) -> ok.
+file_meta_mock_setup(Workers, Config) ->
     Self = self(),
-    test_utils:mock_new(Workers, file_meta),
+    case ?config(file_meta_mock_options, Config) of
+        undefined ->
+            test_utils:mock_new(Workers, file_meta);
+        Opts ->
+            test_utils:mock_new(Workers, file_meta, Opts)
+    end,
     test_utils:mock_expect(Workers, file_meta, 'after', fun
         (ModelName, Method, Level, Context, ReturnValue) ->
             meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),

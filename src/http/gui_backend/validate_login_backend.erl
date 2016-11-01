@@ -13,8 +13,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(validate_login_backend).
--author("Lukasz Opiola").
 -behaviour(page_backend_behaviour).
+-author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").

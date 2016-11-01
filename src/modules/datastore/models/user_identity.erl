@@ -138,14 +138,18 @@ fetch(#'OTPCertificate'{}) ->
     {error, cannot_fetch};
 fetch(Auth) ->
     try
-        {ok, #user_details{id = UserId}} = oz_users:get_details(Auth),
-        {ok, #document{key = Id}} = od_user:get_or_fetch(Auth, UserId),
-        NewDoc = #document{key = Auth, value = #user_identity{user_id = Id}},
-        case user_identity:create(NewDoc) of
-            {ok, _} -> ok;
-            {error, already_exists} -> ok
-        end,
-        {ok, NewDoc}
+         case oz_users:get_details(Auth) of
+            {ok, #user_details{id = UserId}} ->
+                {ok, #document{key = Id}} = od_user:get_or_fetch(Auth, UserId),
+                NewDoc = #document{key = Auth, value = #user_identity{user_id = Id}},
+                case user_identity:create(NewDoc) of
+                    {ok, _} -> ok;
+                    {error, already_exists} -> ok
+                end,
+                {ok, NewDoc};
+             {error, {_Code, _Reason, _}} = Error ->
+                 Error
+        end
     catch
         _:Reason ->
             ?error_stacktrace("Cannot establish onedata user identity due to: ~p", [Reason]),

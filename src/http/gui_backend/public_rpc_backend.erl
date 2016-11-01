@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(public_rpc_backend).
--author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
+-author("Lukasz Opiola").
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -20,9 +20,8 @@
 %% API
 -export([handle/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% rpc_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -51,6 +50,8 @@ handle(<<"getPublicFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
             gui_error:internal_server_error()
     end;
 
+handle(<<"fetchMoreDirChildren">>, Props) ->
+    file_data_backend:fetch_more_dir_children(?ROOT_SESS_ID, Props);
+
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).
-

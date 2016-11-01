@@ -395,7 +395,7 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
     catch
         _:Error ->
             report_handshake_error(Sock, Transp, Error),
-            {stop, Error, State}
+            {stop, {shutdown, Error}, State}
     end.
 
 %%--------------------------------------------------------------------
