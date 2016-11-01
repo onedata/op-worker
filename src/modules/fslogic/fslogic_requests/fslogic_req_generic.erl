@@ -161,8 +161,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
             RootUuid = fslogic_uuid:user_root_dir_uuid(SessionUserId),
             ParentGuid = case fslogic_uuid:parent_uuid(FileDoc, SessionUserId) of
                 undefined -> undefined;
-                {ok, RootUuid} -> fslogic_uuid:uuid_to_guid(RootUuid, undefined);
-                {ok, ParentUuid} -> fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId)
+                RootUuid -> fslogic_uuid:uuid_to_guid(RootUuid, undefined);
+                ParentUuid -> fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId)
             end,
 
             FinalUID = case session:get(SessId) of

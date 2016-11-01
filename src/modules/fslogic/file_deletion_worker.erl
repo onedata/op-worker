@@ -75,14 +75,16 @@ handle(healthcheck) ->
     ok;
 handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, FileUUID, Silent}) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(FileUUID),
-    {ok, #document{key = ParentUUID} = ParentDoc} = file_meta:get_parent(FileDoc),
+    {ok, ParentDoc} = file_meta:get_parent(FileDoc),
 
     case open_file:exists(FileUUID) of
         true ->
-            NewName = <<".onedata_hidden", FileUUID/binary>>,
+            {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId),
 
+            NewName = <<".onedata_hidden", FileUUID/binary>>,
+            Path = <<ParentPath/binary, ?DIRECTORY_SEPARATOR, NewName/binary>>,
             #fuse_response{status = #status{code = ?OK}} = fslogic_rename:rename(
-                CTX, {uuid, FileUUID}, ParentUUID, NewName),
+                CTX, {uuid, FileUUID}, Path),
 
             case open_file:mark_to_remove(FileUUID) of
                 ok ->

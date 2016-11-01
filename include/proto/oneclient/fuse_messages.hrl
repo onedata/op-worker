@@ -92,7 +92,7 @@
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #get_new_file_location{} |
     #get_file_location{} | #release{} | #truncate{} | #synchronize_block{} |
-    #synchronize_block_and_compute_checksum{}.
+    #synchronize_block_and_compute_checksum{} | #get_child_attr{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),

@@ -350,9 +350,11 @@ handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_
     fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Offset, Size);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #change_mode{mode = Mode}}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Mode);
-handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
-    TargetDirUUID = fslogic_uuid:guid_to_uuid(TargetParentGuid),
-    fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, TargetDirUUID, TargetName);
+handle_fuse_request(#fslogic_ctx{session_id = SessId} = Ctx, #file_request{context_guid = GUID, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
+    %% Use lfm_files wrapper for fslogic as the target uuid may not be local
+    {ok, TargetParentPath} = lfm_files:get_file_path(SessId, TargetParentGuid),
+    TargetPath = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, TargetParentPath, TargetName]),
+    fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, TargetPath);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #get_new_file_location{name = Name,

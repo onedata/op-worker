@@ -37,7 +37,7 @@
 %% If the file is a root directory itself, returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec parent_uuid(file_meta:entry(), onedata_user:id()) -> file_meta:uuid() | undefined.
+-spec parent_uuid(file_meta:entry(), onedata_user:id()) -> file_meta:uuid() | no_return().
 parent_uuid(Entry, UserId) ->
     UserRootUuid = user_root_dir_uuid(UserId),
     case file_meta:get(Entry) of
@@ -45,8 +45,8 @@ parent_uuid(Entry, UserId) ->
         {ok, #document{key = UserRootUuid}} -> undefined;
         {ok, FileDoc} ->
             case file_meta:get_parent_uuid(FileDoc) of
-                {ok, ?ROOT_DIR_UUID} -> {ok, UserRootUuid};
-                {ok, ParentUuid} -> {ok, ParentUuid}
+                {ok, ?ROOT_DIR_UUID} -> UserRootUuid;
+                {ok, ParentUuid} -> ParentUuid
             end
     end.
 
