@@ -322,18 +322,15 @@ start_event_streams(EvtStmSup, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec request_to_file_entry_or_provider(#event{} | #subscription{}) ->
-    {file, fslogic_worker:file_guid_or_path()} |
-    {connected_client, {guid, fslogic_worker:file_guid()}} | not_file_context.
+    {file, fslogic_worker:file_guid_or_path()} | not_file_context.
 request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUUID}}) ->
     {file, {guid, FileUUID}};
 request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
     {file, {guid, FileUUID}};
-request_to_file_entry_or_provider(#event{object = #update_event{object = #file_attr{uuid = FileUUID}}}) ->
-    {connected_client, {guid, FileUUID}};
-request_to_file_entry_or_provider(#event{object = #update_event{object = #file_location{uuid = FileUUID}}}) ->
-    {connected_client, {guid, FileUUID}};
-request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = FileUUID}}) ->
-    {connected_client, {guid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #update_event{}}) ->
+    not_file_context;
+request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = _FileUUID}}) ->
+    not_file_context;
 request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
     {file, {guid, FileUUID}};
 request_to_file_entry_or_provider(#subscription{object = #file_location_subscription{file_uuid = FileUUID}}) ->
@@ -351,9 +348,7 @@ request_to_file_entry_or_provider(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_or_reroute(RequestMessage :: term(),
-    RequestContext :: {file, fslogic_worker:file_guid_or_path()} |
-    {connected_client, {guid, fslogic_worker:file_guid()}} |
-    {provider, oneprovider:id()} | not_file_context,
+    RequestContext :: {file, fslogic_worker:file_guid_or_path()} | {provider, oneprovider:id()} | not_file_context,
     SessId :: (session:id() | undefined),
     HandleLocallyFun :: fun((RequestMessage :: term(), NewProvMap :: maps:map(),
     IsRerouted :: boolean()) -> term()), ProvMap :: maps:map()) -> term().
@@ -424,19 +419,6 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun, ProvM
                 {[], _} ->
                     throw(unsupported_space)
             end
-    end;
-handle_or_reroute(RequestMessage, {connected_client, {guid, FileUUID}}, SessId, HandleLocallyFun, ProvMap) ->
-    {ok, #document{value = #session{type = Type, auth = Auth, proxy_via = ProxyVia}}} = session:get(SessId),
-    case {Type, ProxyVia} of
-        {fuse, ProxyVia} when ProxyVia /= undefined ->
-            provider_communicator:stream(sequencer:term_to_stream_id(FileUUID), #client_message{
-                message_body = RequestMessage,
-                proxy_session_id = SessId,
-                proxy_session_auth = Auth
-            }, session_manager:get_provider_session_id(outgoing, ProxyVia), 1),
-            HandleLocallyFun(RequestMessage, ProvMap, true);
-        _ ->
-            HandleLocallyFun(RequestMessage, ProvMap, false)
     end;
 handle_or_reroute(Msg, _, _, HandleLocallyFun, ProvMap) ->
     HandleLocallyFun(Msg, ProvMap, false).
