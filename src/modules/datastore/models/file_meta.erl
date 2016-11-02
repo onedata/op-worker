@@ -207,9 +207,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
 -spec get_name(entry()) -> {ok, file_meta:name()} | {datastore:get_error()}.
 get_name(Entry) ->
     case file_meta:get(Entry) of
-        {ok, #document{value = #file_meta{name = Name}}} ->
-            {ok, Name};
-
+        {ok, #document{value = #file_meta{name = Name}}} -> {ok, Name};
         {error, Reason} -> {error, Reason}
     end.
 
