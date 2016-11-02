@@ -4,6 +4,43 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc10
+
+* VFS-2742 Fix aggregation for update_attr events.
+* VFS-2494 Updating GUI frontend reference
+* VFS-2703 Update mocking
+* VFS-2662 Account uploaded files in LS cache
+* VFS-2662 Fix a badly stacktrace in fslogic worker
+* VFS-2662 Append new files to the beginning of the files list
+* VFS-2662 Implement file creation compatible with pagination model
+* VFS-2662 Add ETS for LS results caching
+* VFS-2665 Add proper deserialization of handle timestamp in subscriptions.
+* VFS-2665 Update ctool and change handle timestamp type definition.
+* VFS-2524 Fix problems with acl protocol encoding, add tests for acl conversion.
+* VFS-2524 Add old acl conversion functions.
+* VFS-2400 Update to new ceph and aws libraries
+* VFS-2524 Improve translation of acl and xattr records.
+* VFS-2524 Add basic attributes to /attributes endpoint.
+* VFS-2667 Improve json encoder for DB operations
+* VFS-2524 Change format of attributes in rest.
+* VFS-2524 Fix wrong file owner in cdmi.
+* VFS-2524 Add copy operation to cdmi interface.
+* VFS-2665 Improve consistency checking in dbsync_events module
+* VFS-2659 Add some new fields to subscriptions
+* VFS-2665 Add times as component of file_consistency.
+* VFS-2665 Move times from file_meta to separate model. Fix dbsync problems.
+* VFS-2573 Repair custom metadata propagation
+* VFS-2663 Update deps, update critical section and transaction usage
+* VFS-2659 Add some fields to records synchronized from OZ
+* VFS-2659 Refactor some filed names in records
+* VFS-2659 Rework user and group models
+* VFS-2659 OP no longer differentiates between groups and effective groups
+* VFS-2659 Rename spaces field in od_user to space_aliases
+* VFS-2659 Rename some of the key records in db
+* VFS-2593 Adapt stress tests to new mechanism allowing for running many test suites
+* VFS-2573 Invalidate permission cache propagation
+
+
 ### 3.0.0-rc9
 
 * VFS-2609 Fix error 500 when specifying wrong url for transfer
