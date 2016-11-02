@@ -37,10 +37,16 @@
 %% File upload related procedures
 %%--------------------------------------------------------------------
 handle(<<"fileUploadSuccess">>, Props) ->
+    SessionId = g_session:get_session_id(),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     ParentId = proplists:get_value(<<"parentId">>, Props),
     FileId = upload_handler:wait_for_file_new_file_id(UploadId),
     upload_handler:upload_map_delete(UploadId),
+    {ok, FileHandle} = logical_file_manager:open(
+        SessionId, {guid, FileId}, read
+    ),
+    ok = logical_file_manager:fsync(FileHandle),
+    ok = logical_file_manager:release(FileHandle),
     file_data_backend:report_file_upload(FileId, ParentId);
 
 handle(<<"fileUploadFailure">>, Props) ->
