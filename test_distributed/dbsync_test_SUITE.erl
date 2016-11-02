@@ -35,9 +35,10 @@
 
 all() ->
     ?ALL([
-        global_stream_test,
-        global_stream_document_remove_test,
-        global_stream_with_proto_test
+%%        @todo Disabled until VFS-2306 is resolved
+%%        global_stream_test,
+%%        global_stream_document_remove_test,
+%%        global_stream_with_proto_test
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -90,9 +91,9 @@ global_stream_test(MultiConfig) ->
             {ok, #file_attr{uuid = FileGUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
             {ok, #file_attr{uuid = FileGUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3}),
 
-            FileUUID1 = fslogic_uuid:file_guid_to_uuid(FileGUID1),
-            FileUUID2 = fslogic_uuid:file_guid_to_uuid(FileGUID2),
-            FileUUID3 = fslogic_uuid:file_guid_to_uuid(FileGUID3),
+            FileUUID1 = fslogic_uuid:guid_to_uuid(FileGUID1),
+            FileUUID2 = fslogic_uuid:guid_to_uuid(FileGUID2),
+            FileUUID3 = fslogic_uuid:guid_to_uuid(FileGUID3),
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID1]),
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID2]),
@@ -131,7 +132,7 @@ global_stream_test(MultiConfig) ->
                     ?assertMatch(LocalLRev, LRev),
 
                     {ok, #file_attr{uuid = GUID}} = lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}),
-                    ?assertMatch(UUID, fslogic_uuid:file_guid_to_uuid(GUID))
+                    ?assertMatch(UUID, fslogic_uuid:guid_to_uuid(GUID))
 
                 end, maps:to_list(PathMap))
         end, RevPerPath),
@@ -174,7 +175,7 @@ global_stream_document_remove_test(MultiConfig) ->
 
             Path1 = <<"/space_name1/", D0/binary>>,
             {ok, #file_attr{uuid = FileGUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
-            FileUUID1 = fslogic_uuid:file_guid_to_uuid(FileGUID1),
+            FileUUID1 = fslogic_uuid:guid_to_uuid(FileGUID1),
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID1]),
 
@@ -207,7 +208,7 @@ global_stream_document_remove_test(MultiConfig) ->
                     ?assertMatch(LocalLRev, LRev),
 
                     {ok, #file_attr{uuid = GUID}} = lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}),
-                    ?assertMatch(UUID, fslogic_uuid:file_guid_to_uuid(GUID))
+                    ?assertMatch(UUID, fslogic_uuid:guid_to_uuid(GUID))
 
                 end, maps:to_list(PathMap))
         end, RevPerPath),
@@ -304,9 +305,9 @@ global_stream_with_proto_test(MultiConfig) ->
             {ok, #file_attr{uuid = FileGUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
             {ok, #file_attr{uuid = FileGUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3}),
 
-            FileUUID1 = fslogic_uuid:file_guid_to_uuid(FileGUID1),
-            FileUUID2 = fslogic_uuid:file_guid_to_uuid(FileGUID2),
-            FileUUID3 = fslogic_uuid:file_guid_to_uuid(FileGUID3),
+            FileUUID1 = fslogic_uuid:guid_to_uuid(FileGUID1),
+            FileUUID2 = fslogic_uuid:guid_to_uuid(FileGUID2),
+            FileUUID3 = fslogic_uuid:guid_to_uuid(FileGUID3),
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID1]),
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID2]),
@@ -345,7 +346,7 @@ global_stream_with_proto_test(MultiConfig) ->
                     ?assertMatch(LocalLRev, LRev),
 
                     {ok, #file_attr{uuid = GUID}} = lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}),
-                    ?assertMatch(UUID, fslogic_uuid:file_guid_to_uuid(GUID))
+                    ?assertMatch(UUID, fslogic_uuid:guid_to_uuid(GUID))
 
                 end, maps:to_list(PathMap))
         end, RevPerPath),
@@ -373,9 +374,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Workers, [dbsync_proto, dbsync_utils]),
@@ -413,7 +415,8 @@ init_per_testcase(_, Config) ->
 
     [{all, Config}, {p1, lfm_proxy:init(ConfigWithSessionInfoP1)}, {p2, lfm_proxy:init(ConfigWithSessionInfoP2)}].
 
-end_per_testcase(_, MultiConfig) ->
+end_per_testcase(Case, MultiConfig) ->
+    ?CASE_STOP(Case),
     timer:sleep(timer:seconds(10)),
     Workers = ?config(op_worker_nodes, ?config(all, MultiConfig)),
     lfm_proxy:teardown(?config(p1, MultiConfig)),

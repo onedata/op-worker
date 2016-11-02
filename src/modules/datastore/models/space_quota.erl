@@ -27,10 +27,22 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
+-export([record_struct/1]).
 
 -type id() :: binary().
 
 -export_type([id/0]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {current_size, integer}
+    ]}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -77,6 +89,8 @@ get(Key) ->
             case create(#document{key = Key, value = #space_quota{current_size = 0}}) of
                 {ok, _} ->
                     get(Key);
+                {error, already_exists} ->
+                    get(Key);
                 Other0 ->
                     Other0
             end;
@@ -109,7 +123,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_quota_bucket, [], ?DISK_ONLY_LEVEL).
+    ?MODEL_CONFIG(space_quota_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -141,10 +155,11 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Records total space size change.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_size_change(SpaceId :: space_info:id(), SizeDiff :: integer()) ->
+-spec apply_size_change(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
     {ok, datastore:key()} | datastore:update_error().
 apply_size_change(SpaceId, SizeDiff) ->
-    datastore:run_synchronized(?MODEL_NAME, term_to_binary({quota, SpaceId}),
+    % TODO - use create_or_update
+    critical_section:run([?MODEL_NAME, term_to_binary({quota, SpaceId})],
         fun() ->
             {ok, #document{value = Quot = #space_quota{current_size = OldSize}} = Doc} = get(SpaceId),
             save(Doc#document{value = Quot#space_quota{current_size = OldSize + SizeDiff}})
@@ -157,7 +172,7 @@ apply_size_change(SpaceId, SizeDiff) ->
 %% is getting disabled because of this change, QuotaExeeded event is sent.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_size_change_and_maybe_emit(SpaceId :: space_info:id(), SizeDiff :: integer()) ->
+-spec apply_size_change_and_maybe_emit(SpaceId :: od_space:id(), SizeDiff :: integer()) ->
     ok | {error, Reason :: any()}.
 apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
     Before = space_quota:available_size(SpaceId),
@@ -175,12 +190,12 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
 %% bytes written to the space then quota allows.
 %% @end
 %%--------------------------------------------------------------------
--spec available_size(SpaceId :: space_info:id()) ->
+-spec available_size(SpaceId :: od_space:id()) ->
     AvailableSize :: integer().
 available_size(SpaceId) ->
     try
         {ok, #document{value = #space_quota{current_size = CSize}}} = get(SpaceId),
-        {ok, #document{value = #space_info{providers_supports = ProvSupport}}} = space_info:get(SpaceId),
+        {ok, #document{value = #od_space{providers_supports = ProvSupport}}} = od_space:get(SpaceId),
         SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
         SupSize - CSize
     catch
@@ -196,7 +211,7 @@ available_size(SpaceId) ->
 %% @equiv assert_write(SpaceId, 1)
 %% @end
 %%--------------------------------------------------------------------
--spec assert_write(SpaceId :: space_info:id()) ->
+-spec assert_write(SpaceId :: od_space:id()) ->
     ok | no_return().
 assert_write(SpaceId) ->
     space_quota:assert_write(SpaceId, 1).
@@ -207,7 +222,7 @@ assert_write(SpaceId) ->
 %% Checks if write operation with given size is permitted for given space.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_write(SpaceId :: space_info:id(), WriteSize :: integer()) ->
+-spec assert_write(SpaceId :: od_space:id(), WriteSize :: integer()) ->
     ok | no_return().
 assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
@@ -224,7 +239,7 @@ assert_write(SpaceId, WriteSize) ->
 %% consideration soft quota limit set in op_worker configuration.
 %% @end
 %%--------------------------------------------------------------------
--spec soft_assert_write(SpaceId :: space_info:id(), WriteSize :: integer()) ->
+-spec soft_assert_write(SpaceId :: od_space:id(), WriteSize :: integer()) ->
     ok | no_return().
 soft_assert_write(_SpaceId, WriteSize) when WriteSize =< 0 ->
     ok;
@@ -241,7 +256,7 @@ soft_assert_write(SpaceId, WriteSize) ->
 %% Returns list of spaces that are currently over quota limit.
 %% @end
 %%--------------------------------------------------------------------
--spec get_disabled_spaces() -> [space_info:id()].
+-spec get_disabled_spaces() -> [od_space:id()].
 get_disabled_spaces() ->
     %% @todo: use locally cached data after resolving VFS-2087
     {ok, SpaceIds} = oz_providers:get_spaces(provider),

@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -36,6 +37,7 @@
 
 -export([
     rename_file_test/1,
+    rename_dbsync_test/1,
     rename_file_test_with_failing_link/1,
     rename_file_test_with_failing_link_and_mv/1,
     move_file_test/1,
@@ -66,6 +68,7 @@
 
 all() ->
     ?ALL([
+        rename_dbsync_test,
         rename_file_test,
         rename_file_test_with_failing_link,
         rename_file_test_with_failing_link_and_mv,
@@ -133,12 +136,31 @@ rename_file_test(Config) ->
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
     ExpectedLs = ordsets:from_list([
         <<"renamed_file1_target">>,
-        <<"renamed_file2_target">>, 
+        <<"renamed_file2_target">>,
         <<"renamed_file3_target">>,
         <<"renamed_file3">>
     ]),
     ?assertEqual(ExpectedLs, ActualLs),
-    
+
+    ok.
+
+rename_dbsync_test(Config) ->
+    [W1, W2] = sorted_workers(Config),
+    TestDir = ?config(test_dir, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W2)}}, Config),
+
+    {_, _BaseDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, ""))),
+    {_, _NastedDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, "/nasted"))),
+    {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(4, TestDir, "/renamed_file1"), 8#770)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId1, {guid, File1Guid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle1, 0, <<"test1">>)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, File1Guid}, filename(4, TestDir, "/nasted/renamed_file1_target"))),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, filename(4, TestDir, "/nasted/renamed_file1_target")}, read), 30),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10)),
+
+
     ok.
 
 rename_file_test_with_failing_link(Config) ->
@@ -462,7 +484,7 @@ attributes_retaining_test(Config) ->
     {_, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(1, TestDir, "/dir2/file2"), 8#770)),
     {_, Dir3Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(1, TestDir, "/dir3"))),
     {_, File3Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(1, TestDir, "/dir3/file3"), 8#770)),
-    
+
     PreRenameGuids = [Dir1Guid, File1Guid, Dir2Guid, File2Guid, Dir3Guid, File3Guid],
 
     Ace = #accesscontrolentity{
@@ -672,24 +694,26 @@ redirecting_event_to_renamed_file_test(Config) ->
 
     Self = self(),
     lists:foreach(fun(W) ->
+        ?assertEqual(ok, rpc:call(W, event, unsubscribe, [?FSLOGIC_SUB_ID])),
         ?assertMatch({ok, _}, rpc:call(W, event, subscribe, [#subscription{
+            object = #write_subscription{},
             event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-                emission_time = infinity, event_handler = fun(Events, _) ->
-                    Self ! {events, Events}
-                end}}]))
-        end, [W1, W2]),
+                event_handler = fun(Events, _) -> Self ! {events, Events} end
+            }
+        }]))
+    end, [W1, W2]),
 
     BaseEvent = #write_event{size = 1, file_size = 1,
         blocks = [#file_block{offset = 0, size = 1}]},
 
     ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#write_event{file_uuid = File1Guid}])),
     {_, [#event{key = Evt1Guid}]} = ?assertReceivedMatch({events, [#event{}]}, ?TIMEOUT),
-    ?assertEqual(fslogic_uuid:file_guid_to_uuid(NewFile1Guid), fslogic_uuid:file_guid_to_uuid(Evt1Guid)),
+    ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile1Guid), fslogic_uuid:guid_to_uuid(Evt1Guid)),
 
     flush(),
     ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#write_event{file_uuid = File2Guid}])),
     {_, [#event{key = Evt2Guid}]} = ?assertReceivedMatch({events, [#event{}]}, ?TIMEOUT),
-    ?assertEqual(fslogic_uuid:file_guid_to_uuid(NewFile2Guid), fslogic_uuid:file_guid_to_uuid(Evt2Guid)),
+    ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile2Guid), fslogic_uuid:guid_to_uuid(Evt2Guid)),
 
     ok.
 
@@ -703,9 +727,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 init_per_testcase(CaseName, Config) ->
+    ?CASE_START(CaseName),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
@@ -735,6 +760,7 @@ init_per_testcase(CaseName, Config) ->
     [{test_dir, <<CaseNameBinary/binary, "_dir">>} | NewConfig].
 
 end_per_testcase(CaseName, Config) ->
+    ?CASE_STOP(CaseName),
     Workers = ?config(op_worker_nodes, Config),
     CaseNameString = atom_to_list(CaseName),
     initializer:unload_quota_mocks(Config),

@@ -32,7 +32,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([rename/3]).
+-export([rename/3, rename_storage_file/5]).
 
 %%%===================================================================
 %%% API functions
@@ -54,13 +54,72 @@ rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) 
             {ok, #document{key = SourceUuid}} = file_meta:get(SourceEntry),
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_renamed{
-                    new_uuid = fslogic_uuid:to_file_guid(SourceUuid)}};
+                    new_uuid = fslogic_uuid:uuid_to_guid(SourceUuid)}};
         false ->
             case rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) of
                 {ok, FileRenamed} ->
                     #fuse_response{status = #status{code = ?OK}, fuse_response = FileRenamed};
                 {error, Code} ->
                     #fuse_response{status = #status{code = Code}}
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Renames file on storage. Tries following methods until one succeeds:
+%%  * link new file and remove old link
+%%  * move file
+%%  * create new file, copy contents and delete old file
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_storage_file(SessId :: session:id(), Location :: #file_location{},
+    TargetFileId :: helpers:file(), TargetSpaceId :: binary(), FileIdVersion :: non_neg_integer()) -> {ok, helpers:file()}.
+rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion) ->
+    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} = session:get(SessId),
+    #file_location{uuid = FileUUID, space_id = SourceSpaceId,
+        storage_id = SourceStorageId, file_id = SourceFileId} = Location,
+    {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get(FileUUID),
+
+    {ok, TargetStorage} = fslogic_storage:select_storage(TargetSpaceId),
+    SourceSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SourceSpaceId),
+    TargetSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),
+
+    {ok, SourceStorage} = storage:get(SourceStorageId),
+
+    TargetDir = fslogic_path:dirname(TargetFileId),
+    TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUUID, undefined, TargetStorage, TargetDir),
+    case storage_file_manager:mkdir(TargetDirHandle, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok ->
+            ok;
+        {error, eexist} ->
+            ok
+    end,
+
+    NextFileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}, TargetFileId, FileIdVersion),
+
+    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUUID, FileUUID, SourceStorage, SourceFileId),
+    case storage_file_manager:link(SourceHandle, TargetFileId) of
+        ok ->
+            ok = storage_file_manager:unlink(SourceHandle),
+            {ok, TargetFileId};
+        {error, eexist} ->
+            rename_storage_file(SessId, Location, NextFileId, TargetSpaceId, FileIdVersion + 1);
+        Error ->
+            TargetHandleTest = storage_file_manager:new_handle(SessId, TargetSpaceUUID, FileUUID, TargetStorage, TargetFileId),
+            case storage_file_manager:create(TargetHandleTest, Mode, true) of
+                {error, eexist} ->
+                    rename_storage_file(SessId, Location, NextFileId, TargetSpaceId, FileIdVersion + 1);
+                _ ->
+                    SourceRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SourceSpaceUUID, FileUUID, SourceStorage, SourceFileId),
+                    case storage_file_manager:mv(SourceRootHandle, TargetFileId) of
+                        ok ->
+                            TargetRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUUID, FileUUID, TargetStorage, TargetFileId),
+                            ok = storage_file_manager:chown(TargetRootHandle, UserId, TargetSpaceId);
+                        Error ->
+                            TargetHandle = storage_file_manager:new_handle(SessId, TargetSpaceUUID, FileUUID, TargetStorage, TargetFileId),
+                            ok = copy_file_contents_sfm(SourceHandle, TargetHandle),
+                            ok = storage_file_manager:unlink(SourceHandle)
+                    end,
+                    {ok, TargetFileId}
             end
     end.
 
@@ -318,7 +377,7 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                         FileSnapshots = [File],
                         lists:foreach(
                             fun(Snapshot) ->
-                                ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
+                                ok = rename_on_storage(CTX, TargetSpaceId, Snapshot)
                             end, FileSnapshots),
                         {Acc, undefined};
                     (_Dir, Acc) ->
@@ -326,8 +385,8 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
                 end,
                 fun(#document{key = Uuid} = Entry, Acc, _) ->
                     {ok, NewPath} = fslogic_path:gen_path(Entry, SessId),
-                    [{fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
-                        fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewPath} | Acc]
+                    [{fslogic_uuid:uuid_to_guid(Uuid, SourceSpaceId),
+                        fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId), NewPath} | Acc]
                 end, []);
 
         #document{key = Uuid} = File ->
@@ -345,12 +404,12 @@ rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Canonica
             lists:foreach(
                 fun(Snapshot) ->
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
-                    ok = rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, Snapshot)
+                    ok = rename_on_storage(CTX, TargetSpaceId, Snapshot)
                 end, FileSnapshots),
 
             {ok, NewLogicalPath} = fslogic_path:gen_path({uuid, Uuid}, SessId),
-            [{fslogic_uuid:to_file_guid(Uuid, SourceSpaceId),
-                fslogic_uuid:to_file_guid(Uuid, TargetSpaceId), NewLogicalPath}]
+            [{fslogic_uuid:uuid_to_guid(Uuid, SourceSpaceId),
+                fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId), NewLogicalPath}]
     end,
 
     ok = create_phantom_files(RenamedEntries, SourceSpaceId, TargetSpaceId),
@@ -386,11 +445,12 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
 
     RenamedEntries = for_each_child_file(SourceEntry,
         fun(#document{key = SourceUuid} = Doc, Acc) ->
-            SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
+            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
             {ok, OldPath} = fslogic_path:gen_path(Doc, SessId),
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
+            {ok, {ATime, CTime, MTime}} = times:get_or_default(SourceUUID),
 
             case Doc of
                 #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} ->
@@ -400,11 +460,10 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
                 #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
                     {ok, TargetGuid} = logical_file_manager:mkdir(SessId, NewPath, 8#777)
             end,
-            {Acc, {TargetGuid, NewPath}}
+            {Acc, {TargetGuid, NewPath, {ATime, CTime, MTime}}}
         end,
-        fun(#document{key = SourceUuid, value = #file_meta{atime = ATime,
-            mtime = MTime, ctime = CTime, mode = Mode}}, Acc, {TargetGuid, NewPath}) ->
-            SourceGuid = fslogic_uuid:to_file_guid(SourceUuid),
+        fun(#document{key = SourceUuid, value = #file_meta{mode = Mode}}, Acc, {TargetGuid, NewPath, {ATime, CTime, MTime}}) ->
+            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
             ok = logical_file_manager:set_perms(SessId, {guid, TargetGuid}, Mode),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, {guid, TargetGuid}),
             ok = logical_file_manager:update_times(SessId, {guid, TargetGuid}, ATime, MTime, CTime),
@@ -427,84 +486,22 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
 %%--------------------------------------------------------------------
 %% @doc Renames file on storage and all its locations.
 %%--------------------------------------------------------------------
--spec rename_on_storage(CTX :: fslogic_worker:ctx(), SourceSpaceId :: binary(),
-    TargetSpaceId :: binary(), SourceEntry :: file_meta:entry()) -> ok.
-rename_on_storage(CTX, SourceSpaceId, TargetSpaceId, SourceEntry) ->
-    #fslogic_ctx{session_id = SessId, session = #session{identity = #identity{user_id = UserId}}} = CTX,
+-spec rename_on_storage(CTX :: fslogic_worker:ctx(), TargetSpaceId :: binary(),
+    SourceEntry :: file_meta:entry()) -> ok.
+rename_on_storage(#fslogic_ctx{session_id = SessId} = CTX, TargetSpaceId, SourceEntry) ->
     {ok, #document{key = SourceUUID, value = #file_meta{mode = Mode}}} = file_meta:get(SourceEntry),
-    SourceSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SourceSpaceId),
-    TargetSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),
 
-    lists:foreach(
-        fun(LocationDoc) ->
-            #document{value = #file_location{storage_id = SourceStorageId,
-                file_id = SourceFileId}} = LocationDoc,
-            {ok, SourceStorage} = storage:get(SourceStorageId),
+    lists:foreach(fun(#document{value = Location}) ->
+        TempFileId = fslogic_utils:gen_storage_file_id({uuid, SourceUUID}),
+        {ok, TargetFileId} = rename_storage_file(SessId, Location, TempFileId, TargetSpaceId, 0),
+        ok = replica_updater:rename(SourceUUID, TargetFileId, TargetSpaceId)
+    end, fslogic_utils:get_local_file_locations(SourceEntry)),
 
-            {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
-            TargetFileId = fslogic_utils:gen_storage_file_id({uuid, SourceUUID}),
-            {ok, TargetStorage} = storage:get(TargetStorageId),
-
-            TargetDir = fslogic_path:dirname(TargetFileId),
-            TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUUID, undefined, TargetStorage, TargetDir),
-            case storage_file_manager:mkdir(TargetDirHandle, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-                ok ->
-                    ok;
-                {error, eexist} ->
-                    ok
-            end,
-
-            SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUUID, SourceUUID, SourceStorage, SourceFileId),
-            ok = case storage_file_manager:link(SourceHandle, TargetFileId) of
-                ok ->
-                    ok = storage_file_manager:unlink(SourceHandle);
-                Error ->
-                    SourceRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SourceSpaceUUID, SourceUUID, SourceStorage, SourceFileId),
-                    case storage_file_manager:mv(SourceRootHandle, TargetFileId) of
-                        ok ->
-                            TargetRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUUID, SourceUUID, TargetStorage, TargetFileId),
-                            ok = storage_file_manager:chown(TargetRootHandle, UserId, TargetSpaceId);
-                        Error ->
-                            TargetHandle = storage_file_manager:new_handle(SessId, TargetSpaceUUID, SourceUUID, TargetStorage, TargetFileId),
-                            ok = storage_file_manager:create(TargetHandle, Mode, true),
-                            ok = copy_file_contents_sfm(SourceHandle, TargetHandle),
-                            ok = storage_file_manager:unlink(SourceHandle)
-                    end
-            end,
-
-            ok = update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId)
-
-        end, fslogic_utils:get_local_file_locations(SourceEntry)),
     ok = fslogic_req_generic:chmod_storage_files(
         CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
         SourceEntry,
         Mode
-    ),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc Updates file location.
-%%--------------------------------------------------------------------
--spec update_location(LocationDoc :: datastore:document(),
-    TargetFileId :: helpers:file(), TargetSpaceUUID :: binary(),
-    TargetStorageId :: storage:id()) -> ok.
-update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
-    TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
-    #document{value = #file_location{uuid = FileUUID, blocks = Blocks} = Location} = LocationDoc,
-    UpdatedBlocks = lists:map(
-        fun(Block) ->
-            Block#file_block{file_id = TargetFileId, storage_id = TargetStorageId}
-        end, Blocks),
-    {ok, _} = datastore:run_synchronized(file_location, FileUUID,
-        fun() ->
-            file_location:save(LocationDoc#document{value = Location#file_location{
-                file_id = TargetFileId,
-                space_id = TargetSpaceId,
-                storage_id = TargetStorageId,
-                blocks = UpdatedBlocks
-            }})
-        end),
-    ok.
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc Unlinks file if it exists.
@@ -580,39 +577,39 @@ copy_file_attributes(SessId, From, To) ->
     case logical_file_manager:get_acl(SessId, From) of
         {ok, ACL} ->
             ok = logical_file_manager:set_acl(SessId, To, ACL);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
     case logical_file_manager:get_mimetype(SessId, From) of
         {ok, Mimetype} ->
             ok = logical_file_manager:set_mimetype(SessId, To, Mimetype);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
     case logical_file_manager:get_transfer_encoding(SessId, From) of
         {ok, TransferEncoding} ->
             ok = logical_file_manager:set_transfer_encoding(SessId, To, TransferEncoding);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
     case logical_file_manager:get_cdmi_completion_status(SessId, From) of
         {ok, CompletionStatus} ->
             ok = logical_file_manager:set_cdmi_completion_status(SessId, To, CompletionStatus);
-        {error, enoattr} ->
+        {error, ?ENOATTR} ->
             ok
     end,
 
-    {ok, XattrNames} = logical_file_manager:list_xattr(SessId, From),
+    {ok, XattrNames} = logical_file_manager:list_xattr(SessId, From, false, true),
 
     lists:foreach(
         fun
             (<<"cdmi_", _/binary>>) ->
                 ok;
             (XattrName) ->
-                {ok, Xattr} = logical_file_manager:get_xattr(SessId, From, XattrName),
+                {ok, Xattr} = logical_file_manager:get_xattr(SessId, From, XattrName, false),
                 ok = logical_file_manager:set_xattr(SessId, To, Xattr)
         end, XattrNames
     ),
@@ -627,21 +624,24 @@ copy_file_contents(SessId, From, To) ->
     {ok, FromHandle} = logical_file_manager:open(SessId, From, read),
     {ok, ToHandle} = logical_file_manager:open(SessId, To, write),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ?CHUNK_SIZE_ENV_KEY),
-    copy_file_contents(SessId, FromHandle, ToHandle, 0, ChunkSize).
+    {NewFromHandle, NewToHandle} = copy_file_contents(SessId, FromHandle, ToHandle, 0, ChunkSize),
+    ok = logical_file_manager:release(NewFromHandle),
+    ok = logical_file_manager:release(NewToHandle).
 
 -spec copy_file_contents(session:id(), FromHandle :: logical_file_manager:handle(),
     ToHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
-    Size :: non_neg_integer()) -> ok.
+    Size :: non_neg_integer()) ->
+    {NewFromHandle :: logical_file_manager:handle(), NewToHandle :: logical_file_manager:handle()}.
 copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
     {ok, NewFromHandle, Data} = logical_file_manager:read(FromHandle, Offset, Size),
     DataSize = size(Data),
     {ok, NewToHandle, DataSize} = logical_file_manager:write(ToHandle, Offset, Data),
     case DataSize of
-        Size ->
-            copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset + Size, Size);
+        0 ->
+            logical_file_manager:fsync(NewToHandle),
+            {NewFromHandle, NewToHandle};
         _ ->
-            logical_file_manager:fsync(ToHandle),
-            ok
+            copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset + DataSize, Size)
     end.
 
 %%--------------------------------------------------------------------
@@ -663,20 +663,20 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
     DataSize = size(Data),
     {ok, DataSize} = storage_file_manager:write(ToHandle, Offset, Data),
     case DataSize of
-        Size ->
-            copy_file_contents_sfm(FromHandle, ToHandle, Offset + Size, Size);
+        0 ->
+            ok;
         _ ->
-            ok
+            copy_file_contents_sfm(FromHandle, ToHandle, Offset + DataSize, Size)
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Returns list of ids of providers supporting
 %%--------------------------------------------------------------------
 -spec get_supporting_providers(SpaceUUID :: binary(),
-    Auth :: oz_endpoint:auth(), UserId :: onedata_user:id()) -> [binary()].
+    Auth :: oz_endpoint:auth(), UserId :: od_user:id()) -> [binary()].
 get_supporting_providers(SpaceId, Auth, UserId) ->
-    {ok, #document{value = #space_info{providers = Providers}}} =
-        space_info:get_or_fetch(Auth, SpaceId, UserId),
+    {ok, #document{value = #od_space{providers = Providers}}} =
+        od_space:get_or_fetch(Auth, SpaceId, UserId),
     ordsets:from_list(Providers).
 
 
@@ -720,7 +720,7 @@ create_phantom_files(Entries, OldSpaceId, NewSpaceId) ->
         false ->
             lists:foreach(
                 fun({OldGuid, NewGuid, _}) ->
-                    file_meta:create_phantom_file(fslogic_uuid:file_guid_to_uuid(OldGuid),
+                    file_meta:create_phantom_file(fslogic_uuid:guid_to_uuid(OldGuid),
                         OldSpaceId, NewGuid)
                 end, Entries)
     end.

@@ -29,7 +29,8 @@
 -type key() :: term().
 -type object() :: #read_event{} | #update_event{} | #write_event{}
 | #permission_changed_event{} | #file_removal_event{} | #quota_exeeded_event{}
-| #file_renamed_event{} | #file_accessed_event{}.
+| #file_renamed_event{} | #file_accessed_event{} | #storage_used_updated{}
+| #od_space_updated{} | #file_operations_statistics{} | #rtransfer_statistics{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
@@ -50,7 +51,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: event() | object()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    emit(Evt, get_event_managers()).
+    emit(Evt, get_event_managers_for_event(Evt)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,13 +62,13 @@ emit(Evt) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, Ref}) ->
     ExcludedEvtMans = sets:from_list(get_event_managers(as_list(Ref))),
-    emit(Evt, filter_event_managers(get_event_managers(), ExcludedEvtMans));
+    emit(Evt, filter_event_managers(get_event_managers_for_event(Evt), ExcludedEvtMans));
 
 emit(#event{key = undefined} = Evt, Ref) ->
     emit(set_key(Evt), Ref);
 
 emit(#event{} = Evt, Ref) ->
-    send_to_event_managers(Evt, get_event_managers(as_list(Ref)));
+    send_to_event_managers(set_stream_id(Evt), get_event_managers(as_list(Ref)));
 
 emit(EvtObject, Ref) ->
     emit(#event{object = EvtObject}, Ref).
@@ -194,30 +195,66 @@ unsubscribe(SubId, Ref) ->
 -spec set_key(Evt :: event()) -> NewEvt :: event().
 set_key(#event{object = #read_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
-
 set_key(#event{object = #write_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
-
 set_key(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
-
+    Evt#event{key = Uuid, stream_key = <<"file_attr.", Uuid/binary>>};
 set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
-
+    Evt#event{key = Uuid, stream_key = <<"file_location.", Uuid/binary>>};
 set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid};
-
+    Evt#event{key = Uuid, stream_key = <<"permission_changed.", Uuid/binary>>};
 set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid};
-
+    Evt#event{key = Uuid, stream_key = <<"file_removal.", Uuid/binary>>};
 set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
     Evt#event{key = <<"quota_exeeded">>};
-
 set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
-    Evt#event{key = Uuid};
-
+    Evt#event{key = Uuid, stream_key = <<"file_renamed.", Uuid/binary>>};
 set_key(#event{object = #file_accessed_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid}.
+    Evt#event{key = Uuid};
+set_key(#event{object = #storage_used_updated{space_id = SpaceId, user_id = UserId}} = Evt) ->
+    Evt#event{key = {SpaceId, UserId, <<"storage_used_updated">>}};
+set_key(#event{object = #od_space_updated{space_id = SpaceId}} = Evt) ->
+    Evt#event{key = {SpaceId, <<"od_space_updated">>}};
+set_key(#event{object = #file_operations_statistics{space_id = SpaceId, user_id = UserId}} = Evt) ->
+    Evt#event{key = {SpaceId, UserId, <<"file_operations_statistics">>}};
+set_key(#event{object = #rtransfer_statistics{space_id = SpaceId, user_id = UserId}} = Evt) ->
+    Evt#event{key = {SpaceId, UserId, <<"rtransfer_statistics">>}}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets ID of a stream that is responsible for handling the event.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_stream_id(Evt :: event()) -> NewEvt :: event().
+set_stream_id(#event{stream_id = StmId} = Evt) when StmId =/= undefined ->
+    Evt;
+set_stream_id(#event{object = #read_event{}} = Evt) ->
+    Evt#event{stream_id = read_event_stream};
+set_stream_id(#event{object = #write_event{}} = Evt) ->
+    Evt#event{stream_id = write_event_stream};
+set_stream_id(#event{object = #update_event{object = #file_attr{}}} = Evt) ->
+    Evt#event{stream_id = file_attr_event_stream};
+set_stream_id(#event{object = #update_event{object = #file_location{}}} = Evt) ->
+    Evt#event{stream_id = file_location_event_stream};
+set_stream_id(#event{object = #permission_changed_event{}} = Evt) ->
+    Evt#event{stream_id = permission_changed_event_stream};
+set_stream_id(#event{object = #file_removal_event{}} = Evt) ->
+    Evt#event{stream_id = file_removal_event_stream};
+set_stream_id(#event{object = #quota_exeeded_event{}} = Evt) ->
+    Evt#event{stream_id = quota_exceeded_event_stream};
+set_stream_id(#event{object = #file_renamed_event{}} = Evt) ->
+    Evt#event{stream_id = file_renamed_event_stream};
+set_stream_id(#event{object = #file_accessed_event{}} = Evt) ->
+    Evt#event{stream_id = file_accessed_event_stream};
+set_stream_id(#event{object = #storage_used_updated{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream};
+set_stream_id(#event{object = #od_space_updated{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream};
+set_stream_id(#event{object = #file_operations_statistics{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream};
+set_stream_id(#event{object = #rtransfer_statistics{}} = Evt) ->
+    Evt#event{stream_id = monitoring_event_stream}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -266,14 +303,32 @@ get_event_managers() ->
             lists:foldl(fun
                 ({ok, EvtMan}, EvtMans) ->
                     [EvtMan | EvtMans];
-                ({error, {not_found, SessId}}, EvtMans) ->
-                    ?warning("Cannot get event manager for session ~p due to: missing", [SessId]),
+                ({error, {not_found, _}}, EvtMans) ->
                     EvtMans
             end, [], Refs);
         {error, Reason} ->
-            ?warning("Cannot get event managers due to: ~p", [Reason]),
+            ?error("Cannot get event managers due to: ~p", [Reason]),
             []
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list of event managers that are dedicated for the event.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_managers_for_event(Evt :: event() | object()) -> [EvtMan :: pid()].
+get_event_managers_for_event(#event{key = undefined} = Evt) ->
+    get_event_managers_for_event(set_key(Evt));
+get_event_managers_for_event(#event{} = Evt) ->
+    case file_subscription:get(Evt) of
+        {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
+            get_event_managers(gb_sets:to_list(SessIds));
+        _ ->
+            get_event_managers()
+    end;
+get_event_managers_for_event(EvtObject) ->
+    get_event_managers_for_event(#event{object = EvtObject}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -298,7 +353,7 @@ filter_event_managers(EvtMans, ExcludedEvtMans) ->
     ok.
 send_to_event_managers(Msg, EvtMans) ->
     lists:foreach(fun(EvtMan) ->
-        gen_server:cast(EvtMan, Msg)
+        gen_server2:cast(EvtMan, Msg)
     end, EvtMans).
 
 %%--------------------------------------------------------------------
@@ -312,4 +367,3 @@ as_list(Object) when is_list(Object) ->
     Object;
 as_list(Object) ->
     [Object].
-

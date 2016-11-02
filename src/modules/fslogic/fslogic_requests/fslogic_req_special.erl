@@ -29,26 +29,24 @@
 %% @doc Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: fslogic_worker:file(),
+-spec mkdir(CTX :: fslogic_worker:ctx(), ParentFile :: fslogic_worker:file(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
-mkdir(CTX, ParentUUID, Name, Mode) ->
+mkdir(CTX, ParentFile, Name, Mode) ->
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
         type = ?DIRECTORY_TYPE,
         mode = Mode,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
-    case file_meta:create(ParentUUID, File) of
+    case file_meta:create(ParentFile, File) of
         {ok, DirUUID} ->
-            fslogic_times:update_mtime_ctime(ParentUUID, fslogic_context:get_user_id(CTX)),
+            {ok, _} = times:create(#document{key = DirUUID, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
+            fslogic_times:update_mtime_ctime(ParentFile, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-                #dir{uuid = fslogic_uuid:to_file_guid(DirUUID)}
+                #dir{uuid = fslogic_uuid:uuid_to_guid(DirUUID)}
             };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
@@ -64,7 +62,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
-read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offset, Size) ->
+read_dir(#fslogic_ctx{space_id = SpaceId, share_id = ShareId} = CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),
@@ -76,8 +74,8 @@ read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offs
     UserRootUUID = fslogic_uuid:user_root_dir_uuid(UserId),
     case Key of
         UserRootUUID ->
-            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
-                onedata_user:get(UserId),
+            {ok, #document{value = #od_user{space_aliases = Spaces}}} =
+                od_user:get(UserId),
 
             Children =
                 case Offset < length(Spaces) of
@@ -85,7 +83,7 @@ read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offs
                         SpacesChunk = lists:sublist(Spaces, Offset + 1, Size),
                         lists:map(fun({SpaceId, SpaceName}) ->
                             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                            #child_link{uuid = fslogic_uuid:to_file_guid(SpaceUUID, SpaceId), name = SpaceName}
+                            #child_link{uuid = fslogic_uuid:uuid_to_guid(SpaceUUID, SpaceId), name = SpaceName}
                         end, SpacesChunk);
                     false ->
                         []
@@ -98,7 +96,7 @@ read_dir(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Offs
             };
         _ ->
             #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:to_file_guid(UUID, SpaceId)}
+                fuse_response = #file_children{child_links = [CL#child_link{uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId)}
                     || CL = #child_link{uuid = UUID} <- ChildLinks]}}
     end.
 

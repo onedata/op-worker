@@ -11,19 +11,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(private_rpc_backend).
--author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
+-author("Lukasz Opiola").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([handle/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% rpc_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -37,27 +37,72 @@
 %% File upload related procedures
 %%--------------------------------------------------------------------
 handle(<<"fileUploadSuccess">>, Props) ->
-    ConnRef = proplists:get_value(<<"connectionRef">>, Props),
     UploadId = proplists:get_value(<<"uploadId">>, Props),
-    FileId = upload_handler:upload_map_lookup(UploadId),
+    ParentId = proplists:get_value(<<"parentId">>, Props),
+    FileId = upload_handler:wait_for_file_new_file_id(UploadId),
     upload_handler:upload_map_delete(UploadId),
-    % @todo VFS-2051 temporary solution for model pushing during upload
-    SessionId = g_session:get_session_id(),
-    % This is sent to the client via sessionDetails object
-    ConnPid = list_to_pid(binary_to_list(base64:decode(ConnRef))),
-    {ok, FileHandle} =
-        logical_file_manager:open(SessionId, {guid, FileId}, read),
-    ok = logical_file_manager:fsync(FileHandle),
-    ok = logical_file_manager:release(FileHandle),
-    {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
-    gui_async:push_created(<<"file">>, FileData, ConnPid),
-    % @todo end
-    ok;
+    file_data_backend:report_file_upload(FileId, ParentId);
 
 handle(<<"fileUploadFailure">>, Props) ->
     UploadId = proplists:get_value(<<"uploadId">>, Props),
     upload_handler:upload_map_delete(UploadId),
     ok;
+
+handle(<<"fileBatchUploadComplete">>, Props) ->
+    ParentId = proplists:get_value(<<"parentId">>, Props),
+    file_data_backend:report_file_batch_complete(ParentId);
+
+% Checks if file can be downloaded (i.e. can be read by the user) and if so,
+% returns download URL.
+handle(<<"getFileDownloadUrl">>, [{<<"fileId">>, FileId}]) ->
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:check_perms(SessionId, {guid, FileId}, read) of
+        {ok, true} ->
+            Hostname = g_ctx:get_requested_hostname(),
+            URL = str_utils:format_bin("https://~s/download/~s",
+                [Hostname, FileId]),
+            {ok, [{<<"fileUrl">>, URL}]};
+        {ok, false} ->
+            gui_error:report_error(<<"Permission denied">>);
+        _ ->
+            gui_error:internal_server_error()
+    end;
+
+% Checks if file that is displayed in shares view can be downloaded
+% (i.e. can be read by the user) and if so, returns download URL.
+handle(<<"getSharedFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
+    {_, FileId} = op_gui_utils:association_to_ids(AssocId),
+    SessionId = g_session:get_session_id(),
+    case logical_file_manager:check_perms(SessionId, {guid, FileId}, read) of
+        {ok, true} ->
+            Hostname = g_ctx:get_requested_hostname(),
+            URL = str_utils:format_bin("https://~s/download/~s",
+                [Hostname, FileId]),
+            {ok, [{<<"fileUrl">>, URL}]};
+        {ok, false} ->
+            gui_error:report_error(<<"Permission denied">>);
+        _ ->
+            gui_error:internal_server_error()
+    end;
+
+%%--------------------------------------------------------------------
+%% File manipulation procedures
+%%--------------------------------------------------------------------
+handle(<<"createFile">>, Props) ->
+    SessionId = g_session:get_session_id(),
+    Name = proplists:get_value(<<"fileName">>, Props),
+    ParentId = proplists:get_value(<<"parentId">>, Props, null),
+    Type = proplists:get_value(<<"type">>, Props),
+    case file_data_backend:create_file(SessionId, Name, ParentId, Type) of
+        {ok, FileId} ->
+            {ok, [{<<"fileId">>, FileId}]};
+        Error ->
+            Error
+    end;
+
+handle(<<"fetchMoreDirChildren">>, Props) ->
+    SessionId = g_session:get_session_id(),
+    file_data_backend:fetch_more_dir_children(SessionId, Props);
 
 %%--------------------------------------------------------------------
 %% Space related procedures
@@ -78,7 +123,7 @@ handle(<<"userJoinSpace">>, [{<<"token">>, Token}]) ->
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            gui_async:push_created(<<"space">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -112,7 +157,7 @@ handle(<<"groupJoinSpace">>, Props) ->
         {ok, SpaceId} ->
             SpaceRecord = space_data_backend:space_record(SpaceId),
             SpaceName = proplists:get_value(<<"name">>, SpaceRecord),
-            gui_async:push_created(<<"space">>, SpaceRecord, self()),
+            gui_async:push_created(<<"space">>, SpaceRecord),
             {ok, [{<<"spaceName">>, SpaceName}]};
         {error, invalid_token_value} ->
             gui_error:report_warning(<<"Invalid token value.">>)
@@ -140,6 +185,25 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
                 <<"Cannot get invite provider token due to unknown error.">>)
     end;
 
+handle(<<"createFileShare">>, Props) ->
+    SessionId = g_session:get_session_id(),
+    FileId = proplists:get_value(<<"fileId">>, Props),
+    Name = proplists:get_value(<<"shareName">>, Props),
+    case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
+        {ok, {ShareId, _}} ->
+            % Push file data so GUI knows that is is shared
+            {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
+            gui_async:push_created(<<"file">>, FileData),
+            {ok, [{<<"shareId">>, ShareId}]};
+        {error, ?EACCES} ->
+            gui_error:report_warning(<<"You do not have permissions to "
+            "manage shares in this space.">>);
+        _ ->
+            gui_error:report_warning(
+                <<"Cannot create share due to unknown error.">>)
+    end;
+
+
 %%--------------------------------------------------------------------
 %% Group related procedures
 %%--------------------------------------------------------------------
@@ -159,7 +223,7 @@ handle(<<"userJoinGroup">>, [{<<"token">>, Token}]) ->
         {ok, GroupId} ->
             GroupRecord = group_data_backend:group_record(GroupId),
             GroupName = proplists:get_value(<<"name">>, GroupRecord),
-            gui_async:push_created(<<"group">>, GroupRecord, self()),
+            gui_async:push_created(<<"group">>, GroupRecord),
             {ok, [{<<"groupName">>, GroupName}]};
         {error, _} ->
             gui_error:report_error(
@@ -194,8 +258,8 @@ handle(<<"groupJoinGroup">>, Props) ->
         {ok, ParentGroupId} ->
             ParentGroupRecord = group_data_backend:group_record(ParentGroupId),
             ChildGroupRecord = group_data_backend:group_record(ChildGroupId),
-            gui_async:push_updated(<<"group">>, ParentGroupRecord, self()),
-            gui_async:push_updated(<<"group">>, ChildGroupRecord, self()),
+            gui_async:push_updated(<<"group">>, ParentGroupRecord),
+            gui_async:push_updated(<<"group">>, ChildGroupRecord),
             PrntGroupName = proplists:get_value(<<"name">>, ParentGroupRecord),
             {ok, [{<<"groupName">>, PrntGroupName}]};
         {error, _} ->
@@ -223,4 +287,7 @@ handle(<<"getTokenRequestSpaceCreation">>, [{<<"groupId">>, GroupId}]) ->
         {error, _} ->
             gui_error:report_error(
                 <<"Cannot get invite provider token due to unknown error.">>)
-    end.
+    end;
+
+handle(_, _) ->
+    gui_error:report_error(<<"Not implemented">>).

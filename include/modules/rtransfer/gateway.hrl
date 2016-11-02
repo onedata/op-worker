@@ -24,7 +24,7 @@
     size :: pos_integer(),
     remote :: {inet:ip_address(), inet:port_number()}, %% IP address and port of remote node that should fulfill the request
     notify :: [pid() | atom()],                        %% a process to be notified of action's results
-    retry :: pos_integer()
+    retry :: integer()
 }).
 
 -define(log_call(Request),

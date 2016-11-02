@@ -19,30 +19,42 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([call_fslogic/4, rm/2, isdir/2]).
+-export([call_fslogic/5, call_fslogic/4, rm/2, isdir/2]).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends given Request to fslogic_worker, recives answer and applies 'fuse_response' value to given function.
-%% Returns the function's return value on success or error code returned in fslogic's response.
+%% Sends given Request to fslogic_worker, recives answer and applies
+%% 'fuse_response' or 'provider_response' value to given function.
+%% Returns the function's return value on success or error code returned
+%% in fslogic's response.
 %% @end
 %%--------------------------------------------------------------------
--spec call_fslogic(SessId :: session:id(), RequestType :: fslogic_worker:request_type(),
-    Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
+-spec call_fslogic(SessId :: session:id(), RequestType :: file_request | provider_request,
+    ContextEntry :: fslogic_worker:file_guid() | undefined, Request :: term(),
+    OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
-call_fslogic(SessId, fuse_request, Request, OKHandle) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = Request}}) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
-            OKHandle(Response);
-        #fuse_response{status = #status{code = Code}} ->
-            {error, Code}
-    end;
-call_fslogic(SessId, provider_request, Request, OKHandle) ->
-    case worker_proxy:call(fslogic_worker, {provider_request, SessId, #provider_request{provider_request = Request}}) of
+call_fslogic(SessId, file_request, ContextGuid, Request, OKHandle) ->
+    call_fslogic(SessId, fuse_request,
+        #file_request{context_guid = ContextGuid, file_request = Request}, OKHandle);
+call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
+    case worker_proxy:call(fslogic_worker, {provider_request, SessId,
+        #provider_request{context_guid = ContextGuid, provider_request = Request}}) of
         #provider_response{status = #status{code = ?OK}, provider_response = Response} ->
             OKHandle(Response);
         #provider_response{status = #status{code = Code}} ->
+            {error, Code}
+    end.
+
+-spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request,
+    Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
+    Return when Return :: term().
+call_fslogic(SessId, fuse_request, Request, OKHandle) ->
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
+        #fuse_request{fuse_request = Request}}) of
+        #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
+            OKHandle(Response);
+        #fuse_response{status = #status{code = Code}} ->
             {error, Code}
     end.
 
@@ -106,7 +118,7 @@ rm_children(#fslogic_ctx{session_id = SessId} = CTX, GUID, Offset, Chunk, Answer
             {FirstError, ErrorCount} = lists:foldl(fun
                 (ok, {Ans, ErrorCount}) -> {Ans, ErrorCount};
                 (Error, {ok, ErrorCount}) -> {Error, ErrorCount + 1};
-                (Error, {OldError, ErrorCount}) -> {OldError, ErrorCount + 1}
+                (_Error, {OldError, ErrorCount}) -> {OldError, ErrorCount + 1}
             end, {Answer, 0}, Answers),
 
             case length(Children) of

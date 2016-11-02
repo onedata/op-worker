@@ -20,13 +20,35 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([run_synchronized/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
+-export([critical_section/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
     validate_block_data/3]).
+-export([record_struct/1]).
 
 -type id() :: binary().
 -type doc() :: datastore:document().
 
 -export_type([id/0, doc/0]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {uuid, string},
+        {provider_id, string},
+        {storage_id, string},
+        {file_id, string},
+        {blocks, [term]},
+        {version_vector, #{term => integer}},
+        {size, integer},
+        {handle_id, string},
+        {space_id, string},
+        {recent_changes, {[term], [term]}},
+        {last_rename, {{string, string}, integer}}
+    ]}.
 
 %%%===================================================================
 %%% API
@@ -38,9 +60,9 @@
 %% run at the same time.
 %% @end
 %%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
+-spec critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
+critical_section(ResourceId, Fun) ->
+    critical_section:run([?MODEL_NAME, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -108,19 +130,19 @@ save(Document = #document{key = Key, value = #file_location{uuid = UUID, space_i
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize - OldSize),
-            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize - OldSize);
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize - OldSize);
 
         {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
 
             space_quota:apply_size_change_and_maybe_emit(OldSpaceId,  -1 * OldSize),
-            monitoring_updates:update_storage_used(OldSpaceId, UserId, -1 * OldSize),
+            monitoring_event:emit_storage_used_updated(OldSpaceId, UserId, -1 * OldSize),
 
             space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
-            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize);
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
         _ ->
             space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
-            monitoring_updates:update_storage_used(SpaceId, UserId, NewSize)
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize)
     end,
     datastore:save(?STORE_LEVEL, Document).
 
@@ -146,7 +168,7 @@ create(Document = #document{value = #file_location{uuid = UUID, space_id = Space
     UserId = get_user_id(UUID),
 
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-    monitoring_updates:update_storage_used(SpaceId, UserId, NewSize),
+    monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize),
 
     datastore:create(?STORE_LEVEL, Document).
 
@@ -171,7 +193,7 @@ delete(Key) ->
             Size = count_bytes(Doc),
             UserId = get_user_id(UUID),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
-            monitoring_updates:update_storage_used(SpaceId, UserId, -1 * Size);
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok
     end,
@@ -193,7 +215,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations_bucket, [], ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
+    ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc

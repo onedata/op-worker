@@ -142,7 +142,7 @@ init_per_suite(Config) ->
     NewConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= emit_read_event_should_execute_handler;
@@ -151,12 +151,12 @@ init_per_testcase(Case, Config) when
     Case =:= emit_file_location_update_event_should_execute_handler ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
-    init_per_testcase(default, [{subscription_id, SubId} | Config]);
+    init_per_testcase(?DEFAULT_CASE(Case), [{subscription_id, SubId} | Config]);
 
 init_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    NewConfig = init_per_testcase(default, Config),
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
     {ok, SubId} = subscribe(Worker, SessId, ?READ_EVENT_STREAM,
         notify_event_handler(), fun(_) -> false end, infinity),
@@ -165,7 +165,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_event_manager ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    NewConfig = init_per_testcase(default, Config),
+    NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
     {ok, SubId} = subscribe(Worker, SessId, ?READ_EVENT_STREAM,
         forward_events_event_handler(), fun(_) -> true end, infinity),
@@ -173,6 +173,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     SessIds = lists:map(fun(N) ->
@@ -191,16 +192,17 @@ init_per_testcase(Case, Config) when
     end),
     NewConfig;
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
     test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
         fun(_) -> <<"spaceid">> end),
-    test_utils:mock_new(Workers, space_info),
-    test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
-        {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
+    test_utils:mock_new(Workers, od_space),
+    test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
+        {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]),
     test_utils:mock_expect(Worker, file_meta, get, fun
@@ -216,17 +218,18 @@ end_per_testcase(Case, Config) when
     Case =:= emit_file_location_update_event_should_execute_handler ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
-    end_per_testcase(default, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process;
     Case =:= subscribe_should_notify_event_manager ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(session_id, Config), ?config(subscription_id, Config)),
-    end_per_testcase(default, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
@@ -236,12 +239,13 @@ end_per_testcase(Case, Config) when
     initializer:clear_assume_all_files_in_space(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:clear_assume_all_files_in_space(Config),
-    test_utils:mock_unload(Workers, space_info),
+    test_utils:mock_unload(Workers, od_space),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================
@@ -268,7 +272,7 @@ session_setup(Worker) ->
     {ok, SessId :: session:id()}.
 session_setup(Worker, SessId) ->
     Self = self(),
-    Iden = #identity{user_id = <<"user1">>},
+    Iden = #user_identity{user_id = <<"user1">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, #token_auth{}, [Self]]
     )),
@@ -306,6 +310,7 @@ subscribe(Worker) ->
     EmTime :: event_stream:emission_time()) -> {ok, SubId :: subscription:id()}.
 subscribe(Worker, StmDef, Handler, EmRule, EmTime) ->
     ?assertMatch({ok, _}, rpc:call(Worker, event, subscribe, [#subscription{
+        object = test_subscription,
         event_stream = StmDef#event_stream_definition{
             emission_rule = EmRule,
             emission_time = EmTime,
@@ -325,6 +330,7 @@ subscribe(Worker, StmDef, Handler, EmRule, EmTime) ->
     {ok, SubId :: subscription:id()}.
 subscribe(Worker, SessId, StmDef, Handler, EmRule, EmTime) ->
     ?assertMatch({ok, _}, rpc:call(Worker, event, subscribe, [#subscription{
+        object = test_subscription,
         event_stream = StmDef#event_stream_definition{
             emission_rule = EmRule,
             emission_time = EmTime,

@@ -42,9 +42,9 @@
     closed :: atom(),
     error :: atom(),
     % actual connection state
-    socket :: ssl2:socket(),
+    socket :: etls:socket(),
     transport :: module(),
-    session_id :: session:id(),
+    session_id :: undefined | session:id(),
     connection_type :: incoming | outgoing,
     peer_type = fuse_client :: fuse_client | provider_incoming
 }).
@@ -61,7 +61,7 @@
 %% Starts the incoming connection.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: atom(), Socket :: ssl2:socket(), Transport :: atom(),
+-spec start_link(Ref :: atom(), Socket :: etls:socket(), Transport :: atom(),
     Opts :: list()) -> {ok, Pid :: pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
@@ -74,7 +74,7 @@ start_link(SessionId, Hostname, Port, Transport, Timeout) ->
 %% Initializes the connection.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term(), Socket :: ssl2:socket(), Transport :: atom(), Opts :: list()) ->
+-spec init(Args :: term(), Socket :: etls:socket(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts) ->
     ok = proc_lib:init_ack({ok, self()}),
@@ -84,11 +84,19 @@ init(Ref, Socket, Transport, _Opts) ->
     Certificate = get_cert(Socket),
 
     PeerType = case provider_auth_manager:is_provider(Certificate) of
-        true -> provider_incoming;
+        true ->
+            MyProviderId = oneprovider:get_provider_id(),
+            case provider_auth_manager:get_provider_id(Certificate) of
+                MyProviderId ->
+                    ?warning("Connection loop detected. Shutting down the connection."),
+                    erlang:error(connection_loop_detected);
+                _ ->
+                    provider_incoming
+            end;
         false -> fuse_client
     end,
 
-    gen_server:enter_loop(?MODULE, [], #state{
+    gen_server2:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
@@ -110,17 +118,18 @@ init(Ref, Socket, Transport, _Opts) ->
 init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [{certfile, oz_plugin:get_cert_path()}, {keyfile, oz_plugin:get_key_path()}],
     ?info("Connecting to ~p ~p ~p", [Hostname, Port, TLSSettings]),
+    % TODO - Often (first?) connection crashes with {error,'No such file or directory'}
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
     {Ok, Closed, Error} = Transport:messages(),
     Certificate = get_cert(Socket),
 
-    session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #identity{
+    session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #user_identity{
         provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
 
     ok = proc_lib:init_ack({ok, self()}),
-    gen_server:enter_loop(?MODULE, [], #state{
+    gen_server2:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
@@ -140,7 +149,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     ok | {error, Reason :: term()} | {exit, Reason :: term()}.
 send(Msg, Ref) when is_pid(Ref) ->
     try
-        gen_server:call(Ref, {send, Msg})
+        gen_server2:call(Ref, {send, Msg})
     catch
         _:Reason -> {error, Reason}
     end;
@@ -159,7 +168,7 @@ send(Msg, Ref) ->
     ok | {error, Reason :: term()}.
 send_async(Msg, Ref) when is_pid(Ref) ->
     try
-        gen_server:cast(Ref, {send, Msg})
+        gen_server2:cast(Ref, {send, Msg})
     catch
         _:Reason -> {error, Reason}
     end;
@@ -256,7 +265,7 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: ssl2:socket(),
+-spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: etls:socket(),
     Data :: binary()} | term(), State :: #state{}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
@@ -299,8 +308,8 @@ handle_info(_Info, State) ->
 terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     session:remove_connection(SessId, self()),
-    ssl2:close(Socket),
-    ssl2:close(State#state.socket),
+    etls:close(Socket),
+    etls:close(State#state.socket),
     ok.
 
 %%--------------------------------------------------------------------
@@ -378,15 +387,39 @@ handle_server_message(State = #state{session_id = SessId, certificate = _Cert}, 
 handle_handshake(State = #state{certificate = Cert, socket = Sock,
     transport = Transp}, Msg) ->
     try fuse_auth_manager:handle_handshake(Msg, Cert) of
-        {ok, Response = #server_message{message_body =
-        #handshake_response{session_id = NewSessId}}} ->
-            send_server_message(Sock, Transp, Response),
-            {noreply, State#state{session_id = NewSessId}, ?TIMEOUT}
+        {ok, SessId} ->
+            send_server_message(Sock, Transp, #server_message{
+                message_body = #handshake_response{status = 'OK'}
+            }),
+            {noreply, State#state{session_id = SessId}, ?TIMEOUT}
     catch
         _:Error ->
-            ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),
-            {stop, Error, State}
+            report_handshake_error(Sock, Transp, Error),
+            {stop, {shutdown, Error}, State}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends a server message with the handshake error details.
+%% @end
+%%--------------------------------------------------------------------
+-spec report_handshake_error(Sock :: etls:socket(), Transp :: module(), Error :: term()) ->
+    ok.
+report_handshake_error(Sock, Transp, {badmatch, {error, Error}}) ->
+    report_handshake_error(Sock, Transp, Error);
+report_handshake_error(Sock, Transp, {Code, Error, _Description}) when is_integer(Code) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = translator:translate_handshake_error(Error)
+        }
+    });
+report_handshake_error(Sock, Transp, _) ->
+    send_server_message(Sock, Transp, #server_message{
+        message_body = #handshake_response{
+            status = 'INTERNAL_SERVER_ERROR'
+        }
+    }).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -464,7 +497,7 @@ update_message_id(State, Msg) ->
 %% via erlang message
 %% @end
 %%--------------------------------------------------------------------
--spec activate_socket_once(Socket :: ssl2:socket(), Transport :: module()) -> ok.
+-spec activate_socket_once(Socket :: etls:socket(), Transport :: module()) -> ok.
 activate_socket_once(Socket, Transport) ->
     ok = Transport:setopts(Socket, [{active, once}]).
 
@@ -474,7 +507,7 @@ activate_socket_once(Socket, Transport) ->
 %% Sends #server_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_server_message(Socket :: ssl2:socket(), Transport :: module(),
+-spec send_server_message(Socket :: etls:socket(), Transport :: module(),
     ServerMessage :: #server_message{}) -> ok.
 send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     try serializator:serialize_server_message(ServerMsg) of
@@ -493,7 +526,7 @@ send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
 %% Sends #client_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
--spec send_client_message(Socket :: ssl2:socket(), Transport :: module(),
+-spec send_client_message(Socket :: etls:socket(), Transport :: module(),
     ServerMessage :: #client_message{}) -> ok.
 send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
     try serializator:serialize_client_message(ClientMsg) of
@@ -512,10 +545,10 @@ send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
 %% Returns OTP certificate for given socket or 'undefined' if there isn't one.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cert(Socket :: ssl2:socket()) ->
+-spec get_cert(Socket :: etls:socket()) ->
     undefined | #'OTPCertificate'{}.
 get_cert(Socket) ->
-    case ssl2:peercert(Socket) of
+    case etls:peercert(Socket) of
         {error, _} -> undefined;
         {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
     end.

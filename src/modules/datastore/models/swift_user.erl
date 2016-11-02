@@ -14,25 +14,34 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/4, user_name/1, password/1]).
+-export([new_ctx/2, new/3, add_ctx/3, add/3, get_all_ctx/1, get_ctx/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
-
--record(swift_user_credentials, {
-    user_name :: user_name(),
-    password :: password()
-}).
+-export([record_struct/1]).
 
 -type user_name() :: binary().
 -type password() :: binary().
--type credentials() :: #swift_user_credentials{}.
+-type ctx() :: #swift_user_ctx{}.
+-type type() :: #swift_user{}.
 
--export_type([user_name/0, password/0, credentials/0]).
+-export_type([user_name/0, password/0, ctx/0, type/0]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {ctx, #{string => term}}
+    ]}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -129,76 +138,58 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds Openstack Swift storage credentials for onedata user.
+%% Creates Openstack Swift user context.
 %% @end
 %%--------------------------------------------------------------------
--spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserName :: user_name(),
-    Password :: password()) -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
-add(UserId, StorageId, UserName, Password) ->
-    case swift_user:get(UserId) of
-        {ok, #document{value = SwiftUser} = Doc} ->
-            NewSwiftUser = add_credentials(SwiftUser, StorageId, UserName, Password),
-            swift_user:save(Doc#document{value = NewSwiftUser});
-        {error, {not_found, _}} ->
-            SwiftUser = new(UserId, StorageId, UserName, Password),
-            case create(SwiftUser) of
-                {ok, SwiftUserId} -> {ok, SwiftUserId};
-                {error, already_exists} ->
-                    add(UserId, StorageId, UserName, Password);
-                {error, Reason} -> {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+-spec new_ctx(UserName :: user_name(), Password :: password()) -> UserCtx :: ctx().
+new_ctx(UserName, Password) ->
+    #swift_user_ctx{user_name = UserName, password = Password}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns Openstack Swift user name.
+%% Creates Openstack Swift user document.
 %% @end
 %%--------------------------------------------------------------------
--spec user_name(Credentials :: #swift_user_credentials{}) -> user_name().
-user_name(#swift_user_credentials{user_name = UserName}) ->
-    UserName.
+-spec new(UserId :: od_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    UserDoc :: datastore:document().
+new(UserId, StorageId, #swift_user_ctx{} = UserCtx) ->
+    #document{key = UserId, value = add_ctx(StorageId, UserCtx, #swift_user{})}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns Openstack Swift user password.
+%% Adds Openstack Swift storage context to onedata user.
 %% @end
 %%--------------------------------------------------------------------
--spec password(Credentials :: #swift_user_credentials{}) -> password().
-password(#swift_user_credentials{password = Password}) ->
-    Password.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+-spec add_ctx(StorageId :: storage:id(), UserCtx :: ctx(), User :: #swift_user{}) ->
+    User :: #swift_user{}.
+add_ctx(StorageId, UserCtx, #swift_user{ctx = Ctx} = User) ->
+    User#swift_user{ctx = maps:put(StorageId, UserCtx, Ctx)}.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns Openstack Swift user datastore document.
+%% Returns all Openstack Swift storage contexts for onedata user.
 %% @end
 %%--------------------------------------------------------------------
--spec new(UserId :: onedata_user:id(), StorageId :: storage:id(),
-    UserName :: user_name(), Password :: password()) -> Doc :: #document{}.
-new(UserId, StorageId, UserName, Password) ->
-    #document{key = UserId, value = #swift_user{
-        credentials = maps:put(StorageId, #swift_user_credentials{
-            user_name = UserName,
-            password = Password
-        }, #{})}
-    }.
+-spec get_all_ctx(User :: #swift_user{}) -> Ctx :: #{storage:id() => ctx()}.
+get_all_ctx(#swift_user{ctx = Ctx}) ->
+    Ctx.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Adds credentials to existing Openstack Swift user.
+%% @equiv helpers_user:get_ctx(?MODULE, UserId, StorageId)
 %% @end
 %%--------------------------------------------------------------------
--spec add_credentials(SwiftUser :: #swift_user{}, StorageId :: storage:id(),
-    UserName :: user_name(), Password :: password()) -> NewSwiftUser :: #swift_user{}.
-add_credentials(#swift_user{credentials = Credentials} = SwiftUser, StorageId, UserName, Password) ->
-    SwiftUser#swift_user{credentials = maps:put(StorageId, #swift_user_credentials{
-        user_name = UserName,
-        password = Password
-    }, Credentials)}.
+-spec get_ctx(UserId :: od_user:id(), StorageId :: storage:id()) ->
+    UserCtx :: ctx() | undefined.
+get_ctx(UserId, StorageId) ->
+    helpers_user:get_ctx(?MODULE, UserId, StorageId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv helpers_user:add(?MODULE, UserId, StorageId, UserCtx)
+%% @end
+%%--------------------------------------------------------------------
+-spec add(UserId :: od_user:id(), StorageId :: storage:id(), UserCtx :: ctx()) ->
+    {ok, UserId :: od_user:id()} | {error, Reason :: term()}.
+add(UserId, StorageId, UserCtx) ->
+    helpers_user:add(?MODULE, UserId, StorageId, UserCtx).

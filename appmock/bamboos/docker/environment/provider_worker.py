@@ -10,8 +10,6 @@ import subprocess
 import sys
 from . import common, docker, worker, gui
 
-DOCKER_BINDIR_PATH = '/root/build'
-
 
 def up(image, bindir, dns_server, uid, config_path, logdir=None,
        storages_dockers=None, luma_config=None):
@@ -95,6 +93,12 @@ class ProviderWorkerConfigurator:
             extra_volumes.extend(gui.extra_volumes(gui_config, instance))
         return extra_volumes
 
+    def couchbase_ramsize(self):
+        return 1024
+
+    def couchbase_buckets(self):
+        return {"default": 300, "sync": 400}
+
     def app_name(self):
         return "op_worker"
 
@@ -112,7 +116,8 @@ def create_storages(storages, op_nodes, op_config, bindir, storages_dockers):
     # copy escript to docker host
     script_names = {'posix': 'create_posix_storage.escript',
                     's3': 'create_s3_storage.escript',
-                    'ceph': 'create_ceph_storage.escript'}
+                    'ceph': 'create_ceph_storage.escript',
+                    'swift': 'create_swift_storage.escript'}
     pwd = common.get_script_dir()
     for script_name in script_names.values():
         command = ['cp', os.path.join(pwd, script_name),
@@ -124,8 +129,9 @@ def create_storages(storages, op_nodes, op_config, bindir, storages_dockers):
     container = first_node.split("@")[1]
     worker_name = container.split(".")[0]
     cookie = op_config[worker_name]['vm.args']['setcookie']
+    bindir = os.path.abspath(bindir)
     script_paths = dict(
-        map(lambda (k, v): (k, os.path.join(DOCKER_BINDIR_PATH, v)),
+        map(lambda (k, v): (k, os.path.join(bindir, v)),
             script_names.iteritems()))
     for storage in storages:
         if isinstance(storage, basestring):
@@ -149,12 +155,24 @@ def create_storages(storages, op_nodes, op_config, bindir, storages_dockers):
             config = storages_dockers['s3'][storage['name']]
             command = ['escript', script_paths['s3'], cookie,
                        first_node, storage['name'], config['host_name'],
-                       storage['bucket'], config['access_key'],
-                       config['secret_key'],
+                       config.get('scheme', 'http'), storage['bucket'],
+                       config['access_key'], config['secret_key'],
                        config.get('iam_request_scheme', 'https'),
                        config.get('iam_host', 'iam.amazonaws.com')]
             assert 0 is docker.exec_(container, command, tty=True,
                                      stdout=sys.stdout, stderr=sys.stderr)
+
+        elif storage['type'] == 'swift':
+            config = storages_dockers['swift'][storage['name']]
+            command = ['escript', script_paths['swift'], cookie,
+                       first_node, storage['name'],
+                       'http://{0}:{1}/v2.0/tokens'.format(config['host_name'],
+                                                    config['keystone_port']),
+                       storage['container'], config['tenant_name'],
+                       config['user_name'], config['password']]
+            assert 0 is docker.exec_(container, command, tty=True,
+                                     stdout=sys.stdout, stderr=sys.stderr)
+
         else:
             raise RuntimeError(
                 'Unknown storage type: {}'.format(storage['type']))

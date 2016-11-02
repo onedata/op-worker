@@ -13,7 +13,6 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/sfm_handle.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/fslogic/helpers.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -23,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
--export([new_handle/5, new_handle/6]).
+-export([new_handle/5, new_handle/6, new_handle/7]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, symlink/2, link/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
     fsync/1]).
@@ -37,6 +36,14 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc @equiv new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, undefined).
+%%--------------------------------------------------------------------
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
+    Storage :: datastore:document(), FileId :: helpers:file()) ->
+    handle().
+new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
+    new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,9 +54,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
-  Storage :: datastore:document(), FileId :: helpers:file()) ->
+  Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: od_share:id() | undefined) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
+new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId, ShareId) ->
     FSize =
         case FileUUID of
             undefined ->
@@ -69,7 +76,8 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
         provider_id = oneprovider:get_provider_id(),
         is_local = true,
         storage = Storage,
-        file_size = FSize
+        file_size = FSize,
+        share_id = ShareId
     }.
 
 %%--------------------------------------------------------------------
@@ -82,9 +90,9 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
-    StorageId :: storage:id(), FileId :: helpers:file(), oneprovider:id()) ->
+    StorageId :: storage:id(), FileId :: helpers:file(), od_share:id() | undefined, oneprovider:id()) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
+new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ShareId, ProviderId) ->
     {IsLocal, Storage, Size} =
         case oneprovider:get_provider_id() of
             ProviderId ->
@@ -108,7 +116,8 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
         is_local = IsLocal,
         storage = Storage,
         storage_id = StorageId,
-        file_size = Size
+        file_size = Size,
+        share_id = ShareId
     }.
 
 %%--------------------------------------------------------------------
@@ -136,6 +145,7 @@ open(#sfm_handle{is_local = false} = SFMHandle, _) ->
 %% when handle goes out of scope (term will be released by Erlang's GC).
 %% Bypasses permissions check to allow to open file at creation.
 %% @end
+% TODO - relese in spec - how (missing release function in sfm)?
 %%--------------------------------------------------------------------
 -spec open_at_creation(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
@@ -173,7 +183,13 @@ mkdir(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid 
                 [_] -> ok;
                 [_ | _]  ->
                     LeafLess = fslogic_path:dirname(Tokens),
-                    ok = mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true)
+                    case mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+                        ok -> ok;
+                        {error,eexist} -> ok;
+                        ParentError ->
+                            ?error("Cannot create parent for file ~p, error ~p", [FileId, ParentError]),
+                            throw(ParentError)
+                    end
             end,
             R = case mkdir(SFMHandle, Mode, false) of
                 ok ->
@@ -234,7 +250,7 @@ chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID, 
 
     case StorageType of
         ?DIRECTIO_HELPER_NAME ->
-            #posix_user_ctx{uid = Uid, gid = Gid} = fslogic_storage:get_posix_user_ctx(?DIRECTIO_HELPER_NAME, #identity{user_id = UserId}, SpaceUuid),
+            #posix_user_ctx{uid = Uid, gid = Gid} = fslogic_storage:get_posix_user_ctx(?DIRECTIO_HELPER_NAME, #user_identity{user_id = UserId}, SpaceUuid),
             helpers:chown(HelperHandle, FileId, Uid, Gid);
         _ ->
             ok
@@ -297,7 +313,7 @@ write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, helper_handle = Helpe
     helpers:write(HelperHandle, File, Offset, Buffer);
 
 write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Data) ->
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
+    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
     ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_write{byte_sequence = [#byte_sequence{offset = Offset, data = Data}]}},
@@ -323,7 +339,7 @@ read(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Of
     helpers:read(HelperHandle, File, Offset, MaxSize);
 
 read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Size) ->
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
+    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
     ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_read{offset = Offset, size = Size}},

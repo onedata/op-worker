@@ -4,6 +4,267 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc10
+
+* VFS-2742 Fix aggregation for update_attr events.
+* VFS-2494 Updating GUI frontend reference
+* VFS-2703 Update mocking
+* VFS-2662 Account uploaded files in LS cache
+* VFS-2662 Fix a badly stacktrace in fslogic worker
+* VFS-2662 Append new files to the beginning of the files list
+* VFS-2662 Implement file creation compatible with pagination model
+* VFS-2662 Add ETS for LS results caching
+* VFS-2665 Add proper deserialization of handle timestamp in subscriptions.
+* VFS-2665 Update ctool and change handle timestamp type definition.
+* VFS-2524 Fix problems with acl protocol encoding, add tests for acl conversion.
+* VFS-2524 Add old acl conversion functions.
+* VFS-2400 Update to new ceph and aws libraries
+* VFS-2524 Improve translation of acl and xattr records.
+* VFS-2524 Add basic attributes to /attributes endpoint.
+* VFS-2667 Improve json encoder for DB operations
+* VFS-2524 Change format of attributes in rest.
+* VFS-2524 Fix wrong file owner in cdmi.
+* VFS-2524 Add copy operation to cdmi interface.
+* VFS-2665 Improve consistency checking in dbsync_events module
+* VFS-2659 Add some new fields to subscriptions
+* VFS-2665 Add times as component of file_consistency.
+* VFS-2665 Move times from file_meta to separate model. Fix dbsync problems.
+* VFS-2573 Repair custom metadata propagation
+* VFS-2663 Update deps, update critical section and transaction usage
+* VFS-2659 Add some fields to records synchronized from OZ
+* VFS-2659 Refactor some filed names in records
+* VFS-2659 Rework user and group models
+* VFS-2659 OP no longer differentiates between groups and effective groups
+* VFS-2659 Rename spaces field in od_user to space_aliases
+* VFS-2659 Rename some of the key records in db
+* VFS-2593 Adapt stress tests to new mechanism allowing for running many test suites
+* VFS-2573 Invalidate permission cache propagation
+
+
+### 3.0.0-rc9
+
+* VFS-2609 Fix error 500 when specifying wrong url for transfer
+* VFS-2609 Fix query-index invalid parameters
+* VFS-2609 Fix error 500 when requesting nonexistent transfer
+* VFS-2609 Handle metadata filter errors
+* VFS-2609 Handle invalid json as error 400
+
+
+### 3.0.0-rc8
+
+* VFS-2625 Add tests for deletion and conflit resolving for handles and handle services
+* VFS-2625 Add support for public handles
+* VFS-2625 Do not use handle get or fetch
+* VFS-2625 Fix public share view not retrieving fiels correctly
+* VFS-2625 Fix handles not being properly retrieved via REST
+* VFS-2609 Add test of setting json primitives as metadata.
+* VFS-2524 Apply recommended changes.
+* VFS-2625 Add backends for handles and handle services
+* VFS-2524 Add move operation to cdmi, split move and copy tests.
+* VFS-2625 Add handle field to share record in data backend
+* VFS-2594 Make filters work with json metadata in arrays.
+* VFS-2625 Accound handles and handle_serives in subscriptions tests
+* VFS-2625 Set default value of service properties in handle services to empty list
+* VFS-2625 Add handles and handle_services to subscriptions
+* VFS-2626 Add handle field to share_info
+
+
+### 3.0.0-rc7
+
+* VFS-2567 Use ShareId and FileId in getPublicFileDownloadUrl public rpc call
+* VFS-2567 Use new approach to shared files displaying in public view
+* VFS-2567 Push container dir change upon share rename
+* VFS-2567 Share.file is now file rather than file-shared record
+* VFS-2567 Add file-property-shared record dedicated for shares view
+* VFS-2567 Add file-shared record dedicated for shares view
+* VFS-2567 Add container dir to share record
+* VFS-2567 Change name of fileProperty field in file public record
+* VFS-2567 Add reference to publi file from public metadata record
+* VFS-2567 Add public metadata record in file public record
+* VFS-2567 Make sure group type is an atom in onedata_group fetch
+* VFS-2567 Allow getting only public data about a group
+* VFS-2567 Show shares only to users with space_view_data
+* VFS-2567 Fix json and rdf metadata not being properly deleted in update callback in data backend
+* VFS-2594 Add read and execute permission for others on space dir. Block guest users from reading non shared files
+* VFS-2567 Fix some bugs in code responsible for checking view privileges
+* VFS-2594 Add check of 'other' perms for share files.
+* VFS-2567 Check view permissions in groups and shares gui backend
+* VFS-2594 Refactor lfm_proxy module.
+* VFS-2594 Move xattr name definitions to header, do not alow direct modification of xattrs with 'onedata_' prefix.
+* VFS-2594 Add remove_metadata operation.
+* VFS-2567 Check view permissions in space gui backend
+* VFS-2594 Add has_custom_metadata method to logical_file_manager.
+* VFS-2180 Implement support for read only spaces
+* VFS-2180 Add provider's ID to file_attr message
+* VFS 2557 Update tests init/teardown
+* VFS-2456 Add metadata to public view
+* VFS-2456 Implement first version of metadata backend
+* VFS-2405 Add some error handling to group privileges
+* VFS-2405 Add some error handling to space privileges
+* VFS-2405 Add error handling when user is not authorized to manage shares
+* VFS-2555 Remove shares on file removal, add doc for share_guid, decode oz 403 error as eacces.
+* VFS-2555 Add shares field to file attr.
+* VFS-2405 Adjust to new shares API in OP, fix a badmatch
+* VFS-2405 Use lfm API to create and delete share
+* VFS-2555 Implement remove_share operation and move some logic out of share_logic.
+* VFS-2555 Add Name parameter to create_share operation.
+* VFS-2405 Implement share_logic:delete
+* VFS-2555 Adjust fslogic_proxyio_test to shares.
+* VFS-2555 Improve share permissions and guest user management.
+* VFS-2555 Add protocol for operations on shares
+* VFS-2555 Add guest session, prepare api and tests for shares.
+* VFS-2405 do not use root session id in shares view
+* VFS-2405 Add mockup of public share data backend
+* VFS-2405 Add mapping in gui backend for the new space permission (manage shares)
+* VFS-2405 Further code refactor
+* VFS-2405 Adjust to new OZ model where shares are no longer spaces
+* VFS-2405 Add share specific parameters to space record
+
+
+### 3.0.0-rc6
+
+* VFS-2180 Improve links conflict resolution
+* VFS-2582 Using GUI fix for blank notifications
+* VFS-2180 Adapt code to cluster_worker's API change
+* VFS-2180 Improve dbsync implementation
+* VFS-2180 Use gen_server2 instead of erlang's gen_server module
+* VFS-2390 Fix handlers specification in REST API
+* VFS-2390 Update rebar to version 3
+* Update memory management
+* VFS-2180 Allow for concurrent file creation
+
+
+### 3.0.0-rc5
+
+* VFS-2534 Use erlang:system_time/1 instead of os:timestamp/0
+* VFS-2534 Skip dbsync state update if not changed
+* VFS-2543 Integrate gen_server2
+* VFS-2446 Use default group type rather than undefined in group logic
+* VFS-2472 Convert metadata to from proplists to maps.
+* VFS-2472 Do not fail when user provides empty callback for replicate operation.
+* VFS-2540 add on_bamboo variable to coverage target
+* VFS-2540 implement collecting .coverdata files in coverage.escript from many ct directories
+* VFS-2534 Improve events processing
+* VFS-2426 Add check_perms operation to logical_file_manager.
+* VFS-2472 Add 1.1 as possible cdmi version, improve documentation.
+* VFS-2472 Handle acl identifier without '&#35;' separator.
+* VFS-2472 Add correct handling of key and keys parameters to query_index handler.
+* VFS-2490 Update op-gui-default ref
+* VFS-2472 Add filter option to metadata PUT.
+* VFS-2472 Unify file identifiers in REST interface.
+* VFS-2472 Add checking permissions to REST API operations.
+* VFS-2472 Add listing and getting inherited xattrs to REST API.
+* VFS-2472 Add inherited option to listing and getting xattrs internals.
+* VFS-2472 Add inherited option to getting json metadata.
+* VFS-2472 Add json merging function.
+* VFS-2472 Add 'inherited' option to list_xattr and get_metadata interface.
+* VFS-2472 Add escaping of user defined js function.
+* VFS-2309 oz test mock updated to match actual implementation
+* VFS-2309 implemented provider registration besed on public keys & updated tests
+* VFS-2309 listener starting fixes
+* VFS-2309 fixed public key encoding
+* VFS-2309 public key based identity endpoind
+
+
+### 3.0.0-rc4
+
+* VFS-2384 Prevent unrelated events from being lost on crash.
+* VFS-2320 Move RRD databases to file system
+
+
+### 3.0.0-RC3
+
+* VFS-2156 Remove GUI files
+* VFS-2311 Add private RPC to retrieve file download URL
+* VFS-2389 Change event stream management
+* VFS-2263 Do not create handles for created file if not needed
+* VFS-2189 Close connection after file upload failure
+* VFS-2319 Remove spawns on event emits
+* VFS-2402 Update cluster_worker
+* Releasing new version 3.0.0-RC2
+* VFS-2273 Handle handshake errors
+* VFS-2233 Changing separate fuse request types to nested types
+* VFS-2336 Update LUMA API to swagger version
+* VFS-2303 Fix eunit tests.
+* VFS-2303 Add metadata-id endpoint.
+* VFS-2303 Add filters for getting metadata.
+* VFS-2303 Add query-index rest endpoint.
+* VFS-2340 Minor comments update
+* VFS-2303 Adjust query_view function to handle any view option.
+* VFS-2303 Fix /index/:id PUT rest internal error.
+* VFS-2303 Add /index and /index/:id endpoints to rest API.
+* VFS-2269 Enable Symmetric Multiprocessing
+* VFS-2303 Store all user indexes in one file.
+* VFS-2303 Adjust metadata changes stream to the new metadata organization.
+* VFS-2303 Add index model.
+* VFS-2303 Add validation of metadata type.
+* VFS-2303 Add filtering by spaceID to views.
+* VFS-2303 Add view tests.
+* VFS-2303 Add better error handling for custom metadata.
+* VFS-2319 Reimplement monitoring using events
+* VFS-2303 Add support for rdf metadata.
+* VFS-2303 Move xattrs to custom_metadata document.
+* VFS-2303 Add basic metadata operations.
+* VFS-2361 Turn off HSTS by default, allow configuration via app.config
+* VFS-2340, Update deps
+* Releasing new version 3.0.0-RC1
+* VFS-2049 Improve file_consistency waiting for parent mechanism.
+* VFS-2049 Add waiting for parent_links in dbsync hook.
+* VFS-2049 Fix file_consistency wrong list ordering.
+* VFS-2303 Add custom_metadata model.
+* VFS-2229 Add reaction to rename of external file_location
+* VFS-2215 Disable blocks prefetching.
+* VFS-2215 Exclude file removal originator from event recipients.
+* VFS-2049 Make file_consistency work after system restart.
+* VFS-1847 Refactor LUMA and helpers modules
+* Squashed 'appmock/' changes from 71733d3..1f49f58
+* VFS-2049 Improve file_consistency model.
+* VFS-2233 Extract file entry to generic fuse request
+* VFS-2049 Basic consistency checking before executing hook.
+
+
+### 3.0.0-RC2
+
+* VFS-2336 Update LUMA API to swagger version
+* VFS-2303 Add metadata-id endpoint.
+* VFS-2303 Add filters for getting metadata.
+* VFS-2303 Add query-index rest endpoint.
+* VFS-2303 Adjust query_view function to handle any view option.
+* VFS-2303 Add /index and /index/:id endpoints to rest API.
+* Fix reactive file displaying in GUI during file upload
+* VFS-2269 Enable Symmetric Multiprocessing
+* VFS-2303 Store all user indexes in one file.
+* VFS-2303 Adjust metadata changes stream to the new metadata organization.
+* VFS-2303 Add custom_metadatada model to sync via dbsync.
+* VFS-2303 Add index model.
+* VFS-2303 Add validation of metadata type.
+* VFS-2303 Add filtering by spaceID to views.
+* VFS-2303 Add view tests.
+* VFS-2303 Add better error handling for custom metadata.
+* VFS-2340 Repair bug in storage file manager
+* VFS-2303 Add support for rdf metadata.
+* VFS-2303 Move xattrs to custom_metadata document.
+* VFS-2340 Update file consistency management
+* VFS-2340 Add file consistency test
+* VFS-2329 Include data requested for sync in prefetching range.
+* VFS-2361 Turn off HSTS by default, allow configuration via app.config
+
+
+### 3.0.0-RC1
+
+* VFS-2316 Update etls.
+* VFS-2292, Update dbsync batches storing
+* VFS-2215 Disable blocks prefetching.
+* VFS-2215 Exclude file removal originator from event recipients.
+* VFS-2215 Wrap event_manager's handle_cast in try/catch.
+* VFS-2292 Session managmenet update
+* VFS-2292 Minor initializer update
+* VFS-2292 Add os-mon
+* VFS-2250 Use wrappers for macaroon serialization
+* VFS-2214, Release handles for created files
+* VFS-2214, Update session management and lfm proxy
+
+
 ### 3.0.0-beta8
 
 

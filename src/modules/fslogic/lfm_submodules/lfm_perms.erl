@@ -22,7 +22,7 @@
 -export_type([access_control_entity/0]).
 
 %% API
--export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
+-export([set_perms/3, check_perms/3, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
 remove_acl/1, remove_acl/2]).
 
 %%%===================================================================
@@ -38,19 +38,31 @@ remove_acl/1, remove_acl/2]).
 set_perms(SessId, FileKey, NewPerms) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, fuse_request,
-        #change_mode{uuid = GUID, mode = NewPerms},
+    lfm_utils:call_fslogic(SessId, file_request, GUID,
+        #change_mode{mode = NewPerms},
         fun(_) -> ok end).
 
 
 %%--------------------------------------------------------------------
 %% @doc Checks if current user has given permissions for given file.
 %%--------------------------------------------------------------------
--spec check_perms(FileKey :: logical_file_manager:file_key(), PermsType :: check_permissions:check_type()) ->
+-spec check_perms(session:id(), logical_file_manager:file_key(), helpers:open_mode()) ->
     {ok, boolean()} | logical_file_manager:error_reply().
-check_perms(_Path, _PermType) ->
-    {ok, false}.
-
+check_perms(SessId, FileKey, PermType) ->
+    CTX = fslogic_context:new(SessId),
+    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    case lfm_utils:call_fslogic(SessId, provider_request, GUID,
+        #check_perms{flags = PermType}, fun(_) -> ok end)
+    of
+        ok ->
+            {ok, true};
+        {error, ?EACCES} ->
+            {ok, false};
+        {error, ?EPERM} ->
+            {ok, false};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Returns file's Access Control List.
@@ -65,9 +77,8 @@ get_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = Se
 get_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, #get_acl{uuid = GUID},
-        fun(#acl{value = Json}) ->
-            Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)), %todo store perms as integers
+    lfm_utils:call_fslogic(SessId, provider_request, GUID, #get_acl{},
+        fun(#acl{value = Acl}) ->
             {ok, Acl}
         end).
 
@@ -86,9 +97,8 @@ set_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id = Se
 set_acl(SessId, FileKey, Acl) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
-    lfm_utils:call_fslogic(SessId, provider_request,
-        #set_acl{uuid = GUID, acl = #acl{value = Json}},
+    lfm_utils:call_fslogic(SessId, provider_request, GUID,
+        #set_acl{acl = #acl{value = Acl}},
         fun(_) -> ok end).
 
 
@@ -104,5 +114,5 @@ remove_acl(#lfm_handle{file_guid = GUID, fslogic_ctx = #fslogic_ctx{session_id =
 remove_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, #remove_acl{uuid = GUID},
+    lfm_utils:call_fslogic(SessId, provider_request, GUID, #remove_acl{},
         fun(_) -> ok end).

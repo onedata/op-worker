@@ -17,18 +17,14 @@
 
 -record(status, {
     code :: code(),
-    description :: binary()
+    description :: undefined | binary()
 }).
 
 -record(file_block, {
     offset :: non_neg_integer(),
-    size :: non_neg_integer(),
-    file_id :: binary(),
-    storage_id :: storage:id()
-}).
-
--record(data, {
-    data :: binary()
+    size :: integer(),
+    file_id :: undefined | binary(),
+    storage_id :: undefined | storage:id()
 }).
 
 -record(file_renamed_entry, {

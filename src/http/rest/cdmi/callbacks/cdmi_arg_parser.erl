@@ -40,7 +40,7 @@
 %%--------------------------------------------------------------------
 %% @doc Extract the CDMI version and options and put it in State.
 %%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {false, req(), #{}}.
+-spec malformed_request(req(), maps:map()) -> {false, req(), maps:map()}.
 malformed_request(Req, State) ->
     {State2, Req2} = add_version_to_state(Req, State),
     {State3, Req3} = add_opts_to_state(Req2, State2),
@@ -53,11 +53,12 @@ malformed_request(Req, State) ->
 %% version is not supportet
 %% @end
 %%--------------------------------------------------------------------
--spec malformed_capability_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
+-spec malformed_capability_request(req(), maps:map()) -> {boolean(), req(), maps:map()} | no_return().
 malformed_capability_request(Req, State) ->
-    {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
-    case maps:find(cdmi_version, State2) of
-        {ok, _} -> {false, Req, State2};
+    {State2, Req2} = add_version_to_state(Req, State),
+    {State3, Req3} = add_opts_to_state(Req2, State2),
+    case maps:find(cdmi_version, State3) of
+        {ok, _} -> {false, Req3, State3};
         _ -> throw(?ERROR_UNSUPPORTED_VERSION)
     end.
 
@@ -67,7 +68,7 @@ malformed_capability_request(Req, State) ->
 %% Add them to request state and change handler to object/container/capability
 %% @end
 %%--------------------------------------------------------------------
--spec malformed_objectid_request(req(), #{}) -> {false, req(), #{}} | no_return().
+-spec malformed_objectid_request(req(), maps:map()) -> {false, req(), maps:map()} | no_return().
 malformed_objectid_request(Req, State) ->
     {State2 = #{path := Path}, Req2} = add_objectid_path_to_state(Req, State),
     {State3, Req3} = add_version_to_state(Req2, State2),
@@ -88,7 +89,7 @@ get_ranges(Req, Size) ->
         undefined -> {undefined, Req1};
         _ ->
             case parse_byte_range(RawRange, Size) of
-                invalid ->throw(?ERROR_INVALID_RANGE);
+                invalid -> throw(?ERROR_INVALID_RANGE);
                 Ranges -> {Ranges, Req1}
             end
     end.
@@ -96,10 +97,15 @@ get_ranges(Req, Size) ->
 %%--------------------------------------------------------------------
 %% @doc Reads whole body and decodes it as json.
 %%--------------------------------------------------------------------
--spec parse_body(cowboy_req:req()) -> {ok, list(), cowboy_req:req()}.
+-spec parse_body(cowboy_req:req()) -> {ok, maps:map(), cowboy_req:req()}.
 parse_body(Req) ->
     {ok, RawBody, Req1} = cowboy_req:body(Req),
-    Body = json_utils:decode(RawBody),
+    Body = case RawBody of
+        <<>> ->
+            #{};
+        _ ->
+            json_utils:decode_map(RawBody)
+    end,
     ok = validate_body(Body),
     {ok, Body, Req1}.
 
@@ -143,9 +149,9 @@ parse_byte_range([First | Rest], Size) ->
 %%--------------------------------------------------------------------
 -spec parse_content(binary()) -> {Mimetype :: binary(), Encoding :: binary() | undefined}.
 parse_content(Content) ->
-    case binary:split(Content,<<";">>) of
+    case binary:split(Content, <<";">>) of
         [RawMimetype, RawEncoding] ->
-            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
+            case binary:split(utils:trim_spaces(RawEncoding), <<"=">>) of
                 [<<"charset">>, <<"utf-8">>] ->
                     {utils:trim_spaces(RawMimetype), <<"utf-8">>};
                 _ ->
@@ -159,13 +165,16 @@ parse_content(Content) ->
 %%% Internal functions
 %%%===================================================================
 
+-type result_state() :: #{options => list(), cdmi_version => binary(),
+path => onedata_file_api:file_path()}.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Parses request's version adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec add_version_to_state(cowboy_req:req(), #{}) ->
-    {#{cdmi_version => binary()}, cowboy_req:req()}.
+-spec add_version_to_state(cowboy_req:req(), maps:map()) ->
+    {result_state(), cowboy_req:req()}.
 add_version_to_state(Req, State) ->
     {RawVersion, NewReq} = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     Version = get_supported_version(RawVersion),
@@ -176,8 +185,8 @@ add_version_to_state(Req, State) ->
 %% Parses request's query string options and adds it to State.
 %% @end
 %%--------------------------------------------------------------------
--spec add_opts_to_state(cowboy_req:req(), #{}) ->
-    {#{options => list()}, cowboy_req:req()}.
+-spec add_opts_to_state(cowboy_req:req(), maps:map()) ->
+    {result_state(), cowboy_req:req()}.
 add_opts_to_state(Req, State) ->
     {Qs, NewReq} = cowboy_req:qs(Req),
     Opts = parse_opts(Qs),
@@ -188,11 +197,10 @@ add_opts_to_state(Req, State) ->
 %% Retrieves file path from req and adds it to state.
 %% @end
 %%--------------------------------------------------------------------
--spec add_path_to_state(cowboy_req:req(), #{}) ->
-    {#{path => onedata_file_api:file_path()}, cowboy_req:req()}.
+-spec add_path_to_state(cowboy_req:req(), maps:map()) ->
+    {result_state(), cowboy_req:req()}.
 add_path_to_state(Req, State) ->
-    {RawPath, NewReq} = cowboy_req:path(Req),
-    <<"/cdmi", Path/binary>> = RawPath,
+    {Path, NewReq} = cdmi_path:get_path(Req),
     {State#{path => Path}, NewReq}.
 
 %%--------------------------------------------------------------------
@@ -207,14 +215,12 @@ add_path_to_state(Req, State) ->
 %% {IdOfRootDir} -> /
 %% @end
 %%--------------------------------------------------------------------
--spec add_objectid_path_to_state(cowboy_req:req(), #{}) ->
-    {#{path => onedata_file_api:file_path()}, cowboy_req:req()}.
+-spec add_objectid_path_to_state(cowboy_req:req(), maps:map()) ->
+    {result_state(), cowboy_req:req()}.
 add_objectid_path_to_state(Req, State) ->
     % get objectid
     {Id, Req2} = cowboy_req:binding(id, Req),
-    {RawPath, Req3} = cowboy_req:path(Req2),
-    IdSize = byte_size(Id),
-    <<"/cdmi/cdmi_objectid/", Id:IdSize/binary, Path/binary>> = RawPath,
+    {Path, Req3} = cdmi_path:get_path_of_id_request(Req2),
 
     % get uuid from objectid
     Uuid =
@@ -254,6 +260,7 @@ get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
     get_supported_version(VersionList);
 get_supported_version([]) -> throw(?ERROR_UNSUPPORTED_VERSION);
 get_supported_version([<<"1.1.1">> | _Rest]) -> <<"1.1.1">>;
+get_supported_version([<<"1.1">> | _Rest]) -> <<"1.1.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 
 
@@ -281,7 +288,7 @@ parse_opts(RawOpts) ->
                                 {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
                         end
                 end;
-            (Other) ->
+            (_Other) ->
                 throw(?ERROR_MALFORMED_QS)
         end,
         Opts
@@ -290,18 +297,14 @@ parse_opts(RawOpts) ->
 %%--------------------------------------------------------------------
 %% @doc Validates correctness of request's body.
 %%--------------------------------------------------------------------
--spec validate_body(list()) -> ok | no_return().
+-spec validate_body(maps:map()) -> ok | no_return().
 validate_body(Body) ->
-    Keys = proplists:get_keys(Body),
+    Keys = maps:keys(Body),
     KeySet = sets:from_list(Keys),
     ExclusiveRequiredKeysSet = sets:from_list(?KEYS_REQUIRED_TO_BE_EXCLUSIVE),
-    case length(Keys) =:= length(Body) of
-        true ->
-            case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
-                N when N > 1 -> throw(?ERROR_CONFLICTING_BODY_FIELDS);
-                _ -> ok
-            end;
-        false -> throw(?ERROR_DUPLICATED_BODY_FIELDS)
+    case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
+        N when N > 1 -> throw(?ERROR_CONFLICTING_BODY_FIELDS);
+        _ -> ok
     end.
 
 %%--------------------------------------------------------------------

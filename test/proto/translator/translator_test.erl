@@ -40,7 +40,7 @@
 %%--------------------------------------------------------------------
 
 translate_status_from_protobuf_test() ->
-    {Internal, Protobuf} = get_status(?OK, <<1,2,3>>),
+    {Internal, Protobuf} = get_status(?OK, <<1, 2, 3>>),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_file_block_from_protobuf_test() ->
@@ -67,7 +67,7 @@ translate_write_event_from_protobuf_test() ->
 
 translate_handshake_request_from_protobuf_test() ->
     Macaroon = macaroon:create("a", "b", "c"),
-    {ok, Token} = macaroon:serialize(Macaroon),
+    {ok, Token} = token_utils:serialize62(Macaroon),
     {Internal, Protobuf} = get_handshake_request(Token, 1),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
@@ -81,7 +81,7 @@ translate_end_of_message_stream_from_protobuf_test() ->
 
 translate_token_from_protobuf_test() ->
     M = macaroon:create("a", "b", "c"),
-    {ok, Token} = macaroon:serialize(M),
+    {ok, Token} = token_utils:serialize62(M),
     {Internal, Protobuf} = get_token(Token),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
@@ -178,12 +178,16 @@ translate_write_subscription_to_protobuf_test() ->
     })).
 
 translate_handshake_response_to_protobuf_test() ->
-    ?assertEqual({handshake_response, #'HandshakeResponse'{session_id = 81}},
-        translator:translate_to_protobuf(#handshake_response{session_id = 81})
-    ),
-    ?assertEqual({handshake_response, #'HandshakeResponse'{}},
-        translator:translate_to_protobuf(#handshake_response{})
-    ).
+    ?assertEqual({handshake_response, #'HandshakeResponse'{
+        status = 'OK'
+    }}, translator:translate_to_protobuf(#handshake_response{
+        status = 'OK'
+    })),
+    ?assertEqual({handshake_response, #'HandshakeResponse'{
+        status = 'INVALID_TOKEN'
+    }}, translator:translate_to_protobuf(#handshake_response{
+        status = 'INVALID_TOKEN'
+    })).
 
 translate_message_stream_to_protobuf_test() ->
     ?assertEqual(#'MessageStream'{stream_id = 27, sequence_number = 43412},
@@ -323,7 +327,7 @@ get_write_event(FileUuid, Size, FileSize, Num, MaxS) ->
     }.
 
 get_token(Val) ->
-    {ok, M} = macaroon:deserialize(Val),
+    {ok, M} = token_utils:deserialize(Val),
     {#token_auth{macaroon = M}, #'Token'{value = Val}}.
 
 get_handshake_request(TokenVal, SessionId) ->

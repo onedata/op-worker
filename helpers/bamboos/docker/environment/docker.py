@@ -13,10 +13,10 @@ import sys
 
 
 # noinspection PyDefaultArgument
-def run(image, docker_host=None, detach=False, dns_list=[], add_host={},
+def run(image, docker_host=None, detach=False, dns_list=[], add_host={}, ports={},
         envs={}, hostname=None, interactive=False, link={}, tty=False, rm=False,
         reflect=[], volumes=[], name=None, workdir=None, user=None, group=None,
-        group_add=[], privileged=False, run_params=[], command=None,
+        group_add=[], cpuset_cpus=None, privileged=False, run_params=[], command=None,
         output=False, stdin=None, stdout=None, stderr=None):
     cmd = ['docker']
 
@@ -36,6 +36,9 @@ def run(image, docker_host=None, detach=False, dns_list=[], add_host={},
 
     for key in envs:
         cmd.extend(['-e', '{0}={1}'.format(key, envs[key])])
+
+    for key in ports:
+        cmd.extend(['-p', '{0}={1}'.format(key, ports[key])])
 
     if hostname:
         cmd.extend(['-h', hostname])
@@ -86,6 +89,9 @@ def run(image, docker_host=None, detach=False, dns_list=[], add_host={},
 
     if privileged:
         cmd.append('--privileged')
+
+    if cpuset_cpus:
+        cmd.extend(['--cpuset-cpus', cpuset_cpus])
 
     cmd.extend(run_params)
     cmd.append(image)
@@ -190,6 +196,23 @@ def remove(containers, docker_host=None, force=False,
     subprocess.check_call(cmd)
 
 
+def cp(container, src_path, dest_path, to_container=False):
+    """Copying file between docker container and host
+    :param container: str, docker id or name
+    :param src_path: str
+    :param dest_path: str
+    :param to_container: bool, if True file will be copied from host to
+    container, otherwise from docker container to host
+    """
+    cmd = ["docker", "cp"]
+    if to_container:
+        cmd.extend([src_path, "{0}:{1}".format(container, dest_path)])
+    else:
+        cmd.extend(["{0}:{1}".format(container, src_path), dest_path])
+
+    subprocess.check_call(cmd)
+
+
 def login(user, password, repository='hub.docker.com'):
     """Logs into docker repository."""
 
@@ -244,3 +267,12 @@ def create_volume(path, name, image, command):
 
     return subprocess.check_output(cmd, universal_newlines=True,
                                    stderr=subprocess.STDOUT)
+
+
+def connect_docker_to_network(network, container):
+    """
+    Connect docker to the network
+    Useful when dockers are in different subnetworks and they need to see each other using IP address
+    """
+
+    subprocess.check_call(['docker', 'network', 'connect', network, container])

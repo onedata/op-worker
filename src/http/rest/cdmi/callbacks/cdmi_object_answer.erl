@@ -24,56 +24,59 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Prepares proplist formatted answer with field names from given list of binaries
+%% @doc Prepares map formatted answer with field names from given list of binaries
 %%--------------------------------------------------------------------
--spec prepare([FieldName :: binary()], #{}) ->
-    [{FieldName :: binary(), Value :: term()}].
+-spec prepare([FieldName :: binary()], maps:map()) -> maps:map().
 prepare([], _State) ->
-    [];
+    #{};
 prepare([<<"objectType">> | Tail], State) ->
-    [{<<"objectType">>, <<"application/cdmi-object">>} | prepare(Tail, State)];
-prepare([<<"objectID">> | Tail], #{attributes := #file_attr{uuid = Uuid}} = State) ->
+    (prepare(Tail, State))#{<<"objectType">> => <<"application/cdmi-object">>};
+prepare([<<"objectID">> | Tail], #{guid := Uuid} = State) ->
     {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
-    [{<<"objectID">>, Id} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"objectID">> => Id};
 prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
-    [{<<"objectName">>, filename:basename(Path)} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"objectName">> => filename:basename(Path)};
 prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
-    [{<<"parentURI">>, <<>>} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"parentURI">> => <<>>};
 prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
     ParentURI = filepath_utils:parent_dir(Path),
-    [{<<"parentURI">>, ParentURI} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"parentURI">> => ParentURI};
 prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
-    [{<<"parentID">>, <<>>} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"parentID">> => <<>>};
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
     {ok, #file_attr{uuid = Uuid}} =
         onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
     {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
-    [{<<"parentID">>, Id} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"parentID">> => Id};
 prepare([<<"capabilitiesURI">> | Tail], State) ->
-    [{<<"capabilitiesURI">>, ?dataobject_capability_path} | prepare(Tail, State)];
-prepare([<<"completionStatus">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
+    (prepare(Tail, State))#{<<"capabilitiesURI">> => ?dataobject_capability_path};
+prepare([<<"completionStatus">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
     CompletionStatus = cdmi_metadata:get_cdmi_completion_status(Auth, {guid, Uuid}),
-    [{<<"completionStatus">>, CompletionStatus} | prepare(Tail, State)];
-prepare([<<"mimetype">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
+    (prepare(Tail, State))#{<<"completionStatus">> => CompletionStatus};
+prepare([<<"mimetype">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
     Mimetype = cdmi_metadata:get_mimetype(Auth, {guid, Uuid}),
-    [{<<"mimetype">>, Mimetype} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"mimetype">> => Mimetype};
 prepare([<<"metadata">> | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
-    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Attrs)} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, <<>>, Attrs)};
 prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
-    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Prefix, Attrs)} | prepare(Tail, State)];
-prepare([<<"valuetransferencoding">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Prefix, Attrs)};
+prepare([<<"metadata">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid})};
+prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, guid := Uuid} = State) ->
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Prefix)};
+prepare([<<"valuetransferencoding">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
     Encoding = cdmi_metadata:get_encoding(Auth, {guid, Uuid}),
-    [{<<"valuetransferencoding">>, Encoding} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"valuetransferencoding">> => Encoding};
 prepare([<<"value">> | Tail], State) ->
-    [{<<"value">>, {range, default}} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"value">> => {range, default}};
 prepare([{<<"value">>, From, To} | Tail], State) ->
-    [{<<"value">>, {range, {From, To}}} | prepare(Tail, State)];
+    (prepare(Tail, State))#{<<"value">> => {range, {From, To}}};
 prepare([<<"valuerange">> | Tail], #{options := Opts, attributes := Attrs} = State) ->
     case lists:keyfind(<<"value">>, 1, Opts) of
         {<<"value">>, From, To} ->
-            [{<<"valuerange">>, iolist_to_binary([integer_to_binary(From), <<"-">>, integer_to_binary(To)])} | prepare(Tail, State)];
+            (prepare(Tail, State))#{<<"valuerange">> => iolist_to_binary([integer_to_binary(From), <<"-">>, integer_to_binary(To)])};
         _ ->
-            [{<<"valuerange">>, iolist_to_binary([<<"0-">>, integer_to_binary(Attrs#file_attr.size - 1)])} | prepare(Tail, State)] %todo fix 0--1 when file is empty
+            (prepare(Tail, State))#{<<"valuerange">> => iolist_to_binary([<<"0-">>, integer_to_binary(Attrs#file_attr.size - 1)])} %todo fix 0--1 when file is empty
     end;
 prepare([_Other | Tail], State) ->
     prepare(Tail, State).

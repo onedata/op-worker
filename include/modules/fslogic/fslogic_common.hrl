@@ -27,8 +27,9 @@
 %% Context definition
 -record(fslogic_ctx, {
     session :: #session{},
-    session_id :: session:id(),
-    space_id :: file_meta:uuid()
+    session_id :: undefined | session:id(),
+    space_id :: file_meta:uuid(),
+    share_id :: undefined | od_share:id()
 }).
 
 %% root user definitions
@@ -36,7 +37,10 @@
 -define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
--define(ROOT_SESS, #session{identity = #identity{user_id = ?ROOT_USER_ID}}).
+-define(ROOT_SESS, #session{identity = #user_identity{user_id = ?ROOT_USER_ID}}).
+-define(GUEST_USER_ID, <<"nobody">>).
+-define(GUEST_SESS_ID, <<"nobody">>).
+-define(GUEST_SESS, #session{identity = #user_identity{user_id = ?GUEST_USER_ID}}).
 -define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
 
 %% fslogic subscription id
@@ -50,5 +54,6 @@
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_UUID, <<"file_uuid">>).
+-define(PROXYIO_PARAMETER_SHARE_ID, <<"share_id">>).
 
 -endif.

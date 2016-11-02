@@ -16,14 +16,17 @@
 -include("proto/oneclient/common_messages.hrl").
 
 %% definition of a top level event wrapper
-%% key     - arbitrary value that distinguish events, i.e. events with the same
-%%           key can be aggregated
-%% counter - number of events aggregated in this event
-%% object  - wrapped event
+%% key        - arbitrary value that distinguish events, i.e. events with the same
+%%              key can be aggregated
+%% stream_key - if present defines a stream that should handle this event
+%% counter    - number of events aggregated in this event
+%% object     - wrapped event
 -record(event, {
     key :: event:key(),
+    stream_id :: event_stream:id(),
+    stream_key :: undefined | event_stream:key(),
     counter = 1 :: event:counter(),
-    object :: event:object()
+    object :: undefined | event:object()
 }).
 
 %% definition of a events container
@@ -36,7 +39,7 @@
     provider_id :: oneprovider:id(),
     subscription_id :: subscription:id(),
     context :: term(),
-    notify :: fun((term()) -> ok)
+    notify :: undefined | fun((term()) -> ok)
 }).
 
 %% definition of an event associated with a read operation in the file system
@@ -49,22 +52,22 @@
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
-%% definition of an event associated with an update operation in the file system
-%% object - wrapped structure that has been modified
--record(update_event, {
-    object :: event:update_object()
-}).
-
 %% definition of an event associated with a write operation in the file system
 %% file_uuid - UUID of a file associated with the write operation
 %% file_size - size of a file after the write operation
 %% size      - number of bytes written
 %% blocks    - list of offset, size pairs that describes bytes segments written
 -record(write_event, {
-    file_uuid :: file_meta:uuid(),
-    file_size :: file_meta:size(),
+    file_uuid :: fslogic_worker:file_guid(),
+    file_size :: undefined | file_meta:size(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
+}).
+
+%% definition of an event associated with an update operation in the file system
+%% object - wrapped structure that has been modified
+-record(update_event, {
+    object :: event:update_object()
 }).
 
 %% definition of an event triggered when file permission gets changed
@@ -81,7 +84,7 @@
 
 %% definition of an event triggered when any of spaces becomes (un)available
 -record(quota_exeeded_event, {
-   spaces = [] :: [space_info:id()]
+   spaces = [] :: [od_space:id()]
 }).
 
 %% definition of an event triggered when file is renamed
@@ -100,6 +103,47 @@
     file_uuid :: file_meta:uuid(),
     open_count :: non_neg_integer(),
     release_count :: non_neg_integer()
+}).
+
+%% definition of event triggered when storage usage is changed
+%% space_id        - ID of space
+%% user_id         - ID of user
+%% size_difference - size difference of storage usage in bytes since last update
+-record(storage_used_updated, {
+    space_id :: datastore:id(),
+    user_id :: undefined | datastore:id(),
+    size_difference :: integer()
+}).
+
+%% definition of event triggered when space record has changed
+-record(od_space_updated, {
+    space_id :: datastore:id()
+}).
+
+%% definition of event with read/write statistics
+%% space_id           - ID of space
+%% user_id            - ID of user
+%% data_access_read   - number of read bytes
+%% data_access_write  - number of write bytes
+%% block_access_write - number of read blocks
+%% block_access_read  - number of write blocks
+-record(file_operations_statistics, {
+    space_id :: datastore:id(),
+    user_id :: undefined | datastore:id(),
+    data_access_read = 0 :: non_neg_integer() ,
+    data_access_write = 0 :: non_neg_integer(),
+    block_access_read = 0 :: non_neg_integer(),
+    block_access_write = 0 :: non_neg_integer()
+}).
+
+%% definition of event with rtransfer statistics
+%% space_id    - ID of space
+%% user_id     - ID of user
+%% transfer_in - data replicated to provider in bytes
+-record(rtransfer_statistics, {
+    space_id :: datastore:id(),
+    user_id :: undefined | datastore:id(),
+    transfer_in = 0 :: non_neg_integer()
 }).
 
 -endif.

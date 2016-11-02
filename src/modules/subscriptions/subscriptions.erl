@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/subscriptions/subscriptions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([account_updates/1, get_missing/0, get_users/0, put_user/1,
@@ -23,8 +24,10 @@
 
 -type(seq() :: non_neg_integer()).
 -type(rev() :: term()).
--type(model() :: onedata_group | onedata_user | space_info | provider_info).
--type(record() :: #space_info{} | #onedata_user{} | #onedata_group{} | #provider_info{}).
+-type model() :: od_group | od_user | od_space | od_share |
+od_provider | od_handle_service | od_handle.
+-type record() :: #od_space{} | #od_user{} | #od_group{} |
+#od_share{} | #od_provider{} | #od_handle_service{} | #od_handle{}.
 -export_type([seq/0, rev/0, model/0, record/0]).
 
 %%--------------------------------------------------------------------
@@ -65,7 +68,7 @@ get_missing() ->
 %% Returns users currently qualified as working with that provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_users() -> [UserID :: onedata_user:id()].
+-spec get_users() -> [UserID :: od_user:id()].
 get_users() ->
     ensure_initialised(),
     {ok, #document{value = #subscriptions_state{users = UserIDs}}}
@@ -78,7 +81,11 @@ get_users() ->
 %% Should be invoked when first session for user is added.
 %% @end
 %%--------------------------------------------------------------------
--spec put_user(UserID :: onedata_user:id()) -> ok.
+-spec put_user(UserID :: od_user:id()) -> ok.
+put_user(?GUEST_USER_ID) ->
+    ok;
+put_user(?ROOT_USER_ID) ->
+    ok;
 put_user(UserID) ->
     ensure_initialised(),
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
@@ -159,11 +166,15 @@ get_refreshing_node() ->
 %% Returns users with sessions in the datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec get_users_with_session() -> [onedata_user:id()].
+-spec get_users_with_session() -> [od_user:id()].
 get_users_with_session() ->
     {ok, Docs} = session:all_with_user(),
     lists:filtermap(fun
-        (#document{value = #session{identity = #identity{user_id = UserID}}}) ->
+        (#document{value = #session{identity = #user_identity{user_id = ?ROOT_USER_ID}}}) ->
+            false;
+        (#document{value = #session{identity = #user_identity{user_id = ?GUEST_USER_ID}}}) ->
+            false;
+        (#document{value = #session{identity = #user_identity{user_id = UserID}}}) ->
             {true, UserID};
         (_) -> false
     end, Docs).

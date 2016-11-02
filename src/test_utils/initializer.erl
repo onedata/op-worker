@@ -36,7 +36,7 @@
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
 -record(user_config, {
-    id :: onedata_user:id(),
+    id :: od_user:id(),
     name :: binary(),
     default_space :: binary(),
     spaces :: [],
@@ -207,8 +207,8 @@ clean_test_users_and_spaces_no_validate(Config) ->
 
 clear_cache(W) ->
     A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
-%%     A2 = gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
-%%     A3 = gen_server:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
+%%     A2 = gen_server2:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
+%%     A3 = gen_server2:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
 %%     ?assertMatch({ok, ok, {ok, ok}}, {A1, A2, A3}).
     ok.
 
@@ -284,7 +284,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
 
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     UserId = UserId,
-    Iden = #identity{user_id = UserId},
+    Iden = #user_identity{user_id = UserId},
 
     lists:foreach(fun({_, SpaceName}) ->
         case get(SpaceName) of
@@ -297,7 +297,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, fetch, [#token_auth{macaroon = Macaroon}]),
+    {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -327,7 +327,7 @@ teardown_sesion(Worker, Config) ->
             end, SpaceIds),
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, od_user, delete, [UserId])),
             ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:user_root_dir_uuid(UserId)])),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
@@ -491,6 +491,8 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
+
+    catch test_utils:mock_new(AllWorkers, oneprovider),
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
@@ -508,7 +510,6 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    catch test_utils:mock_new(AllWorkers, oneprovider),
     catch test_utils:mock_new(AllWorkers, oz_providers),
 
     %% Setup storage
@@ -617,17 +618,17 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
-    file_meta_mock_setup(AllWorkers),
+    file_meta_mock_setup(AllWorkers, Config),
     oz_users_mock_setup(AllWorkers, Users),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
 
     lists:foreach(fun({SpaceId, _}) ->
-        rpc:multicall(MasterWorkers, space_info, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
+        rpc:multicall(MasterWorkers, od_space, get_or_fetch, [provider, SpaceId, ?ROOT_USER_ID])
     end, Spaces),
 
     %% Set expiration time for session to 1d.
-    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 24 * 60 * 60]),
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, 240 * 60 * 60]),
 
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
@@ -784,16 +785,17 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
 %% @private
 %% @doc Mocks file_meta module, so that creation of onedata user sends notification.
 %%--------------------------------------------------------------------
--spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
-file_meta_mock_setup(Workers) ->
+-spec file_meta_mock_setup(Workers :: node() | [node()], Config :: list()) -> ok.
+file_meta_mock_setup(Workers, Config) ->
     Self = self(),
-    Handler = fun(UUID) ->
-        file_meta:setup_onedata_user(provider, UUID),
-        Self ! onedata_user_setup
+    case ?config(file_meta_mock_options, Config) of
+        undefined ->
+            test_utils:mock_new(Workers, file_meta);
+        Opts ->
+            test_utils:mock_new(Workers, file_meta, Opts)
     end,
-    test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after', fun
-        (onedata_user, create_or_update, _, _, {ok, UUID}) -> Handler(UUID);
-        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID);
-        (onedata_user, save, _, _, {ok, UUID}) -> Handler(UUID)
+        (ModelName, Method, Level, Context, ReturnValue) ->
+            meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
+            Self ! onedata_user_setup
     end).

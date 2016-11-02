@@ -27,13 +27,13 @@
 -define(MAX_WAIT_FOR_FILE_HANDLE, 30000).
 
 % Interval between retries to resolve file handle.
--define(INTERVAL_WAIT_FOR_FILE_HANDLE, 100).
+-define(INTERVAL_WAIT_FOR_FILE_HANDLE, 300).
 
 %% Cowboy API
 -export([init/3, handle/2, terminate/3]).
 %% API
 -export([upload_map_insert/2, upload_map_delete/1]).
--export([upload_map_lookup/1, upload_map_lookup/2]).
+-export([wait_for_file_new_file_id/1]).
 -export([clean_upload_map/0]).
 
 %% ====================================================================
@@ -50,6 +50,12 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec upload_map_insert(UploadId :: term(), FileId :: term()) -> ok.
+upload_map_insert(_UploadId, undefined) ->
+    error(badarg);
+
+upload_map_insert(undefined, _FileId) ->
+    error(badarg);
+
 upload_map_insert(UploadId, FileId) ->
     Map = g_session:get_value(?UPLOAD_MAP, #{}),
     NewMap = maps:put(UploadId, FileId, Map),
@@ -57,19 +63,7 @@ upload_map_insert(UploadId, FileId) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Retrieves a FileId from upload map by UploadId.
-%% Upload map is a map in session memory dedicated for handling chunked
-%% file uploads.
-%% @todo Should be redesigned in VFS-1815.
-%% @end
-%%--------------------------------------------------------------------
--spec upload_map_lookup(UploadId :: term()) -> FileId :: term().
-upload_map_lookup(UploadId) ->
-    upload_map_lookup(UploadId, undefined).
-
-
-%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Retrieves a FileId from upload map by UploadId or returns a default value.
 %% Upload map is a map in session memory dedicated for handling chunked
@@ -77,11 +71,10 @@ upload_map_lookup(UploadId) ->
 %% @todo Should be redesigned in VFS-1815.
 %% @end
 %%--------------------------------------------------------------------
--spec upload_map_lookup(UploadId :: term(), Default :: term()) ->
-    FileId :: term().
-upload_map_lookup(UploadId, Default) ->
+-spec upload_map_lookup(UploadId :: term()) -> FileId :: term() | undefined.
+upload_map_lookup(UploadId) ->
     Map = g_session:get_value(?UPLOAD_MAP, #{}),
-    maps:get(UploadId, Map, Default).
+    maps:get(UploadId, Map, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -97,6 +90,29 @@ upload_map_delete(UploadId) ->
     Map = g_session:get_value(?UPLOAD_MAP, #{}),
     NewMap = maps:remove(UploadId, Map),
     g_session:put_value(?UPLOAD_MAP, NewMap).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Wait for new file id for upload trying to read it from session memory,
+%% retrying in intervals.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_file_new_file_id(UploadId :: binary()) ->
+    fslogic_worker:file_guid().
+wait_for_file_new_file_id(UploadId) ->
+    wait_for_file_new_file_id(UploadId, ?MAX_WAIT_FOR_FILE_HANDLE).
+wait_for_file_new_file_id(_, Timeout) when Timeout < 0 ->
+    throw(cannot_resolve_new_file_id);
+wait_for_file_new_file_id(UploadId, Timeout) ->
+    case upload_map_lookup(UploadId) of
+        undefined ->
+            timer:sleep(?INTERVAL_WAIT_FOR_FILE_HANDLE),
+            wait_for_file_new_file_id(
+                UploadId, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE);
+        FileId ->
+            FileId
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -173,7 +189,7 @@ handle_http_upload(Req) ->
         end,
     case InitSession of
         error ->
-            g_ctx:reply(500, [], <<"">>);
+            g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
         ok ->
             try
                 NewReq = multipart(Req, []),
@@ -181,9 +197,9 @@ handle_http_upload(Req) ->
                 g_ctx:reply(200, [], <<"">>)
             catch
                 throw:{missing_param, _} ->
-                    g_ctx:reply(500, [], <<"">>);
+                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
                 throw:stream_file_error ->
-                    g_ctx:reply(500, [], <<"">>);
+                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>);
                 Type:Message ->
                     ?error_stacktrace("Error while processing file upload "
                     "from user ~p - ~p:~p",
@@ -192,7 +208,7 @@ handle_http_upload(Req) ->
                     % because retries are not stable
 %%                    % Return 204 - resumable will retry the upload
 %%                    g_ctx:reply(204, [], <<"">>)
-                    g_ctx:reply(500, [], <<"">>)
+                    g_ctx:reply(500, [{<<"connection">>, <<"close">>}], <<"">>)
             end
     end,
     g_ctx:finish().
@@ -247,6 +263,7 @@ multipart(Req, Params) ->
                         ?error_stacktrace("Error while streaming file upload "
                         "from user ~p - ~p:~p",
                             [g_session:get_user_id(), Type, Message]),
+                        logical_file_manager:release(FileHandle), % release if possible
                         logical_file_manager:unlink(SessionId, {guid, FileId}, false),
                         throw(stream_file_error)
                     end,
@@ -307,29 +324,6 @@ get_new_file_id(Params) ->
             FileId;
         _ ->
             wait_for_file_new_file_id(UploadId, ?MAX_WAIT_FOR_FILE_HANDLE)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Wait for new file id for upload trying to read it from session memory,
-%% retrying in intervals.
-%% @end
-%%--------------------------------------------------------------------
--spec wait_for_file_new_file_id(UploadId :: binary(), Timeout :: integer()) ->
-    file_meta:uuid().
-wait_for_file_new_file_id(_, Timeout) when Timeout < 0 ->
-    throw(cannot_resolve_new_file_id);
-
-wait_for_file_new_file_id(UploadId, Timeout) ->
-    case upload_map_lookup(UploadId, undefined) of
-        undefined ->
-            timer:sleep(?INTERVAL_WAIT_FOR_FILE_HANDLE),
-            wait_for_file_new_file_id(
-                UploadId, Timeout - ?INTERVAL_WAIT_FOR_FILE_HANDLE);
-        FileId ->
-            FileId
     end.
 
 

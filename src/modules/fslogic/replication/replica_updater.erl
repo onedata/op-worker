@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update/5, fill_blocks_with_storage_info/2]).
+-export([update/5, rename/3, fill_blocks_with_storage_info/2]).
 
 %%%===================================================================
 %%% API
@@ -37,12 +37,11 @@
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean(), version_vector:version_vector()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
-    fslogic_utils:wait_for_local_file_location(FileUUID),
-    file_location:run_synchronized(FileUUID,
+    file_location:critical_section(FileUUID,
         fun() ->
             [Location = #document{value = #file_location{size = OldSize,
                 version_vector = Version}} | _] =
-                fslogic_utils:get_local_file_locations_once({uuid, FileUUID}), %todo get location as argument, insted operating on first one
+                fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, instead of operating on first one
             FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
             warning_if_different_version(BaseVersion, Version, FileUUID),
@@ -61,6 +60,39 @@ update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
                     {ok, size_changed}
             end
             % todo reconcile other local replicas according to this one
+        end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Renames file's local location.
+%% This function in synchronized on the file.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename(FileUUID :: file_meta:uuid(), TargetFileId :: helpers:file(),
+    TargetSpaceId :: binary()) -> ok | {error, Reason :: term()}.
+rename(FileUUID, TargetFileId, TargetSpaceId) ->
+    file_location:critical_section(FileUUID,
+        fun() ->
+            [#document{value = #file_location{blocks = Blocks} = Location} = LocationDoc | _] =
+                fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, instead of operating on first one
+
+            {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
+
+            UpdatedBlocks = lists:map(fun(Block) ->
+                Block#file_block{file_id = TargetFileId, storage_id = TargetStorageId}
+            end, Blocks),
+
+            fslogic_file_location:set_last_rename(
+                version_vector:bump_version(
+                    LocationDoc#document{value = Location#file_location{
+                            file_id = TargetFileId,
+                            space_id = TargetSpaceId,
+                            storage_id = TargetStorageId,
+                            blocks = UpdatedBlocks
+                    }}
+                ), TargetFileId, TargetSpaceId
+            )
         end).
 
 
@@ -155,7 +187,7 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 %% Inavlidates given blocks in given locations. File size is also updated.
 %% @end
 %%--------------------------------------------------------------------
--spec shrink(#document{value :: #file_location{}}, [#file_block{}] | [], non_neg_integer()) ->
+-spec shrink(#document{value :: #file_location{}}, [#file_block{}] | lists:list(), non_neg_integer()) ->
     file_location:doc().
 shrink(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks, NewSize) ->
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),

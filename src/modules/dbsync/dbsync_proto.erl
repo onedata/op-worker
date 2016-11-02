@@ -39,6 +39,7 @@
 %%--------------------------------------------------------------------
 -spec send_batch(dbsync_worker:queue(), SpaceId :: binary(), dbsync_worker:batch()) ->
     skip | ok | no_return().
+% TODO - batches sometimes go to providers that do not support space
 send_batch(_, _, #batch{since = X, until = X}) ->
     skip;
 send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
@@ -49,7 +50,7 @@ send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Unt
     send_tree_broadcast(SpaceId, lists:usort(Providers), ToSend, 3),
     ok;
 send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?debug("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
+    ?debug("[ DBSync ] Sending batch from space ~p to provider ~p: ~p", [SpaceId, ProviderId, Batch]),
     case dbsync_utils:validate_space_access(ProviderId, SpaceId) of
         ok -> send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
             changes_encoded = dbsync_utils:encode_term(Changes)}, 3);
@@ -65,7 +66,7 @@ send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since =
 -spec changes_request(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 changes_request(ProviderId, Since, Until) ->
-%%    ?info("Requesting direct changes ~p ~p ~p", [ProviderId, Since, Until]),
+    ?debug("Requesting direct changes ~p ~p ~p", [ProviderId, Since, Until]),
     send_direct_message(ProviderId, #changes_request{since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until)}, 3).
 
 
@@ -185,7 +186,7 @@ reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, messa
     #status{}.
 handle(SessId, #dbsync_request{message_body = MessageBody}) ->
     ?debug("DBSync request from ~p ~p", [SessId, MessageBody]),
-    {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
+    {ok, #document{value = #session{identity = #user_identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle_impl(ProviderId, MessageBody) of
         ok ->
             #status{code = ?OK};

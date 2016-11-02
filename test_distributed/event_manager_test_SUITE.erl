@@ -67,32 +67,41 @@ event_manager_should_update_session_on_terminate(Config) ->
     ), 10).
 
 event_manager_should_start_event_streams_on_init(_) ->
-    ?assertReceivedMatch({start_event_stream, #subscription{id = 1}}, ?TIMEOUT),
-    ?assertReceivedMatch({start_event_stream, #subscription{id = 2}}, ?TIMEOUT).
+    ?assertReceivedMatch({start_event_stream, #subscription{
+        event_stream = #event_stream_definition{id = stream_1}
+    }}, ?TIMEOUT),
+    ?assertReceivedMatch({start_event_stream, #subscription{
+        event_stream = #event_stream_definition{id = stream_2}
+    }}, ?TIMEOUT).
 
 event_manager_should_register_event_stream(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, {register_stream, 1, self()}),
-    gen_server:cast(EvtMan, #event{}),
+    gen_server:cast(EvtMan, {register_stream, stream_1, self()}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_1}),
     ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_unregister_event_stream(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, {unregister_stream, 1}),
-    gen_server:cast(EvtMan, {unregister_stream, 2}),
-    gen_server:cast(EvtMan, #event{}),
+    gen_server:cast(EvtMan, {unregister_stream, stream_1}),
+    gen_server:cast(EvtMan, {unregister_stream, stream_2}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_1}),
     ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_forward_events_to_event_streams(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, #event{}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_1}),
+    gen_server:cast(EvtMan, #event{stream_id = stream_2}),
     ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
-    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
+    ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_start_event_stream_on_subscription(Config) ->
     EvtMan = ?config(event_manager, Config),
-    gen_server:cast(EvtMan, #subscription{id = 1}),
-    ?assertReceivedMatch({start_event_stream, #subscription{id = 1}}, ?TIMEOUT).
+    gen_server:cast(EvtMan, #subscription{object = test_subscription,
+        event_stream = #event_stream_definition{id = 1}}),
+    ?assertReceivedMatch({start_event_stream, #subscription{
+        event_stream = #event_stream_definition{id = 1}
+    }}, ?TIMEOUT).
 
 event_manager_should_terminate_event_stream_on_subscription_cancellation(Config) ->
     EvtMan = ?config(event_manager, Config),
@@ -107,18 +116,19 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
+init_per_testcase(event_manager_should_start_event_stream_on_subscription = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_event_stream_sup(Worker),
-    init_per_testcase(default, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) when
     Case =:= event_manager_should_start_event_streams_on_init;
     Case =:= event_manager_should_unregister_event_stream;
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
@@ -128,7 +138,8 @@ init_per_testcase(Case, Config) when
     {ok, EvtMan} = start_event_manager(Worker, SessId),
     [{event_manager, EvtMan}, {session_id, SessId} | Config];
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
@@ -137,9 +148,9 @@ init_per_testcase(_, Config) ->
     {ok, EvtMan} = start_event_manager(Worker, SessId),
     [{event_manager, EvtMan}, {session_id, SessId} | Config].
 
-end_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
+end_per_testcase(event_manager_should_start_event_stream_on_subscription = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(default, Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
 end_per_testcase(Case, Config) when
@@ -148,10 +159,11 @@ end_per_testcase(Case, Config) when
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(default, Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_event_manager(?config(event_manager, Config)),
     test_utils:mock_validate_and_unload(Worker, [event_manager_sup, subscription]),
@@ -194,7 +206,7 @@ stop_event_manager(EvtMan) ->
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session, create, [#document{
-        key = <<"session_id">>, value = #session{identity = #identity{}}
+        key = <<"session_id">>, value = #session{identity = #user_identity{}}
     }])).
 
 %%--------------------------------------------------------------------
@@ -233,8 +245,13 @@ mock_event_manager_sup(Worker) ->
 -spec mock_event_stream_sup(Worker :: node()) -> ok.
 mock_event_stream_sup(Worker) ->
     Self = self(),
-    Loop = fun(Fun) -> receive Msg -> Self ! Msg, Fun(Fun) end end,
-    {EvtStm, _} = spawn_monitor(fun() -> Loop(Loop) end),
+    Loop = fun Fun() ->
+        receive
+            {'$gen_cast', {remove_subscription, _}} -> ok;
+            Msg -> Self ! Msg, Fun()
+        end
+    end,
+    {EvtStm, _} = spawn_monitor(Loop),
     test_utils:mock_new(Worker, [event_stream_sup]),
     test_utils:mock_expect(Worker, event_stream_sup, start_event_stream, fun
         (_, _, Sub, _) -> Self ! {start_event_stream, Sub}, {ok, EvtStm}
@@ -249,8 +266,10 @@ mock_event_stream_sup(Worker) ->
 -spec mock_subscription(Worker :: node()) -> ok.
 mock_subscription(Worker) ->
     mock_subscription(Worker, [
-        #document{key = 1, value = #subscription{id = 1}},
-        #document{key = 2, value = #subscription{id = 2}}
+        #document{key = 1, value = #subscription{id = 1, object = test_subscription,
+            event_stream = #event_stream_definition{id = stream_1}}},
+        #document{key = 2, value = #subscription{id = 2, object = test_subscription,
+            event_stream = #event_stream_definition{id = stream_2}}}
     ]).
 
 %%--------------------------------------------------------------------

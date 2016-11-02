@@ -66,7 +66,7 @@ cdmi_stream_size(Range, FileSize, ValueTransferEncoding, JsonBodyPrefix, JsonBod
 %% Returns fun that reads given ranges of file and streams to given Socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_binary(Stata ::#{},
+-spec stream_binary(Stata ::maps:map(),
   Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined) -> function().
 stream_binary(#{attributes := #file_attr{size = Size}} = State, undefined) ->
     stream_binary(State, [{0, Size -1}]);
@@ -85,7 +85,7 @@ stream_binary(#{path := Path, auth := Auth} = State, Ranges) ->
 %% json representing cdmi object.
 %% @end
 %%--------------------------------------------------------------------
--spec stream_cdmi(Stata ::#{}, Range :: {non_neg_integer(), non_neg_integer()},
+-spec stream_cdmi(Stata ::maps:map(), Range :: {non_neg_integer(), non_neg_integer()},
   ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
   JsonBodySuffix :: binary()) -> function().
 stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
@@ -106,7 +106,7 @@ stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
 %% and streamed to given Socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_range(Socket :: term(), Transport :: atom(), State :: #{}, Range, Encoding :: binary(),
+-spec stream_range(Socket :: term(), Transport :: atom(), State :: maps:map(), Range, Encoding :: binary(),
   BufferSize :: integer(), FileHandle :: onedata_file_api:file_handle()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
     Result :: ok | no_return().
@@ -120,15 +120,16 @@ stream_range(Socket, Transport, #{attributes := #file_attr{size = Size}} = State
     stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
 stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
-    case ToRead > BufferSize of
-        true ->
-            {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
-            Transport:send(Socket, cdmi_encoder:encode(Data, Encoding)),
-            stream_range(Socket, Transport, State, {From + BufferSize, To},
-                Encoding, BufferSize, NewFileHandle);
-        false ->
-            {ok, _NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ToRead),
-            Transport:send(Socket, cdmi_encoder:encode(Data, Encoding))
+    ReadBufSize = min(ToRead, BufferSize),
+    {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ReadBufSize),
+    Transport:send(Socket, cdmi_encoder:encode(Data, Encoding)),
+    DataSize = size(Data),
+    case DataSize of
+        0 ->
+           ok;
+        _ ->
+            stream_range(Socket, Transport, State, {From + DataSize, To},
+                Encoding, BufferSize, NewFileHandle)
     end.
 
 %%%===================================================================

@@ -31,7 +31,7 @@
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
+-spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
         {{ok, Auth}, NewReq} ->
@@ -93,10 +93,10 @@ authenticate(Req) ->
 -spec authenticate_using_token(req(), Token :: binary()) ->
     {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
-    case macaroon:deserialize(Token) of
+    case token_utils:deserialize(Token) of
         {ok, Macaroon} ->
             Auth = #token_auth{macaroon = Macaroon},
-            case identity:get_or_fetch(Auth) of
+            case user_identity:get_or_fetch(Auth) of
                 {ok, #document{value = Iden}} ->
                     {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
                     {{ok, SessId}, Req};
@@ -116,7 +116,7 @@ authenticate_using_token(Req, Token) ->
     {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_basic_auth(Req, BasicAuthHeader) ->
     Auth = #basic_auth{credentials = BasicAuthHeader},
-    case identity:get_or_fetch(Auth) of
+    case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = Iden}} ->
             {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
             {{ok, SessId}, Req};
@@ -133,10 +133,10 @@ authenticate_using_basic_auth(Req, BasicAuthHeader) ->
     {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_cert(Req) ->
     Socket = cowboy_req:get(socket, Req),
-    case ssl2:peercert(Socket) of
+    case etls:peercert(Socket) of
         {ok, Der} ->
             Certificate = public_key:pkix_decode_cert(Der, otp),
-            case identity:get_or_fetch(Certificate) of
+            case user_identity:get_or_fetch(Certificate) of
                 {ok, #document{value = Iden}} ->
                     {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden),
                     {{ok, SessId}, Req};

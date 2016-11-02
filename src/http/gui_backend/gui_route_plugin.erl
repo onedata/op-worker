@@ -19,6 +19,7 @@
 -behaviour(gui_route_plugin_behaviour).
 
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("gui/include/gui.hrl").
@@ -27,6 +28,7 @@
 -export([session_details/0]).
 -export([login_page_path/0, default_page_path/0]).
 -export([error_404_html_file/0, error_500_html_file/0]).
+-export([response_headers/0]).
 
 %% Convenience macros for defining routes.
 -define(LOGIN, #gui_route{
@@ -48,8 +50,8 @@
 }).
 
 -define(INDEX, #gui_route{
-    requires_session = ?SESSION_LOGGED_IN,
-    websocket = ?SESSION_LOGGED_IN,
+    requires_session = ?SESSION_ANY,
+    websocket = ?SESSION_ANY,
     html_file = <<"index.html">>,
     page_backend = undefined
 }).
@@ -57,8 +59,6 @@
 %% ====================================================================
 %% API
 %% ====================================================================
-
-%%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,7 +70,8 @@ route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/logout.html">>) -> ?LOGOUT;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?INDEX;
-route(<<"/index.html">>) -> ?INDEX.
+route(<<"/index.html">>) -> ?INDEX;
+route(_) -> ?INDEX.
 
 
 %%--------------------------------------------------------------------
@@ -81,15 +82,35 @@ route(<<"/index.html">>) -> ?INDEX.
 -spec data_backend(HasSession :: boolean(), Identifier :: binary()) ->
     HandlerModule :: module().
 data_backend(true, <<"file">>) -> file_data_backend;
-data_backend(true, <<"file-acl">>) -> file_data_backend;
-data_backend(true, <<"file-distribution">>) -> file_data_backend;
+data_backend(true, <<"file-shared">>) -> file_data_backend;
+data_backend(_, <<"file-public">>) -> file_data_backend;
+
+data_backend(true, <<"file-acl">>) -> file_acl_data_backend;
+
+data_backend(true, <<"file-distribution">>) -> file_distribution_data_backend;
+
+data_backend(true, <<"file-property">>) -> metadata_data_backend;
+data_backend(_, <<"file-property-public">>) -> metadata_data_backend;
+data_backend(true, <<"file-property-shared">>) -> metadata_data_backend;
+
 data_backend(true, <<"data-space">>) -> data_space_data_backend;
+
 data_backend(true, <<"space">>) -> space_data_backend;
 data_backend(true, <<"space-user-permission">>) -> space_data_backend;
 data_backend(true, <<"space-group-permission">>) -> space_data_backend;
+
+data_backend(true, <<"share">>) -> share_data_backend;
+data_backend(_, <<"share-public">>) -> share_data_backend;
+
 data_backend(true, <<"group">>) -> group_data_backend;
 data_backend(true, <<"group-user-permission">>) -> group_data_backend;
 data_backend(true, <<"group-group-permission">>) -> group_data_backend;
+
+data_backend(true, <<"handle">>) -> handle_data_backend;
+data_backend(_, <<"handle-public">>) -> handle_data_backend;
+
+data_backend(true, <<"handle-service">>) -> handle_service_data_backend;
+
 data_backend(true, <<"system-provider">>) -> system_data_backend;
 data_backend(true, <<"system-user">>) -> system_data_backend;
 data_backend(true, <<"system-group">>) -> system_data_backend.
@@ -122,18 +143,13 @@ public_rpc_backend() -> public_rpc_backend.
     {ok, proplists:proplist()} | gui_error:error_result().
 session_details() ->
     {ok, #document{
-        value = #onedata_user{
+        value = #od_user{
             name = Name
-        }}} = onedata_user:get(g_session:get_user_id()),
-    ConnectionRef = base64:encode(pid_to_list(self())),
+        }}} = od_user:get(g_session:get_user_id()),
     Res = [
         {<<"userName">>, Name},
         {<<"manageProvidersURL">>,
-            str_utils:to_binary(oneprovider:get_oz_providers_page())},
-        % @todo VFS-2051 temporary solution for model pushing during upload
-        % Used for model pushing during file upload - the client informs which
-        % connection is his and updates are pushed to that pid.
-        {<<"connectionRef">>, ConnectionRef}
+            str_utils:to_binary(oneprovider:get_oz_providers_page())}
     ],
     {ok, Res}.
 
@@ -176,3 +192,14 @@ error_404_html_file() ->
 -spec error_500_html_file() -> FileName :: binary().
 error_500_html_file() ->
     <<"page500.html">>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gui_route_plugin_behaviour} callback response_headers/0
+%% @end
+%%--------------------------------------------------------------------
+-spec response_headers() -> [{Key :: binary(), Value :: binary()}].
+response_headers() ->
+    {ok, Headers} = application:get_env(?APP_NAME, gui_response_headers),
+    Headers.

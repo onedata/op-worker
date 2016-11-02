@@ -49,7 +49,7 @@
 -spec start(session:id(), file_meta:entry(), oneprovider:id(), binary()) ->
     {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileEntry, ProviderId, Callback) ->
-    {ok, Pid} = gen_server:start(?MODULE,
+    {ok, Pid} = gen_server2:start(?MODULE,
         [SessionId, FileEntry, ProviderId, Callback], []),
     TransferId = pid_to_id(Pid),
     session:add_transfer(SessionId, TransferId),
@@ -62,16 +62,20 @@ start(SessionId, FileEntry, ProviderId, Callback) ->
 %%--------------------------------------------------------------------
 -spec get_status(TransferId :: id()) -> status().
 get_status(TransferId)  ->
-    gen_server:call(id_to_pid(TransferId), get_status).
+    {ok, Pid} = id_to_pid(TransferId),
+    ok = check_transfer_existence(Pid),
+    gen_server2:call(Pid, get_status).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets transfer info
 %% @end
 %%--------------------------------------------------------------------
--spec get(TransferId :: id()) -> list().
+-spec get(TransferId :: id()) -> maps:map().
 get(TransferId)  ->
-    gen_server:call(id_to_pid(TransferId), get_info).
+    {ok, Pid} = id_to_pid(TransferId),
+    ok = check_transfer_existence(Pid),
+    gen_server2:call(Pid, get_info).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -80,7 +84,9 @@ get(TransferId)  ->
 %%--------------------------------------------------------------------
 -spec stop(id()) -> ok.
 stop(TransferId) ->
-    gen_server:stop(id_to_pid(TransferId)).
+    {ok, Pid} = id_to_pid(TransferId),
+    ok = check_transfer_existence(Pid),
+    gen_server2:stop(Pid).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -99,13 +105,13 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
     Server = self(),
     spawn(fun() ->
         try
-            ok = gen_server:call(Server, transfer_active),
+            ok = gen_server2:call(Server, transfer_active),
             ok = logical_file_manager:replicate_file(SessionId, FileEntry, ProviderId),
-            gen_server:cast(Server, transfer_completed)
+            gen_server2:cast(Server, transfer_completed)
         catch
             _:E ->
                 ?error_stacktrace("Could not replicate file ~p due to ~p", [FileEntry, E]),
-                gen_server:cast(Server, transfer_failed)
+                gen_server2:cast(Server, transfer_failed)
         end
     end),
     FilePath =
@@ -134,11 +140,11 @@ init([SessionId, FileEntry, ProviderId, Callback]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(get_info, _From, State = #state{status = Status, path = Path, target_provider_id = TargetProviderId}) ->
-    Response = [
-        {<<"path">>, Path},
-        {<<"status">>, atom_to_binary(Status, utf8)},
-        {<<"targetProviderId">>, TargetProviderId}
-    ],
+    Response = #{
+        <<"path">> => Path,
+        <<"status">> => atom_to_binary(Status, utf8),
+        <<"targetProviderId">> => TargetProviderId
+    },
     {reply, Response, State};
 handle_call(get_status, _From, State) ->
     {reply, State#state.status, State};
@@ -230,6 +236,25 @@ pid_to_id(Pid) ->
 %% Converts transfer id to pid of transfer handler
 %% @end
 %%--------------------------------------------------------------------
--spec id_to_pid(TransferId :: id()) -> pid().
+-spec id_to_pid(TransferId :: id()) -> {ok, pid()} | {error, {not_found, transfer}}.
 id_to_pid(TransferId) ->
-    binary_to_term(base64url:decode(TransferId)).
+    try
+        {ok, binary_to_term(base64url:decode(TransferId))}
+    catch
+        _:_ ->
+            {error, {not_found, transfer}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if transfer server pid exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_transfer_existence(pid()) -> ok | {error, {not_found, transfer}}.
+check_transfer_existence(Pid) ->
+    case utils:process_info(Pid) of
+        undefined ->
+            {error, {not_found, transfer}};
+        _ ->
+            ok
+    end.

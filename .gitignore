@@ -4,12 +4,9 @@
 .dialyzer.plt
 .idea
 .rebar
+rebar3.crashdump
 
 cluster_manager
-src/gui_static/common
-src/gui_static/flatui
-src/gui_static/fonts
-src/gui_static/n2o
 
 *.iml
 *.sublime*
@@ -26,12 +23,11 @@ test/eunit_results
 test_distributed/cover_tmp.spec
 test_coverage
 
-deps
 doc
 logs
-ebin
 priv
 .rebar
+rebar3.crashdump
 
 c_lib
 c_src/helpers_nif/*.o
@@ -43,3 +39,8 @@ docs/_build/
 # OS X
 .DS_Store
 ._*
+
+_build
+compile_commands.json
+
+rel/files/vm.args

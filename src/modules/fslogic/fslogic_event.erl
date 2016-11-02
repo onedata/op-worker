@@ -18,7 +18,7 @@
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_file_location_update/3,
-    emit_permission_changed/1, emit_file_removal/1, emit_file_renamed/3,
+    emit_permission_changed/1, emit_file_removal/2, emit_file_renamed/3,
     emit_quota_exeeded/0, emit_file_renamed/4]).
 
 %%%===================================================================
@@ -50,7 +50,7 @@ emit_quota_exeeded() ->
     ok | {error, Reason :: term()}.
 emit_file_attr_update(FileEntry, ExcludedSessions) ->
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
+    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID),
     case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{size = Size} = FileAttr} ->
             ?debug("Sending new attributes for file ~p to all sessions except ~p, size ~p",
@@ -70,7 +70,7 @@ emit_file_attr_update(FileEntry, ExcludedSessions) ->
     ok | {error, Reason :: term()}.
 emit_file_sizeless_attrs_update(FileEntry) ->
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
+    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID),
     case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new times for file ~p to all subscribers", [FileEntry]),
@@ -135,7 +135,7 @@ emit_file_location_update(FileEntry, ExcludedSessions, Range) ->
         % fill gaps, fill storage info, transform uid and emit
         LocationToSend = file_location:ensure_blocks_not_empty(
             FileLocation#file_location{
-                uuid = fslogic_uuid:to_file_guid(FileUuid),
+                uuid = fslogic_uuid:uuid_to_guid(FileUuid),
                 blocks = BlocksWithFilledGaps
             }),
         event:emit(#event{object = #update_event{
@@ -155,17 +155,19 @@ emit_file_location_update(FileEntry, ExcludedSessions, Range) ->
 -spec emit_permission_changed(FileUuid :: file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
 emit_permission_changed(FileUuid) ->
-    event:emit(#event{object = #permission_changed_event{file_uuid = fslogic_uuid:to_file_guid(FileUuid)}}).
+    event:emit(#event{object = #permission_changed_event{file_uuid = fslogic_uuid:uuid_to_guid(FileUuid)}}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Send event informing subscribed client about file removal.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_removal(FileGUID :: fslogic_worker:file_guid()) ->
+-spec emit_file_removal(FileGUID :: fslogic_worker:file_guid(),
+    ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
-emit_file_removal(FileGUID) ->
-    event:emit(#event{object = #file_removal_event{file_uuid = FileGUID}}).
+emit_file_removal(FileGUID, ExcludedSessions) ->
+    event:emit(#event{object = #file_removal_event{file_uuid = FileGUID}},
+        {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -184,10 +186,10 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 %% Send event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_renamed(file_meta:uuid(), space_info:id(), file_meta:path(),
+-spec emit_file_renamed(file_meta:uuid(), od_space:id(), file_meta:path(),
     session:id()) -> ok | {error, Reason :: term()}.
 emit_file_renamed(FileUUID, SpaceId, Path, SessionId) ->
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID, SpaceId),
+    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
         old_uuid = FileGUID,
         new_uuid = FileGUID,

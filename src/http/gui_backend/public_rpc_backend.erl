@@ -11,15 +11,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(public_rpc_backend).
--author("Lukasz Opiola").
 -behaviour(rpc_backend_behaviour).
+-author("Lukasz Opiola").
+
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([handle/2]).
 
-
 %%%===================================================================
-%%% API functions
+%%% rpc_backend_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -29,6 +31,27 @@
 %%--------------------------------------------------------------------
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
+% Checks if file can be downloaded (i.e. can be read by the user) and if so,
+% returns download URL.
+handle(<<"getPublicFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
+    {_, FileId} = op_gui_utils:association_to_ids(AssocId),
+    PermsCheckAnswer = logical_file_manager:check_perms(
+        ?GUEST_SESS_ID, {guid, FileId}, read
+    ),
+    case PermsCheckAnswer of
+        {ok, true} ->
+            Hostname = g_ctx:get_requested_hostname(),
+            URL = str_utils:format_bin("https://~s/download/~s",
+                [Hostname, FileId]),
+            {ok, [{<<"fileUrl">>, URL}]};
+        {ok, false} ->
+            gui_error:report_error(<<"Permission denied">>);
+        _ ->
+            gui_error:internal_server_error()
+    end;
+
+handle(<<"fetchMoreDirChildren">>, Props) ->
+    file_data_backend:fetch_more_dir_children(?ROOT_SESS_ID, Props);
+
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).
-

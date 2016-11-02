@@ -25,18 +25,18 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
+-export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
-    get_transfers/1, remove_transfer/2, add_transfer/2]).
+    get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
 -type auth() :: #token_auth{} | #basic_auth{}.
--type type() :: fuse | rest | gui | provider_outgoing | provider_incoming.
+-type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 -type status() :: active | inactive.
--type identity() :: #identity{}.
+-type identity() :: #user_identity{}.
 
 -export_type([id/0, ttl/0, auth/0, type/0, status/0, identity/0]).
 
@@ -51,9 +51,8 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(#document{value = Sess} = Document) ->
-    Timestamp = os:timestamp(),
     datastore:save(?STORE_LEVEL, Document#document{value = Sess#session{
-        accessed = Timestamp
+        accessed = erlang:system_time(seconds)
     }}).
 
 %%--------------------------------------------------------------------
@@ -64,11 +63,15 @@ save(#document{value = Sess} = Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) when is_map(Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{accessed => os:timestamp()});
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{
+        accessed => erlang:system_time(seconds)
+    });
 update(Key, Diff) when is_function(Diff) ->
     NewDiff = fun(Sess) ->
         case Diff(Sess) of
-            {ok, NewSess} -> {ok, NewSess#session{accessed = os:timestamp()}};
+            {ok, NewSess} -> {ok, NewSess#session{
+                accessed = erlang:system_time(seconds)
+            }};
             {error, Reason} -> {error, Reason}
         end
     end,
@@ -81,9 +84,8 @@ update(Key, Diff) when is_function(Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(#document{value = Sess} = Document) ->
-    Timestamp = os:timestamp(),
     datastore:create(?STORE_LEVEL, Document#document{value = Sess#session{
-        accessed = Timestamp
+        accessed = erlang:system_time(seconds)
     }}).
 
 %%--------------------------------------------------------------------
@@ -93,28 +95,7 @@ create(#document{value = Sess} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_SESS_ID) ->
-    {ok, #document{key = ?ROOT_SESS_ID, value = #session{
-        identity = #identity{user_id = ?ROOT_USER_ID}
-    }}};
 get(Key) ->
-    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
-        {ok, Doc} ->
-            session:update(Key, #{}),
-            {ok, Doc};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link model_behaviour} callback get/1.
-%% Does not modify access time.
-%% @end
-%%--------------------------------------------------------------------
--spec const_get(datastore:key()) ->
-    {ok, datastore:document()} | datastore:get_error().
-const_get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -151,13 +132,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    case ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)) of
-        true ->
-            update(Key, #{}),
-            true;
-        false ->
-            false
-    end.
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -205,7 +180,7 @@ all_with_user() ->
         ('$end_of_table', Acc) ->
             {abort, Acc};
         (#document{
-            value = #session{identity = #identity{user_id = UserID}}
+            value = #session{identity = #user_identity{user_id = UserID}}
         } = Doc, Acc) when is_binary(UserID) ->
             {next, [Doc | Acc]};
         (_X, Acc) ->
@@ -218,14 +193,14 @@ all_with_user() ->
 %% Returns ID of user associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(SessId :: id()) ->
-    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+-spec get_user_id(SessIdOrSession :: id() | #session{}) ->
+    {ok, UserId :: od_user:id()} | {error, Reason :: term()}.
+get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
+    {ok, UserId};
 get_user_id(SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} ->
-            {ok, UserId};
-        {error, Reason} ->
-            {error, Reason}
+        {ok, #document{value = Session}} -> get_user_id(Session);
+        {error, Reason} -> {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -346,7 +321,7 @@ get_connections(SessId) ->
 -spec get_connections(SessId :: id(), HideOverloaded :: boolean()) ->
     {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId, HideOverloaded) ->
-    case session:const_get(SessId) of
+    case ?MODULE:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
             ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
             provider_communicator:ensure_connected(ProxyViaSession),
@@ -415,7 +390,7 @@ get_auth(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_rest_session_id(session:identity()) -> id().
-get_rest_session_id(#identity{user_id = Uid}) ->
+get_rest_session_id(#user_identity{user_id = Uid}) ->
     <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
 
 %%--------------------------------------------------------------------
@@ -493,6 +468,56 @@ add_transfer(SessionId, TransferId) ->
         {ok, Sess#session{transfers = [TransferId | Transfers]}}
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Add link to handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_handle(SessionId :: session:id(), HandleID :: binary(),
+    Handle :: storage_file_manager:handle()) -> ok | datastore:generic_error().
+add_handle(SessionId, HandleID, Handle) ->
+    case sfm_handle:create(#document{value = Handle}) of
+        {ok, Key} ->
+            datastore:add_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [{HandleID, {Key, sfm_handle}}]);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove link to handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_handle(SessionId :: session:id(), HandleID :: binary()) -> ok | datastore:generic_error().
+remove_handle(SessionId, HandleID) ->
+    case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+        {ok, {HandleKey, sfm_handle}} ->
+            case sfm_handle:delete(HandleKey) of
+                ok ->
+                    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]);
+                {error, Reason2} ->
+                    {error, Reason2}
+            end;
+        {error, link_not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_handle(SessionId :: session:id(), HandleID :: binary()) ->
+    {ok, storage_file_manager:handle()} | datastore:generic_error().
+get_handle(SessionId, HandleID) ->
+    case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+        {ok, #document{value = Handle}} ->
+            {ok, Handle};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%%===================================================================
 %%% Internal functions

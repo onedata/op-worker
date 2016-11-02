@@ -5,9 +5,10 @@ ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts
 LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L ../priv/helpers/lib \
 	-lhelpers $(shell pkg-config --libs botan-1.10 tbb fuse) -laws-cpp-sdk-s3 \
 	-laws-cpp-sdk-core -lcurl -lSwift -lPocoUtil -lPocoXML \
-	-lPocoNet -lPocoFoundation -lpthread -lboost_filesystem -lrados -lglog \
-	../helpers/release/erlang-tls/c_src/deps/boringssl/ssl/libssl.a \
-	../helpers/release/erlang-tls/c_src/deps/boringssl/crypto/libcrypto.a
+	-lPocoNet -lPocoFoundation -lpthread -Wl,-Bstatic -lrados -Wl,-Bdynamic \
+	-lglog -lnss3 -lnspr4 -lboost_filesystem -lboost_log -lboost_thread \
+	-lboost_iostreams ../helpers/release/etls/c_src/deps/boringssl/ssl/libssl.a \
+	../helpers/release/etls/c_src/deps/boringssl/crypto/libcrypto.a
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall $(shell pkg-config --cflags botan-1.10 tbb) \
 -isystem ../priv/helpers/include -isystem $(ERTS_INCLUDE_DIR) \
@@ -19,6 +20,13 @@ all: \
 		../priv/luma_nif.so \
 		../priv/rt_priority_queue_drv.so \
 		../priv/rt_map_drv.so
+
+../priv/helpers/lib/libhelpers.a:
+	make LDFLAGS= CFLAGS= CXXFLAGS= INSTALL_PREFIX=../../priv/helpers BUILD_PROXY_IO=OFF -C ../helpers/ install
+	rm -rf ../priv/helpers/**/*.so
+
+%.o: %.cc ../priv/helpers/lib/libhelpers.a
+	$(CXX) $(CXXFLAGS) $(CFLAGS) -c $< -o $@
 
 ../priv/csr_creator_drv.so: \
 		csr_creator/csr_creator.o \

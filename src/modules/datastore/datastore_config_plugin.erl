@@ -15,28 +15,30 @@
 -behaviour(datastore_config_behaviour).
 
 %% datastore_config_behaviour callbacks
--export([models/0]).
+-export([models/0, throttled_models/0]).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% {@link datastore_config_behaviour} callback models/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
 models() -> [
+    od_user,
+    od_group,
+    od_space,
+    od_share,
+    od_provider,
+    od_handle_service,
+    od_handle,
     subscriptions_state,
     subscription,
+    file_subscription,
     session,
-    onedata_user,
-    onedata_group,
-    identity,
+    user_identity,
     file_meta,
     storage,
     file_location,
-    xattr,
-    provider_info,
-    space_info,
     space_storage,
     ceph_user,
     s3_user,
@@ -47,6 +49,22 @@ models() -> [
     space_quota,
     monitoring_state,
     open_file,
-    monitoring_init_state,
-    swift_user
+    swift_user,
+    sfm_handle,
+    dbsync_batches,
+    custom_metadata,
+    indexes,
+    file_consistency,
+    permissions_cache,
+    permissions_cache_helper,
+    change_propagation_controller,
+    times
 ].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link datastore_config_behaviour} callback throttled_models/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec throttled_models() -> Models :: [model_behaviour:model_type()].
+throttled_models() -> [file_meta].

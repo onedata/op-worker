@@ -14,6 +14,7 @@
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -57,8 +58,8 @@ session_manager_session_creation_and_reuse_test(Config) ->
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Iden1 = #identity{user_id = <<"user_id_1">>},
-    Iden2 = #identity{user_id = <<"user_id_2">>},
+    Iden1 = #user_identity{user_id = <<"user_id_1">>},
+    Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
     lists:foreach(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
@@ -159,7 +160,7 @@ session_manager_supervision_tree_structure_test(Config) ->
 
     ok.
 
-%% Check whether session manager can remove session dispite of node on which
+%% Check whether session manager can remove session despite of node on which
 %% request is processed.
 session_manager_session_removal_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -232,7 +233,7 @@ session_supervisor_child_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
@@ -266,22 +267,25 @@ init_per_suite(Config) ->
     NewConfig.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
+init_per_testcase(session_manager_session_creation_and_reuse_test = Case, Config) ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     Config;
 
-init_per_testcase(session_getters_test, Config) ->
+init_per_testcase(session_getters_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+    Iden = #user_identity{user_id = <<"user_id">>},
     initializer:communicator_mock(Worker),
     initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
-init_per_testcase(session_supervisor_child_crash_test, Config) ->
+init_per_testcase(session_supervisor_child_crash_test = Case, Config) ->
+    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     initializer:communicator_mock(Worker),
@@ -297,39 +301,48 @@ init_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test;
     Case =:= session_manager_session_removal_test ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId1 = <<"session_id_1">>,
     SessId2 = <<"session_id_2">>,
-    Iden1 = #identity{user_id = <<"user_id_1">>},
-    Iden2 = #identity{user_id = <<"user_id_2">>},
+    Iden1 = #user_identity{user_id = <<"user_id_1">>},
+    Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
     initializer:communicator_mock(Workers),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_fuse_session, [SessId1, Iden1, Self])),
     ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_fuse_session, [SessId2, Iden2, Self])),
+    ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
+        remove_session, [?ROOT_SESS_ID])),
+    ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
+        remove_session, [?GUEST_SESS_ID])),
 
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 
-end_per_testcase(session_getters_test, Config) ->
+end_per_testcase(session_getters_test = Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:basic_session_teardown(Worker, Config),
     test_utils:mock_validate_and_unload(Worker, communicator);
 
-end_per_testcase(session_supervisor_child_crash_test, Config) ->
+end_per_testcase(session_supervisor_child_crash_test = Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, logger);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_creation_and_reuse_test;
     Case =:= session_manager_session_removal_test ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     SessIds = ?config(session_ids, Config),
     lists:foreach(fun(SessId) ->

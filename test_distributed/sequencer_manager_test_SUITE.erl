@@ -163,7 +163,7 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_unregister_sequencer_in_stream;
@@ -171,10 +171,11 @@ init_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_sequencer_stream_sup(Worker),
-    init_per_testcase(default, Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    ?CASE_START(Case),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
     mock_communicator(Worker),
@@ -187,10 +188,11 @@ end_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_create_sequencer_stream_on_open_stream;
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(default, Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, sequencer_stream_sup);
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_manager(?config(sequencer_manager, Config)),
     test_utils:mock_validate_and_unload(Worker, [communicator, sequencer_manager_sup]),

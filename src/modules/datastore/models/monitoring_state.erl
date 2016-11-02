@@ -18,9 +18,31 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
-    model_init/0, 'after'/5, before/4, run_synchronized/2]).
+    model_init/0, 'after'/5, before/4, run_in_critical_section/2]).
+-export([record_struct/1]).
 
 -export([encode_id/1]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {monitoring_id, {record, 1, [
+            {main_subject_type, atom},
+            {main_subject_id, binary},
+            {metric_type, atom},
+            {secondary_subject_type, atom},
+            {secondary_subject_id, binary},
+            {provider_id, binary}
+        ]}},
+        {rrd_path, string},
+        {state_buffer, #{term => term}},
+        {last_update_time, integer}
+    ]}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -143,12 +165,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% that 2 funs with same ResourceId won't run at the same time.
 %% @end
 %%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary() | #monitoring_id{},
+-spec run_in_critical_section(ResourceId :: binary() | #monitoring_id{},
     Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(#monitoring_id{} = MonitoringIdRecord, Fun) ->
-    monitoring_state:run_synchronized(encode_id(MonitoringIdRecord), Fun);
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
+% TODO remove after update of monitoring worker
+run_in_critical_section(#monitoring_id{} = MonitoringIdRecord, Fun) ->
+    monitoring_state:run_in_critical_section(encode_id(MonitoringIdRecord), Fun);
+run_in_critical_section(ResourceId, Fun) ->
+    critical_section:run([?MODEL_NAME, ResourceId], Fun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -157,7 +180,7 @@ run_synchronized(ResourceId, Fun) ->
 %%--------------------------------------------------------------------
 -spec encode_id(#monitoring_id{}) -> datastore:id().
 encode_id(MonitoringIdRecord) ->
-    base64:encode(crypto:hash(md5, term_to_binary(MonitoringIdRecord))).
+    http_utils:base64url_encode(crypto:hash(md5, term_to_binary(MonitoringIdRecord))).
 
 
 %%%===================================================================

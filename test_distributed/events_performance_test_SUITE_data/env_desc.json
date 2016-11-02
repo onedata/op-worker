@@ -1,17 +1,22 @@
 {
     "dirs_config": {
         "cluster_manager": {
-            "input_dir": "rel/cluster_manager",
-            "target_dir": "rel/test_cluster"
+            "input_dir": "_build/default/rel/cluster_manager",
+            "target_dir": "_build/default/rel/test_cluster"
         },
         "op_worker": {
-            "input_dir": "rel/op_worker",
-            "target_dir": "rel/test_cluster"
+            "input_dir": "_build/default/rel/op_worker",
+            "target_dir": "_build/default/rel/test_cluster"
         }
     },
     "os_configs": {
         "cfg1": {
-            "storages": [],
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st"
+                }
+            ],
             "users": [],
             "groups": {}
         }
@@ -46,6 +51,31 @@
                             "127.0.0.1:49161"
                         ],
                         "verify_oz_cert": false
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "space1"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space_name1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     }
                 }
             }

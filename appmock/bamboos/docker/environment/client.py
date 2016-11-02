@@ -39,6 +39,8 @@ def _tweak_config(config, os_config, name, uid):
                          'user_cert': client['user_cert'],
                          'mounting_path': client['mounting_path'],
                          'token_for': client['token_for']}
+        if 'default_timeout' in client.keys():
+            client_config['default_timeout'] = client['default_timeout']
 
         node['clients'].append(client_config)
 
@@ -54,13 +56,14 @@ def _node_up(image, bindir, config, config_path, dns_servers, logdir, storages_d
 
     client_data = {}
 
+    bindir = os.path.abspath(bindir)
     # We want the binary from debug more than relwithdebinfo, and any of these
     # more than from release (ifs are in reverse order so it works when
     # there are multiple dirs).
     command = '''set -e
-[ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
-[ -d /root/build/relwithdebinfo ] && cp /root/build/relwithdebinfo/oneclient /root/bin/oneclient
-[ -d /root/build/debug ] && cp /root/build/debug/oneclient /root/bin/oneclient
+[ -d {bindir}/release ] && cp {bindir}/release/oneclient /root/bin/oneclient
+[ -d {bindir}/relwithdebinfo ] && cp {bindir}/relwithdebinfo/oneclient /root/bin/oneclient
+[ -d {bindir}/debug ] && cp {bindir}/debug/oneclient /root/bin/oneclient
 chmod 777 /tmp
 mkdir /tmp/certs
 mkdir /tmp/keys
@@ -76,6 +79,9 @@ bindfs --create-for-user={uid} --create-for-group={gid} /tmp /tmp
                                     'zone_domain': client['zone_domain'],
                                     'mounting_path': client['mounting_path'],
                                     'token_for': client['token_for']}
+        if 'default_timeout' in client.keys():
+            client_data[client_name]['default_timeout'] = client['default_timeout']
+
         # cert_file_path and key_file_path can both be an absolute path
         # or relative to gen_dev_args.json
         cert_file_path = os.path.join(common.get_file_dir(config_path),
@@ -93,6 +99,7 @@ EOF
 '''
 
         command = command.format(
+            bindir=bindir,
             client_name=client_name,
             cert_file=open(cert_file_path, 'r').read(),
             key_file=open(key_file_path, 'r').read(),
@@ -108,7 +115,7 @@ EOF
 
     command += '''bash'''
 
-    volumes = [(bindir, '/root/build', 'ro')]
+    volumes = [(bindir, bindir, 'ro')]
     posix_storages = []
     if os_config['storages']:
         if isinstance(os_config['storages'][0], basestring):

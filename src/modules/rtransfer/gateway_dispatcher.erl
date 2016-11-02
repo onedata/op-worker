@@ -49,7 +49,7 @@
      Pid :: pid(),
      Error :: {already_started,Pid} | term().
 start_link(NetworkInterfaces) ->
-    gen_server:start_link({local, ?GATEWAY_DISPATCHER}, ?MODULE,
+    gen_server2:start_link({local, ?GATEWAY_DISPATCHER}, ?MODULE,
         NetworkInterfaces, []).
 
 
@@ -127,7 +127,7 @@ handle_cast({register_connection_manager, Id, Addr, Pid}, State) ->
 handle_cast(#gw_fetch{} = Request, State) ->
     Managers = State#gwstate.connection_managers,
     {{value, #cmref{pid = MgrPid} = Manager}, PoppedManagers} = queue:out(Managers),
-    gen_server:cast(MgrPid, Request),
+    gen_server2:cast(MgrPid, Request),
     {noreply, State#gwstate{connection_managers = queue:in(Manager, PoppedManagers)}};
 
 handle_cast(_Request, State) ->

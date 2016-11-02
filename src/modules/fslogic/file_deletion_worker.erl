@@ -88,9 +88,7 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
 
             case open_file:mark_to_remove(FileUUID) of
                 ok ->
-                    spawn(fun() ->
-                        fslogic_event:emit_file_renamed(FileUUID, SpaceId, Path, SessId)
-                    end);
+                    fslogic_event:emit_file_renamed(FileUUID, SpaceId, Path, SessId);
                 {error, {not_found, _}} ->
                     remove_file_and_file_meta(FileUUID, SessId, Silent)
             end;
@@ -129,10 +127,12 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_meta:uuid(), session:id(), boolean()) -> ok.
 remove_file_and_file_meta(FileUUID, SessId, Silent) ->
-    {ok, #document{value = #file_meta{uid = UID, type = Type}} = FileDoc} =
+    {ok, #document{value = #file_meta{uid = UID, type = Type, shares = Shares}} = FileDoc} =
         file_meta:get(FileUUID),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, UID),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
+
+    ok = delete_shares(SessId, Shares),
 
     fslogic_times:update_mtime_ctime(ParentDoc, UID),
 
@@ -148,10 +148,8 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
     case Silent of
         true -> ok;
         false ->
-            spawn(fun() ->
-                fslogic_event:emit_file_removal(
-                    fslogic_uuid:to_file_guid(FileUUID, SpaceId))
-            end)
+            fslogic_event:emit_file_removal(
+                fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), [SessId])
     end,
     ok.
 
@@ -196,4 +194,18 @@ delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
             ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p",
                 [FileUUID, Reason3])
     end,
+    ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes given shares from oz and db.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_shares(session:id(), [od_share:id()]) -> ok | no_return().
+delete_shares(_SessId, []) ->
+    ok;
+delete_shares(SessId, Shares) ->
+    {ok, Auth} = session:get_auth(SessId),
+    [ok = share_logic:delete(Auth, ShareId) || ShareId <- Shares],
     ok.

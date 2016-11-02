@@ -39,41 +39,323 @@
     lfm_acl_test/1,
     rm_recursive_test/1,
     file_gap_test/1,
-    ls_test/1
+    ls_test/1, ls_test_base/1,
+    ls_with_stats_test/1, ls_with_stats_test_base/1,
+    create_share_dir_test/1,
+    create_share_file_test/1,
+    share_getattr_test/1,
+    share_list_test/1,
+    share_read_test/1,
+    share_child_getattr_test/1,
+    share_child_list_test/1,
+    share_child_read_test/1,
+    share_permission_denied_test/1,
+    echo_loop_test/1, echo_loop_test_base/1
+]).
+
+-define(TEST_CASES, [
+    fslogic_new_file_test,
+    lfm_create_and_unlink_test,
+    lfm_create_and_access_test,
+    lfm_write_test,
+    lfm_stat_test,
+    lfm_synch_stat_test,
+    lfm_truncate_test,
+    lfm_acl_test,
+    rm_recursive_test,
+    file_gap_test,
+    ls_test,
+    ls_with_stats_test,
+    create_share_dir_test,
+    create_share_file_test,
+    share_getattr_test,
+    share_list_test,
+    share_read_test,
+    share_child_getattr_test,
+    share_child_list_test,
+    share_child_read_test,
+    share_permission_denied_test,
+    echo_loop_test
+]).
+
+-define(PERFORMANCE_TEST_CASES, [
+    ls_test, ls_with_stats_test, echo_loop_test
 ]).
 
 all() ->
-    ?ALL([
-        fslogic_new_file_test,
-        lfm_create_and_unlink_test,
-        lfm_create_and_access_test,
-        lfm_write_test,
-        lfm_stat_test,
-        lfm_synch_stat_test,
-        lfm_truncate_test,
-        lfm_acl_test,
-        rm_recursive_test,
-        file_gap_test,
-        ls_test
-    ]).
+    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}], ?TIMEOUT)).
+-define(REPEATS, 5).
+-define(SUCCESS_RATE, 100).
+
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
+
+-define(file_req(W, SessId, ContextGuid, FileRequest), ?req(W, SessId,
+    #file_request{context_guid = ContextGuid, file_request = FileRequest})).
+
 -define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
 %%% Test function
 %%%====================================================================
 
-ls_test(Config) ->
+echo_loop_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, ?REPEATS},
+        {success_rate, ?SUCCESS_RATE},
+        {parameters, [
+            [{name, writes_num}, {value, 1000}, {description, "Number of write operations during "}]
+        ]},
+        {description, "Simulates loop of echo operations done by client"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, writes_num}, {value, 10000}]
+            ]},
+            {description, "Basic performance configuration"}
+        ]}
+    ]).
+echo_loop_test_base(Config) ->
+    WritesNum = ?config(writes_num, Config),
+
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    VerifyLS = fun(Offset, Limit, ElementsList) ->
-        LSAns = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, Offset, Limit),
-        LSAns2 = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, 0, Offset),
-        LSAns3 = lfm_proxy:ls(Worker, SessId1, {path, <<"/space_name1">>}, Offset + Limit, length(ElementsList)),
+    File = generator:gen_name(),
+    FilePath = <<"/space_name1/", File/binary, "/">>,
+    ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#755)),
+
+    {WriteTime, _} = measure_execution_time(fun() ->
+        lists:foldl(fun(N, Offset) ->
+            OpenAns = lfm_proxy:open(Worker, SessId1, {path, FilePath}, write),
+            ?assertMatch({ok, _}, OpenAns),
+            {ok, Handle} = OpenAns,
+            Bytes = integer_to_binary(N),
+            BufSize = size(Bytes),
+            ?assertMatch({ok, BufSize}, lfm_proxy:write(Worker, Handle, Offset, Bytes)),
+            lfm_proxy:close(Worker, Handle),
+            Offset + BufSize
+        end, 0, lists:seq(1, WritesNum))
+    end),
+
+    #parameter{name = echo_time, value = WriteTime, unit = "us",
+        description = "Aggregated time of all operations"}.
+
+ls_with_stats_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, ?REPEATS},
+        {success_rate, ?SUCCESS_RATE},
+        {parameters, [
+            [{name, proc_num}, {value, 1}, {description, "Number of threads used during the test."}],
+            [{name, dir_level}, {value, 10}, {description, "Level of test directory."}],
+            [{name, dirs_num_per_proc}, {value, 10}, {description, "Number of dirs tested by single thread."}]
+        ]},
+        {description, "Tests performance of ls with gettin stats operation"},
+        {config, [{name, low_level_single_thread_small_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 1}],
+                [{name, dirs_num_per_proc}, {value, 5}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, low_level_single_thread_large_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 1}],
+                [{name, dirs_num_per_proc}, {value, 100}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, low_level_10_threads_large_dir},
+            {parameters, [
+                [{name, proc_num}, {value, 10}],
+                [{name, dir_level}, {value, 1}],
+                [{name, dirs_num_per_proc}, {value, 10}]
+            ]},
+            {description, ""}
+        ]},
+%%        {config, [{name, low_level_many_threads_large_dir},
+%%            {parameters, [
+%%                [{name, proc_num}, {value, 100}],
+%%                [{name, dir_level}, {value, 1}],
+%%                [{name, dirs_num_per_proc}, {value, 1}]
+%%            ]},
+%%            {description, ""}
+%%        ]},
+        {config, [{name, high_level_single_thread_small_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 100}],
+                [{name, dirs_num_per_proc}, {value, 5}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, high_level_single_thread_large_dir},
+            {parameters, [
+                [{name, dir_level}, {value, 100}],
+                [{name, dirs_num_per_proc}, {value, 100}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, high_level_10_threads_large_dir},
+            {parameters, [
+                [{name, proc_num}, {value, 10}],
+                [{name, dir_level}, {value, 100}],
+                [{name, dirs_num_per_proc}, {value, 10}]
+            ]},
+            {description, ""}
+        ]}
+%%        {config, [{name, high_level_many_threads_large_dir},
+%%            {parameters, [
+%%                [{name, proc_num}, {value, 100}],
+%%                [{name, dir_level}, {value, 100}],
+%%                [{name, dirs_num_per_proc}, {value, 1}]
+%%            ]},
+%%            {description, ""}
+%%        ]}
+    ]).
+ls_with_stats_test_base(Config) ->
+    % Get test and environment description
+    DirLevel = ?config(dir_level, Config),
+    ProcNum = ?config(proc_num, Config),
+    DirsNumPerProc = ?config(dirs_num_per_proc, Config),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Master = self(),
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    % Generate names of dirs in test directory tree
+    [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
+        NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
+        [NewDir | Acc]
+    end, [<<"/space_name1">>], lists:seq(1,DirLevel)),
+    [_ | TreeDirs] = lists:reverse(TreeDirsReversed),
+
+    % Create dirs tree
+    {CreateTreeTime, _} = measure_execution_time(fun() ->
+        lists:foreach(fun(D) ->
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D, 8#755))
+        end, TreeDirs)
+    end),
+
+    % Create dirs at last level of tree (to be listed)
+    {CreateDirsTime, _} = measure_execution_time(fun() ->
+        Fun = fun() ->
+            lists:foreach(fun(_) ->
+                D = <<LastTreeDir/binary, "/", (generator:gen_name())/binary>>,
+                ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, D, 8#755))
+            end, lists:seq(1,DirsNumPerProc))
+        end,
+        case ProcNum of
+            1 ->
+                [Fun()];
+            _ ->
+                lists:foreach(fun(_) ->
+                    spawn(fun() ->
+                        Fun(),
+                        report_success(Master)
+                    end)
+                end, lists:seq(1,ProcNum)),
+                check_run_parallel_ans(ProcNum)
+        end
+    end),
+
+    % List directory
+    {LsTime, LSDirs} = measure_execution_time(fun() ->
+        LSAns = lfm_proxy:ls(Worker, SessId1, {path, LastTreeDir}, 0, DirsNumPerProc*ProcNum),
+        ?assertMatch({ok, _}, LSAns),
+        {ok, ListedDirs} = LSAns,
+        ?assertEqual(DirsNumPerProc*ProcNum, length(ListedDirs)),
+        ListedDirs
+    end),
+
+    % Stat listed directories
+    {StatTime, _} = measure_execution_time(fun() ->
+        Fun = fun(Dirs) ->
+            lists:foreach(fun({D, _}) ->
+                StatAns = lfm_proxy:stat(Worker, SessId1,  {guid, D}),
+                ?assertMatch({ok, #file_attr{}}, StatAns)
+            end, Dirs)
+        end,
+        case ProcNum of
+            1 ->
+                Fun(LSDirs);
+            _ ->
+                {Dirs, _} = lists:foldl(fun(D, {[H | T] = Acc, Count}) ->
+                    case Count =< DirsNumPerProc of
+                        true ->
+                            {[[D | H] | T], Count + 1};
+                        _ ->
+                            {[[D] | Acc], 1}
+                    end
+                end, {[[]], 0}, LSDirs),
+
+                lists:foreach(fun(ProcDirs) ->
+                    spawn(fun() ->
+                        Fun(ProcDirs),
+                        Master ! run_parallel_ok
+                          end)
+                end, Dirs),
+                check_run_parallel_ans(ProcNum)
+        end
+    end),
+
+    LsWithStatTime = LsTime + StatTime,
+
+    [
+        #parameter{name = create_tree_time, value = CreateTreeTime, unit = "us",
+            description = "Time of test tree creation"},
+        #parameter{name = create_dirs_time, value = CreateDirsTime, unit = "us",
+            description = "Time of test dirs creation"},
+        #parameter{name = ls_time, value = LsTime, unit = "us",
+            description = "Time of ls operation"},
+        #parameter{name = stat_time, value = StatTime, unit = "us",
+            description = "Time of all stat operations"},
+        #parameter{name = ls_stat_time, value = LsWithStatTime, unit = "us",
+            description = "Total time of ls and all stat operations"}
+    ].
+
+ls_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, ?REPEATS},
+        {success_rate, ?SUCCESS_RATE},
+        {parameters, [
+            [{name, dir_size_multiplier}, {value, 1}, {description, "Parametr for dir size tunning."}]
+        ]},
+        {description, "Tests ls operation"},
+        {config, [{name, medium_dir},
+            {parameters, [
+                [{name, dir_size_multiplier}, {value, 1}]
+            ]},
+            {description, ""}
+        ]},
+        {config, [{name, large_dir},
+            {parameters, [
+                [{name, dir_size_multiplier}, {value, 10}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+ls_test_base(Config) ->
+    DSM = ?config(dir_size_multiplier, Config),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    MainDir = generator:gen_name(),
+    MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath, 8#755)),
+
+    VerifyLS = fun(Offset0, Limit0, ElementsList) ->
+        Offset = Offset0 * DSM,
+        Limit = Limit0 * DSM,
+        LSAns = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset, Limit),
+        LSAns2 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, 0, Offset),
+        LSAns3 = lfm_proxy:ls(Worker, SessId1, {path, MainDirPath}, Offset + Limit, length(ElementsList)),
         ?assertMatch({ok, _}, LSAns),
         ?assertMatch({ok, _}, LSAns2),
         ?assertMatch({ok, _}, LSAns3),
@@ -88,42 +370,46 @@ ls_test(Config) ->
             lists:sort(lists:map(fun({_, Name}) -> Name  end, ListedElements ++ ListedElements2 ++ ListedElements3)))
     end,
 
-    Files = lists:sort(lists:map(fun(I) ->
-        list_to_binary(integer_to_list(I) ++ "ls_test_file") end, lists:seq(1, 150))),
+    Files = lists:sort(lists:map(fun(_) ->
+        generator:gen_name() end, lists:seq(1, 30*DSM))),
     lists:foreach(fun(F) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<"/space_name1/", F/binary>>, 8#755))
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, F/binary>>, 8#755))
     end, Files),
 
-    VerifyLS(0,150, Files),
-    VerifyLS(0,20, Files),
-    VerifyLS(0,75, Files),
-    VerifyLS(0,115, Files),
-    VerifyLS(60,55, Files),
-    VerifyLS(100,15, Files),
-    VerifyLS(110,40, Files),
-    VerifyLS(0,200, Files),
-    VerifyLS(150,50, Files),
-    VerifyLS(175,25, Files),
+    VerifyLS(0,30, Files),
+    VerifyLS(0,4, Files),
+    VerifyLS(0,15, Files),
+    VerifyLS(0,23, Files),
+    VerifyLS(12,11, Files),
+    VerifyLS(20,3, Files),
+    VerifyLS(22,8, Files),
+    VerifyLS(0,40, Files),
+    VerifyLS(30,10, Files),
+    VerifyLS(35,5, Files),
 
-    Dirs = lists:map(fun(I) ->
-        list_to_binary(integer_to_list(I) ++ "ls_test_dir") end, lists:seq(1, 150)),
+    Dirs = lists:map(fun(_) ->
+        generator:gen_name() end, lists:seq(1, 30*DSM)),
     lists:foreach(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<"/space_name1/", D/binary>>, 8#755))
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<MainDirPath/binary, D/binary>>, 8#755))
     end, Dirs),
     FandD = lists:sort(Files ++ Dirs),
 
-    VerifyLS(0,300, FandD),
-    VerifyLS(0,115, FandD),
-    VerifyLS(60,55, FandD),
-    VerifyLS(100,15, FandD),
-    VerifyLS(110,40, FandD),
-    VerifyLS(110,115, FandD),
-    VerifyLS(225,25, FandD),
-    VerifyLS(225,75, FandD),
-    VerifyLS(50,175, FandD),
-    VerifyLS(0,400, FandD),
+    VerifyLS(0,60, FandD),
+    VerifyLS(0,23, FandD),
+    VerifyLS(12,11, FandD),
+    VerifyLS(20,3, FandD),
+    VerifyLS(22,8, FandD),
+    VerifyLS(22,23, FandD),
+    VerifyLS(45,5, FandD),
+    VerifyLS(45,15, FandD),
+    VerifyLS(10,35, FandD),
 
-    ok.
+    {FinalLSTime, _} = measure_execution_time(fun() ->
+        VerifyLS(0,80, FandD)
+    end),
+
+    #parameter{name = final_ls_time, value = FinalLSTime, unit = "us",
+        description = "Time of last full dir listing"}.
 
 
 fslogic_new_file_test(Config) ->
@@ -135,8 +421,8 @@ fslogic_new_file_test(Config) ->
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name2">>),
 
-    Resp11 = ?req(Worker, SessId1, #get_new_file_location{parent_uuid = RootUUID1, name = <<"test">>}),
-    Resp21 = ?req(Worker, SessId2, #get_new_file_location{parent_uuid = RootUUID2, name = <<"test">>}),
+    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #get_new_file_location{name = <<"test">>, create_handle = false}),
+    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #get_new_file_location{name = <<"test">>, create_handle = false}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp11),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp21),
@@ -446,7 +732,6 @@ rm_recursive_test(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessId, {guid, FileIGuid})),
     ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, {guid, FileJGuid})).
 
-
 file_gap_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
@@ -471,6 +756,105 @@ file_gap_test(Config) ->
     ?assertEqual({ok, <<0, 0, 0, $a, $b, $c, 0, 0, $d, $e, $f, $g>>},
         lfm_proxy:read(W, Handle, 0, 12)).
 
+create_share_dir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    Path = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, Path, 8#700),
+
+    ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+
+create_share_file_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    Path = <<"/space_name1/share_file">>,
+    {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#700),
+
+    ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+
+share_getattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
+    {ok, {ShareId, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+
+    ?assertMatch({ok, #file_attr{mode = 8#704, name = <<"share_dir">>, type = ?DIRECTORY_TYPE, uuid = ShareGuid, shares = [ShareId]}},
+        lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})).
+
+share_list_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    {ok, _Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/1">>, 8#700),
+    {ok, _Guid2} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/2">>, 8#700),
+    {ok, _Guid3} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/3">>, 8#700),
+
+    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 10)),
+    ?assertMatch([{<<_/binary>>, <<"1">>}, {<<_/binary>>, <<"2">>}, {<<_/binary>>, <<"3">>}], Result).
+
+share_read_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    Path = <<"/space_name1/share_file">>,
+    {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#707),
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, Guid}, write),
+    {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+
+    {ok, ShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareGuid}, read)),
+    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)).
+
+share_child_getattr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, _} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/file">>, 8#700),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+
+    ?assertMatch({ok, #file_attr{mode = 8#700, name = <<"file">>, type = ?REGULAR_FILE_TYPE, shares = []}},
+        lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})).
+
+share_child_list_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    {ok, _Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/1">>, 8#707),
+    {ok, _Guid2} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir/1/2">>, 8#707),
+    {ok, _Guid3} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir/1/3">>, 8#707),
+    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+
+    {ok, Result} = ?assertMatch({ok, _}, lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareChildGuid}, 0, 10)),
+    ?assertMatch([{<<_/binary>>, <<"2">>}, {<<_/binary>>, <<"3">>}], Result).
+
+share_child_read_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+    Path = <<"/space_name1/share_dir/file">>,
+    {ok, FileGuid} = lfm_proxy:create(W, SessId, Path, 8#707),
+    {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, write),
+    {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
+    {ok, [{ShareFileGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+
+    {ok, ShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read)),
+    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)).
+
+share_permission_denied_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    DirPath = <<"/space_name1/share_dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+
+    ?assertEqual({error, ?EACCES}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -482,15 +866,45 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test orelse
+    ShareTest =:= create_share_file_test orelse
+    ShareTest =:= share_getattr_test orelse
+    ShareTest =:= share_list_test orelse
+    ShareTest =:= share_read_test orelse
+    ShareTest =:= share_child_getattr_test orelse
+    ShareTest =:= share_child_list_test orelse
+    ShareTest =:= share_child_read_test orelse
+    ShareTest =:= share_permission_denied_test ->
+    ?CASE_START(ShareTest),
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, oz_shares),
+    test_utils:mock_expect(Workers, oz_shares, create, fun(_Auth, ShareId, _SpaceId, _Parameters) -> {ok, ShareId} end),
+    init_per_testcase(default, Config);
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(_, Config) ->
+end_per_testcase(ShareTest, Config) when
+    ShareTest =:= create_share_dir_test orelse
+        ShareTest =:= create_share_file_test orelse
+        ShareTest =:= share_getattr_test orelse
+        ShareTest =:= share_list_test orelse
+        ShareTest =:= share_read_test orelse
+        ShareTest =:= share_child_getattr_test orelse
+        ShareTest =:= share_child_list_test orelse
+        ShareTest =:= share_child_read_test orelse
+        ShareTest =:= share_permission_denied_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, oz_shares),
+    end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -507,7 +921,7 @@ get_uuid_privileged(Worker, SessId, Path) ->
 get_uuid(Worker, SessId, Path) ->
     #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
         #fuse_response{status = #status{code = ?OK}},
-        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+        ?req(Worker, SessId, #resolve_guid{path = Path}),
         30
     ),
     UUID.
@@ -517,3 +931,24 @@ for(From, To, Fun) ->
 for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
 
+measure_execution_time(Fun) ->
+    StartTime = os:timestamp(),
+    Ans = Fun(),
+    Now = os:timestamp(),
+    {timer:now_diff(Now, StartTime), Ans}.
+
+check_run_parallel_ans(0) ->
+    ok;
+check_run_parallel_ans(Num) ->
+    RStatus = receive
+        run_parallel_ok ->
+            ok
+    after
+        100000 ->
+            timeout
+    end,
+    ?assertEqual(ok, RStatus),
+    check_run_parallel_ans(Num - 1).
+
+report_success(Master) ->
+    Master ! run_parallel_ok.

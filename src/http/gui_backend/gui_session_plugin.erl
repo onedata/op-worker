@@ -17,6 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include("http/gui_common.hrl").
 -include_lib("gui/include/gui.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -39,6 +40,11 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    ets:new(?LS_CACHE_ETS, [
+        set, public, named_table,
+        {read_concurrency, true},
+        {write_concurrency, true}
+    ]),
     ok.
 
 
@@ -49,6 +55,7 @@ init() ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
+    ets:delete(?LS_CACHE_ETS),
     ok.
 
 
@@ -59,7 +66,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec create_session(UserId :: term(), CustomArgs :: [term()]) ->
     {ok, SessionId :: binary()} | {error, term()}.
-create_session(_UserId, [#identity{} = Identity, #token_auth{} = Auth]) ->
+create_session(_UserId, [#user_identity{} = Identity, #token_auth{} = Auth]) ->
     %% UserId no needed here to crete session as it is indicated by Auth.
     case session_manager:create_gui_session(Identity, Auth) of
         {ok, SessionId} ->

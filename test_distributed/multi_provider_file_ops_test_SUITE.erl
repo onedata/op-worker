@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Michał Wrzeszcz
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -10,482 +10,287 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multi_provider_file_ops_test_SUITE).
--author("Michał Wrzeszcz").
+-author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    db_sync_test/1, proxy_test1/1, proxy_test2/1
+    db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
+    proxy_basic_opts_test1/1, proxy_many_ops_test1/1, proxy_distributed_modification_test1/1,
+    proxy_basic_opts_test2/1, proxy_many_ops_test2/1, proxy_distributed_modification_test2/1,
+    db_sync_many_ops_test_base/1, proxy_many_ops_test1_base/1, proxy_many_ops_test2_base/1,
+    file_consistency_test/1, file_consistency_test_base/1, concurrent_create_test/1,
+    permission_cache_invalidate_test/1
 ]).
--export([synchronization_test_base/6]).
+
+-define(TEST_CASES, [
+    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
+    proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
+    proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
+    file_consistency_test, concurrent_create_test, permission_cache_invalidate_test
+]).
+
+-define(PERFORMANCE_TEST_CASES, [
+    db_sync_many_ops_test, proxy_many_ops_test1, proxy_many_ops_test2, file_consistency_test
+]).
 
 all() ->
-    ?ALL([
-        proxy_test1, proxy_test2, db_sync_test
-    ]).
-
--define(match(Expect, Expr, Attempts),
-    case Attempts of
-        0 ->
-            ?assertMatch(Expect, Expr);
-        _ ->
-            ?assertMatch(Expect, Expr, Attempts)
-    end
-).
+    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-db_sync_test(Config) ->
-    % TODO change timeout after VFS-2197
-    synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 150, 10, 100).
-%%synchronization_test_base(Config, <<"user1">>, {4,0,0,2}, 60, 10, 100).
+-define(performance_description(Desc),
+    [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, dirs_num}, {value, 5}, {description, "Numbers of directories used during test."}],
+            [{name, files_num}, {value, 5}, {description, "Numbers of files used during test."}]
+        ]},
+        {description, Desc},
+        {config, [{name, large_config},
+            {parameters, [
+                [{name, dirs_num}, {value, 50}],
+                [{name, files_num}, {value, 100}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
 
-proxy_test1(Config) ->
-    synchronization_test_base(Config, <<"user2">>, {0,4,1,2}, 0, 10, 100).
+db_sync_basic_opts_test(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
-proxy_test2(Config) ->
-    synchronization_test_base(Config, <<"user3">>, {0,4,1,2}, 0, 10, 100).
+db_sync_many_ops_test(Config) ->
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+db_sync_many_ops_test_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 60, DirsNum, FilesNum).
 
-synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, DirsNum, FilesNum) ->
-    synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, DirsNum, FilesNum);
+db_sync_distributed_modification_test(Config) ->
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
-synchronization_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfWriteProvider},
-    Attempts, DirsNum, FilesNum) ->
-    ProxyNodesWritten = ProxyNodesWritten0 * NodesOfWriteProvider,
+proxy_basic_opts_test1(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
+
+proxy_many_ops_test1(Config) ->
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+proxy_many_ops_test1_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user2">>, {0,4,1,2}, 0, DirsNum, FilesNum).
+
+proxy_distributed_modification_test1(Config) ->
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user2">>, {0,4,1,2}, 0).
+
+proxy_basic_opts_test2(Config) ->
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
+
+proxy_many_ops_test2(Config) ->
+    ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
+proxy_many_ops_test2_base(Config) ->
+    DirsNum = ?config(dirs_num, Config),
+    FilesNum = ?config(files_num, Config),
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user3">>, {0,4,1,2}, 0, DirsNum, FilesNum).
+
+proxy_distributed_modification_test2(Config) ->
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
+
+concurrent_create_test(Config) ->
+    FileCount = 3,
     Workers = ?config(op_worker_nodes, Config),
-    Worker1 = lists:foldl(fun(W, Acc) ->
-        case is_atom(Acc) of
-            true ->
-                Acc;
-            _ ->
-                case string:str(atom_to_list(W), "p1") of
-                    0 -> Acc;
-                    _ -> W
-                end
-        end
-    end, [], Workers),
-    timer:sleep(10000), % TODO - connection must appear after mock setup
-
-    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    ProvIDs = lists:map(fun(Worker) ->
+    ProvIDs0 = lists:map(fun(Worker) ->
         rpc:call(Worker, oneprovider, get_provider_id, [])
-    end, Workers),
+                         end, Workers),
 
-    Verify = fun(TestFun) ->
-        lists:foldl(fun(W, Acc) ->
-            [TestFun(W) | Acc]
-        end, [], Workers)
-    end,
+    ProvIdCount = length(lists:usort(ProvIDs0)),
 
-    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+    ProvIDs = lists:zip(Workers, ProvIDs0),
+    ProvMap = lists:foldl(
+        fun({Worker, ProvId}, Acc) ->
+            maps:put(ProvId, [Worker | maps:get(ProvId, Acc, [])], Acc)
+        end, #{}, ProvIDs),
 
-    Level3Dirs = lists:map(fun(_) ->
-        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1,DirsNum)),
-    Level3Dirs2 = lists:map(fun(_) ->
-        <<Level2Dir/binary, "/", (generator:gen_name())/binary>>
-    end, lists:seq(1,DirsNum)),
-
-    Level3Dir = <<Level2Dir/binary, "/", (generator:gen_name())/binary>>,
-    Level4Files = lists:map(fun(Num) ->
-        {Num, <<Level3Dir/binary, "/", (generator:gen_name())/binary>>}
-    end, lists:seq(1,FilesNum)),
-
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
-
-    VerifyStats = fun(File, IsDir) ->
-        VerAns = Verify(fun(W) ->
-%%            ct:print("VerifyStats ~p", [{File, IsDir, W}]),
-            case IsDir of
-                true ->
-                    ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-                        lfm_proxy:stat(W, SessId(W), {path, File}), Attempts);
-                _ ->
-                    ?match({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
-                        lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
-            end,
-            StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
-            {ok, #file_attr{uuid = FileGUID}} = StatAns,
-            FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-            {FileUUID, rpc:call(W, file_meta, get, [FileUUID])}
-        end),
-
-        NotFoundList = lists:filter(fun({_, {error, {not_found, _}}}) -> true; (_) -> false end, VerAns),
-        OKList = lists:filter(fun({_, {ok, _}}) -> true; (_) -> false end, VerAns),
-
-        ?assertEqual(ProxyNodes - ProxyNodesWritten, length(NotFoundList)),
-        ?assertEqual(SyncNodes + ProxyNodesWritten, length(OKList)),
-        [{FileUUIDAns, _} | _] = VerAns,
-        FileUUIDAns
-    end,
-    VerifyStats(Dir, true),
-    VerifyStats(Level2Dir, true),
-
-    FileBeg = <<"1234567890abcd">>,
-    CreateFileOnWorker = fun(Offset, File, WriteWorker) ->
-        ?assertMatch({ok, _}, lfm_proxy:create(WriteWorker, SessId(WriteWorker), File, 8#755)),
-        OpenAns = lfm_proxy:open(WriteWorker, SessId(WriteWorker), {path, File}, rdwr),
-        ?assertMatch({ok, _}, OpenAns),
-        {ok, Handle} = OpenAns,
-        FileBegSize = size(FileBeg),
-        ?assertMatch({ok, FileBegSize}, lfm_proxy:write(WriteWorker, Handle, 0, FileBeg)),
-        Size = size(File),
-        Offset2 = Offset rem 5 + 1,
-        ?assertMatch({ok, Size}, lfm_proxy:write(WriteWorker, Handle, Offset2, File)),
-        ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId(WriteWorker), {path, File}, 2*Offset2))
-    end,
-    CreateFile = fun({Offset, File}) ->
-        CreateFileOnWorker(Offset, File, Worker1)
-    end,
-    CreateFile({2, Level2File}),
-
-    VerifyFile = fun({Offset, File}) ->
-        Offset2 = Offset rem 5 + 1,
-        Size = 2*Offset2,
-        FileUUID = VerifyStats(File, false),
-
-        Beg = binary:part(FileBeg, 0, Offset2),
-        End = binary:part(File, 0, Offset2),
-        FileCheck = <<Beg/binary, End/binary>>,
-
-        VerifyLocation = fun() ->
-            Verify(fun(W) ->
-                lists:map(fun(ProvID) ->
-                    case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                        {error, {not_found, _}} ->
-                            0;
-                        GetAns ->
-                            ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                            {ok, #document{value = Links}} = GetAns,
-                            verify_locations(W, Links)
-                    end
-                end, ProvIDs)
-            end)
+    W = fun(N) ->
+        [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
+        Worker
         end,
 
-        VerAns0 = VerifyLocation(),
-%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+    User = <<"user1">>,
 
-        Verify(fun(W) ->
-%%            ct:print("Verify file ~p", [{File, W}]),
-            OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
-            ?assertMatch({ok, _}, OpenAns),
-            {ok, Handle} = OpenAns,
-            ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts)
-        end),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
 
-        AssertLocations = fun() ->
-            VerAns = VerifyLocation(),
-            Flattened = lists:flatten(VerAns),
-%%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+    ct:print("WMap: ~p", [{W(1), W(2), ProvMap}]),
 
-            ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
-            LocationsList = lists:filter(fun(S) -> S == 1 end, Flattened),
-            {length(ZerosList), length(LocationsList)}
-        end,
-        ToMatch = {(SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*SyncNodes
-            - ProxyNodesWritten*NodesOfWriteProvider,
-            SyncNodes*SyncNodes + ProxyNodesWritten*NodesOfWriteProvider},
-        ?match(ToMatch, AssertLocations(), Attempts),
+    DirBaseName = <<SpaceName/binary, "/concurrent_create_test_">>,
 
-        LocToAns = Verify(fun(W) ->
-            StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
-            ?assertMatch({ok, #file_attr{}}, StatAns),
-            {ok, #file_attr{uuid = FileGUID}} = StatAns,
-            FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    TestMaster = self(),
 
-            {W, lists:flatten(lists:foldl(fun(ProvID, Acc) ->
-                case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                    {error, {not_found, _}} ->
-                        Acc;
-                    GetAns ->
-                        ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                        {ok, #document{value = Links}} = GetAns,
-                        [get_locations(W, Links) | Acc]
-                end
-            end, [], ProvIDs))}
-        end),
-        {File, FileUUID, LocToAns}
-    end,
+    DirName = fun(N) ->
+        NameSuffix = integer_to_binary(N),
+        <<DirBaseName/binary, NameSuffix/binary>>
+              end,
 
-    VerifyDel = fun({F,  FileUUID, Locations}) ->
-        Verify(fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
-            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
-            %,
-%%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
-%%            lists:foreach(fun(ProvID) ->
-%%                ?match({error, {not_found, _}},
-%%                    rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]), Attempts)
-%%            end, ProvIDs),
-%%            lists:foreach(fun(Location) ->
-%%                ?match({error, {not_found, _}},
-%%                    rpc:call(W, file_meta, get, [Location]), Attempts)
-%%            end, proplists:get_value(W, Locations, []))
-        end)
-    end,
+    AllFiles = lists:map(
+        fun(N) ->
 
-    VerifyFile({2, Level2File}),
+            Files = lists:foldl(fun
+                                    (10, retry) ->
+                                        throw(unable_to_make_concurrent_create);
+                                    (_, L) when is_list(L) ->
+                                        L;
+                                    (_, _) ->
+                                        lists:foreach(
+                                            fun(WId) ->
+                                                lfm_proxy:unlink(W(WId), SessId(W(WId)), {path, DirName(N)})
+                                            end, lists:seq(1, ProvIdCount)),
 
-    lists:foreach(fun(W) ->
-        Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755)),
-        VerifyStats(Level2TmpDir, true),
+                                        lists:foreach(
+                                            fun(WId) ->
+                                                spawn(fun() ->
+                                                    TestMaster ! {WId, lfm_proxy:mkdir(W(WId), SessId(W(WId)), DirName(N), 8#755)}
+                                                      end)
+                                            end, lists:seq(1, ProvIdCount)),
 
-        lists:foreach(fun(W2) ->
-            Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
-            ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755)),
-            VerifyStats(Level3TmpDir, true)
-        end, Workers)
-    end, Workers),
+                                        try
+                                            lists:map(
+                                                fun(WId) ->
+                                                    receive
+                                                        {WId, {ok, GUID}} ->
+                                                            {WId, GUID};
+                                                        {WId, {error, _}} ->
+                                                            throw(not_concurrent)
+                                                    end
+                                                end, lists:seq(1, ProvIdCount))
+                                        catch
+                                            not_concurrent ->
+                                                retry
+                                        end
 
-    lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
-    end, Level3Dirs),
 
-    lists:map(fun(D) ->
-        VerifyStats(D, true)
-    end, Level3Dirs),
+                                end, start, lists:seq(1, 10)),
+            {N, Files}
+        end, lists:seq(1, FileCount)),
 
-    lists:map(fun(D) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), D, 8#755))
-    end, Level3Dirs2),
+    ct:print("AllFiles ~p", [AllFiles]),
 
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level3Dir, 8#755)),
-    lists:map(fun(F) ->
-        CreateFile(F)
-    end, Level4Files),
+    timer:sleep(10000),
 
-    VerifyDirSize = fun(DirToCheck, DSize, Deleted) ->
-        VerAns = Verify(fun(W) ->
-            CountChilden = fun() ->
-                LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 200),
-                ?assertMatch({ok, _}, LSAns),
-                {ok, ListerDirs} = LSAns,
-                length(ListerDirs)
-            end,
-            ?match(DSize, CountChilden(), Attempts),
+    lists:foreach(
+        fun(WId) ->
+            {ok, ChildList} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, SpaceName}, 0, 1000),
+            ExpectedChildCount = ProvIdCount * FileCount,
+            {FetchedIds, FetchedNames} = lists:unzip(ChildList),
+            {_, IdsPerWorker} = lists:unzip(AllFiles),
+            Ids = [GUID || {_, GUID} <- lists:flatten(IdsPerWorker)],
+            ExpectedIds = lists:usort(Ids),
 
-            StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
-            ?assertMatch({ok, #file_attr{}}, StatAns),
-            {ok, #file_attr{uuid = FileGUID}} = StatAns,
-            FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+            ct:print("Check ~p", [{lists:usort(Ids), lists:usort(FetchedIds)}]),
 
-            lists:map(fun(ProvID) ->
-                case rpc:call(W, file_meta, get, [links_utils:links_doc_key(FileUUID, ProvID)]) of
-                    {error, {not_found, _}} ->
-                        0;
-                    GetAns ->
-                        ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                        {ok, #document{value = Links}} = GetAns,
-                        count_links(W, Links)
-                end
-            end, ProvIDs)
-        end),
-        Flattened = lists:flatten(VerAns),
-%%        ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+            ?assertMatch(ExpectedChildCount, length(ChildList)),
+            ?assertMatch(ExpectedChildCount, length(lists:usort(FetchedNames))),
+            ?assertMatch(ExpectedIds, lists:usort(FetchedIds)),
 
-        ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
-        SList = lists:filter(fun(S) -> S == 2*DSize + Deleted + 1 end, Flattened),
+            lists:foreach(
+                fun(FileNo) ->
+                    LocalIdsPerWorker = proplists:get_value(FileNo, AllFiles),
+                    LocalGUID = proplists:get_value(WId, lists:flatten(LocalIdsPerWorker)),
+                    LocalName = proplists:get_value(LocalGUID, ChildList),
+                    ExpectedName = filename:basename(DirName(FileNo)),
+                    ct:print("Local name test ~p", [{FileNo, LocalGUID, ExpectedName, LocalName}]),
 
-        ?assertEqual((SyncNodes+ProxyNodes)*(SyncNodes+ProxyNodes) - SyncNodes*NodesOfWriteProvider
-            - ProxyNodesWritten*NodesOfWriteProvider, length(ZerosList)),
-        ?assertEqual(SyncNodes * NodesOfWriteProvider + ProxyNodesWritten*NodesOfWriteProvider, length(SList))
-    end,
-    VerifyDirSize(Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1, 0),
+                    ?assertMatch(ExpectedName, LocalName)
+                end, lists:seq(1, FileCount))
 
-    Level3Dirs2Uuids = lists:map(fun(D) ->
-        VerifyStats(D, true)
-    end, Level3Dirs2),
-
-    Level4FilesVerified = lists:map(fun(F) ->
-        VerifyFile(F)
-    end, Level4Files),
-    VerifyDirSize(Level3Dir, length(Level4Files), 0),
-
-    lists:map(fun({_, F}) ->
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, F}))
-    end, Level4Files),
-    lists:map(fun(D) ->
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, D}))
-    end, Level3Dirs2),
-
-    lists:map(fun(F) ->
-        VerifyDel(F)
-    end, Level4FilesVerified),
-    lists:map(fun({D, Uuid}) ->
-        VerifyDel({D, Uuid, []})
-    end, lists:zip(Level3Dirs2, Level3Dirs2Uuids)),
-    VerifyDirSize(Level3Dir, 0, length(Level4Files)),
-    VerifyDirSize(Level2Dir, length(Level3Dirs) + 1, length(Level3Dirs2)),
-
-    lists:foreach(fun(W) ->
-        Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-        CreateFileOnWorker(4, Level2TmpFile, W),
-        VerifyFile({4, Level2TmpFile})
-    end, Workers),
-
-    lists:foldl(fun(W, Acc) ->
-        OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
-        ?assertMatch({ok, _}, OpenAns),
-        {ok, Handle} = OpenAns,
-        WriteBuf = atom_to_binary(W, utf8),
-        Offset = size(Acc),
-        WriteSize = size(WriteBuf),
-        ?assertMatch({ok, WriteSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
-        NewAcc = <<Acc/binary, WriteBuf/binary>>,
-
-        Verify(fun(W2) ->
-%%            ct:print("Verify write ~p", [{Level2File, W2}]),
-            OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
-            ?assertMatch({ok, _}, OpenAns2),
-            {ok, Handle2} = OpenAns2,
-            ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts)
-        end),
-        NewAcc
-    end, <<>>, Workers),
-
-    Master = self(),
-    lists:foreach(fun(W) ->
-        spawn_link(fun() ->
-            Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-            MkAns = lfm_proxy:mkdir(W, SessId(W), Level2TmpDir, 8#755),
-            Master ! {mkdir_ans, Level2TmpDir, MkAns}
-        end)
-    end, Workers),
-
-    Level2TmpDirs = lists:foldl(fun(_, Acc) ->
-        MkAnsCheck =
-            receive
-                {mkdir_ans, ReceivedLevel2TmpDir, MkAns} ->
-                    {ReceivedLevel2TmpDir, MkAns}
-            after timer:seconds(2*Attempts+2) ->
-                {error, timeout}
-            end,
-        ?assertMatch({_, {ok, _}}, MkAnsCheck),
-        {Level2TmpDir, _} = MkAnsCheck,
-%%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
-        VerifyStats(Level2TmpDir, true),
-        [Level2TmpDir | Acc]
-    end, [], Workers),
-
-    lists:foreach(fun(Level2TmpDir) ->
-        lists:foreach(fun(W2) ->
-            spawn_link(fun() ->
-                Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-                MkAns = lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir, 8#755),
-                Master ! {mkdir_ans, Level3TmpDir, MkAns}
-            end)
-        end, Workers)
-    end, Level2TmpDirs),
-
-    lists:foreach(fun(_) ->
-        lists:foreach(fun(_) ->
-            MkAnsCheck =
-                receive
-                    {mkdir_ans, ReceivedLevel2TmpDirLevel3TmpDir, MkAns} ->
-                        {ReceivedLevel2TmpDirLevel3TmpDir, MkAns}
-                after timer:seconds(2*Attempts+2) ->
-                    {error, timeout}
-                end,
-            ?assertMatch({_, {ok, _}}, MkAnsCheck),
-            {Level3TmpDir, _} = MkAnsCheck,
-%%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
-            VerifyStats(Level3TmpDir, true)
-        end, Workers)
-    end, Level2TmpDirs),
+        end, lists:seq(1, ProvIdCount)),
 
     ok.
+
+file_consistency_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_cases}, {value, [1,2,12,13]}, {description, "Number of test cases to be executed"}]
+        ]},
+        {description, "Tests file consistency"},
+        {config, [{name, all_cases},
+            {parameters, [
+                [{name, test_cases}, {value, [1,2,3,4,5,6,7,8,9,10,11,12,13,14]}]
+            ]},
+            {description, ""}
+        ]}
+    ]).
+file_consistency_test_base(Config) ->
+    ConfigsNum = ?config(test_cases, Config),
+
+    Workers = ?config(op_worker_nodes, Config),
+    {Worker1, Worker2} = lists:foldl(fun(W, {Acc1, Acc2}) ->
+        NAcc1 = case is_atom(Acc1) of
+                    true ->
+                        Acc1;
+                    _ ->
+                        case string:str(atom_to_list(W), "p1") of
+                            0 -> Acc1;
+                            _ -> W
+                        end
+                end,
+        NAcc2 = case is_atom(Acc2) of
+                    true ->
+                        Acc2;
+                    _ ->
+                        case string:str(atom_to_list(W), "p2") of
+                            0 -> Acc2;
+                            _ -> W
+                        end
+                end,
+        {NAcc1, NAcc2}
+    end, {[], []}, Workers),
+
+    multi_provider_file_ops_test_base:file_consistency_test_skeleton(Config, Worker1, Worker2, Worker1, ConfigsNum).
+
+permission_cache_invalidate_test(Config) ->
+    multi_provider_file_ops_test_base:permission_cache_invalidate_test_base(Config, 30).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, multi_provider_file_ops_test_base]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     ct:timetrap({minutes, 60}),
-    application:start(ssl2),
+    application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     initializer:enable_grpca_based_communication(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:disable_grpca_based_communication(Config),
     initializer:unload_quota_mocks(Config),
     hackney:stop(),
-    application:stop(ssl2).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-count_links(W, #links{link_map = Map, children = Children}) ->
-    case maps:size(Children) of
-        0 ->
-            maps:size(Map);
-        _ ->
-            maps:fold(fun(_, Uuid, Acc) ->
-                GetAns = rpc:call(W, file_meta, get, [Uuid]),
-                ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                {ok, #document{value = Links}} = GetAns,
-                Acc + count_links(W, Links)
-            end, maps:size(Map), Children)
-    end.
-
-verify_locations(W, Links) ->
-    IDs = get_locations(W, Links),
-    lists:foldl(fun(ID, Acc) ->
-        case rpc:call(W, file_location, get, [ID]) of
-            {ok, _} -> Acc + 1;
-            _ -> Acc
-        end
-    end, 0, IDs).
-
-get_locations(W, #links{link_map = Map, children = Children}) ->
-    case maps:size(Children) of
-        0 ->
-            get_locations_from_map(Map);
-        _ ->
-            maps:fold(fun(_, Uuid, Acc) ->
-                GetAns = rpc:call(W, file_meta, get, [Uuid]),
-                ?assertMatch({ok, #document{value = #links{}}}, GetAns),
-                {ok, #document{value = Links}} = GetAns,
-                Acc ++ get_locations(W, Links)
-            end, get_locations_from_map(Map), Children)
-    end.
-
-get_locations_from_map(Map) ->
-    maps:fold(fun(_, V, Acc) ->
-        case V of
-            {ID, file_location} ->
-                [ID | Acc];
-            _ ->
-                Acc
-        end
-    end, [], Map).
+    application:stop(etls).

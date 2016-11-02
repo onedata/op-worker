@@ -45,14 +45,22 @@ handle(Req, State, error, {case_clause, CaseClause}) ->
 handle(Req, State, error, {error, no_peer_certificate}) ->
     {ok, Req2} = cowboy_req:reply(?NOT_AUTHORIZED, [], [], Req),
     {halt, Req2, State};
-handle(Req, State, error, {error,{not_found,file_meta}}) ->
+handle(Req, State, error, {error,{not_found, _}}) ->
     handle(Req, State, error, ?ERROR_NOT_FOUND);
+handle(Req, State, _, {error,{_, invalid_json}}) ->
+    handle(Req, State, error, invalid_json);
+handle(Req, State, _, invalid_json) ->
+    handle(Req, State, error, ?ERROR_INVALID_JSON);
 handle(Req, State, error, {error, ?ENOENT}) ->
     handle(Req, State, error, ?ERROR_NOT_FOUND);
+handle(Req, State, error, {error, ?ENOATTR}) ->
+    handle(Req, State, error, ?ERROR_ATTRIBUTE_NOT_FOUND);
 handle(Req, State, error, {error, ?EACCES}) ->
     handle(Req, State, error, ?ERROR_PERMISSION_DENIED);
 handle(Req, State, error, {error, ?EPERM}) ->
     handle(Req, State, error, ?ERROR_FORBIDDEN);
+handle(Req, State, error, {error, ?EEXIST}) ->
+    handle(Req, State, error, ?ERROR_EXISTS);
 handle(Req, State, _Type, Status) when is_integer(Status) ->
     {ok, Req2} = cowboy_req:reply(Status, [], [], Req),
     {halt, Req2, State};
@@ -61,7 +69,7 @@ handle(Req, State, _Type, {Status, BodyBinary})
     {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, _Type, {Status, Body}) when is_integer(Status) ->
-    BodyBinary = json_utils:encode(Body),
+    BodyBinary = json_utils:encode_map(Body),
     {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, Type, Error) ->

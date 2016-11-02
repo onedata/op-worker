@@ -21,7 +21,6 @@
     st_ctime, st_blksize, st_blocks
 }).
 
-
 %% Names of helpers
 -define(CEPH_HELPER_NAME, <<"Ceph">>).
 -define(DIRECTIO_HELPER_NAME, <<"DirectIO">>).
@@ -30,27 +29,27 @@
 
 %% Record holding user's identity that may be used on Ceph storage system
 -record(ceph_user_ctx, {
-    user_name :: binary(),
-    user_key :: binary()
+    user_name :: ceph_user:name(),
+    user_key :: ceph_user:key()
 }).
 
 %% Record holding user's identity that may be used on POSIX compliant systems
 -record(posix_user_ctx, {
-    uid :: non_neg_integer(),
-    gid :: non_neg_integer()
+    uid :: posix_user:uid(),
+    gid :: posix_user:gid()
 }).
 
 %% Record holding user's identity that may be used on Amazon S3 storage system
 -record(s3_user_ctx, {
-    access_key :: binary(),
-    secret_key :: binary()
+    access_key :: s3_user:access_key(),
+    secret_key :: s3_user:secret_key()
 }).
 
 %% Record holding user's identity that may be used on Openstack Swift
 %% storage system
 -record(swift_user_ctx, {
-    user_name :: binary(),
-    password :: binary()
+    user_name :: swift_user:user_name(),
+    password :: swift_user:password()
 }).
 
 -endif.

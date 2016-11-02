@@ -34,7 +34,6 @@
     event_stream_should_execute_event_handler_when_emission_time_satisfied/1,
     event_stream_should_aggregate_events_with_the_same_key/1,
     event_stream_should_not_aggregate_events_with_different_keys/1,
-    event_stream_should_check_admission_rule/1,
     event_stream_should_reset_metadata_after_event_handler_execution/1
 ]).
 
@@ -49,7 +48,6 @@ all() ->
         event_stream_should_execute_event_handler_when_emission_time_satisfied,
         event_stream_should_aggregate_events_with_the_same_key,
         event_stream_should_not_aggregate_events_with_different_keys,
-        event_stream_should_check_admission_rule,
         event_stream_should_reset_metadata_after_event_handler_execution
     ]).
 
@@ -62,14 +60,18 @@ all() ->
 event_stream_should_register_with_event_manager_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
-    ?assertReceivedMatch({'$gen_cast', {register_stream, 1, EvtStm}}, ?TIMEOUT),
+    ?assertReceivedMatch({'$gen_cast',
+        {register_stream, read_event_stream, EvtStm}
+    }, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_unregister_from_event_manager_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
     stop_event_stream(EvtStm),
-    ?assertReceivedMatch({'$gen_cast', {unregister_stream, 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast',
+        {unregister_stream, read_event_stream}
+    }, ?TIMEOUT).
 
 event_stream_should_execute_init_handler_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -126,13 +128,6 @@ event_stream_should_not_aggregate_events_with_different_keys(Config) ->
     ?assertReceivedMatch({event_handler, [_ | _]}, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
-event_stream_should_check_admission_rule(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker, fun(_) -> true end, infinity),
-    emit(Worker, EvtStm, write_event(<<"file_uuid">>, 1, 1, [{0, 1}])),
-    ?assertNotReceivedMatch({event_handler, [_]}),
-    stop_event_stream(EvtStm).
-
 event_stream_should_reset_metadata_after_event_handler_execution(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     CtrThr = 5,
@@ -152,13 +147,14 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(_, Config) ->
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
     Config.
 
-end_per_testcase(_, Config) ->
-    Config.
+end_per_testcase(Case, _Config) ->
+    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions
@@ -247,24 +243,8 @@ read_event(Size, Blocks) ->
 -spec read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
     Blocks :: proplists:proplist()) -> Evt :: #event{}.
 read_event(FileUuid, Size, Blocks) ->
-    #event{key = FileUuid, object = #read_event{
+    #event{key = FileUuid, stream_id = read_event_stream, object = #read_event{
         file_uuid = FileUuid, size = Size, blocks = [
-            #file_block{offset = O, size = S} || {O, S} <- Blocks
-        ]
-    }}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns write event.
-%% @end
-%%--------------------------------------------------------------------
--spec write_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
-    FileSize :: file_meta:size(), Blocks :: proplists:proplist()) ->
-    Evt :: #event{}.
-write_event(FileUuid, Size, FileSize, Blocks) ->
-    #event{key = FileUuid, object = #write_event{
-        file_uuid = FileUuid, size = Size, file_size = FileSize, blocks = [
             #file_block{offset = O, size = S} || {O, S} <- Blocks
         ]
     }}.

@@ -51,7 +51,9 @@
     acl_test/1,
     errors_test/1,
     accept_header_test/1,
-    copy_move_test/1
+    move_copy_conflict_test/1,
+    move_test/1,
+    copy_test/1
 ]).
 
 all() ->
@@ -76,15 +78,13 @@ all() ->
         partial_upload_test,
         acl_test,
         errors_test,
-        accept_header_test
-%%        copy_move_test %todo split into smaller tests and enable when copy/move will be working properly
-    ]).
+        accept_header_test,
+        move_copy_conflict_test,
+        move_test,
+        copy_test
+]).
 
 -define(TIMEOUT, timer:seconds(5)).
-
-user_1_token_header() ->
-    {ok, Srlzd} = macaroon:serialize(macaroon:create("a", "b", "c")),
-    {<<"X-Auth-Token">>, Srlzd}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
@@ -93,7 +93,6 @@ user_1_token_header() ->
 -define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
 -define(INFINITY, 9999).
-
 
 %%%===================================================================
 %%% Test functions
@@ -150,8 +149,14 @@ mimetype_and_encoding_test(Config) ->
 out_of_range_test(Config) ->
     cdmi_test_base:out_of_range(Config).
 
-copy_move_test(Config) ->
-    cdmi_test_base:copy_move(Config).
+move_copy_conflict_test(Config) ->
+    cdmi_test_base:move_copy_conflict(Config).
+
+move_test(Config) ->
+    cdmi_test_base:move(Config).
+
+copy_test(Config) ->
+    cdmi_test_base:copy(Config).
 
 partial_upload_test(Config) ->
     cdmi_test_base:partial_upload(Config).
@@ -170,35 +175,33 @@ accept_header_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-%%    [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
-%%    Config0 = proplists:delete(op_worker_nodes, ConfigWithNodes),
-%%    [{op_worker_nodes, [Worker, Worker]} | Config0].
-    ConfigWithNodes.
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
-init_per_testcase(choose_adequate_handler_test, Config) ->
+init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    init_per_testcase(default, Config);
-init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
+    application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(choose_adequate_handler_test, Config) ->
+end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    end_per_testcase(default, Config);
-end_per_testcase(_, Config) ->
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
-    application:stop(ssl2).
+    application:stop(etls).
 
 %%%===================================================================
 %%% Internal functions

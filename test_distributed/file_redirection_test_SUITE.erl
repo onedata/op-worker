@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -63,11 +64,15 @@ redirect_event_test(Config) ->
     {TargetGuid, RedirectionGuid} = create_file_with_redirection(W1, W2, Config),
 
     Self = self(),
+    rpc:call(W1, event, unsubscribe, [?FSLOGIC_SUB_ID]),
     ?assertMatch({ok, _}, rpc:call(W1, event, subscribe,
-        [#subscription{event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-            emission_time = infinity,
-            event_handler = fun(Events, _) -> Self ! {events, Events} end
-        }}])),
+        [#subscription{
+            object = #write_subscription{},
+            event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
+                event_handler = fun(Events, _) -> Self ! {events, Events} end
+            }
+        }]
+    )),
 
     BaseEvent = #write_event{size = 1, file_size = 1,
         blocks = [#file_block{offset = 0, size = 1}]},
@@ -111,9 +116,10 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    ?TEST_STOP(Config).
 
 init_per_testcase(CaseName, Config) ->
+    ?CASE_START(CaseName),
     initializer:enable_grpca_based_communication(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
@@ -121,7 +127,8 @@ init_per_testcase(CaseName, Config) ->
     CaseNameBinary = list_to_binary(atom_to_list(CaseName)),
     [{test_dir, <<CaseNameBinary/binary, "_dir">>} | NewConfig].
 
-end_per_testcase(_, Config) ->
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
     initializer:unload_quota_mocks(Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -138,7 +145,7 @@ create_file_with_redirection(FileWorker, RedirectionWorker, Config) ->
     {_, TargetGuid} = ?assertMatch({ok, _}, lfm_proxy:create(FileWorker, SessId1, filename(1, TestDir, "/target_file"), 8#770)),
 
     RedirectionUuid = <<"redirection_uuid">>,
-    RedirectionGuid = fslogic_uuid:to_file_guid(RedirectionUuid, <<"space_id2">>),
+    RedirectionGuid = fslogic_uuid:uuid_to_guid(RedirectionUuid, <<"space_id2">>),
     ?assertMatch({ok, _}, rpc:call(RedirectionWorker, file_meta, create_phantom_file, [RedirectionUuid, <<"space_id2">>, TargetGuid])),
     {TargetGuid, RedirectionGuid}.
 

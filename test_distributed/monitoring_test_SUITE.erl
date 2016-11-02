@@ -12,10 +12,14 @@
 -author("Michal Wrona").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/performance.hrl").
+-include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("modules/monitoring/rrd_definitions.hrl").
+
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -29,100 +33,68 @@ all() ->
 -define(TIMEOUT, timer:seconds(60)).
 -define(COUNTER_TIMEOUT, timer:seconds(30)).
 
--define(SPACE_ID, <<"674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf">>).
+-define(SPACE_ID, <<"space1">>).
 -define(USER_ID, <<"674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf674a4b28461d31f662c8bcce592594bf">>).
-
--define(BLOCK_ACCESS_UPDATE, #{
-    update_value => #{write_operations_counter => 10, read_operations_counter => 40},
-    is_updated => fun(BufferState) ->
-        case maps:get(write_operations_counter, BufferState) of
-            10 ->
-                case maps:get(read_operations_counter, BufferState) of
-                    40 ->
-                        true;
-                    _ ->
-                        false
-                end;
-            _ ->
-                false
-        end
-    end
-}).
-
--define(DATA_ACCESS_UPDATE, #{
-    update_value => #{write_counter => 25, read_counter => 80},
-    is_updated => fun(BufferState) ->
-        case maps:get(write_counter, BufferState) of
-            25 ->
-                case maps:get(read_counter, BufferState) of
-                    80 ->
-                        true;
-                    _ ->
-                        false
-                end;
-            _ ->
-                false
-        end
-    end
-}).
 
 -define(MONITORING_TYPES, [
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = storage_used
-    }, none, [100]},
+    }, [100], <<"<row><v>1.0000000000e+02</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = storage_quota
-    }, none, [100]},
+    }, [100], <<"<row><v>1.0000000000e+03</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = connected_users
-    }, none, [100]},
+    }, [100], <<"<row><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = storage_used,
         secondary_subject_type = user,
         secondary_subject_id = ?USER_ID
-    }, #{
-        update_value => 60,
-        is_updated => fun(BufferState) ->
-            case maps:get(storage_used, BufferState) of
-                60 ->
-                   true;
-                _ ->
-                   false
-            end
-        end
-    }, [100]},
+    }, [100], <<"<row><v>1.0000000000e+06</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = block_access
-    }, ?BLOCK_ACCESS_UPDATE, [100, 100]},
+    }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = block_access,
         secondary_subject_type = user,
         secondary_subject_id = ?USER_ID
-    }, ?BLOCK_ACCESS_UPDATE, [100, 100]},
+    }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = data_access
-    }, ?DATA_ACCESS_UPDATE, [100, 100]},
+    }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
     {#monitoring_id{
         main_subject_type = space,
         main_subject_id = ?SPACE_ID,
         metric_type = data_access,
         secondary_subject_type = user,
         secondary_subject_id = ?USER_ID
-    }, ?DATA_ACCESS_UPDATE, [100, 100]}
+    }, [100, 100], <<"<row><v>1.0000000000e+00</v><v>1.0000000000e+00</v></row>">>},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = remote_transfer
+    }, [100], <<"<row><v>8.0000000000e+00</v></row>">>},
+    {#monitoring_id{
+        main_subject_type = space,
+        main_subject_id = ?SPACE_ID,
+        metric_type = remote_transfer,
+        secondary_subject_type = user,
+        secondary_subject_id = ?USER_ID
+    }, [100], <<"<row><v>8.0000000000e+00</v></row>">>}
 ]).
 
 -define(FORMATS, [json, xml]).
@@ -137,96 +109,70 @@ all() ->
 rrd_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    lists:foreach(fun({MonitoringId, _, UpdateValue}) ->
+    lists:foreach(fun({MonitoringId, UpdateValue, _}) ->
         %% create
+        CurrentTime = erlang:system_time(seconds),
         ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId, #{}])),
+        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd,
+            [?SPACE_ID, MonitoringId, #{}, CurrentTime - ?STEP_IN_SECONDS])),
         ?assertEqual(true, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
 
-        {ok, #document{value = #monitoring_state{rrd_file = RRDFile} = State} = Doc} =
-            rpc:call(Worker, monitoring_state, get, [MonitoringId]),
-        ?assertNotEqual(undefinied, RRDFile),
-
         %% second create
-        ?assertEqual(already_exists, rpc:call(Worker, rrd_utils, create_rrd, [MonitoringId, #{}])),
-        ?assertEqual({ok, Doc}, rpc:call(Worker, monitoring_state, get, [MonitoringId])),
+        ?assertEqual(ok, rpc:call(Worker, rrd_utils, create_rrd, [?SPACE_ID,
+            MonitoringId, #{}, CurrentTime - ?STEP_IN_SECONDS])),
 
         %% update
-        {ok, #monitoring_state{rrd_file = UpdatedRRDFile}} = ?assertMatch(
-            {ok, #monitoring_state{}}, rpc:call(Worker, rrd_utils, update_rrd,
-                [MonitoringId, State, UpdateValue])),
-        ?assertNotEqual(RRDFile, UpdatedRRDFile),
+        {ok, #document{value = #monitoring_state{} = State}} =
+            rpc:call(Worker, monitoring_state, get, [MonitoringId]),
+        ?assertEqual(ok, rpc:call(Worker, rrd_utils, update_rrd,
+            [MonitoringId, State, CurrentTime, UpdateValue])),
 
         %% export
         lists:foreach(fun(Step) ->
             lists:foreach(fun(Format) ->
                 ?assertMatch({ok, _}, rpc:call(Worker, rrd_utils, export_rrd,
                     [MonitoringId, Step, Format]))
-            end,
-                ?FORMATS)
-        end,
-            ?STEPS)
-    end,
-        ?MONITORING_TYPES).
+            end, ?FORMATS)
+        end, ?STEPS)
+    end, ?MONITORING_TYPES).
 
 monitoring_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    lists:foreach(fun({MonitoringId, StateBufferTest, _}) ->
-        %% start
-        ?assertEqual(false, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
+    {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
+    ?assertEqual(0, length(Docs)),
 
-        ?assertEqual(ok, ?reg(Worker, {start, MonitoringId})),
+    rpc:call(Worker, monitoring_event, emit_od_space_updated, [?SPACE_ID]),
 
-        ?assertEqual(true, rpc:call(Worker, monitoring_state, exists, [MonitoringId])),
+    rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 950000]),
+    rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 50000]),
 
-        {ok, #document{value = #monitoring_state{rrd_file = RRDFile, active = Active} = State} = Doc} =
-            rpc:call(Worker, monitoring_state, get, [MonitoringId]),
-        ?assertNotEqual(undefinied, RRDFile),
-        ?assertEqual(true, Active),
+    rpc:call(Worker, monitoring_event, emit_read_statistics, [?SPACE_ID, ?USER_ID, 0, 300]),
+    rpc:call(Worker, monitoring_event, emit_read_statistics, [?SPACE_ID, ?USER_ID, 300, 0]),
 
-        %% second start
-        ?assertEqual(ok, ?reg(Worker, {start, MonitoringId})),
+    rpc:call(Worker, monitoring_event, emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 299]),
+    rpc:call(Worker, monitoring_event, emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 1]),
 
-        %% update
-        ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
+    rpc:call(Worker, monitoring_event, emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 100]),
+    rpc:call(Worker, monitoring_event, emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 200]),
 
-        case StateBufferTest of
-            none -> ok;
-            _ ->
-                #monitoring_state{state_buffer = StateBuffer} = State,
-                UpdateValue = maps:get(update_value, StateBufferTest),
-                IsUpdated = maps:get(is_updated, StateBufferTest),
+    {ok, #document{value = #session{event_manager = Pid}}} =
+        rpc:call(Worker, session, get, [?ROOT_SESS_ID]),
+    ?assertEqual(ok, rpc:call(Worker, gen_server, cast, [Pid,
+        {flush_stream, ?MONITORING_SUB_ID, fun(_) -> ok end}])),
 
-                ?assertEqual(false, IsUpdated(StateBuffer)),
-                ?reg(Worker, {update_buffer_state, MonitoringId, UpdateValue}),
+    timer:sleep(timer:seconds(?STEP_IN_SECONDS)),
 
-                {ok, #document{value = #monitoring_state{state_buffer = UpdatedStateBuffer}}} =
-                    rpc:call(Worker, monitoring_state, get, [MonitoringId]),
+    {ok, UpdatedDocs} = rpc:call(Worker, monitoring_state, list, []),
+    ?assertEqual(10, length(UpdatedDocs)),
 
-                ?assertEqual(true, IsUpdated(UpdatedStateBuffer))
-        end,
-
-        ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
-
-        %% export
-        lists:foreach(fun(Step) ->
-            lists:foreach(fun(Format) ->
-                ?assertMatch({ok, _}, ?reg(Worker, {export, MonitoringId, Step, Format}))
-            end,
-                ?FORMATS)
-        end,
-            ?STEPS),
-
-        %% stop
-        ?assertEqual(ok, ?reg(Worker, {stop, MonitoringId})),
-
-        {ok, #document{value = #monitoring_state{active = UnActive}}} =
-            rpc:call(Worker, monitoring_state, get, [MonitoringId]),
-        ?assertEqual(false, UnActive)
-    end,
-        ?MONITORING_TYPES).
+    ProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    lists:foreach(fun({MonitoringId, _, ExpectedValue}) ->
+        {ok, ExportedMetric} = ?assertMatch({ok, _}, ?reg(Worker,
+            {export, MonitoringId#monitoring_id{provider_id = ProviderId}, '5m', xml})),
+        ?assertNotEqual(nomatch, binary:match(ExportedMetric, ExpectedValue))
+    end, ?MONITORING_TYPES).
 
 rrdtool_pool_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -239,9 +185,16 @@ rrdtool_pool_test(Config) ->
                 main_subject_id = integer_to_binary(Id),
                 metric_type = storage_used
             },
-            ?assertEqual(ok, ?reg(Worker, {start, MonitoringId})),
-            ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
-            ?assertEqual(ok, ?reg(Worker, {update, MonitoringId})),
+            CurrentTime = erlang:system_time(seconds),
+            ?assertEqual(ok, rpc:call(Worker, monitoring_utils, create,
+                [?SPACE_ID, MonitoringId, CurrentTime - ?STEP_IN_SECONDS])),
+            {ok, #document{value = MonitoringState}} =
+                rpc:call(Worker, monitoring_state, get, [MonitoringId]),
+
+            ?assertEqual(ok, rpc:call(Worker, monitoring_utils, update,
+                [MonitoringId, MonitoringState, CurrentTime, #{}])),
+            ?assertEqual(ok, rpc:call(Worker, monitoring_utils, update,
+                [MonitoringId, MonitoringState, CurrentTime + ?STEP_IN_SECONDS, #{}])),
             CounterPid ! ok
         end)
     end, lists:seq(1, ?EXPECTED_SIZE)),
@@ -254,32 +207,26 @@ rrdtool_pool_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    EnvUpResult = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    [Worker | _] = ?config(op_worker_nodes, EnvUpResult),
-    test_utils:mock_new(Worker, space_info),
-    test_utils:mock_expect(Worker, space_info, 'after',
-        fun(_, _, _, _, _) -> ok end),
-    ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
-        key = ?SPACE_ID,
-        value = #space_quota{
-            current_size = 100
-        }
-    }])),
-    ?assertMatch({ok, _}, rpc:call(Worker, space_info, create, [#document{
-        key = ?SPACE_ID,
-        value = #space_info{
-            providers_supports = [{oneprovider:get_provider_id(), 1000}]
-        }
-    }])),
-    EnvUpResult.
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
+    [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
 
+    ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
+        key = ?SPACE_ID, value = #space_quota{current_size = 100}}])),
+
+    initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, space_info),
-    test_node_starter:clean_environment(Config).
+    initializer:teardown_storage(Config),
+    ?TEST_STOP(Config).
 
-init_per_testcase(rrdtool_pool_test, Config)->
+init_per_testcase(monitoring_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, space_quota),
+    test_utils:mock_expect(Worker, space_quota, get, fun(_) ->
+        {ok, #document{value = #space_quota{current_size = 100}}} end),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(rrdtool_pool_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Id) ->
         ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
@@ -289,28 +236,40 @@ init_per_testcase(rrdtool_pool_test, Config)->
             }
         }]))
     end, lists:seq(1, ?EXPECTED_SIZE)),
-    Config;
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(_, Config) ->
-    Config.
+init_per_testcase(Case, Config) ->
+    ?CASE_START(Case),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    clear_state(Worker),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config),
+    lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(rrdtool_pool_test, Config) ->
+end_per_testcase(monitoring_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, space_quota),
+    end_per_testcase(?DEFAULT_CASE(Case), Worker);
+
+end_per_testcase(rrdtool_pool_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Id) ->
         ?assertMatch(ok, rpc:call(Worker, space_quota, delete, [integer_to_binary(Id)]))
     end, lists:seq(1, ?EXPECTED_SIZE)),
-    end_per_testcase(all, Config);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    clear_state(Worker),
-    ok.
+end_per_testcase(Case, Config) ->
+    ?CASE_STOP(Case),
+    lfm_proxy:teardown(Config),
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
 clear_state(Worker) ->
-    lists:foreach(fun({MonitoringId, _, _}) ->
-        ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [MonitoringId]))
-    end,
-        ?MONITORING_TYPES).
+    {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
+    lists:foreach(fun(#document{key = Id, value = #monitoring_state{rrd_path = Path}}) ->
+        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, Path),
+        ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [Id]))
+    end, Docs).
 
 counter(CurrentCount, ExpectedCount, ResponsePid) ->
     case CurrentCount == ExpectedCount of

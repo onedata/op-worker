@@ -13,8 +13,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(validate_login_backend).
--author("Lukasz Opiola").
 -behaviour(page_backend_behaviour).
+-author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
@@ -39,10 +39,10 @@ page_init() ->
             ok;
         false ->
             SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
-            {ok, Macaroon} = macaroon:deserialize(SrlzdMacaroon),
+            {ok, Macaroon} = token_utils:deserialize(SrlzdMacaroon),
             {ok, Auth = #token_auth{}} = gui_auth_manager:authenticate(Macaroon),
-            {ok, #document{value = #identity{user_id = UserId} = Identity}} =
-                identity:get_or_fetch(Auth),
+            {ok, #document{value = #user_identity{user_id = UserId} = Identity}} =
+                user_identity:get_or_fetch(Auth),
             {ok, _} = g_session:log_in(UserId, [Identity, Auth])
     end,
     {redirect_relative, <<"/">>}.

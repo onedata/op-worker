@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % Default buffer size used to send file to a client. It is used if env variable
@@ -78,7 +79,7 @@ terminate(_Reason, _Req, _State) ->
 -spec handle_http_download(Req :: cowboy_req:req(),
     FileId :: file_meta:uuid()) -> cowboy_req:req().
 handle_http_download(Req, FileId) ->
-    % Try to retrieve user's session
+    % Try to retrieve user's session (no session is also a valid session)
     InitSession =
         try
             g_ctx:init(Req, false)
@@ -92,15 +93,26 @@ handle_http_download(Req, FileId) ->
             g_ctx:reply(500, [], <<"">>);
         ok ->
             try
-                SessionId = g_session:get_session_id(),
+                SessionId = case fslogic_uuid:is_share_guid(FileId) of
+                    true -> ?GUEST_SESS_ID;
+                    false -> g_session:get_session_id()
+                end,
                 {ok, FileHandle} = logical_file_manager:open(
                     SessionId, {guid, FileId}, read),
-                {ok, #file_attr{size = Size, name = FileName}} =
-                    logical_file_manager:stat(SessionId, {guid, FileId}),
-                StreamFun = cowboy_file_stream_fun(FileHandle, Size),
-                Headers = attachment_headers(FileName),
-                % Reply with attachment headers and a streaming function
-                g_ctx:reply(200, Headers, {Size, StreamFun})
+                try
+                    {ok, #file_attr{size = Size, name = FileName}} =
+                        logical_file_manager:stat(SessionId, {guid, FileId}),
+                    StreamFun = cowboy_file_stream_fun(FileHandle, Size),
+                    Headers = attachment_headers(FileName),
+                    % Reply with attachment headers and a streaming function
+                    g_ctx:reply(200, Headers, {Size, StreamFun})
+                catch
+                    T2:M2 ->
+                        ?error_stacktrace("Error while processing file download "
+                        "for user ~p - ~p:~p", [g_session:get_user_id(), T2, M2]),
+                        logical_file_manager:release(FileHandle), % release if possible
+                        g_ctx:reply(500, [], <<"">>)
+                end
             catch
                 T:M ->
                     ?error_stacktrace("Error while processing file download "
@@ -158,15 +170,17 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 -spec stream_file(Socket :: term(), Transport :: atom(),
     FileHandle :: #lfm_handle{}, Size :: integer(),
     Sent :: integer(), BufSize :: integer()) -> ok.
+stream_file(_, _, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
+    ok = logical_file_manager:release(FileHandle);
 stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
     {ok, NewHandle, BytesRead} = logical_file_manager:read(
         FileHandle, BytesSent, min(Size - BytesSent, BufSize)),
     ok = Transport:send(Socket, BytesRead),
     NewSent = BytesSent + size(BytesRead),
-    case NewSent >= Size of
-        true ->
-            ok;
-        false ->
+    case size(BytesRead) of
+        0 ->
+            ok = logical_file_manager:release(FileHandle);
+        _ ->
             stream_file(Socket, Transport, NewHandle, Size, NewSent, BufSize)
     end.
 

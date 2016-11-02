@@ -18,7 +18,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([gen_path/2, gen_storage_path/1]).
+-export([gen_path/2, gen_storage_path/1, check_path/1]).
 -export([verify_file_path/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, basename_and_parent/1]).
 -export([dirname/1]).
@@ -112,6 +112,28 @@ gen_path(Entry, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Checks if path to file is ok.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_path(file_meta:uuid()) -> ok | path_beg_error | {path_error,
+    {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}.
+check_path(Uuid) ->
+    case file_meta:get({uuid, Uuid}) of
+        {ok, #document{value = #file_meta{name = Name}} = Doc} ->
+            case file_meta:get_parent_uuid(Doc) of
+                {ok, ?ROOT_DIR_UUID} ->
+                    ok;
+                {ok, ParentUuid} ->
+                    check_path(ParentUuid, Name, Uuid);
+                _ ->
+                    path_beg_error
+            end;
+        _ ->
+            path_beg_error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Generate storage file_meta:path() for given file_meta:entry()
 %% @end
 %%--------------------------------------------------------------------
@@ -139,7 +161,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
 get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
+    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
 
     MatchedSpaces = lists:filter(fun({_, Name}) ->
         Name =:= SpaceName
@@ -204,15 +226,15 @@ basename_and_parent(Path) ->
 %% and concatenates them into path().
 %% @end
 %%--------------------------------------------------------------------
--spec gen_path(file_meta:entry(), onedata_user:id(), [file_meta:name()]) ->
+-spec gen_path(file_meta:entry(), od_user:id(), [file_meta:name()]) ->
     {ok, file_meta:path()} | datastore:generic_error() | no_return().
 gen_path(Entry, UserId, Tokens) ->
     {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
         {ok, #document{key = ?ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
-            {ok, #document{value = #space_info{name = SpaceName}}} =
-                space_info:get(SpaceId, UserId),
+            {ok, #document{value = #od_space{name = SpaceName}}} =
+                od_space:get(SpaceId, UserId),
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUUID}} ->
             gen_path({uuid, ParentUUID}, UserId, [Name | Tokens])
@@ -234,4 +256,37 @@ gen_storage_path(Entry, Tokens) ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, #document{key = ParentUUID}} ->
             gen_storage_path({uuid, ParentUUID}, [Name | Tokens])
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if path to file is ok.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_path(file_meta:uuid(), file_meta:name(), file_meta:uuid()) ->
+    ok | {path_error, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}.
+check_path(Uuid, Name, ChildUuid) ->
+    case file_meta:get({uuid, Uuid}) of
+        {ok, #document{value = #file_meta{name = NewName}} = Doc} ->
+            case file_meta:get_child(Doc, Name) of
+                {ok, UUIDs} ->
+                    case lists:member(ChildUuid, UUIDs) of
+                        true ->
+                            case file_meta:get_parent_uuid(Doc) of
+                                {ok, ?ROOT_DIR_UUID} ->
+                                    ok;
+                                {ok, ParentUuid} ->
+                                    check_path(ParentUuid, NewName, Uuid);
+                                _ ->
+                                    {path_error, {Uuid, Name, ChildUuid}}
+                            end;
+                        false ->
+                            {path_error, {Uuid, Name, ChildUuid}}
+                    end;
+                _ ->
+                    {path_error, {Uuid, Name, ChildUuid}}
+            end;
+        _ ->
+            {path_error, {Uuid, Name, ChildUuid}}
     end.

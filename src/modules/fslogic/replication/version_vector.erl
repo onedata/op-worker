@@ -22,7 +22,7 @@
     replica_id_is_greater/2]).
 
 -type replica_id() :: {oneprovider:id(), file_location:id()}.
--type version_vector() :: #{}.
+-type version_vector() :: #{{binary(), binary()} => non_neg_integer()}.
 -type comparsion_result() :: lesser | greater | identical | concurrent.
 
 %%%===================================================================
@@ -104,7 +104,7 @@ replica_id_is_greater(LocalDoc, ExternalDoc) ->
 %% Get version corresponding to given replica id, from version_vector.
 %% @end
 %%--------------------------------------------------------------------
--spec get_version(replica_id(), version_vector()) -> neg_integer().
+-spec get_version(replica_id(), version_vector()) -> non_neg_integer().
 get_version(ReplicaId, VV) ->
     maps:get(ReplicaId, VV, 0).
 

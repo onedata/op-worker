@@ -24,6 +24,7 @@
 -export([set_user_privileges/4, set_group_privileges/4]).
 -export([get_invite_user_token/2, get_invite_group_token/2,
     get_create_space_token/2]).
+-export([has_effective_user/2, has_effective_privilege/3]).
 
 %%%===================================================================
 %%% API
@@ -37,7 +38,7 @@
 -spec get(GroupId :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 get(GroupId) ->
-    onedata_group:get(GroupId).
+    od_group:get(GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -49,7 +50,7 @@ get(GroupId) ->
 -spec get(oz_endpoint:auth(), GroupId :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
 get(Auth, GroupId) ->
-    onedata_group:get_or_fetch(Auth, GroupId).
+    od_group:get_or_fetch(Auth, GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -58,13 +59,14 @@ get(Auth, GroupId) ->
 %% User identity is determined using provided auth.
 %% @end
 %%--------------------------------------------------------------------
--spec create(oz_endpoint:auth(), #onedata_group{}) ->
+-spec create(oz_endpoint:auth(), #od_group{}) ->
     {ok, GroupId :: binary()} | {error, Reason :: term()}.
 create(Auth, Record) ->
-    Name = Record#onedata_group.name,
+    Name = Record#od_group.name,
     oz_users:create_group(Auth, [
         {<<"name">>, Name},
-        {<<"type">>, <<"undefined">>}
+        % Use default group type
+        {<<"type">>, <<"role">>}
     ]).
 
 
@@ -152,7 +154,8 @@ leave_group(Auth, ParentGroupId, ChildGroupId) ->
 set_name(Auth, GroupId, Name) ->
     oz_groups:modify_details(Auth, GroupId, [
         {<<"name">>, Name},
-        {<<"type">>, <<"undefined">>}
+        % Use default group type
+        {<<"type">>, <<"role">>}
     ]).
 
 
@@ -220,3 +223,42 @@ get_invite_group_token(Auth, GroupId) ->
 get_create_space_token(Auth, GroupId) ->
     oz_groups:get_create_space_token(Auth, GroupId).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user belongs to given group directly
+%% or via nested groups.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_effective_user(GroupId :: od_group:id(),
+    UserId :: od_user:id()) -> boolean().
+has_effective_user(GroupId, UserId) ->
+    case od_user:get(UserId) of
+        {error, {not_found, _}} ->
+            false;
+        {ok, #document{value = UserInfo}} ->
+            #od_user{eff_groups = Groups} = UserInfo,
+            lists:member(GroupId, Groups)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user has a privilege in given group.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_effective_privilege(GroupId :: od_group:id(),
+    UserId :: od_user:id(), Privilege :: privileges:group_privilege()) ->
+    boolean().
+has_effective_privilege(GroupId, UserId, Privilege) ->
+    case has_effective_user(GroupId, UserId) of
+        false ->
+            false;
+        true ->
+            {ok, #document{
+                value = #od_group{
+                    users = UserTuples
+                }}} = od_group:get(GroupId),
+            UserPrivileges = proplists:get_value(UserId, UserTuples, []),
+            lists:member(Privilege, UserPrivileges)
+    end.

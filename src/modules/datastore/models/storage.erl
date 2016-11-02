@@ -28,9 +28,30 @@
 
 -export_type([id/0, name/0]).
 
+%% API
+-export([id/1, name/1, helpers/1, get_by_name/1]).
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4, list/0, get_by_name/1, id/1]).
+    'after'/5, before/4, list/0]).
+-export([record_struct/1]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns structure of the record in specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+record_struct(1) ->
+    {record, [
+        {name, binary},
+        {helpers, [{record, 1, [
+            {name, string},
+            {args, #{string => string}}
+        ]}]}
+    ]}.
+
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -66,21 +87,23 @@ update(Key, Diff) ->
 create(#storage{} = S) ->
     create(#document{value = S});
 create(#document{value = #storage{name = Name}} = Document) ->
-    datastore:run_synchronized(?MODEL_NAME, ?STORAGE_LOCK_ID, fun() ->
+    critical_section:run_on_mnesia([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
         case datastore:fetch_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, Name) of
             {ok, _} ->
-                {error, aleady_exists};
+                {error, already_exists};
             {error, link_not_found} ->
-                _ = datastore:create(?STORE_LEVEL, #document{key = ?ROOT_STORAGE, value = #storage{}}),
-                case datastore:create(?STORE_LEVEL, Document) of
-                    {error, Reason} ->
-                        {error, Reason};
-                    {ok, Key} ->
-                        ok = datastore:add_links(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
-                        {ok, Key}
-                end
+                datastore:run_transaction(fun() ->
+                    _ = datastore:create(?STORE_LEVEL, #document{key = ?ROOT_STORAGE, value = #storage{}}),
+                    case datastore:create(?STORE_LEVEL, Document) of
+                        {error, Reason} ->
+                            {error, Reason};
+                        {ok, Key} ->
+                            ok = datastore:add_links(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
+                            {ok, Key}
+                    end
+                end)
         end
-                                                              end).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -150,10 +173,45 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
     datastore:foreach_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME,
-        fun(_LinkName, {Key, storage}, AccIn) ->
+        fun(_LinkName, {_V, [{_, _, Key, storage}]}, AccIn) ->
             {ok, Doc} = get(Key),
             [Doc | AccIn]
         end, []).
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec id(Doc :: #document{}) -> StorageId :: id().
+id(#document{key = StorageId, value = #storage{}}) ->
+    StorageId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage name.
+%% @end
+%%--------------------------------------------------------------------
+-spec name(Storage :: #document{} | #storage{}) -> Name :: name().
+name(#document{value = #storage{} = Storage}) ->
+    name(Storage);
+name(#storage{name = Name}) ->
+    Name.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage helpers.
+%% @end
+%%--------------------------------------------------------------------
+-spec helpers(Storage :: #document{} | #storage{}) -> Helpers :: [helpers:init()].
+helpers(#document{value = #storage{} = Storage}) ->
+    helpers(Storage);
+helpers(#storage{helpers = Helpers}) ->
+    Helpers.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -164,15 +222,6 @@ list() ->
 get_by_name(Name) ->
     {ok, Docs} = list(),
     get_by_name(Name, Docs).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns storage ID.
-%% @end
-%%--------------------------------------------------------------------
--spec id(Doc :: #document{}) -> StorageId :: id().
-id(#document{key = StorageId, value = #storage{}}) ->
-    StorageId.
 
 %%%===================================================================
 %%% Internal functions
