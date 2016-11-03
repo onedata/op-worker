@@ -82,20 +82,20 @@ handle_http_download(Req, FileId) ->
     % Try to retrieve user's session (no session is also a valid session)
     InitSession =
         try
-            g_ctx:init(Req, false)
+            gui_ctx:init(Req, false)
         catch _:_ ->
-            % Logging is done inside g_ctx:init
+            % Logging is done inside gui_ctx:init
             error
         end,
 
     case InitSession of
         error ->
-            g_ctx:reply(500, [], <<"">>);
+            gui_ctx:reply(500, [], <<"">>);
         ok ->
             try
                 SessionId = case fslogic_uuid:is_share_guid(FileId) of
                     true -> ?GUEST_SESS_ID;
-                    false -> g_session:get_session_id()
+                    false -> gui_session:get_session_id()
                 end,
                 {ok, FileHandle} = logical_file_manager:open(
                     SessionId, {guid, FileId}, read),
@@ -105,22 +105,22 @@ handle_http_download(Req, FileId) ->
                     StreamFun = cowboy_file_stream_fun(FileHandle, Size),
                     Headers = attachment_headers(FileName),
                     % Reply with attachment headers and a streaming function
-                    g_ctx:reply(200, Headers, {Size, StreamFun})
+                    gui_ctx:reply(200, Headers, {Size, StreamFun})
                 catch
                     T2:M2 ->
                         ?error_stacktrace("Error while processing file download "
-                        "for user ~p - ~p:~p", [g_session:get_user_id(), T2, M2]),
+                        "for user ~p - ~p:~p", [gui_session:get_user_id(), T2, M2]),
                         logical_file_manager:release(FileHandle), % release if possible
-                        g_ctx:reply(500, [], <<"">>)
+                        gui_ctx:reply(500, [], <<"">>)
                 end
             catch
                 T:M ->
                     ?error_stacktrace("Error while processing file download "
-                    "for user ~p - ~p:~p", [g_session:get_user_id(), T, M]),
-                    g_ctx:reply(500, [], <<"">>)
+                    "for user ~p - ~p:~p", [gui_session:get_user_id(), T, M]),
+                    gui_ctx:reply(500, [], <<"">>)
             end
     end,
-    g_ctx:finish().
+    gui_ctx:finish().
 
 
 %%--------------------------------------------------------------------

@@ -60,7 +60,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"group">>, GroupId) ->
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     % Check if the user belongs to this group
     case group_logic:has_effective_user(GroupId, UserId) of
         false ->
@@ -72,7 +72,7 @@ find(<<"group">>, GroupId) ->
 % PermissionsRecord matches <<"group-(user|group)-permission">>
 find(PermissionsRecord, AssocId) ->
     {_, GroupId} = op_gui_utils:association_to_ids(AssocId),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
     Authorized = group_logic:has_effective_privilege(
@@ -99,7 +99,7 @@ find(PermissionsRecord, AssocId) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"group">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     GroupIds = op_gui_utils:find_all_groups(UserAuth, UserId),
     Res = lists:map(
         fun(GroupId) ->
@@ -276,7 +276,7 @@ delete_record(<<"group">>, GroupId) ->
 group_record(GroupId) ->
     % Check if that user has view privileges in that group
     HasViewPrivileges = group_logic:has_effective_privilege(
-        GroupId, g_session:get_user_id(), group_view_data
+        GroupId, gui_session:get_user_id(), group_view_data
     ),
     group_record(GroupId, HasViewPrivileges).
 

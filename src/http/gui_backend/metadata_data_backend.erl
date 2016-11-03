@@ -62,7 +62,7 @@ find(ModelType, ResourceId) ->
             ?GUEST_SESS_ID;
         _ ->
             % covers: file-property, file-property-shared
-            g_session:get_session_id()
+            gui_session:get_session_id()
     end,
     try
         metadata_record(ModelType, SessionId, ResourceId)
@@ -111,7 +111,7 @@ create_record(<<"file-property-public">>, _Data) ->
 create_record(ModelType, Data) ->
     ResourceId = proplists:get_value(<<"file">>, Data),
     ok = update_record(ModelType, ResourceId, Data),
-    metadata_record(ModelType, g_session:get_session_id(), ResourceId).
+    metadata_record(ModelType, gui_session:get_session_id(), ResourceId).
 
 
 %%--------------------------------------------------------------------
@@ -134,7 +134,7 @@ update_record(ModelType, ResourceId, Data) ->
             {_ShareId, FId} = op_gui_utils:association_to_ids(ResourceId),
             FId
     end,
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     case proplists:get_value(<<"basic">>, Data) of
         undefined ->
             ok;
@@ -210,7 +210,7 @@ delete_record(ModelType, ResourceId) ->
             {_ShareId, FId} = op_gui_utils:association_to_ids(ResourceId),
             FId
     end,
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     {ok, XattrKeys} = logical_file_manager:list_xattr(
         SessionId, {guid, FileId}, false, false
     ),

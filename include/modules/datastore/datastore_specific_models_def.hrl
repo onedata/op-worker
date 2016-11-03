@@ -243,7 +243,7 @@
     proxy_via :: session:id() | undefined,
     response_map = #{} :: maps:map(),
     % Key-value in-session memory
-    memory = [] :: [{Key :: term(), Value :: term()}],
+    memory = #{} :: maps:map(),
     open_files = sets:new() :: sets:set(file_meta:uuid()),
     transfers = [] :: [transfer:id()]
 }).
