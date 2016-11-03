@@ -253,15 +253,10 @@ mock_oz_certificates(Config) ->
 
     test_utils:mock_new(Workers, [oneprovider, oz_endpoint]),
 
-    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
-    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
-
     test_utils:mock_expect(Workers, oneprovider, get_provider_id,
         fun() -> <<"050fec8f157d6e4b31fd6d2924923c7a">> end),
-    test_utils:mock_expect(Workers, oneprovider, get_oz_cert,
-        fun() -> public_key:pkix_decode_cert(CACertEncoded, otp) end),
 
-    test_utils:mock_expect(Workers, oz_endpoint, auth_request,
+    test_utils:mock_expect(Workers, oz_endpoint, provider_request,
         fun
             % @todo for now, in rest we only use the root macaroon
             (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
