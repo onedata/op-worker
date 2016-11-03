@@ -116,7 +116,7 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
-    TLSSettings = [{certfile, oz_plugin:get_cert_path()}, {keyfile, oz_plugin:get_key_path()}],
+    TLSSettings = [{certfile, oz_plugin:get_cert_file()}, {keyfile, oz_plugin:get_key_file()}],
     ?info("Connecting to ~p ~p ~p", [Hostname, Port, TLSSettings]),
     % TODO - Often (first?) connection crashes with {error,'No such file or directory'}
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),

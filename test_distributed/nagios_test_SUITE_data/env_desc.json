@@ -44,8 +44,7 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ],
-                        "verify_oz_cert": false
+                        ]
                     }
                 },
                 "worker2": {
@@ -58,8 +57,7 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ],
-                        "verify_oz_cert": false
+                        ]
                     }
                 },
                 "worker3": {
@@ -72,8 +70,7 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ],
-                        "verify_oz_cert": false
+                        ]
                     }
                 }
             }
