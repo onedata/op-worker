@@ -149,6 +149,8 @@ rename_dbsync_test(Config) ->
     TestDir = ?config(test_dir, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W2)}}, Config),
+    tracer:start([W1]),
+    tracer:trace_calls(couchdb_datastore_driver, save_link_doc),
 
     {_, _BaseDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, ""))),
     {_, _NastedDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, "/nasted"))),

@@ -137,7 +137,7 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                         fun({Scope0, {deleted, VH0}, _, _}) ->
                             case Scope0 of
                                 MyProvID ->
-                                    erlang:put(mother_scope, MyProvID); %% Links that origins from this provider shall begin
+                                    erlang:put(mother_scope, MyProvID); %% Links that origins from this provider shall be
                                                                         %% deleted also in synchronized link tree
                                 _ ->
                                     erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE)
