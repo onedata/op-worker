@@ -253,7 +253,7 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"type">>, <<"dir">>},
         {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
+        {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
@@ -276,7 +276,7 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"type">>, <<"dir">>},
         {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
+        {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
@@ -340,7 +340,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                         true ->
                             fetch_dir_children(FileId, ChildrenLimit)
                     end,
-                    {<<"dir">>, 0, ChildrenList, TotalCount};
+                    {<<"dir">>, null, ChildrenList, TotalCount};
                 _ ->
                     {<<"file">>, SizeAttr, [], 0}
             end,
