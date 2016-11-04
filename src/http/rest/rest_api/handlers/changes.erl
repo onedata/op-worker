@@ -163,6 +163,16 @@ send_change(SendChunk, #change{seq = Seq, doc = #document{
     {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
     send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
         RequestedSpaceId);
+send_change(SendChunk, #change{seq = Seq, doc = #document{
+    value = #file_location{uuid = FileUuid, provider_id = ProviderId}}}, RequestedSpaceId) ->
+    case ProviderId =:= oneprovider:get_provider_id() of
+        true ->
+            {ok, FileDoc} = file_meta:get({uuid, FileUuid}),
+            send_change(SendChunk, #change{seq = Seq, doc = FileDoc, model = file_meta},
+                RequestedSpaceId);
+        false ->
+            ok
+    end;
 send_change(SendChunk, Change, RequestedSpaceId) ->
     Scope =
         case Change#change.doc#document.value#file_meta.is_scope of

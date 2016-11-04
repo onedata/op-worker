@@ -33,7 +33,8 @@ notify_function(Pid, Ref) ->
         (_, stream_ended, _) ->
             Pid ! {Ref, stream_ended};
         (Seq, Doc = #document{value = Value}, Model)
-            when is_record(Value, file_meta); is_record(Value, custom_metadata) ->
+            when is_record(Value, file_meta); is_record(Value, custom_metadata);
+            is_record(Value, times); is_record(Value, file_location) ->
             Pid ! {Ref, #change{seq = Seq, doc = Doc, model = Model}};
         (_Seq, _Doc, _Model) ->
             ok
