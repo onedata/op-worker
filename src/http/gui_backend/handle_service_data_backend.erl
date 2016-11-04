@@ -76,7 +76,7 @@ find(<<"handle-service">>, HandleServiceId) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"handle-service">>) ->
     Auth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     {ok, HandleServiceIds} = user_logic:get_effective_handle_services(
         Auth, UserId
     ),

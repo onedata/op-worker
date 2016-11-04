@@ -59,7 +59,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file-acl">>, FileId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     file_acl_record(SessionId, FileId).
 
 
@@ -112,7 +112,7 @@ create_record(<<"file-acl">>, Data) ->
     ok | gui_error:error_result().
 update_record(<<"file-acl">>, FileId, Data) ->
     try
-        SessionId = g_session:get_session_id(),
+        SessionId = gui_session:get_session_id(),
         Acl = acl_utils:json_to_acl(Data),
         case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
             ok ->
@@ -135,7 +135,7 @@ update_record(<<"file-acl">>, FileId, Data) ->
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
 delete_record(<<"file-acl">>, FileId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
         ok ->
             ok;

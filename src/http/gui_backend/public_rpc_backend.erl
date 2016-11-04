@@ -40,7 +40,7 @@ handle(<<"getPublicFileDownloadUrl">>, [{<<"fileId">>, AssocId}]) ->
     ),
     case PermsCheckAnswer of
         {ok, true} ->
-            Hostname = g_ctx:get_requested_hostname(),
+            Hostname = gui_ctx:get_requested_hostname(),
             URL = str_utils:format_bin("https://~s/download/~s",
                 [Hostname, FileId]),
             {ok, [{<<"fileUrl">>, URL}]};

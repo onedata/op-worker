@@ -75,7 +75,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, FileId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     try
         file_record(SessionId, FileId)
     catch T:M ->
@@ -85,7 +85,7 @@ find(<<"file">>, FileId) ->
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
     end;
 find(<<"file-shared">>, AssocId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     file_record(<<"file-shared">>, SessionId, AssocId);
 find(<<"file-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
@@ -152,7 +152,7 @@ update_record(<<"file-public">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file">>, FileId, Data) ->
     try
-        SessionId = g_session:get_session_id(),
+        SessionId = gui_session:get_session_id(),
         case proplists:get_value(<<"permissions">>, Data, undefined) of
             undefined ->
                 ok;
@@ -189,7 +189,7 @@ delete_record(<<"file-shared">>, _Id) ->
 delete_record(<<"file-public">>, _Id) ->
     gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"file">>, FileId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     {ok, ParentId} = logical_file_manager:get_parent(SessionId, {guid, FileId}),
     case logical_file_manager:rm_recursive(SessionId, {guid, FileId}) of
         ok ->
@@ -253,7 +253,7 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"type">>, <<"dir">>},
         {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
+        {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
@@ -276,7 +276,7 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"type">>, <<"dir">>},
         {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
-        {<<"size">>, 0},
+        {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
@@ -340,7 +340,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                         true ->
                             fetch_dir_children(FileId, ChildrenLimit)
                     end,
-                    {<<"dir">>, 0, ChildrenList, TotalCount};
+                    {<<"dir">>, null, ChildrenList, TotalCount};
                 _ ->
                     {<<"file">>, SizeAttr, [], 0}
             end,
@@ -452,7 +452,7 @@ report_file_upload(FileId, ParentId) ->
 %%--------------------------------------------------------------------
 -spec report_file_batch_complete(DirId :: fslogic_worker:file_guid()) -> ok.
 report_file_batch_complete(DirId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     LsSubCacheName = ls_sub_cache_name(),
     [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
         LsSubCacheName, {DirId, last_children_count}
@@ -505,7 +505,7 @@ fetch_more_dir_children(SessionId, Props) ->
 get_user_root_dir_uuid() ->
     fslogic_uuid:uuid_to_guid(
         fslogic_uuid:user_root_dir_uuid(
-            g_session:get_user_id())).
+            gui_session:get_user_id())).
 
 
 %%--------------------------------------------------------------------

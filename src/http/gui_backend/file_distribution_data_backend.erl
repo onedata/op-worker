@@ -81,7 +81,7 @@ find_all(<<"file-distribution">>) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(
         SessionId, {guid, FileId}
     ),

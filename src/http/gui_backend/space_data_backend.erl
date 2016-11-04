@@ -61,7 +61,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"space">>, SpaceId) ->
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     % Check if the user belongs to this space
     case space_logic:has_effective_user(SpaceId, UserId) of
         false ->
@@ -73,7 +73,7 @@ find(<<"space">>, SpaceId) ->
 % PermissionsRecord matches <<"space-(user|group)-permission">>
 find(PermissionsRecord, AssocId) ->
     {_, SpaceId} = op_gui_utils:association_to_ids(AssocId),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
     Authorized = space_logic:has_effective_privilege(
@@ -101,7 +101,7 @@ find(PermissionsRecord, AssocId) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"space">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
@@ -197,7 +197,7 @@ update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = g_session:get_user_id(),
+    CurrentUser = gui_session:get_user_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
@@ -230,7 +230,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
 
 update_record(<<"space-group-permission">>, AssocId, Data) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = g_session:get_user_id(),
+    CurrentUser = gui_session:get_user_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
@@ -297,7 +297,7 @@ delete_record(<<"space">>, SpaceId) ->
 space_record(SpaceId) ->
     % Check if that user has view privileges in that space
     HasViewPrivileges = space_logic:has_effective_privilege(
-        SpaceId, g_session:get_user_id(), space_view_data
+        SpaceId, gui_session:get_user_id(), space_view_data
     ),
     space_record(SpaceId, HasViewPrivileges).
 
@@ -311,7 +311,7 @@ space_record(SpaceId) ->
 -spec space_record(SpaceId :: binary(), HasViewPrivileges :: boolean()) ->
     proplists:proplist().
 space_record(SpaceId, HasViewPrivileges) ->
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #od_space{
@@ -363,7 +363,7 @@ space_record(SpaceId, HasViewPrivileges) ->
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = g_session:get_user_id(),
+    CurrentUser = gui_session:get_user_id(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
@@ -393,7 +393,7 @@ space_user_permission_record(AssocId) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    CurrentUser = g_session:get_user_id(),
+    CurrentUser = gui_session:get_user_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #od_space{
