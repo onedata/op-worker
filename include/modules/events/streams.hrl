@@ -15,7 +15,6 @@
 
 -include("types.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 %% definition of an event stream
 %% id                - unique stream ID
