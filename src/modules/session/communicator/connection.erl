@@ -154,8 +154,9 @@ send(Msg, Ref) when is_pid(Ref) ->
         _:Reason -> {error, Reason}
     end;
 send(Msg, Ref) ->
+    MsgWithProxyInfo = fill_proxy_info(Msg, Ref),
     case session:get_random_connection(Ref) of
-        {ok, Con} -> send(Msg, Con);
+        {ok, Con} -> send(MsgWithProxyInfo, Con);
         {error, Reason} -> {error, Reason}
     end.
 
@@ -562,3 +563,21 @@ get_cert(Socket) ->
     #client_message{}.
 to_client_message(#server_message{message_body = Body, message_id = Id, message_stream = Stream, proxy_session_id = SessId}) ->
     #client_message{message_body = Body, message_id = Id, message_stream = Stream, proxy_session_id = SessId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fills message with info about session to which it should be proxied
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_proxy_info(#server_message{} | #client_message{}, session:id()) ->
+    #server_message{} | #client_message{}.
+fill_proxy_info(Msg, SessionId) ->
+    {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
+    case {Msg, is_binary(ProxyVia)} of
+        {#server_message{proxy_session_id = undefined}, true} ->
+            Msg#server_message{proxy_session_id = SessionId};
+        {#client_message{proxy_session_id = undefined}, true} ->
+            Msg#client_message{proxy_session_id = SessionId};
+        _ ->
+            Msg
+    end.
