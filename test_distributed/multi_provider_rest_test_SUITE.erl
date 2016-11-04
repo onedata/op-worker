@@ -699,7 +699,7 @@ create_list_index(Config) ->
 
     % when
     {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
-        do_request(WorkerP1, <<"index?space_id=space1&name=name">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"text/javascript">>}], Function)),
+        do_request(WorkerP1, <<"index?space_id=space1&name=name">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
     <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
 
     % then
@@ -707,12 +707,12 @@ create_list_index(Config) ->
     IndexList = json_utils:decode_map(ListBody),
     ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id}], IndexList),
     ?assertMatch({ok, 200, _, _},
-        do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"text/javascript">>}], [])),
+        do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"application/javascript">>}], [])),
 
     % when
     {ok, 303, _, _} = ?assertMatch({ok, 303, _, _},
         do_request(WorkerP1, <<"index?space_id=space1&name=name2">>, post,
-            [user_1_token_header(Config), {<<"content-type">>,<<"text/javascript">>}], Function)),
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
 
     % then
     {ok, _, _, ListBody2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get,

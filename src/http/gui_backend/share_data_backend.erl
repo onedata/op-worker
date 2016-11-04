@@ -68,7 +68,7 @@ find(ModelType, ShareId) ->
     % view privileges in this space, or view the share in public view.
     Authorized = case ModelType of
         <<"share">> ->
-            UserId = g_session:get_user_id(),
+            UserId = gui_session:get_user_id(),
             space_logic:has_effective_privilege(
                 SpaceId, UserId, space_view_data
             );
@@ -94,7 +94,7 @@ find_all(<<"share-public">>) ->
     gui_error:report_error(<<"Not implemented">>);
 find_all(<<"share">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     ShareIds = lists:foldl(
         fun(SpaceId, Acc) ->
@@ -194,7 +194,7 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
 delete_record(<<"share-public">>, _ShareId) ->
     gui_error:report_error(<<"Not implemented">>);
 delete_record(<<"share">>, ShareId) ->
-    SessionId = g_session:get_session_id(),
+    SessionId = gui_session:get_session_id(),
     case logical_file_manager:remove_share(SessionId, ShareId) of
         ok ->
             ok;

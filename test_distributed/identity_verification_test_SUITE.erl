@@ -146,8 +146,8 @@ init_per_suite(RunConfig) ->
     %% ensure some provider certs present as ctool requires them
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
-        {ok, Key} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_key_path]),
-        {ok, Cert} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_cert_path]),
+        {ok, Key} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_key_file]),
+        {ok, Cert} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_cert_file]),
         Domain = rpc:call(Worker, oneprovider, get_provider_domain, []),
         ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, Domain])
     end, Workers),

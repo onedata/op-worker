@@ -144,10 +144,15 @@ public_rpc_backend() -> public_rpc_backend.
 session_details() ->
     {ok, #document{
         value = #od_user{
-            name = Name
-        }}} = od_user:get(g_session:get_user_id()),
+            name = UserName
+        }}} = od_user:get(gui_session:get_user_id()),
+    {ok, #document{
+        value = #od_provider{
+            client_name = ProviderName
+        }}} = od_provider:get_or_fetch(oneprovider:get_provider_id()),
     Res = [
-        {<<"userName">>, Name},
+        {<<"userName">>, UserName},
+        {<<"providerName">>, ProviderName},
         {<<"manageProvidersURL">>,
             str_utils:to_binary(oneprovider:get_oz_providers_page())}
     ],
