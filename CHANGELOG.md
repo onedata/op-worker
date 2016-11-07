@@ -4,6 +4,18 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc11
+
+* VFS-2773 Listen to more changes in /changes api and add a few new tests.
+* VFS-2764 Fix directories having 0B size in GUI
+* VFS-2764 Fix size of files being zero right after upload
+* VFS-2696 Change text/javascript to applicaiton/javascript
+* VFS-2696 Reroute events through proxy for open files.
+* VFS-2696 Fix wrong aggregarion of file_attr event.
+* VFS-2733 Add REST routes to GUI listener
+* VFS-2733 Standarize app listeners
+
+
 ### 3.0.0-rc10
 
 * VFS-2742 Fix aggregation for update_attr events.
