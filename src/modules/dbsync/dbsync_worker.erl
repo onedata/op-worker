@@ -595,6 +595,8 @@ apply_changes(SpaceId,
             end
         end),
 
+%%        erlang:erase(mother_scope),
+%%        erlang:erase(other_scopes),
         case Value of
             #links{} ->
                 lists:foreach(fun(LName) ->

@@ -81,10 +81,14 @@ create_session(_UserId, [#user_identity{} = Identity, #token_auth{} = Auth]) ->
 %% {@link gui_session_plugin_behaviour} callback update_session/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update_session(SessId :: binary(), Memory :: proplists:proplist()) ->
+-spec update_session(SessId :: binary(),
+    MemoryUpdateFun :: fun((maps:map()) -> maps:map())) ->
     ok | {error, term()}.
-update_session(SessionId, Memory) ->
-    case session:update(SessionId, #{memory => Memory}) of
+update_session(SessionId, MemoryUpdateFun) ->
+    SessionUpdateFun = fun(#session{memory = OldMemory} = Session) ->
+        {ok, Session#session{memory = MemoryUpdateFun(OldMemory)}}
+    end,
+    case session:update(SessionId, SessionUpdateFun) of
         {ok, _} ->
             ok;
         {error, Error} ->
@@ -98,7 +102,7 @@ update_session(SessionId, Memory) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec lookup_session(SessionId :: binary()) ->
-    {ok, Memory :: proplists:proplist()} | undefined.
+    {ok, Memory :: maps:map()} | undefined.
 lookup_session(SessionId) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{memory = Memory}}} ->

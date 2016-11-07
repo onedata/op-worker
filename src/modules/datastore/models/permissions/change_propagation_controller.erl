@@ -140,7 +140,7 @@ list() ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(change_propagation_controller_bucket, [], ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL,
-        true, false, mother_scope, other_scopes)#model_config{sync_enabled = true}.
+        true, false, oneprovider:get_provider_id())#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -275,6 +275,6 @@ decode_key(Key) ->
 %%--------------------------------------------------------------------
 -spec set_link_context(ProvId :: binary()) -> ok.
 set_link_context(ProvId) ->
-    erlang:put(mother_scope, ProvId),
-    erlang:put(other_scopes, []),
+%%    erlang:put(mother_scope, ProvId),
+%%    erlang:put(other_scopes, []),
     ok.

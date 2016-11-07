@@ -19,14 +19,8 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(OZPKEY_ENV, grpkey_path).
--define(OZPCSR_ENV, grpcsr_path).
--define(OZPCERT_ENV, grpcert_path).
-
-
 %% ID of provider that is not currently registered in Global Registry
 -define(NON_GLOBAL_PROVIDER_ID, <<"non_global_provider">>).
-
 
 %% ID of this provider (assigned by global registry)
 -type id() :: binary().
@@ -36,7 +30,7 @@
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
 -export([get_provider_id/0, get_provider_domain/0]).
--export([get_oz_domain/0, get_oz_url/0, get_oz_cert/0]).
+-export([get_oz_domain/0, get_oz_url/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([register_in_oz/3, save_file/2]).
 
@@ -151,9 +145,9 @@ get_oz_providers_page() ->
     {ok, ProviderID :: binary()} | {error, term()}.
 register_in_oz(NodeList, KeyFilePassword, ProviderName) ->
     try
-        OZPKeyPath = oz_plugin:get_key_path(),
-        OZPCertPath = oz_plugin:get_cert_path(),
-        OZPCSRPath = oz_plugin:get_csr_path(),
+        OZPKeyPath = oz_plugin:get_key_file(),
+        OZPCertPath = oz_plugin:get_cert_file(),
+        OZPCSRPath = oz_plugin:get_csr_file(),
         % Create a CSR
         0 = csr_creator:create_csr(KeyFilePassword, OZPKeyPath, OZPCSRPath),
         {ok, CSR} = file:read_file(OZPCSRPath),
@@ -189,9 +183,9 @@ register_in_oz(NodeList, KeyFilePassword, ProviderName) ->
     {ok, ProviderID :: binary()} | {error, term()}.
 register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
     try
-        OZPKeyPath = oz_plugin:get_key_path(),
-        OZPCertPath = oz_plugin:get_cert_path(),
-        OZPCSRPath = oz_plugin:get_csr_path(),
+        OZPKeyPath = oz_plugin:get_key_file(),
+        OZPCertPath = oz_plugin:get_cert_file(),
+        OZPCSRPath = oz_plugin:get_csr_file(),
         % Create a CSR
         0 = csr_creator:create_csr(KeyFilePassword, OZPKeyPath, OZPCSRPath),
         {ok, CSR} = file:read_file(OZPCSRPath),
@@ -268,7 +262,7 @@ get_provider_id() ->
         {ok, ProviderId} ->
             ProviderId;
         _ ->
-            try file:read_file(oz_plugin:get_cert_path()) of
+            try file:read_file(oz_plugin:get_cert_file()) of
                 {ok, Bin} ->
                     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
                     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
@@ -283,27 +277,6 @@ get_provider_id() ->
                     ?NON_GLOBAL_PROVIDER_ID
             end
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns OZ public certificate
-%% @end
-%%--------------------------------------------------------------------
--spec get_oz_cert() -> #'OTPCertificate'{} | no_return().
-get_oz_cert() ->
-    % Cache the cert so that we don't decode the cert every time
-    case application:get_env(?APP_NAME, oz_certificate) of
-        {ok, GrCert} ->
-            GrCert;
-        _ ->
-            {ok, PemCert} = file:read_file(oz_plugin:get_cacert_path()),
-            [{'Certificate', DerCert, _}] = public_key:pem_decode(PemCert),
-            GrCert = #'OTPCertificate'{} = public_key:pkix_decode_cert(DerCert, otp),
-            application:set_env(?APP_NAME, oz_certificate, GrCert),
-            GrCert
-    end.
-
 
 %%%===================================================================
 %%% Internal functions

@@ -356,7 +356,7 @@ get_child(Doc, Name) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update}, {od_user, save}, {od_user, update}],
-        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, mother_scope, other_scopes, true)#model_config{sync_enabled = true}.
+        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id(), true)#model_config{sync_enabled = true}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -817,9 +817,6 @@ get_guid_from_phantom_file(OldUUID) ->
 %%--------------------------------------------------------------------
 -spec set_link_context_for_space(SpaceId :: datastore:key()) -> ok.
 set_link_context_for_space(SpaceId) ->
-    MyProvID = oneprovider:get_provider_id(),
-    erlang:put(mother_scope, MyProvID),
-    erlang:put(other_scopes, []),
     ok.
 
 %%--------------------------------------------------------------------
@@ -1152,8 +1149,6 @@ location_ref(ProviderId) ->
 -spec set_link_context(Doc :: datastore:document() | datastore:key()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
 set_link_context(_) ->
-    erlang:put(mother_scope, oneprovider:get_provider_id()),
-    erlang:put(other_scopes, []),
     ok.
 
 %%--------------------------------------------------------------------

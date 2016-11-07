@@ -103,10 +103,9 @@ change_replicated_internal(_SpaceId, _Change) ->
     MainDocKey :: datastore:ext_key(), AddedMap :: #{}, DeletedMap :: #{}) ->
     ok.
 links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
-    #model_config{link_store_level = _LinkStoreLevel} = ModelName:model_init(),
+    MC0 = #model_config{link_store_level = _LinkStoreLevel} = ModelName:model_init(),
+    MC = MC0#model_config{disable_remote_link_delete = true},
     MyProvID = oneprovider:get_provider_id(),
-    erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE),
-    erlang:put(other_scopes, <<"system_internal">>),
 
     maps:fold(
         fun(K, {Version, Targets}, AccIn) ->
@@ -129,27 +128,18 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                     case NewTargetsAdd of
                         [] -> ok;
                         _ ->
-                            ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [{K, {Version, NewTargetsAdd}}])
+                            ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, MC, [{K, {Version, NewTargetsAdd}}])
                     end,
 
                     %% Handle links marked as deleted
                     lists:foreach(
                         fun({Scope0, {deleted, VH0}, _, _}) ->
-                            case Scope0 of
-                                MyProvID ->
-                                    erlang:put(mother_scope, MyProvID); %% Links that origins from this provider shall be
-                                                                        %% deleted also in synchronized link tree
-                                _ ->
-                                    erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE)
-                            end,
-                            ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName,
+                            ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, MC,
                                 [links_utils:make_scoped_link_name(K, Scope0, VH0, size(Scope0))])
                         end, NewTargetsDel)
 
             end
         end, #{}, AddedMap),
-
-    erlang:put(mother_scope, ?LOCAL_ONLY_LINK_SCOPE),
 
     maps:fold(
         fun(K, V, _AccIn) ->
@@ -160,8 +150,7 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                         {deleted, VH1} ->
                             ok; %% Ignore deletion of deleted link
                         VH1 ->
-                            erlang:put(mother_scope, MyProvID), %% Delete always from both synchronized and aggregated tree
-                            ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, ModelName, [links_utils:make_scoped_link_name(K, S, VH1, size(S))])
+                            ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, MC, [links_utils:make_scoped_link_name(K, S, VH1, size(S))])
                     end
                 end, DelTargets)
         end, [], DeletedMap),
