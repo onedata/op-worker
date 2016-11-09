@@ -71,7 +71,7 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), maps:map()}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"text/javascript">>, create_index}
+        {<<"application/javascript">>, create_index}
     ], Req, State}.
 
 %%%===================================================================

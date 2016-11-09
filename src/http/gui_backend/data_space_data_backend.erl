@@ -59,7 +59,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space">>, SpaceId) ->
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested space - he must belong
     % to it.
     case space_logic:has_effective_user(SpaceId, UserId) of
@@ -79,7 +79,7 @@ find(<<"data-space">>, SpaceId) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"data-space">>) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
@@ -147,7 +147,7 @@ delete_record(<<"data-space">>, _Id) ->
 -spec data_space_record(SpaceId :: od_space:id()) -> proplists:proplist().
 data_space_record(SpaceId) ->
     UserAuth = op_gui_utils:get_user_auth(),
-    UserId = g_session:get_user_id(),
+    UserId = gui_session:get_user_id(),
     {ok, #document{
     value = #od_space{
         name = Name,

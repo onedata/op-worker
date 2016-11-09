@@ -49,19 +49,20 @@ start() ->
     {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
     {ok, DispatcherPoolSize} =
         application:get_env(?APP_NAME, protocol_handler_pool_size),
+    {ok, KeyFile} =
+        application:get_env(?APP_NAME, protocol_handler_ssl_key_file),
     {ok, CertFile} =
-        application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
-    Ip = case application:get_env(?APP_NAME, protocol_handler_bind_addr) of
-             {ok, loopback} -> {127, 0, 0, 1};
-             {ok, all} -> {0, 0, 0, 0}
-         end,
+        application:get_env(?APP_NAME, protocol_handler_ssl_cert_file),
+    {ok, CaCertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CaCerts} = file_utils:read_files({dir, CaCertsDir}),
 
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
         ranch_etls, [
-            {ip, Ip},
             {port, Port},
+            {keyfile, KeyFile},
             {certfile, CertFile},
-            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
+            {cacerts, CaCerts},
+            {ciphers, ssl:cipher_suites() -- ssl_utils:weak_ciphers()},
             {versions, ['tlsv1.2', 'tlsv1.1']}
         ],
         connection, []
@@ -105,17 +106,3 @@ healthcheck() ->
         _ ->
             {error, server_not_responding}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns list of weak ciphers.
-%% @end
--spec weak_ciphers() -> list().
-%%--------------------------------------------------------------------
-weak_ciphers() ->
-    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

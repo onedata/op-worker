@@ -52,10 +52,7 @@ init(_Args) ->
             emission_time = timer:seconds(?STEP_IN_SECONDS)
         }
     },
-    case event:subscribe(Sub) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
+    {ok, _} = event:subscribe(Sub, ?ROOT_SESS_ID),
 
     {ok, #{}}.
 

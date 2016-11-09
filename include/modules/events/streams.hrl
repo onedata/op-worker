@@ -101,7 +101,6 @@
                 X -> X
             end
         },
-
         E1#event{
             counter = E1#event.counter + E2#event.counter,
             object = O2#update_event{object = AggregatedAttr}

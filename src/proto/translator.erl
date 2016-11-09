@@ -103,6 +103,8 @@ translate_from_protobuf(#'UpdateEvent'{object = {_, Obj}}) ->
     #update_event{
         object = translate_from_protobuf(Obj)
     };
+translate_from_protobuf(#'PermissionChangedEvent'{file_uuid = FileUuid}) ->
+    #permission_changed_event{file_uuid = FileUuid};
 translate_from_protobuf(#'FileRemovalEvent'{} = Record) ->
     #file_removal_event{
         file_uuid = Record#'FileRemovalEvent'.file_uuid
