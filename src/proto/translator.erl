@@ -320,8 +320,8 @@ translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
     {Key, Value};
-translate_from_protobuf(#'Checksum'{value = Value}) ->
-    #checksum{value = Value};
+translate_from_protobuf(#'SyncResponse'{checksum = Checksum, file_location = FileLocation}) ->
+    #sync_response{checksum = Checksum, file_location = translate_from_protobuf(FileLocation)};
 translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = ChildEntries}) ->
     #file_renamed{new_uuid = NewUuid,
         child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]};
@@ -727,8 +727,9 @@ translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     {_, Record} = translate_to_protobuf(HelperParams),
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
         space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
-translate_to_protobuf(#checksum{value = Value}) ->
-    {checksum, #'Checksum'{value = Value}};
+translate_to_protobuf(#sync_response{checksum = Value, file_location = FileLocation}) ->
+    {_, ProtoFileLocation} = translate_to_protobuf(FileLocation),
+    {sync_response, #'SyncResponse'{checksum = Value, file_location = ProtoFileLocation}};
 translate_to_protobuf(#file_renamed{new_uuid = NewUuid, child_entries = ChildEntries}) ->
     {file_renamed, #'FileRenamed'{new_uuid = NewUuid,
         child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};
