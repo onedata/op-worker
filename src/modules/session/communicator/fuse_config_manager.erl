@@ -21,7 +21,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_configuration/0]).
+-export([get_configuration/1]).
 -export([create_storage_test_file/2, remove_storage_test_file/3,
     verify_storage_test_file/2]).
 
@@ -45,14 +45,18 @@
 %% Returns remote client configuration.
 %% @end
 %%--------------------------------------------------------------------
--spec get_configuration() -> Configuration :: #configuration{}.
-get_configuration() ->
+-spec get_configuration(SessId :: session:id()) -> Configuration :: #configuration{}.
+get_configuration(SessId) ->
+    {ok, UserId} = session:get_user_id(SessId),
     {ok, Docs} = subscription:list(),
     Subs = lists:filtermap(fun
         (#document{value = #subscription{object = undefined}}) -> false;
         (#document{value = #subscription{} = Sub}) -> {true, Sub}
     end, Docs),
-    #configuration{subscriptions = Subs, disabled_spaces = space_quota:get_disabled_spaces()}.
+    #configuration{
+        root_uuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
+        subscriptions = Subs,
+        disabled_spaces = space_quota:get_disabled_spaces()}.
 
 %%--------------------------------------------------------------------
 %% @doc
