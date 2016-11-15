@@ -159,8 +159,9 @@ create_index(Req, State) ->
     {State1, Req1} = validator:parse_query_space_id(Req, State),
     {State2, Req2} = validator:parse_name(Req1, State1),
     {State3, Req3} = validator:parse_function(Req2, State2),
+    {State4, Req4} = validator:parse_spatial(Req3, State3),
 
-    #{auth := Auth, name := Name, space_id := SpaceId, function := Function} = State3,
+    #{auth := Auth, name := Name, space_id := SpaceId, function := Function, spatial := Spatial} = State4,
     {ok, UserId} = session:get_user_id(Auth),
     case SpaceId of
         undefined ->
@@ -169,10 +170,9 @@ create_index(Req, State) ->
             ok
     end,
     space_membership:check_with_user(UserId, SpaceId),
+    {ok, Id} = indexes:add_index(UserId, Name, Function, SpaceId, Spatial),
 
-    {ok, Id} = indexes:add_index(UserId, Name, Function, SpaceId),
-
-    {{true, <<"/api/v3/oneprovider/index/", Id/binary>>}, Req3, State3}.
+    {{true, <<"/api/v3/oneprovider/index/", Id/binary>>}, Req4, State4}.
 
 
 

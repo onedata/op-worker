@@ -34,7 +34,12 @@ all: test_rel
 
 compile:
 	$(REBAR) compile
-	make -C $(LIB_DIR)/cluster_worker/ priv/sync_gateway
+	CLUSTER_WORKER_DIR="a"
+	if [ -d $(LIB_DIR)/cluster_worker/ ]; then \
+	    make -C $(LIB_DIR)/cluster_worker/ priv/sync_gateway ; \
+	else \
+	    make -C _checkouts/cluster_worker/ priv/sync_gateway ; \
+	fi
 
 deps:
 	$(LIB_DIR)/gui/pull-gui.sh gui-config.sh
