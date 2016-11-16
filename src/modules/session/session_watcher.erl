@@ -221,19 +221,19 @@ code_change(_OldVsn, State, _Extra) ->
     Milliseconds :: non_neg_integer().
 get_session_ttl(gui) ->
     {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
-    Period;
+    timer:seconds(Period);
 get_session_ttl(rest) ->
     {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
-    Period;
+    timer:seconds(Period);
 get_session_ttl(provider_incoming) ->
     {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
-    Period;
+    timer:seconds(Period);
 get_session_ttl(provider_outgoing) ->
     {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
-    Period;
+    timer:seconds(Period);
 get_session_ttl(_) ->
     {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
-    Period.
+    timer:seconds(Period).
 
 %%--------------------------------------------------------------------
 %% @private
