@@ -378,6 +378,24 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                             op_gui_utils:ids_to_association(ShareId, FId)
                         end, ChildrenIds)
             end,
+            % Depending on model name, properly set the ACL field
+            FileAcl = case ModelType of
+                <<"file">> ->
+                    GetAcl = logical_file_manager:get_acl(
+                        SessionId, {guid, FileId}
+                    ),
+                    case GetAcl of
+                        {ok, _} ->
+                            FileId;
+                        {error, ?EACCES} ->
+                            acl_utils:non_accessible_acl_id();
+                        _ ->
+                            null
+                    end;
+                _ ->
+                    null
+            end,
+
 
             % Currently only one share per file is allowed.
             % Share is always null for file-shared and file-public so as not to
@@ -405,7 +423,7 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 {<<"totalChildrenCount">>, TotalChildrenCount},
                 {<<"parent">>, Parent},
                 {<<"children">>, Children},
-                {<<"fileAcl">>, FileId},
+                {<<"fileAcl">>, FileAcl},
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
                 {<<"fileProperty">>, Metadata}

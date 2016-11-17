@@ -16,11 +16,18 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([acl_to_json/2, json_to_acl/1]).
+-export([non_accessible_acl_id/0, acl_to_json/2, json_to_acl/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Id of file-acl record when the ACL for file is not accessible.
+%%--------------------------------------------------------------------
+-spec non_accessible_acl_id() -> binary().
+non_accessible_acl_id() ->
+    <<"eaccess">>.
 
 %%--------------------------------------------------------------------
 %% @doc Convert acl to gui compatible json.
