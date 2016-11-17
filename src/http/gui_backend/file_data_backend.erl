@@ -175,7 +175,7 @@ update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
     try
         SessionId = gui_session:get_session_id(),
         {ok, OldPath} = logical_file_manager:get_file_path(
-            SessionId, {guid, FileId}
+            SessionId, FileId
         ),
         DirPath = fslogic_path:dirname(OldPath),
         NewPath = fslogic_path:join([DirPath, NewName]),
