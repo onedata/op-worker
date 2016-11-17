@@ -60,8 +60,10 @@ exists(_FileKey) ->
 mv(SessId, FileKey, TargetPath) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
+    {guid, TargetDirGuid} = fslogic_uuid:ensure_guid(CTX, {path, TargetDir}),
     lfm_utils:call_fslogic(SessId, file_request, GUID,
-        #rename{target_path = TargetPath},
+        #rename{target_parent_uuid = TargetDirGuid, target_name = TargetName},
         fun(#file_renamed{new_uuid = NewGuid}) ->
             {ok, NewGuid}
         end).

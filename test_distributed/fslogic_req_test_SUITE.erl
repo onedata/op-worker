@@ -31,6 +31,7 @@
 %% tests
 -export([
     fslogic_get_file_attr_test/1,
+    fslogic_get_child_attr_test/1,
     fslogic_mkdir_and_rmdir_test/1,
     fslogic_read_dir_test/1,
     chmod_test/1,
@@ -44,6 +45,7 @@
 all() ->
     ?ALL([
         fslogic_get_file_attr_test,
+        fslogic_get_child_attr_test,
         fslogic_mkdir_and_rmdir_test,
         fslogic_read_dir_test,
         chmod_test,
@@ -72,24 +74,54 @@ fslogic_get_file_attr_test(Config) ->
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    lists:foreach(fun({SessId, Name, Mode, UID, Path}) ->
+    UserRootGUID1 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId1), undefined),
+    UserRootGUID2 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
+
+    lists:foreach(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
                 name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
-                uid = UID
+                uid = UID, parent_uuid = ParentGuid
             }
         }, ?req(Worker, SessId, #resolve_guid{path = Path}))
     end, [
-        {SessId1, UserId1, 8#1755, 0, <<"/">>},
-        {SessId2, UserId2, 8#1755, 0, <<"/">>},
-        {SessId1, <<"space_name1">>, 8#1775, 0, <<"/space_name1">>},
-        {SessId2, <<"space_name2">>, 8#1775, 0, <<"/space_name2">>},
-        {SessId1, <<"space_name3">>, 8#1775, 0, <<"/space_name3">>},
-        {SessId2, <<"space_name4">>, 8#1775, 0, <<"/space_name4">>}
+        {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined},
+        {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined},
+        {SessId1, <<"space_name1">>, 8#1775, 0, <<"/space_name1">>, UserRootGUID1},
+        {SessId2, <<"space_name2">>, 8#1775, 0, <<"/space_name2">>, UserRootGUID2},
+        {SessId1, <<"space_name3">>, 8#1775, 0, <<"/space_name3">>, UserRootGUID1},
+        {SessId2, <<"space_name4">>, 8#1775, 0, <<"/space_name4">>, UserRootGUID2}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #resolve_guid{path = <<"/space_name1/t1_dir">>}
     )).
+
+
+fslogic_get_child_attr_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+
+    UserRootGUID1 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId1), undefined),
+    UserRootGUID2 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
+
+    lists:foreach(fun({SessId, Name, Mode, UID, ParentGuid, ChildName}) ->
+        ?assertMatch(#fuse_response{status = #status{code = ?OK},
+            fuse_response = #file_attr{
+                name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
+                uid = UID, parent_uuid = ParentGuid
+            }
+        }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
+    end, [
+        {SessId1, <<"space_name1">>, 8#1775, 0, UserRootGUID1, <<"space_name1">>},
+        {SessId2, <<"space_name2">>, 8#1775, 0, UserRootGUID2, <<"space_name2">>},
+        {SessId1, <<"space_name3">>, 8#1775, 0, UserRootGUID1, <<"space_name3">>},
+        {SessId2, <<"space_name4">>, 8#1775, 0, UserRootGUID2, <<"space_name4">>}
+    ]),
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
+        ?file_req(Worker, SessId1, UserRootGUID1, #get_child_attr{name = <<"no such child">>})).
+
 
 fslogic_mkdir_and_rmdir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -402,7 +434,7 @@ simple_rename_test(Config) ->
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
 
     #fuse_response{fuse_response = #file_attr{uuid = RootUUID1}} = RootFileAttr1,
-    #fuse_response{fuse_response = #file_attr{uuid = _RootUUID2}} = RootFileAttr2,
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID2}} = RootFileAttr2,
 
     MakeTree =
         fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
@@ -422,7 +454,7 @@ simple_rename_test(Config) ->
         [<<"t6_dir1">>, <<"t6_dir2">>, <<"t6_dir3">>]),
     [_, ToMove | _] = lists:reverse(UUIDs1),
 
-    RenameResp1 = ?file_req(Worker, SessId1, ToMove, #rename{target_path = <<"/space_name2/t6_dir4">>}),
+    RenameResp1 = ?file_req(Worker, SessId1, ToMove, #rename{target_parent_uuid = RootUUID2, target_name = <<"t6_dir4">>}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RenameResp1),
 
     MovedFileAttr1 = ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2/t6_dir4">>}),

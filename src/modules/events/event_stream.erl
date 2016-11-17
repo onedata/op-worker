@@ -213,6 +213,9 @@ handle_info({'DOWN', MonitorRef, _, _, _}, #state{handler_ref = {_, MonitorRef},
         _ -> {noreply, NewState}
     end;
 
+handle_info({'DOWN', _, _, _, _}, State) ->
+    {noreply, State};
+
 handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
 

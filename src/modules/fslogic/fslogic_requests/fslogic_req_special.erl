@@ -19,7 +19,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([mkdir/4, read_dir/4, link/3, read_link/2]).
+-export([mkdir/4, read_dir/4, link/3, read_link/2, get_child_attr/3]).
 
 %%--------------------------------------------------------------------
 %% API functions
@@ -50,6 +50,41 @@ mkdir(CTX, ParentFile, Name, Mode) ->
             };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetches attributes of directory's child (if exists).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_attr(CTX :: fslogic_worker:ctx(),
+    ParentFile :: fslogic_worker:file(), Name :: file_meta:name()) ->
+    FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
+get_child_attr(CTX, ParentFile, Name) ->
+    UserId = fslogic_context:get_user_id(CTX),
+    UserRootUUID = fslogic_uuid:user_root_dir_uuid(UserId),
+    {ok, ParentFileDoc} = file_meta:get(ParentFile),
+
+    File = case ParentFileDoc#document.key of
+        UserRootUUID ->
+            {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
+            case lists:keyfind(Name, 2, Spaces) of
+                {SpaceId, _} -> {uuid, fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)};
+                false -> false
+            end;
+
+        _ ->
+            case file_meta:resolve_path(ParentFileDoc, <<"/", Name/binary>>) of
+                {ok, {F, _}} -> F;
+                {error, {not_found, _}} -> false
+            end
+    end,
+
+    case File of
+        false -> #fuse_response{status = #status{code = ?ENOENT}};
+        _ -> fslogic_req_generic:get_file_attr(CTX, File)
     end.
 
 
