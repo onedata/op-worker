@@ -167,7 +167,10 @@ update_record(<<"file">>, FileId, [{<<"permissions">>, NewPerms}]) ->
                 gui_error:report_warning(
                     <<"Cannot change permissions, invalid octal value.">>)
         end
-    catch _:_ ->
+    catch Error:Message ->
+        ?error_stacktrace("Cannot change permissions via GUI - ~p:~p", [
+            Error, Message
+        ]),
         gui_error:report_warning(
             <<"Cannot change permissions due to unknown error.">>)
     end;
@@ -177,8 +180,8 @@ update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
         {ok, OldPath} = logical_file_manager:get_file_path(
             SessionId, FileId
         ),
-        DirPath = fslogic_path:dirname(OldPath),
-        NewPath = fslogic_path:join([DirPath, NewName]),
+        DirPathTokens = fslogic_path:split(fslogic_path:dirname(OldPath)),
+        NewPath = fslogic_path:join(DirPathTokens ++ [NewName]),
         case logical_file_manager:mv(SessionId, {guid, FileId}, NewPath) of
             {ok, _} ->
                 ok;
@@ -187,7 +190,10 @@ update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
             {error, ?EACCES} ->
                 gui_error:report_warning(<<"Access denied.">>)
         end
-    catch _:_ ->
+    catch Error:Message ->
+        ?error_stacktrace("Cannot rename file via GUI - ~p:~p", [
+            Error, Message
+        ]),
         gui_error:report_warning(
             <<"Cannot rename file due to unknown error.">>)
     end;
