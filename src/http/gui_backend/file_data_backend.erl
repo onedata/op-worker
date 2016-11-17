@@ -150,31 +150,47 @@ update_record(<<"file-shared">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file-public">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-update_record(<<"file">>, FileId, Data) ->
+update_record(<<"file">>, FileId, [{<<"permissions">>, NewPerms}]) ->
     try
         SessionId = gui_session:get_session_id(),
-        case proplists:get_value(<<"permissions">>, Data, undefined) of
-            undefined ->
-                ok;
-            NewPerms ->
-                Perms = case is_integer(NewPerms) of
-                    true ->
-                        binary_to_integer(integer_to_binary(NewPerms), 8);
-                    false ->
-                        binary_to_integer(NewPerms, 8)
-                end,
-                case Perms >= 0 andalso Perms =< 8#777 of
-                    true ->
-                        ok = logical_file_manager:set_perms(
-                            SessionId, {guid, FileId}, Perms);
-                    false ->
-                        gui_error:report_warning(<<"Cannot change permissions, "
-                        "invalid octal value.">>)
-                end
+        Perms = case is_integer(NewPerms) of
+            true ->
+                binary_to_integer(integer_to_binary(NewPerms), 8);
+            false ->
+                binary_to_integer(NewPerms, 8)
+        end,
+        case Perms >= 0 andalso Perms =< 8#777 of
+            true ->
+                ok = logical_file_manager:set_perms(
+                    SessionId, {guid, FileId}, Perms);
+            false ->
+                gui_error:report_warning(
+                    <<"Cannot change permissions, invalid octal value.">>)
         end
     catch _:_ ->
-        gui_error:report_warning(<<"Cannot change permissions.">>)
-    end.
+        gui_error:report_warning(
+            <<"Cannot change permissions due to unknown error.">>)
+    end;
+update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
+    try
+        SessionId = gui_session:get_session_id(),
+        {ok, OldPath} = logical_file_manager:get_file_path(
+            SessionId, {guid, FileId}
+        ),
+        DirPath = fslogic_path:dirname(OldPath),
+        NewPath = fslogic_path:join([DirPath, NewName]),
+        case logical_file_manager:mv(SessionId, {guid, FileId}, NewPath) of
+            {ok, _} ->
+                ok;
+            {error, ?EPERM} ->
+                gui_error:report_warning(<<"Permission denied.">>)
+        end
+    catch _:_ ->
+        gui_error:report_warning(
+            <<"Cannot rename file due to unknown error.">>)
+    end;
+update_record(<<"file">>, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
