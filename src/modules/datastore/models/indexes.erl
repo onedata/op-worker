@@ -61,7 +61,7 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_index(od_user:id(), view_name() | undefined, view_function(),
-    od_space:id() | undefined, spatial(), index_id()) -> {ok, index_id()} | {error, any()}.
+    od_space:id() | undefined, spatial() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
 add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, IndexId) ->
     EscapedViewFunction = escape_js_function(ViewFunction),
     critical_section:run([?MODEL_NAME, UserId], fun() ->
