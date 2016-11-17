@@ -87,7 +87,7 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, IndexId) ->
                 end;
             {error, {not_found, indexes}} ->
                 add_db_view(IndexId, SpaceId, EscapedViewFunction, Spatial),
-                Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction}, #{}),
+                Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction, spatial => Spatial}, #{}),
                 case create(#document{key = UserId, value = #indexes{value = Map}}) of
                     {ok, _} ->
                         {ok, IndexId};

@@ -116,10 +116,10 @@ list_indexes(Req, State) ->
     IndexList = maps:values(maps:map(fun(K, V) -> V#{id => K} end, Indexes)),
     RawResponse =
         lists:filtermap(fun
-            (#{id := Id, space_id := SID, name := undefined}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
-                {true, #{<<"spaceId">> => SID, <<"indexId">> => Id}};
-            (#{id := Id, space_id := SID, name := Name}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
-                {true, #{<<"spaceId">> => SID, <<"name">> => Name, <<"indexId">> => Id}};
+            (#{id := Id, space_id := SID, spatial := Value, name := undefined}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
+                {true, #{<<"spaceId">> => SID, <<"spatial">> => Value, <<"indexId">> => Id}};
+            (#{id := Id, space_id := SID, spatial := Value, name := Name}) when SpaceId =:= undefined orelse SID =:= SpaceId ->
+                {true, #{<<"spaceId">> => SID, <<"spatial">> => Value, <<"indexId">> => Id, <<"name">> => Name}};
             (_) ->
                 false
         end, IndexList),

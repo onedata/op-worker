@@ -649,10 +649,10 @@ changes_stream_on_multi_provider_test(Config) ->
         end, AllChanges),
 
     ?assert(lists:any(fun(Change) ->
-        <<"file4">> == maps:get(<<"name">>, Change),
-        3 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)),
-        0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)),
-        0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)),
+        <<"file4">> == maps:get(<<"name">>, Change) andalso
+        3 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
+        0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
+        0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"mtime">>, maps:get(<<"changes">>, Change))
     end, DecodedChanges)).
 
@@ -824,13 +824,11 @@ create_geospatial_index(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Function =
         <<"function (meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['loc']) {
-
-                  return meta['onedata_json']['meta']['loc'];
+              if(meta['onedata_json'] && meta['onedata_json']['loc']) {
+                  return meta['onedata_json']['loc'];
               }
               return null;
         }">>,
-    ?assertMatch({ok, 200, _, <<"[]">>}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
 
     % when
     {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
@@ -840,7 +838,7 @@ create_geospatial_index(Config) ->
     % then
     {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
     IndexList = json_utils:decode_map(ListBody),
-    ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id, <<"spatial">> := true}], IndexList),
+    ?assert(lists:member(#{<<"spaceId">> => <<"space1">>, <<"name">> => <<"name">>, <<"indexId">> => Id, <<"spatial">> => true}, IndexList)),
     ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"application/javascript">>}], [])).
 
@@ -849,9 +847,8 @@ query_geospatial_index(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     Function =
         <<"function (meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['loc']) {
-
-                  return meta['onedata_json']['meta']['loc'];
+              if(meta['onedata_json'] && meta['onedata_json']['loc']) {
+                  return meta['onedata_json']['loc'];
               }
               return null;
         }">>,
@@ -865,21 +862,22 @@ query_geospatial_index(Config) ->
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1,10.22]}, [<<"loc">>]),
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid2}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0,0]}, [<<"loc">>]),
     ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid3}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10,5]}, [<<"loc">>]),
-    timer:sleep(timer:seconds(5)), % let the data be stored in db
     {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
         do_request(WorkerP1, <<"index?space_id=space1&name=name&spatial=true">>, post,
             [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
     <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
+    timer:sleep(timer:seconds(5)), % let the data be stored in db
 
     % when
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    Guids = json_utils:decode_map(Body),
+    Guids = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_uuid(X), ObjId end, json_utils:decode_map(Body)),
+
     ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids)),
 
     % when
-    {ok, 200, _, Body2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "spatial=true&stale=false&start_key=[0,0]&end_key=[5.5,10.5]">>, get, [user_1_token_header(Config)], [])),
+    {ok, 200, _, Body2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "spatial=true&stale=false&start_range=[0,0]&end_range=[5.5,10.5]">>, get, [user_1_token_header(Config)], [])),
 
     % then
     Guids2 = json_utils:decode_map(Body2),
