@@ -183,7 +183,9 @@ update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
             {ok, _} ->
                 ok;
             {error, ?EPERM} ->
-                gui_error:report_warning(<<"Permission denied.">>)
+                gui_error:report_warning(<<"Permission denied.">>);
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Access denied.">>)
         end
     catch _:_ ->
         gui_error:report_warning(
@@ -420,20 +422,25 @@ create_file(SessionId, Name, ParentId, Type) ->
         {ok, ParentPath} = logical_file_manager:get_file_path(
             SessionId, ParentId),
         Path = filename:join([ParentPath, Name]),
-        FileId = case Type of
+        Result = case Type of
             <<"file">> ->
-                {ok, FId} = logical_file_manager:create(SessionId, Path),
-                FId;
+                logical_file_manager:create(SessionId, Path);
             <<"dir">> ->
-                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
-                DirId
+                logical_file_manager:mkdir(SessionId, Path)
         end,
-        NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
-        {ok, FileData} = file_record(
-            <<"file">>, SessionId, ParentId, true, NewChildrenCount
-        ),
-        gui_async:push_updated(<<"file">>, FileData),
-        {ok, FileId}
+        case Result of
+            {ok, FileId} ->
+                NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
+                {ok, FileData} = file_record(
+                    <<"file">>, SessionId, ParentId, true, NewChildrenCount
+                ),
+                gui_async:push_updated(<<"file">>, FileData),
+                {ok, FileId};
+            {error, ?EPERM} ->
+                gui_error:report_warning(<<"Permission denied.">>);
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Access denied.">>)
+        end
     catch Error:Message ->
         ?error_stacktrace(
             "Cannot create file via GUI - ~p:~p", [Error, Message]
