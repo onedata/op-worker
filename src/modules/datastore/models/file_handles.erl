@@ -133,7 +133,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(file_handles_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config = ?MODEL_CONFIG(open_file_bucket, [], ?GLOBALLY_CACHED_LEVEL),
     Config#model_config{version = 2}.
 
 %%--------------------------------------------------------------------
