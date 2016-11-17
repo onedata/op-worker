@@ -52,7 +52,7 @@
 before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     Args = [#fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}}, share_id = ShareId} | _]) ->
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
-    % TODO - beter cache "or" in AccessType
+    % TODO - better cache "or" in AccessType
     % TODO - better cache EACCES (it will be always traversed to first EACCES)
     lists:foreach(fun check_rule_and_cache_result/1, ExpandedAccessDefinitions),
     lists:foreach(fun cache_ok_result/1, ExpandedAccessDefinitions),

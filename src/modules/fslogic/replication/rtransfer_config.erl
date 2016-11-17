@@ -57,8 +57,8 @@ rtransfer_opts() ->
                     end, URLs)
             end},
         {open_fun,
-            fun(FileGUID, OpenMode) ->
-                lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenMode)
+            fun(FileGUID, OpenFlag) ->
+                lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenFlag)
             end},
         {read_fun,
             fun(Handle, Offset, MaxSize) ->
@@ -70,7 +70,7 @@ rtransfer_opts() ->
             end},
         {close_fun,
             fun
-                (Handle = #lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = ?ROOT_SESS_ID}, open_mode = write}) ->
+                (Handle = #lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = ?ROOT_SESS_ID}, open_flag = write}) ->
                     lfm_files:fsync(Handle);
                 (_) ->
                     ok

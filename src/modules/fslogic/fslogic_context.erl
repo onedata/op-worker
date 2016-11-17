@@ -43,7 +43,8 @@ new(SessId) ->
     #fslogic_ctx{}.
 set_space_and_share_id(#fslogic_ctx{} = CTX, {guid, FileGUID}) ->
     case fslogic_uuid:unpack_share_guid(FileGUID) of
-        {FileUUID, undefined, ShareId} -> set_space_and_share_id(CTX#fslogic_ctx{share_id = ShareId}, {uuid, FileUUID});
+        {FileUUID, undefined, ShareId} ->
+            set_space_and_share_id(CTX#fslogic_ctx{share_id = ShareId}, {uuid, FileUUID});
         {_, SpaceId, ShareId} ->
             CTX#fslogic_ctx{space_id = SpaceId, share_id = ShareId}
     end;

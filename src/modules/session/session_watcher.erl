@@ -158,7 +158,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
                     [{Pid, NewQueueLen} | AccIn];
                 {message_queue_len, NewQueueLen} ->
                     ?error("Connection ~p on session ~p hang with ~p messages
-                                                        in request queue. Removing.", [Pid, SessId, NewQueueLen]),
+                            in request queue. Removing.", [Pid, SessId, NewQueueLen]),
                     session:remove_connection(SessId, Pid),
                     erlang:exit(Pid, kill),
                     AccIn

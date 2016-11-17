@@ -46,13 +46,13 @@ set_perms(SessId, FileKey, NewPerms) ->
 %%--------------------------------------------------------------------
 %% @doc Checks if current user has given permissions for given file.
 %%--------------------------------------------------------------------
--spec check_perms(session:id(), logical_file_manager:file_key(), helpers:open_mode()) ->
+-spec check_perms(session:id(), logical_file_manager:file_key(), fslogic_worker:open_flag()) ->
     {ok, boolean()} | logical_file_manager:error_reply().
-check_perms(SessId, FileKey, PermType) ->
+check_perms(SessId, FileKey, Flag) ->
     CTX = fslogic_context:new(SessId),
     {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     case lfm_utils:call_fslogic(SessId, provider_request, GUID,
-        #check_perms{flags = PermType}, fun(_) -> ok end)
+        #check_perms{flag = Flag}, fun(_) -> ok end)
     of
         ok ->
             {ok, true};

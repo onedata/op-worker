@@ -164,10 +164,8 @@ create(SessId, Path, Mode) ->
         #resolve_guid{path = ParentPath},
         fun(#file_attr{uuid = ParentGUID}) ->
             lfm_utils:call_fslogic(SessId, file_request, ParentGUID,
-                #get_new_file_location{
-                    name = Name, mode = Mode, create_handle = false
-                },
-                fun(#file_location{uuid = GUID}) -> {ok, GUID} end
+                #make_file{name = Name, mode = Mode},
+                fun(#file_attr{uuid = GUID}) -> {ok, GUID} end
             )
         end).
 
@@ -178,33 +176,41 @@ create(SessId, Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    OpenType :: helpers:open_mode()) ->
+    Flag :: fslogic_worker:open_flag()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
-open(SessId, FileKey, OpenType) ->
+open(SessId, FileKey, Flag) ->
     CTX = fslogic_context:new(SessId),
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    CTX2 = #fslogic_ctx{share_id = ShareId} = fslogic_context:set_space_and_share_id(CTX, {guid, FileGUID}),
+    CTX2 = #fslogic_ctx{share_id = ShareId} =
+        fslogic_context:set_space_and_share_id(CTX, {guid, FileGUID}),
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
-        #get_file_location{flags = OpenType},
-        fun(#file_location{provider_id = ProviderId, uuid = FileGUID,
-            file_id = FileId, storage_id = StorageId} = Location) ->
-            {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
-            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID,
-                FileUUID, StorageId, FileId, ShareId, ProviderId),
+        #get_file_location{},
+        fun(#file_location{provider_id = ProviderId, file_id = FileId,
+            storage_id = StorageId} = Location) ->
+            lfm_utils:call_fslogic(SessId, file_request, FileGUID,
+                #open_file{flag = Flag},
+                fun(#file_opened{handle_id = HandleId}) ->
+                    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
+                    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                    SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID,
+                        FileUUID, StorageId, FileId, ShareId, ProviderId),
 
-            case storage_file_manager:open(SFMHandle0, OpenType) of
-                {ok, NewSFMHandle} ->
-                    {ok, #lfm_handle{file_location = normalize_file_location(Location),
-                        provider_id = ProviderId,
-                        sfm_handles = maps:from_list([{default,
-                            {{StorageId, FileId}, NewSFMHandle}}]),
-                        fslogic_ctx = CTX2, file_guid = FileGUID,
-                        open_mode = OpenType}};
-                {error, Reason} ->
-                    {error, Reason}
-            end
-        end).
+                    case storage_file_manager:open(SFMHandle0, Flag) of
+                        {ok, Handle} ->
+                            {ok, #lfm_handle{
+                                handle_id = HandleId,
+                                file_location = normalize_file_location(Location),
+                                provider_id = ProviderId,
+                                sfm_handles = #{default => {{StorageId, FileId}, Handle}},
+                                fslogic_ctx = CTX2,
+                                file_guid = FileGUID,
+                                open_flag = Flag}};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
+                end)
+        end
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -214,10 +220,9 @@ open(SessId, FileKey, OpenType) ->
 %%--------------------------------------------------------------------
 -spec release(logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
-release(#lfm_handle{file_location = #file_location{handle_id = undefined}}) ->
+release(#lfm_handle{handle_id = undefined}) ->
     ok;
-release(#lfm_handle{file_guid = FileGUID, fslogic_ctx = CTX,
-    file_location = #file_location{handle_id = FSLogicHandle}}) ->
+release(#lfm_handle{handle_id = FSLogicHandle, file_guid = FileGUID, fslogic_ctx = CTX}) ->
     lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX), file_request,
         FileGUID, #release{handle_id = FSLogicHandle},
         fun(_) -> ok end).
@@ -236,8 +241,8 @@ fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_i
     end, maps:values(SFMHandles));
 fsync(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID, sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     lists:foreach(fun({_, SFMHandle}) ->
-            ok = storage_file_manager:fsync(SFMHandle)
-        end, maps:values(SFMHandles)),
+        ok = storage_file_manager:fsync(SFMHandle)
+    end, maps:values(SFMHandles)),
     RecvRef = event:flush(ProviderId, fslogic_uuid:guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
     receive
         {RecvRef, Response} ->
@@ -408,7 +413,7 @@ get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_n_update_handle(Handle :: logical_file_manager:handle(), Key :: term(), SFMHandles :: sfm_handles_map(),
-    OpenType :: helpers:open_mode()) ->
+    OpenType :: helpers:open_flag()) ->
     {{StorageId :: storage:id(), FileId :: file_meta:uuid()},
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: logical_file_manager:handle()} |  no_return().
@@ -473,12 +478,12 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
 -spec write_internal(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
     Buffer :: binary(), GenerateEvents :: boolean()) ->
     {ok, logical_file_manager:handle(), non_neg_integer()} | logical_file_manager:error_reply().
-write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_mode = OpenType,
+write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_flag = Flag,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer, GenerateEvents) ->
     {Key, NewSize} = get_sfm_handle_key(write, Handle, Offset, byte_size(Buffer)),
 
     {{StorageId, FileId}, SFMHandle, NewHandle = #lfm_handle{file_location = #file_location{blocks = CBlocks} = Location}}
-        = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
+        = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, Flag),
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
@@ -536,7 +541,7 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
 -spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
-read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = GUID, open_mode = OpenType,
+read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = GUID, open_flag = Flag,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize,
     GenerateEvents, PrefetchData) ->
 
@@ -546,7 +551,7 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = GUID, open_mode 
         fun(_) -> ok end),
 
     {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
-    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
+    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, Flag),
 
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->

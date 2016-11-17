@@ -48,7 +48,7 @@ models() -> [
     message_id,
     space_quota,
     monitoring_state,
-    open_file,
+    file_handles,
     swift_user,
     sfm_handle,
     dbsync_batches,

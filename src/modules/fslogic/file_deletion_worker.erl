@@ -35,23 +35,22 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case open_file:list() of
+    case file_handles:list() of
         {ok, Docs} ->
-            RemovedFiles = lists:filter(
-                fun(#document{value = #open_file{is_removed = IsRemoved}}) ->
-                    IsRemoved
-                end, Docs),
+            RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
+                Handle#file_handles.is_removed
+            end, Docs),
 
             lists:foreach(fun(#document{key = FileUUID}) ->
-                try remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false)
+                try
+                    remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false)
                 catch
-                    T:M ->
-                        ?error_stacktrace("Cannot remove file - ~p:~p", [T, M])
+                    T:M -> ?error_stacktrace("Cannot remove file - ~p:~p", [T, M])
                 end
             end, RemovedFiles),
 
             lists:foreach(fun(#document{key = FileUUID}) ->
-                ok = open_file:delete(FileUUID)
+                ok = file_handles:delete(FileUUID)
             end, Docs);
         {error, Reason} ->
             ?error_stacktrace("Cannot clean open files descriptors - ~p", [Reason])
@@ -77,7 +76,7 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(FileUUID),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
 
-    case open_file:exists(FileUUID) of
+    case file_handles:exists(FileUUID) of
         true ->
             {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId),
 
@@ -86,7 +85,7 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
             #fuse_response{status = #status{code = ?OK}} = fslogic_rename:rename(
                 CTX, {uuid, FileUUID}, Path),
 
-            case open_file:mark_to_remove(FileUUID) of
+            case file_handles:mark_to_remove(FileUUID) of
                 ok ->
                     fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
                 {error, {not_found, _}} ->
@@ -176,7 +175,7 @@ delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
                                     ok -> ok;
                                     {error, Reason1} ->
                                         {{StorageId, FileId}, {error, Reason1}}
-                                end ;
+                                end;
                             {error, Reason2} ->
                                 {{StorageId, FileId}, {error, Reason2}}
                         end

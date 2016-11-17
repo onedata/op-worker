@@ -578,7 +578,7 @@ remove_metadata(_CTX, {uuid, FileUuid}, rdf) ->
 %% Check given permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_worker:open_flags()) ->
+-spec check_perms(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_worker:open_flag()) ->
     #provider_response{}.
 check_perms(Ctx, Uuid, read) ->
     check_perms_read(Ctx, Uuid);
