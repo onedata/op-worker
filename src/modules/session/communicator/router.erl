@@ -180,10 +180,10 @@ route_and_send_answer(#client_message{message_id = Id,
 route_and_send_answer(#client_message{message_id = Id,
     message_body = #get_protocol_version{}}) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
-route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #get_configuration{}}) ->
     spawn(fun() ->
-        Configuration = fuse_config_manager:get_configuration(),
+        Configuration = fuse_config_manager:get_configuration(effective_session_id(Msg)),
         communicator:send(#server_message{
             message_id = Id, message_body = Configuration
         }, OriginSessId)
