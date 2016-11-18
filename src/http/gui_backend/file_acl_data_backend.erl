@@ -113,10 +113,19 @@ create_record(<<"file-acl">>, Data) ->
 update_record(<<"file-acl">>, FileId, Data) ->
     try
         SessionId = gui_session:get_session_id(),
-        Status = proplists:get_value(<<"status">>, Data),
-        AclJson = proplists:get_value(<<"acl">>, Data),
-        case Status of
-            <<"ok">> ->
+        AclJson = proplists:get_value(<<"acl">>, Data, null),
+        % We do not have to check the status that was sent with the update,
+        % as everything can be deduced from acl field.
+        case AclJson of
+            null ->
+                case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
+                    ok ->
+                        ok;
+                    {error, ?EACCES} ->
+                        gui_error:report_warning(
+                            <<"Cannot remove ACL - access denied.">>)
+                end;
+            _ ->
                 Acl = acl_utils:json_to_acl(AclJson),
                 case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
                     ok ->
@@ -125,14 +134,6 @@ update_record(<<"file-acl">>, FileId, Data) ->
                         gui_error:report_warning(
                             <<"Cannot change ACL - access denied.">>
                         )
-                end;
-            <<"ne">> ->
-                case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
-                    ok ->
-                        ok;
-                    {error, ?EACCES} ->
-                        gui_error:report_warning(
-                            <<"Cannot remove ACL - access denied.">>)
                 end
         end
     catch Error:Message ->
