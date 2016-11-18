@@ -176,7 +176,7 @@ file_acl_record(SessId, FileId) ->
         {error, ?EACCES} ->
             {<<"ea">>, null};
         {ok, AclEntries} ->
-            {<<"ok">>, acl_utils:acl_to_json(FileId, AclEntries)}
+            {<<"ok">>, acl_utils:acl_to_json(AclEntries)}
     end,
     case {Status, Acl} of
         {error, ?ENOENT} ->
