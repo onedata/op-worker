@@ -113,17 +113,30 @@ create_record(<<"file-acl">>, Data) ->
 update_record(<<"file-acl">>, FileId, Data) ->
     try
         SessionId = gui_session:get_session_id(),
-        Acl = acl_utils:json_to_acl(Data),
-        case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
-            ok ->
-                ok;
-            {error, ?EACCES} ->
-                gui_error:report_warning(
-                    <<"Cannot change ACL - access denied.">>
-                )
+        Status = proplists:get_value(<<"status">>, Data),
+        AclJson = proplists:get_value(<<"acl">>, Data),
+        case Status of
+            <<"ok">> ->
+                Acl = acl_utils:json_to_acl(AclJson),
+                case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
+                    ok ->
+                        ok;
+                    {error, ?EACCES} ->
+                        gui_error:report_warning(
+                            <<"Cannot change ACL - access denied.">>
+                        )
+                end;
+            <<"ne">> ->
+                case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
+                    ok ->
+                        ok;
+                    {error, ?EACCES} ->
+                        gui_error:report_warning(
+                            <<"Cannot remove ACL - access denied.">>)
+                end
         end
     catch _:_ ->
-        gui_error:report_warning(<<"Cannot change ACL.">>)
+        gui_error:report_warning(<<"Cannot change ACL due to unknown error.">>)
     end.
 
 
@@ -134,15 +147,8 @@ update_record(<<"file-acl">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file-acl">>, FileId) ->
-    SessionId = gui_session:get_session_id(),
-    case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
-        ok ->
-            ok;
-        {error, ?EACCES} ->
-            gui_error:report_warning(
-                <<"Cannot remove ACL - access denied.">>)
-    end.
+delete_record(<<"file-acl">>, _FileId) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%%===================================================================
