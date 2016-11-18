@@ -152,20 +152,34 @@ delete_record(<<"file-acl">>, FileId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Constructs a file acl record for given FileId.
+%% Constructs a file acl record for given FileId. There are three possible
+%% values of Status:
+%%      # ok - the ACL is set and can be read by the user
+%%      # ne - the ACL is not set and can be read by the user
+%%      # ea - the ACL cannot be read by the user (we don't know if it's set)
 %% @end
 %%--------------------------------------------------------------------
 -spec file_acl_record(SessionId :: session:id(), fslogic_worker:file_guid()) ->
     {ok, proplists:proplist()}.
-file_acl_record(SessionId, FileId) ->
-    case logical_file_manager:get_acl(SessionId, {guid, FileId}) of
+file_acl_record(SessId, FileId) ->
+    {Status, Acl} = case logical_file_manager:get_acl(SessId, {guid, FileId}) of
+        {error, ?ENOENT} ->
+            {error, ?ENOENT};
+        {error, ?ENOATTR} ->
+            {<<"ne">>, null};
+        {error, ?EACCES} ->
+            {<<"ea">>, null};
+        {ok, Acl} ->
+            {<<"ok">>, acl_utils:acl_to_json(FileId, Acl)}
+    end,
+    case {Status, Acl} of
         {error, ?ENOENT} ->
             gui_error:report_error(<<"No such file or directory.">>);
-        {error, ?ENOATTR} ->
-            gui_error:report_error(<<"No ACL defined.">>);
-        {error, ?EACCES} ->
-            gui_error:report_error(<<"Cannot read ACL - access denied.">>);
-        {ok, Acl} ->
-            Res = acl_utils:acl_to_json(FileId, Acl),
-            {ok, Res}
+        _ ->
+            {ok, [
+                {<<"id">>, FileId},
+                {<<"file">>, FileId},
+                {<<"status">>, Status},
+                {<<"acl">>, Acl}
+            ]}
     end.
