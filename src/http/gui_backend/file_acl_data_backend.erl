@@ -135,7 +135,10 @@ update_record(<<"file-acl">>, FileId, Data) ->
                             <<"Cannot remove ACL - access denied.">>)
                 end
         end
-    catch _:_ ->
+    catch Error:Message ->
+        ?error_stacktrace("Cannot set ACL for file ~p - ~p:~p", [
+            FileId, Error, Message
+        ]),
         gui_error:report_warning(<<"Cannot change ACL due to unknown error.">>)
     end.
 
