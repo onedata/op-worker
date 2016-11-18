@@ -113,10 +113,10 @@ create_record(<<"file-acl">>, Data) ->
 update_record(<<"file-acl">>, FileId, Data) ->
     try
         SessionId = gui_session:get_session_id(),
-        AclJson = proplists:get_value(<<"acl">>, Data, []),
-        % Default status is "ok", because "ne" will appear here
+        AclJson = proplists:get_value(<<"acl">>, Data, <<"[]">>),
+        % Default status is "ok", because "ne" will appear
         % when (and only when) ACL should be deleted.
-        Status = proplists:get_value(<<"acl">>, Data, <<"ok">>),
+        Status = proplists:get_value(<<"status">>, Data, <<"ok">>),
         case Status of
             <<"ok">> ->
                 Acl = acl_utils:json_to_acl(AclJson),
@@ -134,7 +134,8 @@ update_record(<<"file-acl">>, FileId, Data) ->
                         ok;
                     {error, ?EACCES} ->
                         gui_error:report_warning(
-                            <<"Cannot remove ACL - access denied.">>)
+                            <<"Cannot remove ACL - access denied.">>
+                        )
                 end
         end
     catch Error:Message ->
