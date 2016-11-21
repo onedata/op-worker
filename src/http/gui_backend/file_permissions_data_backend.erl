@@ -207,8 +207,7 @@ file_permissions_record(SessId, FileId) ->
                 {<<"id">>, FileId},
                 {<<"file">>, FileId},
                 {<<"type">>, Type},
-                {<<"posix_value">>, PosixValue},
-                {<<"acl_value">>, AclValue},
-                {<<"acl">>, AclValue}
+                {<<"posixValue">>, PosixValue},
+                {<<"aclValue">>, AclValue}
             ]}
     end.
