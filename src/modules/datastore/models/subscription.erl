@@ -28,8 +28,7 @@
 -type id() :: integer().
 -type object() :: #file_attr_subscription{} | #file_location_subscription{} |
 #read_subscription{} | #write_subscription{} | #permission_changed_subscription{} |
-#file_removal_subscription{} | #quota_subscription{} | #file_renamed_subscription{} |
-#file_accessed_subscription{}.
+#file_removed_subscription{} | #quota_subscription{} | #file_renamed_subscription{}.
 -type cancellation() :: #subscription_cancellation{}.
 
 %%%===================================================================
@@ -52,7 +51,7 @@ generate_id() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1. 
+%% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
@@ -62,7 +61,7 @@ save(Document) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2. 
+%% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
@@ -72,7 +71,7 @@ update(Key, Diff) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1. 
+%% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
@@ -109,7 +108,7 @@ delete(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback exists/1. 
+%% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
@@ -118,7 +117,7 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback model_init/0. 
+%% {@link model_behaviour} callback model_init/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
@@ -127,7 +126,7 @@ model_init() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback 'after'/5. 
+%% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
 -spec 'after'(ModelName :: model_behaviour:model_type(),
@@ -139,7 +138,7 @@ model_init() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback before/4. 
+%% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
 -spec before(ModelName :: model_behaviour:model_type(),
@@ -148,4 +147,3 @@ model_init() ->
     ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-

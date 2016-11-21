@@ -28,9 +28,9 @@
 -type event() :: #event{}.
 -type key() :: term().
 -type object() :: #read_event{} | #update_event{} | #write_event{}
-| #permission_changed_event{} | #file_removal_event{} | #quota_exeeded_event{}
-| #file_renamed_event{} | #file_accessed_event{} | #storage_used_updated{}
-| #od_space_updated{} | #file_operations_statistics{} | #rtransfer_statistics{}.
+| #permission_changed_event{} | #file_removed_event{} | #quota_exeeded_event{}
+| #file_renamed_event{} | #storage_used_updated{} | #od_space_updated{}
+| #file_operations_statistics{} | #rtransfer_statistics{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
@@ -203,14 +203,12 @@ set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = E
     Evt#event{key = Uuid, stream_key = <<"file_location.", Uuid/binary>>};
 set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid, stream_key = <<"permission_changed.", Uuid/binary>>};
-set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid, stream_key = <<"file_removal.", Uuid/binary>>};
+set_key(#event{object = #file_removed_event{file_uuid = Uuid}} = Evt) ->
+    Evt#event{key = Uuid, stream_key = <<"file_removed.", Uuid/binary>>};
 set_key(#event{object = #quota_exeeded_event{}} = Evt) ->
     Evt#event{key = <<"quota_exeeded">>};
 set_key(#event{object = #file_renamed_event{top_entry = #file_renamed_entry{old_uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid, stream_key = <<"file_renamed.", Uuid/binary>>};
-set_key(#event{object = #file_accessed_event{file_uuid = Uuid}} = Evt) ->
-    Evt#event{key = Uuid};
 set_key(#event{object = #storage_used_updated{space_id = SpaceId, user_id = UserId}} = Evt) ->
     Evt#event{key = {SpaceId, UserId, <<"storage_used_updated">>}};
 set_key(#event{object = #od_space_updated{space_id = SpaceId}} = Evt) ->
@@ -239,14 +237,12 @@ set_stream_id(#event{object = #update_event{object = #file_location{}}} = Evt) -
     Evt#event{stream_id = file_location_event_stream};
 set_stream_id(#event{object = #permission_changed_event{}} = Evt) ->
     Evt#event{stream_id = permission_changed_event_stream};
-set_stream_id(#event{object = #file_removal_event{}} = Evt) ->
-    Evt#event{stream_id = file_removal_event_stream};
+set_stream_id(#event{object = #file_removed_event{}} = Evt) ->
+    Evt#event{stream_id = file_removed_event_stream};
 set_stream_id(#event{object = #quota_exeeded_event{}} = Evt) ->
     Evt#event{stream_id = quota_exceeded_event_stream};
 set_stream_id(#event{object = #file_renamed_event{}} = Evt) ->
     Evt#event{stream_id = file_renamed_event_stream};
-set_stream_id(#event{object = #file_accessed_event{}} = Evt) ->
-    Evt#event{stream_id = file_accessed_event_stream};
 set_stream_id(#event{object = #storage_used_updated{}} = Evt) ->
     Evt#event{stream_id = monitoring_event_stream};
 set_stream_id(#event{object = #od_space_updated{}} = Evt) ->

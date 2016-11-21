@@ -120,7 +120,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes file and file meta. If parameter Silent is true, file_removal_event
+%% Removes file and file meta. If parameter Silent is true, file_removed_event
 %% will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
@@ -147,7 +147,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
     case Silent of
         true -> ok;
         false ->
-            fslogic_event:emit_file_removal(
+            fslogic_event:emit_file_removed(
                 fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), [SessId])
     end,
     ok.
