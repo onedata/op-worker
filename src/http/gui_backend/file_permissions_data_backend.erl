@@ -107,7 +107,7 @@ create_record(<<"file-permission">>, _Data) ->
 update_record(<<"file-permission">>, FileId, Data) ->
     try
         SessId = gui_session:get_session_id(),
-        Type = proplists:get_value(<<"status">>, Data),
+        Type = proplists:get_value(<<"type">>, Data),
         case Type of
             <<"acl">> ->
                 AclJson = proplists:get_value(<<"aclValue">>, Data, <<"[]">>),
