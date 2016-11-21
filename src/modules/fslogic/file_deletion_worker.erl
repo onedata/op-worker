@@ -80,17 +80,13 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
         true ->
             {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId),
 
-            NewName = <<".onedata_hidden", FileUUID/binary>>,
+            NewName = <<?HIDDEN_FILE_PREFIX, FileUUID/binary>>,
             Path = <<ParentPath/binary, ?DIRECTORY_SEPARATOR, NewName/binary>>,
             #fuse_response{status = #status{code = ?OK}} = fslogic_rename:rename(
                 CTX, {uuid, FileUUID}, Path),
 
-            case file_handles:mark_to_remove(FileUUID) of
-                ok ->
-                    fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
-                {error, {not_found, _}} ->
-                    remove_file_and_file_meta(FileUUID, SessId, Silent)
-            end;
+            ok = file_handles:mark_to_remove(FileUUID),
+            fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
         false ->
             remove_file_and_file_meta(FileUUID, SessId, Silent)
     end,
