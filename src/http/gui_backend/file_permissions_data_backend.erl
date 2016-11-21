@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the file-acl model used in Ember application.
+%%% the file-permission model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_acl_data_backend).
+-module(file_permissions_data_backend).
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
@@ -58,9 +58,9 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file-acl">>, FileId) ->
+find(<<"file-permission">>, FileId) ->
     SessionId = gui_session:get_session_id(),
-    file_acl_record(SessionId, FileId).
+    file_permissions_record(SessionId, FileId).
 
 
 %%--------------------------------------------------------------------
@@ -70,7 +70,7 @@ find(<<"file-acl">>, FileId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"file-acl">>) ->
+find_all(<<"file-permission">>) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -81,7 +81,7 @@ find_all(<<"file-acl">>) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"file-acl">>, _Data) ->
+find_query(<<"file-permission">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -92,14 +92,8 @@ find_query(<<"file-acl">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"file-acl">>, Data) ->
-    Id = proplists:get_value(<<"file">>, Data),
-    case update_record(<<"file-acl">>, Id, Data) of
-        ok ->
-            file_acl_record(?ROOT_SESS_ID, Id);
-        Error ->
-            Error
-    end.
+create_record(<<"file-permission">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -110,17 +104,15 @@ create_record(<<"file-acl">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"file-acl">>, FileId, Data) ->
+update_record(<<"file-permission">>, FileId, Data) ->
     try
-        SessionId = gui_session:get_session_id(),
-        AclJson = proplists:get_value(<<"acl">>, Data, <<"[]">>),
-        % Default status is "ok", because "ne" will appear
-        % when (and only when) ACL should be deleted.
-        Status = proplists:get_value(<<"status">>, Data, <<"ok">>),
-        case Status of
-            <<"ok">> ->
+        SessId = gui_session:get_session_id(),
+        Type = proplists:get_value(<<"status">>, Data),
+        case Type of
+            <<"acl">> ->
+                AclJson = proplists:get_value(<<"acl_value">>, Data, <<"[]">>),
                 Acl = acl_utils:json_to_acl(AclJson),
-                case logical_file_manager:set_acl(SessionId, {guid, FileId}, Acl) of
+                case logical_file_manager:set_acl(SessId, {guid, FileId}, Acl) of
                     ok ->
                         ok;
                     {error, ?EACCES} ->
@@ -128,14 +120,37 @@ update_record(<<"file-acl">>, FileId, Data) ->
                             <<"Cannot change ACL - access denied.">>
                         )
                 end;
-            <<"ne">> ->
-                case logical_file_manager:remove_acl(SessionId, {guid, FileId}) of
-                    ok ->
-                        ok;
-                    {error, ?EACCES} ->
-                        gui_error:report_warning(
-                            <<"Cannot remove ACL - access denied.">>
-                        )
+            <<"posix">> ->
+                PosixValue = case proplists:get_value(<<"posix_value">>, Data) of
+                    undefined ->
+                        {ok, #file_attr{
+                            mode = PermissionsAttr
+                        }} = logical_file_manager:stat(SessId, {guid, FileId}),
+                        integer_to_binary((PermissionsAttr rem 1000), 8);
+                    Val ->
+                        case is_integer(Val) of
+                            true ->
+                                binary_to_integer(integer_to_binary(Val), 8);
+                            false ->
+                                binary_to_integer(Val, 8)
+                        end
+                end,
+                case PosixValue >= 0 andalso PosixValue =< 8#777 of
+                    true ->
+                        case logical_file_manager:set_perms(
+                            SessId, {guid, FileId}, PosixValue) of
+                            {error, ?EACCES} ->
+                                gui_error:report_warning(<<"Cannot set "
+                                "permissions - access denied.">>);
+                            {error, ?EPERM} ->
+                                gui_error:report_warning(<<"Cannot set "
+                                "permissions - access denied.">>);
+                            ok ->
+                                ok
+                        end;
+                    false ->
+                        gui_error:report_warning(<<"Cannot change permissions, "
+                        "invalid octal value.">>)
                 end
         end
     catch Error:Message ->
@@ -153,7 +168,7 @@ update_record(<<"file-acl">>, FileId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"file-acl">>, _FileId) ->
+delete_record(<<"file-permission">>, _FileId) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -171,27 +186,29 @@ delete_record(<<"file-acl">>, _FileId) ->
 %%      # ea - the ACL cannot be read by the user (we don't know if it's set)
 %% @end
 %%--------------------------------------------------------------------
--spec file_acl_record(SessionId :: session:id(), fslogic_worker:file_guid()) ->
-    {ok, proplists:proplist()}.
-file_acl_record(SessId, FileId) ->
-    {Status, Acl} = case logical_file_manager:get_acl(SessId, {guid, FileId}) of
-        {error, ?ENOENT} ->
-            {error, ?ENOENT};
-        {error, ?ENOATTR} ->
-            {<<"ne">>, null};
-        {error, ?EACCES} ->
-            {<<"ea">>, null};
-        {ok, AclEntries} ->
-            {<<"ok">>, acl_utils:acl_to_json(AclEntries)}
-    end,
-    case {Status, Acl} of
+-spec file_permissions_record(SessionId :: session:id(),
+    fslogic_worker:file_guid()) -> {ok, proplists:proplist()}.
+file_permissions_record(SessId, FileId) ->
+    case logical_file_manager:stat(SessId, {guid, FileId}) of
         {error, ?ENOENT} ->
             gui_error:report_error(<<"No such file or directory.">>);
-        _ ->
+        {ok, #file_attr{mode = PermissionsAttr}} ->
+            PosixValue = integer_to_binary((PermissionsAttr rem 1000), 8),
+            GetAclResult = logical_file_manager:get_acl(SessId, {guid, FileId}),
+            {Type, AclValue} = case GetAclResult of
+                {error, ?ENOATTR} ->
+                    {<<"posix">>, null};
+                {error, ?EACCES} ->
+                    {<<"eaccess">>, null};
+                {ok, AclEntries} ->
+                    {<<"acl">>, acl_utils:acl_to_json(AclEntries)}
+            end,
             {ok, [
                 {<<"id">>, FileId},
                 {<<"file">>, FileId},
-                {<<"status">>, Status},
-                {<<"acl">>, Acl}
+                {<<"type">>, Type},
+                {<<"posix_value">>, PosixValue},
+                {<<"acl_value">>, AclValue},
+                {<<"acl">>, AclValue}
             ]}
     end.

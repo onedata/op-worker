@@ -150,30 +150,6 @@ update_record(<<"file-shared">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file-public">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-update_record(<<"file">>, FileId, [{<<"permissions">>, NewPerms}]) ->
-    try
-        SessionId = gui_session:get_session_id(),
-        Perms = case is_integer(NewPerms) of
-            true ->
-                binary_to_integer(integer_to_binary(NewPerms), 8);
-            false ->
-                binary_to_integer(NewPerms, 8)
-        end,
-        case Perms >= 0 andalso Perms =< 8#777 of
-            true ->
-                ok = logical_file_manager:set_perms(
-                    SessionId, {guid, FileId}, Perms);
-            false ->
-                gui_error:report_warning(
-                    <<"Cannot change permissions, invalid octal value.">>)
-        end
-    catch Error:Message ->
-        ?error_stacktrace("Cannot change permissions via GUI - ~p:~p", [
-            Error, Message
-        ]),
-        gui_error:report_warning(
-            <<"Cannot change permissions due to unknown error.">>)
-    end;
 update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
     try
         SessionId = gui_session:get_session_id(),
@@ -275,13 +251,12 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
         {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
         {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
-        {<<"fileAcl">>, null},
+        {<<"filePermission">>, null},
         {<<"share">>, null},
         {<<"provider">>, null},
         {<<"fileProperty">>, null}
@@ -298,13 +273,12 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
         {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
         {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
-        {<<"fileAcl">>, null},
+        {<<"filePermission">>, null},
         {<<"share">>, null},
         {<<"provider">>, null},
         {<<"fileProperty">>, null}
@@ -328,7 +302,6 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr,
                 shares = Shares,
                 provider_id = ProviderId
             } = FileAttr,
@@ -354,7 +327,6 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                     end
             end,
 
-            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
 
             {Type, Size, ChildrenIds, TotalChildrenCount} = case TypeAttr of
                 ?DIRECTORY_TYPE ->
@@ -406,13 +378,12 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 {<<"id">>, ResId},
                 {<<"name">>, Name},
                 {<<"type">>, Type},
-                {<<"permissions">>, Permissions},
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
                 {<<"totalChildrenCount">>, TotalChildrenCount},
                 {<<"parent">>, Parent},
                 {<<"children">>, Children},
-                {<<"fileAcl">>, FileAcl},
+                {<<"filePermission">>, FileAcl},
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
                 {<<"fileProperty">>, Metadata}

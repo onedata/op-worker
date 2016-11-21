@@ -85,7 +85,7 @@ data_backend(true, <<"file">>) -> file_data_backend;
 data_backend(true, <<"file-shared">>) -> file_data_backend;
 data_backend(_, <<"file-public">>) -> file_data_backend;
 
-data_backend(true, <<"file-acl">>) -> file_acl_data_backend;
+data_backend(true, <<"file-permission">>) -> file_permissions_data_backend;
 
 data_backend(true, <<"file-distribution">>) -> file_distribution_data_backend;
 
