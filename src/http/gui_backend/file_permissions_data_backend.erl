@@ -110,7 +110,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
         Type = proplists:get_value(<<"status">>, Data),
         case Type of
             <<"acl">> ->
-                AclJson = proplists:get_value(<<"acl_value">>, Data, <<"[]">>),
+                AclJson = proplists:get_value(<<"aclValue">>, Data, <<"[]">>),
                 Acl = acl_utils:json_to_acl(AclJson),
                 case logical_file_manager:set_acl(SessId, {guid, FileId}, Acl) of
                     ok ->
@@ -121,7 +121,7 @@ update_record(<<"file-permission">>, FileId, Data) ->
                         )
                 end;
             <<"posix">> ->
-                PosixValue = case proplists:get_value(<<"posix_value">>, Data) of
+                PosixValue = case proplists:get_value(<<"posixValue">>, Data) of
                     undefined ->
                         {ok, #file_attr{
                             mode = PermissionsAttr
