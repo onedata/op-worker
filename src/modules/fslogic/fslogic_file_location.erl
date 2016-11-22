@@ -19,7 +19,7 @@
 %% API
 -export([add_change/2, get_changes/2, create_storage_file_if_not_exists/2,
     create_storage_file/4, get_merged_changes/2, set_last_rename/3,
-    rename_or_delete/2, chown_file/3]).
+    rename_or_delete/2, chown_file/3, prepare_location_for_client/2]).
 
 -define(MAX_CHANGES, 20).
 
@@ -257,6 +257,53 @@ chown_file(FileUuid, UserId, SpaceId) ->
                     AddAns
             end
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Prepare location that can be understood by client.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_location_for_client(file_meta:entry(), fslogic_blocks:block() | undefined) -> #file_location{}.
+prepare_location_for_client(FileEntry, ReqRange) ->
+    % get locations
+    {ok, #document{} = File} = file_meta:get(FileEntry),
+    {ok, LocationIds} = file_meta:get_locations(File),
+    Locations = lists:map(
+        fun(LocId) ->
+            {ok, Location} = file_location:get(LocId),
+            Location
+        end, LocationIds),
+    [FileLocationDoc = #document{value = FileLocation = #file_location{blocks = Blocks, uuid = FileUuid, size = Size}}] =
+        lists:filter(
+            fun(#document{value = #file_location{provider_id = ProviderId}}) ->
+                ProviderId =:= oneprovider:get_provider_id()
+            end, Locations),
+
+    % find gaps
+    AllRanges = lists:foldl(
+        fun(#document{value = #file_location{blocks = Blocks}}, Acc) ->
+            fslogic_blocks:merge(Acc, Blocks)
+        end, [], Locations),
+    RequestedRange = utils:ensure_defined(ReqRange, undefined, #file_block{offset = 0, size = Size}),
+    ExtendedRequestedRange = case RequestedRange of
+        #file_block{offset = O, size = S} when O + S < Size ->
+            RequestedRange#file_block{size = Size - O};
+        _ -> RequestedRange
+    end,
+    FullFile = replica_updater:fill_blocks_with_storage_info(
+        [ExtendedRequestedRange], FileLocationDoc),
+    Gaps = fslogic_blocks:consolidate(
+        fslogic_blocks:invalidate(FullFile, AllRanges)
+    ),
+    BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
+
+    % fill gaps, fill storage info, transform uid and emit
+    file_location:ensure_blocks_not_empty(
+        FileLocation#file_location{
+            uuid = fslogic_uuid:uuid_to_guid(FileUuid),
+            blocks = BlocksWithFilledGaps
+        }).
 
 %%%===================================================================
 %%% Internal functions

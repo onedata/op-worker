@@ -234,12 +234,14 @@ synchronize_block(CTX, {uuid, FileUUID}, Block, Prefetch)  ->
 -spec synchronize_block_and_compute_checksum(fslogic_worker:ctx(),
     {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
 synchronize_block_and_compute_checksum(#fslogic_ctx{session_id = SessId}, {uuid, FileUUID},
-    #file_block{offset = Offset, size = Size})  ->
+    Range = #file_block{offset = Offset, size = Size})  ->
     {ok, Handle} = lfm_files:open(SessId, {guid, fslogic_uuid:uuid_to_guid(FileUUID)}, read),
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
     Checksum = crypto:hash(md4, Data),
+    LocationToSend =
+        fslogic_file_location:prepare_location_for_client({uuid, FileUUID}, Range),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #checksum{value = Checksum}}.
+        fuse_response = #sync_response{checksum = Checksum, file_location = LocationToSend}}.
 
 
 %%--------------------------------------------------------------------

@@ -73,8 +73,8 @@ translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #file_block{offset = Off, size = S, file_id = FID, storage_id = SID};
-translate_from_protobuf(#'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
-    #file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
+translate_from_protobuf(#'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName}) ->
+    #file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName};
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
     #dir{uuid = UUID};
 
@@ -232,6 +232,8 @@ translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid, file_request 
     #file_request{context_guid = ContextGuid, file_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'GetFileAttr'{}) ->
     #get_file_attr{};
+translate_from_protobuf(#'GetChildAttr'{name = Name}) ->
+    #get_child_attr{name = Name};
 translate_from_protobuf(#'GetFileChildren'{offset = Offset, size = Size}) ->
     #get_file_children{offset = Offset, size = Size};
 translate_from_protobuf(#'CreateDir'{name = Name, mode = Mode}) ->
@@ -243,8 +245,8 @@ translate_from_protobuf(#'UpdateTimes'{atime = ATime, mtime = MTime,
     #update_times{atime = ATime, mtime = MTime, ctime = CTime};
 translate_from_protobuf(#'ChangeMode'{mode = Mode}) ->
     #change_mode{mode = Mode};
-translate_from_protobuf(#'Rename'{target_path = TargetPath}) ->
-    #rename{target_path = TargetPath};
+translate_from_protobuf(#'Rename'{target_parent_uuid = TargetParentUuid, target_name = TargetName}) ->
+    #rename{target_parent_uuid = TargetParentUuid, target_name = TargetName};
 translate_from_protobuf(#'GetNewFileLocation'{name = Name, mode = Mode,
     flags = Flags, create_handle = CreateHandle}) ->
     #get_new_file_location{name = Name, mode = Mode,
@@ -278,6 +280,7 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         uuid = FileAttr#'FileAttr'.uuid,
         name = FileAttr#'FileAttr'.name,
         mode = FileAttr#'FileAttr'.mode,
+        parent_uuid = FileAttr#'FileAttr'.parent_uuid,
         uid = FileAttr#'FileAttr'.uid,
         gid = FileAttr#'FileAttr'.gid,
         atime = FileAttr#'FileAttr'.atime,
@@ -317,8 +320,8 @@ translate_from_protobuf(#'HelperArg'{key = Key, value = Value}) ->
     #helper_arg{key = Key, value = Value};
 translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
     {Key, Value};
-translate_from_protobuf(#'Checksum'{value = Value}) ->
-    #checksum{value = Value};
+translate_from_protobuf(#'SyncResponse'{checksum = Checksum, file_location = FileLocation}) ->
+    #sync_response{checksum = Checksum, file_location = translate_from_protobuf(FileLocation)};
 translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = ChildEntries}) ->
     #file_renamed{new_uuid = NewUuid,
         child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]};
@@ -488,8 +491,8 @@ translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
-translate_to_protobuf(#file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath}) ->
-    #'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_path = NewPath};
+translate_to_protobuf(#file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName}) ->
+    #'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName};
 translate_to_protobuf(#dir{uuid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 
@@ -599,8 +602,9 @@ translate_to_protobuf(#pong{data = Data}) ->
     {pong, #'Pong'{data = Data}};
 translate_to_protobuf(#protocol_version{major = Major, minor = Minor}) ->
     {protocol_version, #'ProtocolVersion'{major = Major, minor = Minor}};
-translate_to_protobuf(#configuration{subscriptions = Subs, disabled_spaces = Spaces}) ->
+translate_to_protobuf(#configuration{root_uuid = RootUuid, subscriptions = Subs, disabled_spaces = Spaces}) ->
     {configuration, #'Configuration'{
+        root_uuid = RootUuid,
         subscriptions = lists:map(
             fun(Sub) ->
                 {_, Record} = translate_to_protobuf(Sub),
@@ -638,6 +642,8 @@ translate_to_protobuf(#file_request{context_guid = ContextGuid, file_request = R
     {file_request, #'FileRequest'{context_guid = ContextGuid, file_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_file_attr{}) ->
     {get_file_attr, #'GetFileAttr'{}};
+translate_to_protobuf(#get_child_attr{name = Name}) ->
+    {get_child_attr, #'GetChildAttr'{name = Name}};
 translate_to_protobuf(#get_file_children{offset = Offset, size = Size}) ->
     {get_file_children, #'GetFileChildren'{offset = Offset, size = Size}};
 translate_to_protobuf(#create_dir{name = Name, mode = Mode}) ->
@@ -648,8 +654,8 @@ translate_to_protobuf(#update_times{atime = ATime, mtime = MTime, ctime = CTime}
     {update_times, #'UpdateTimes'{atime = ATime, mtime = MTime, ctime = CTime}};
 translate_to_protobuf(#change_mode{mode = Mode}) ->
     {change_mode, #'ChangeMode'{mode = Mode}};
-translate_to_protobuf(#rename{target_path = TargetPath}) ->
-    {rename, #'Rename'{target_path = TargetPath}};
+translate_to_protobuf(#rename{target_parent_uuid = TargetParentUuid, target_name = TargetName}) ->
+    {rename, #'Rename'{target_parent_uuid = TargetParentUuid, target_name = TargetName}};
 translate_to_protobuf(#get_new_file_location{name = Name, mode = Mode,
     flags = Flags, create_handle = CreateHandle}) ->
     {get_new_file_location, #'GetNewFileLocation'{name = Name, mode = Mode,
@@ -681,6 +687,7 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         uuid = FileAttr#file_attr.uuid,
         name = FileAttr#file_attr.name,
         mode = FileAttr#file_attr.mode,
+        parent_uuid = FileAttr#file_attr.parent_uuid,
         uid = FileAttr#file_attr.uid,
         gid = FileAttr#file_attr.gid,
         atime = FileAttr#file_attr.atime,
@@ -720,8 +727,9 @@ translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     {_, Record} = translate_to_protobuf(HelperParams),
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
         space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
-translate_to_protobuf(#checksum{value = Value}) ->
-    {checksum, #'Checksum'{value = Value}};
+translate_to_protobuf(#sync_response{checksum = Value, file_location = FileLocation}) ->
+    {_, ProtoFileLocation} = translate_to_protobuf(FileLocation),
+    {sync_response, #'SyncResponse'{checksum = Value, file_location = ProtoFileLocation}};
 translate_to_protobuf(#file_renamed{new_uuid = NewUuid, child_entries = ChildEntries}) ->
     {file_renamed, #'FileRenamed'{new_uuid = NewUuid,
         child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};

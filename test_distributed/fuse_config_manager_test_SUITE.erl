@@ -51,8 +51,13 @@ all() ->
 get_configuration_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    ?assertMatch(#configuration{subscriptions = [_ | _]},
-        ?fcm_req(Worker, get_configuration, [])).
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    UserId = ?config({user_id, <<"user1">>}, Config),
+
+    UserRootGuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId), undefined),
+
+    ?assertMatch(#configuration{subscriptions = [_ | _], root_uuid = UserRootGuid},
+        ?fcm_req(Worker, get_configuration, [SessId])).
 
 create_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -145,4 +150,3 @@ end_per_testcase(Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config).
-
