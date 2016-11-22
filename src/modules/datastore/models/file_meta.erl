@@ -290,8 +290,10 @@ delete(Key) ->
     ?run(begin
         case get(Key) of
             {ok, #document{} = Document} ->
+                ?info("qqqqqqqq Doc ~p", [{Key, Document}]),
                 delete(Document);
             {error, {not_found, _}} ->
+                ?info("qqqqqqqq Doc ~p", [{Key}]),
                 ok
         end
     end).
