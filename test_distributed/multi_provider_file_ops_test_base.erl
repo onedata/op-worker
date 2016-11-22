@@ -718,8 +718,6 @@ get_links(FileUUID) ->
         AccFun = fun(LN, LV, Acc) ->
             maps:put(LN, LV, Acc)
         end,
-        {ok, Scope1} = file_meta:get_scope({uuid, FileUUID}),
-        file_meta:set_link_context(Scope1),
         {ok, Links} = datastore:foreach_link(?GLOBALLY_CACHED_LEVEL, FileUUID, file_meta, AccFun, #{}),
         Links
     catch
@@ -762,13 +760,11 @@ create_doc(Doc, _ParentDoc, _LocId, _Path) ->
 
 set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     FDoc = Doc#document.value,
-    file_meta:set_link_context(ParentDoc),
     MC = file_meta:model_init(),
     LSL = MC#model_config.link_store_level,
     ok = datastore:add_links(LSL, ParentDoc, {FDoc#file_meta.name, Doc}).
 
 set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
-    file_meta:set_link_context(ParentDoc),
     MC = file_meta:model_init(),
     LSL = MC#model_config.link_store_level,
     ok = datastore:add_links(LSL, Doc, {parent, ParentDoc}).
@@ -809,7 +805,6 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
 set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
     FileUuid = Doc#document.key,
-    file_meta:set_link_context(ParentDoc),
     MC = file_meta:model_init(),
     LSL = MC#model_config.link_store_level,
     ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),

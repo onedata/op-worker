@@ -184,7 +184,6 @@ expand_traverse_ancestors_check(SubjectDoc, ParentDoc,
                 []
         end,
 
-    file_meta:set_link_context(NewSubjDoc),
     {AncestorsCheck, CacheUsed} = expand_ancestors_check(Uuid, [], UserId, UserDoc, ShareId, AclMap),
     case {ShareId, CacheUsed} of
         {undefined, _} ->

@@ -553,7 +553,6 @@ apply_changes(SpaceId,
         MainDocKey = case Value of
             #links{} ->
                 MDK = Value#links.doc_key,
-                file_meta:set_link_context_for_space(SpaceId),
 
                 OldLinksMap = case forign_links_get(ModelConfig, Key) of
                     {ok, #document{value = OldLinks0}} ->
