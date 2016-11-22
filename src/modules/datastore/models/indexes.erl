@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([add_index/5, get_index/2, query_view/2, get_all_indexes/1, change_index_function/3]).
@@ -153,7 +154,15 @@ get_all_indexes(UserId) ->
 -spec query_view(index_id(), list()) -> {ok, [file_meta:uuid()]}.
 query_view(Id, Options) ->
     {ok, FileUuids} = couchdb_datastore_driver:query_view(custom_metadata, Id, Options),
-    {ok, lists:map(fun(Uuid) -> fslogic_uuid:uuid_to_guid(Uuid) end, FileUuids)}.
+    {ok, lists:filtermap(fun(Uuid) ->
+        try
+            {true, fslogic_uuid:uuid_to_guid(Uuid)}
+        catch
+            _:_  ->
+                ?error("Cannot resolve uuid of file ~p in index ~p",[Uuid, Id]),
+                false
+        end
+    end, FileUuids)}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
