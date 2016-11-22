@@ -21,7 +21,7 @@ usage() {
 cat <<EOF
 Usage: $SCRIPT «command»
 where «command» is one of the following:
-    { help | start | stop | restart | ping | console | attach
+    { help | start | stop | restart | ping | console | attach | upgrade
       attach-direct | ertspath | chkconfig | escript | version | getpid
       top [-interval N] [-sort { reductions | memory | msg_q }] [-lines N] } |
       config { generate | effective | describe VARIABLE } [-l debug]
@@ -65,6 +65,10 @@ This is the primary script for controlling the $SCRIPT node.
         Starts the $SCRIPT node in the foreground, giving access to the Erlang
         shell and runtime messages. Prints "Node is already running - use
         '$SCRIPT attach' instead" when the node is running in the background.
+
+    upgrade
+        Starts $SCRIPT upgrade. This process does not require $SCRIPT node to be active.
+        Current status of the upgrade process will be printed to standard output of current terminal.    
 
  DIAGNOSTIC COMMANDS
     ping
@@ -353,6 +357,27 @@ case "$1" in
         # Start the VM
         exec $CMD
         ;;
+
+    upgrade)
+        # Bootstrap daemon command (check perms & drop to $RUNNER_USER)
+        bootstrapd $@
+
+        check_config
+        ES=$?
+        if [ "$ES" -ne 0 ]; then
+            exit $ES
+        fi
+
+        # Warn the user if ulimit -n is less than the defined threshold
+        check_ulimit
+
+        # Make sure log directory exists
+        mkdir -p $RUNNER_LOG_DIR
+
+        exec $ERTS_PATH/erl -hidden $CONFIG_ARGS -pa $RUNNER_PATCH_DIR -name updater \
+            -s datastore initialize_minimal_env -s datastore_versions shell_upgrade -s erlang halt
+
+        ;;    
 
     top)
         # Make sure the local node IS running
