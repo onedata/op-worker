@@ -34,12 +34,11 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
         space_id = SpaceId,
         size_difference = SizeDifference
     },
-    event:emit(#event{object = EventBase#storage_used_updated{user_id = undefined}}),
+    emit(#event{object = EventBase#storage_used_updated{user_id = undefined}}),
     case UserId of
         ?ROOT_USER_ID -> ok;
         ?GUEST_USER_ID -> ok; % todo store guest statistics
-        _ ->
-            event:emit(#event{object = EventBase#storage_used_updated{user_id = UserId}})
+        _ -> emit(#event{object = EventBase#storage_used_updated{user_id = UserId}})
     end.
 
 
@@ -50,7 +49,7 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
 %%--------------------------------------------------------------------
 -spec emit_od_space_updated(datastore:id()) -> ok | {error, Reason :: term()}.
 emit_od_space_updated(SpaceId) ->
-    event:emit(#event{object = #od_space_updated{space_id = SpaceId}}).
+    emit(#event{object = #od_space_updated{space_id = SpaceId}}).
 
 
 %%--------------------------------------------------------------------
@@ -74,8 +73,8 @@ emit_file_operations_statistics(SpaceId, UserId, DataAccessRead, DataAccessWrite
                 block_access_read = BlockAccessRead,
                 block_access_write = BlockAccessWrite
             },
-            event:emit(#event{object = EventBase#file_operations_statistics{user_id = undefined}}),
-            event:emit(#event{object = EventBase#file_operations_statistics{user_id = UserId}})
+            emit(#event{object = EventBase#file_operations_statistics{user_id = undefined}}),
+            emit(#event{object = EventBase#file_operations_statistics{user_id = UserId}})
     end.
 
 
@@ -112,12 +111,12 @@ emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
         space_id = SpaceId,
         transfer_in = TransferIn
     },
-    event:emit(#event{object = EventBase#rtransfer_statistics{user_id = undefined}}),
+    emit(#event{object = EventBase#rtransfer_statistics{user_id = undefined}}),
     case UserId of
         ?GUEST_USER_ID -> ok;
         ?ROOT_USER_ID -> ok;
         _ ->
-            event:emit(#event{object = EventBase#rtransfer_statistics{user_id = UserId}})
+            emit(#event{object = EventBase#rtransfer_statistics{user_id = UserId}})
     end.
 
 
@@ -287,3 +286,11 @@ get_monitoring_id(SpaceId, UserId) ->
                 secondary_subject_type = user
             }
     end.
+
+%%--------------------------------------------------------------------
+%% @private @doc Emits event using the root session.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit(Evt :: event:event()) -> ok | {error, Reason :: term()}.
+emit(Evt) ->
+    event:emit(Evt, ?ROOT_SESS_ID).

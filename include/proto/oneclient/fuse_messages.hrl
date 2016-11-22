@@ -26,6 +26,10 @@
 -record(get_file_attr, {
 }).
 
+-record(get_child_attr, {
+    name :: file_meta:name()
+}).
+
 -record(get_file_children, {
     offset :: file_meta:offset(),
     size :: file_meta:size()
@@ -51,7 +55,8 @@
 }).
 
 -record(rename, {
-    target_path :: file_meta:path()
+    target_parent_uuid :: fslogic_worker:file_guid(),
+    target_name :: file_meta:name()
 }).
 
 -record(get_new_file_location, {
@@ -87,7 +92,7 @@
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #get_new_file_location{} |
     #get_file_location{} | #release{} | #truncate{} | #synchronize_block{} |
-    #synchronize_block_and_compute_checksum{}.
+    #synchronize_block_and_compute_checksum{} | #get_child_attr{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -144,8 +149,9 @@
     file_content :: binary()
 }).
 
--record(checksum, {
-    value :: binary()
+-record(sync_response, {
+    checksum :: binary(),
+    file_location :: #file_location{}
 }).
 
 -record(file_renamed, {
@@ -155,7 +161,7 @@
 
 -type fuse_response() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
-    #storage_test_file{} | #dir{} | #checksum{} | #file_renamed{} | undefined.
+    #storage_test_file{} | #dir{} | #sync_response{} | #file_renamed{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},

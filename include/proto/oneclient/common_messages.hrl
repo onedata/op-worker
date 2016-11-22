@@ -30,7 +30,8 @@
 -record(file_renamed_entry, {
     old_uuid :: fslogic_worker:file_guid(),
     new_uuid :: fslogic_worker:file_guid(),
-    new_path :: file_meta:path()
+    new_parent_uuid :: fslogic_worker:file_guid(),
+    new_name :: file_meta:name()
 }).
 
 -record(dir, {

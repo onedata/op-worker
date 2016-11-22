@@ -157,6 +157,14 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
 
             Size = fslogic_blocks:get_file_size(FileDoc),
 
+            {ok, SessionUserId} = session:get_user_id(SessId),
+            RootUuid = fslogic_uuid:user_root_dir_uuid(SessionUserId),
+            ParentGuid = case fslogic_uuid:parent_uuid(FileDoc, SessionUserId) of
+                undefined -> undefined;
+                RootUuid -> fslogic_uuid:uuid_to_guid(RootUuid, undefined);
+                ParentUuid -> fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId)
+            end,
+
             FinalUID = case session:get(SessId) of
                 {ok, #document{value = #session{identity = #user_identity{user_id = UserID}}}} ->
                     UID;
@@ -167,7 +175,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
             {ok, {ATime, CTime, MTime}} = times:get_or_default(UUID),
 
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
-                gid = GID,
+                gid = GID, parent_uuid = ParentGuid,
                 uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name, provider_id = ProviderId,
