@@ -34,10 +34,16 @@
 ]).
 
 -define(TEST_CASES, [
-    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
+%%    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
     proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
     proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
-    file_consistency_test, concurrent_create_test, permission_cache_invalidate_test
+    proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
+    proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
+    proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
+    proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
+    proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
+    proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2
+%%    file_consistency_test, concurrent_create_test, permission_cache_invalidate_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
