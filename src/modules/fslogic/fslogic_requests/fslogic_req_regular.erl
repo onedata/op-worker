@@ -409,7 +409,10 @@ open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = 
 %%--------------------------------------------------------------------
 -spec save_handle(session:id(), storage_file_manager:handle()) ->
     {ok, binary()}.
-save_handle(SessionId, Handle) ->
+save_handle(SessId, Handle) ->
     HandleId = base64:encode(crypto:rand_bytes(20)),
-    ok = session:add_handle(SessionId, HandleId, Handle),
+    case (SessId =/= ?ROOT_SESS_ID) andalso (SessId =/= ?GUEST_SESS_ID) of
+      true -> ok = session:add_handle(SessId, HandleId, Handle);
+      false -> ok
+    end,
     {ok, HandleId}.

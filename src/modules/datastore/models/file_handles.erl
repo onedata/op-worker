@@ -169,6 +169,10 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec register_open(file_meta:uuid(), session:id(), pos_integer()) ->
     ok | {error, Reason :: term()}.
+register_open(_, ?ROOT_SESS_ID, _) ->
+    ok;
+register_open(_, ?GUEST_SESS_ID, _) ->
+    ok;
 register_open(FileUUID, SessId, Count) ->
     Diff = fun
         (#file_handles{is_removed = true}) ->
@@ -212,6 +216,10 @@ register_open(FileUUID, SessId, Count) ->
 %%--------------------------------------------------------------------
 -spec register_release(file_meta:uuid(), session:id(), pos_integer() | infinity) ->
     ok | {error, Reason :: term()}.
+register_release(_, ?ROOT_SESS_ID, _) ->
+    ok;
+register_release(_, ?GUEST_SESS_ID, _) ->
+    ok;
 register_release(FileUUID, SessId, Count) ->
     Diff = fun(#file_handles{is_removed = Removed, descriptors = Fds} = Handle) ->
         FdCount = maps:get(SessId, Fds, 0),
