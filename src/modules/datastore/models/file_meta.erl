@@ -274,11 +274,9 @@ delete(#document{value = #file_meta{name = FileName, version = Version}, key = K
     ?run(begin
         case datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent) of
             {ok, {ParentKey, ?MODEL_NAME}} ->
-                ?info("qqqqqqqq Parent ~p", [{Key, ParentKey}]),
                 ok = delete_child_link_in_parent(ParentKey, FileName, Key),
                 ok = delete_child_link_in_parent(ParentKey, snapshot_name(FileName, Version), Key);
-            EEE ->
-                ?info("qqqqqqqq Parent ~p", [{Key, EEE}]),
+            _ ->
                 ok
         end,
         case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, location_ref(oneprovider:get_provider_id())) of
@@ -287,9 +285,7 @@ delete(#document{value = #file_meta{name = FileName, version = Version}, key = K
             _ ->
                 ok
         end,
-        Ans = datastore:delete(?STORE_LEVEL, ?MODULE, Key),
-        ?info("qqqqqqqq Doc ~p", [{Key, Doc, Ans}]),
-        Ans
+        datastore:delete(?STORE_LEVEL, ?MODULE, Key)
     end);
 delete({path, Path}) ->
     ?run(begin
@@ -300,10 +296,8 @@ delete(Key) ->
     ?run(begin
         case get(Key) of
             {ok, #document{} = Document} ->
-                ?info("qqqqqqqq Doc ~p", [{Key, Document}]),
                 delete(Document);
             {error, {not_found, _}} ->
-                ?info("qqqqqqqq Doc ~p", [{Key}]),
                 ok
         end
     end).
@@ -854,22 +848,18 @@ remove_share(FileUuid, ShareId) ->
 delete_child_link_in_parent(ParentUUID, ChildName, ChildUUID) ->
     case datastore:fetch_full_link(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, ChildName) of
         {ok, {_, ParentTargets}} ->
-            ?info("qqqqqqqq child ~p", [{ParentUUID, ChildName, ChildUUID, ParentTargets}]),
             lists:foreach(
                 fun({Scope0, VHash0, Key0, _}) ->
                     case Key0 of
                         ChildUUID ->
-                            ?info("qqqqqqqq child ~p", [{ParentUUID, ChildName, ChildUUID, Key0}]),
                             ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME,
                                 [links_utils:make_scoped_link_name(ChildName, Scope0, VHash0, size(Scope0))]);
-                        _ ->
-                            ?info("qqqqqqqq child ~p", [{ParentUUID, ChildName, ChildUUID, Key0}]),
-                            ok
+                        _ -> ok
                     end
                 end, ParentTargets);
-        Error ->
-            ?info("qqqqqqqq child ~p", [{ParentUUID, ChildName, ChildUUID, Error}]),
-            Error
+        {error,link_not_found} ->
+            ok;
+        Error -> Error
     end.
 
 

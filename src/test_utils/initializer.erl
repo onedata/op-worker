@@ -299,7 +299,6 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
-    ct:print("create ~p", [{Worker, Spaces}]),
     [
         {{spaces, UserId}, Spaces},
         {{groups, UserId}, Groups},
@@ -324,7 +323,6 @@ teardown_sesion(Worker, Config) ->
         ({{spaces, _}, Spaces}, Acc) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
             lists:foreach(fun(SpaceId) ->
-                ct:print("del ~p", [{Worker, SpaceId}]),
                 ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)]))
             end, SpaceIds),
             Acc;
