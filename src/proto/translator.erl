@@ -247,12 +247,14 @@ translate_from_protobuf(#'ChangeMode'{mode = Mode}) ->
     #change_mode{mode = Mode};
 translate_from_protobuf(#'Rename'{target_parent_uuid = TargetParentUuid, target_name = TargetName}) ->
     #rename{target_parent_uuid = TargetParentUuid, target_name = TargetName};
-translate_from_protobuf(#'GetNewFileLocation'{name = Name, mode = Mode,
-    flags = Flags, create_handle = CreateHandle}) ->
-    #get_new_file_location{name = Name, mode = Mode,
-        flags = open_flags_translate_from_protobuf(Flags), create_handle = CreateHandle};
-translate_from_protobuf(#'GetFileLocation'{flags = Flags, create_handle = CreateHandle}) ->
-    #get_file_location{flags = open_flags_translate_from_protobuf(Flags), create_handle = CreateHandle};
+translate_from_protobuf(#'CreateFile'{name = Name, mode = Mode, flag = Flag}) ->
+    #create_file{name = Name, mode = Mode, flag = open_flag_translate_from_protobuf(Flag)};
+translate_from_protobuf(#'MakeFile'{name = Name, mode = Mode}) ->
+    #make_file{name = Name, mode = Mode};
+translate_from_protobuf(#'OpenFile'{flag = Flag}) ->
+    #open_file{flag = open_flag_translate_from_protobuf(Flag)};
+translate_from_protobuf(#'GetFileLocation'{}) ->
+    #get_file_location{};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
@@ -304,7 +306,6 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
-        handle_id = Record#'FileLocation'.handle_id,
         blocks = lists:map(
             fun(Block) ->
                 translate_from_protobuf(Block)
@@ -322,9 +323,21 @@ translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
     {Key, Value};
 translate_from_protobuf(#'SyncResponse'{checksum = Checksum, file_location = FileLocation}) ->
     #sync_response{checksum = Checksum, file_location = translate_from_protobuf(FileLocation)};
+translate_from_protobuf(#'FileCreated'{} = Record) ->
+    #file_created{
+        handle_id = Record#'FileCreated'.handle_id,
+        file_attr = translate_from_protobuf(Record#'FileCreated'.file_attr),
+        file_location = translate_from_protobuf(Record#'FileCreated'.file_location)
+    };
+translate_from_protobuf(#'FileOpened'{} = Record) ->
+    #file_opened{
+        handle_id = Record#'FileOpened'.handle_id
+    };
 translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = ChildEntries}) ->
-    #file_renamed{new_uuid = NewUuid,
-        child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]};
+    #file_renamed{
+        new_uuid = NewUuid,
+        child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
+    };
 
 
 %% PROXYIO
@@ -436,8 +449,8 @@ translate_from_protobuf(#'Metadata'{type = <<"json">>, value = Json}) ->
     #metadata{type = json, value = json_utils:decode_map(Json)};
 translate_from_protobuf(#'Metadata'{type = <<"rdf">>, value = Rdf}) ->
     #metadata{type = rdf, value = Rdf};
-translate_from_protobuf(#'CheckPerms'{flags = Flags}) ->
-    #check_perms{flags = open_flags_translate_from_protobuf(Flags)};
+translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
+    #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
 translate_from_protobuf(#'CreateShare'{name = Name}) ->
     #create_share{name = Name};
 translate_from_protobuf(#'RemoveShare'{}) ->
@@ -656,13 +669,15 @@ translate_to_protobuf(#change_mode{mode = Mode}) ->
     {change_mode, #'ChangeMode'{mode = Mode}};
 translate_to_protobuf(#rename{target_parent_uuid = TargetParentUuid, target_name = TargetName}) ->
     {rename, #'Rename'{target_parent_uuid = TargetParentUuid, target_name = TargetName}};
-translate_to_protobuf(#get_new_file_location{name = Name, mode = Mode,
-    flags = Flags, create_handle = CreateHandle}) ->
-    {get_new_file_location, #'GetNewFileLocation'{name = Name, mode = Mode,
-        flags = open_flags_translate_to_protobuf(Flags), create_handle = CreateHandle}};
-translate_to_protobuf(#get_file_location{flags = Flags, create_handle = CreateHandle}) ->
-    {get_file_location, #'GetFileLocation'{flags = open_flags_translate_to_protobuf(Flags),
-        create_handle = CreateHandle}};
+translate_to_protobuf(#create_file{name = Name, mode = Mode, flag = Flag}) ->
+    {create_file, #'CreateFile'{name = Name, mode = Mode,
+        flag = open_flag_translate_to_protobuf(Flag)}};
+translate_to_protobuf(#make_file{name = Name, mode = Mode}) ->
+    {make_file, #'MakeFile'{name = Name, mode = Mode}};
+translate_to_protobuf(#open_file{flag = Flag}) ->
+    {open_file, #'OpenFile'{flag = open_flag_translate_to_protobuf(Flag)}};
+translate_to_protobuf(#get_file_location{}) ->
+    {get_file_location, #'GetFileLocation'{}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size}) ->
@@ -712,8 +727,7 @@ translate_to_protobuf(#file_location{} = Record) ->
         file_id = Record#file_location.file_id,
         blocks = lists:map(fun(Block) ->
             translate_to_protobuf(Block)
-        end, Record#file_location.blocks),
-        handle_id = Record#file_location.handle_id
+        end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
@@ -730,9 +744,23 @@ translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
 translate_to_protobuf(#sync_response{checksum = Value, file_location = FileLocation}) ->
     {_, ProtoFileLocation} = translate_to_protobuf(FileLocation),
     {sync_response, #'SyncResponse'{checksum = Value, file_location = ProtoFileLocation}};
+translate_to_protobuf(#file_created{} = Record) ->
+    {_, FileAttr} = translate_to_protobuf(Record#file_created.file_attr),
+    {_, FileLocation} = translate_to_protobuf(Record#file_created.file_location),
+    {file_created, #'FileCreated'{
+        handle_id = Record#file_created.handle_id,
+        file_attr = FileAttr,
+        file_location = FileLocation
+    }};
+translate_to_protobuf(#file_opened{} = Record) ->
+    {file_opened, #'FileOpened'{
+        handle_id = Record#file_opened.handle_id
+    }};
 translate_to_protobuf(#file_renamed{new_uuid = NewUuid, child_entries = ChildEntries}) ->
-    {file_renamed, #'FileRenamed'{new_uuid = NewUuid,
-        child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};
+    {file_renamed, #'FileRenamed'{
+        new_uuid = NewUuid,
+        child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
+    }};
 
 
 %% PROXYIO
@@ -844,8 +872,8 @@ translate_to_protobuf(#metadata{type = json, value = Json}) ->
     {metadata, #'Metadata'{type = <<"json">>, value = json_utils:encode_map(Json)}};
 translate_to_protobuf(#metadata{type = rdf, value = Rdf}) ->
     {metadata, #'Metadata'{type = <<"rdf">>, value = Rdf}};
-translate_to_protobuf(#check_perms{flags = Flags}) ->
-    {check_perms, #'CheckPerms'{flags = open_flags_translate_to_protobuf(Flags)}};
+translate_to_protobuf(#check_perms{flag = Flag}) ->
+    {check_perms, #'CheckPerms'{flag = open_flag_translate_to_protobuf(Flag)}};
 translate_to_protobuf(#create_share{name = Name}) ->
     {create_share, #'CreateShare'{name = Name}};
 translate_to_protobuf(#remove_share{}) ->
@@ -892,25 +920,21 @@ translate_to_protobuf(undefined) ->
 %%%===================================================================
 
 
--spec open_flags_translate_to_protobuf(fslogic_worker:open_flags()) ->
+-spec open_flag_translate_to_protobuf(fslogic_worker:open_flag()) ->
     'READ_WRITE' | 'READ' | 'WRITE'.
-open_flags_translate_to_protobuf(undefined) ->
-    'READ_WRITE';
-open_flags_translate_to_protobuf(rdwr) ->
-    'READ_WRITE';
-open_flags_translate_to_protobuf(read) ->
+open_flag_translate_to_protobuf(read) ->
     'READ';
-open_flags_translate_to_protobuf(write) ->
-    'WRITE'.
+open_flag_translate_to_protobuf(write) ->
+    'WRITE';
+open_flag_translate_to_protobuf(_) ->
+    'READ_WRITE'.
 
 
--spec open_flags_translate_from_protobuf('READ_WRITE' | 'READ' | 'WRITE') ->
-    fslogic_worker:open_flags().
-open_flags_translate_from_protobuf(undefined) ->
-    rdwr;
-open_flags_translate_from_protobuf('READ_WRITE') ->
-    rdwr;
-open_flags_translate_from_protobuf('READ') ->
+-spec open_flag_translate_from_protobuf('READ_WRITE' | 'READ' | 'WRITE') ->
+    fslogic_worker:open_flag().
+open_flag_translate_from_protobuf('READ') ->
     read;
-open_flags_translate_from_protobuf('WRITE') ->
-    write.
+open_flag_translate_from_protobuf('WRITE') ->
+    write;
+open_flag_translate_from_protobuf(_) ->
+    rdwr.
