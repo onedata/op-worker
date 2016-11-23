@@ -122,8 +122,9 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_meta:uuid(), session:id(), boolean()) -> ok.
 remove_file_and_file_meta(FileUUID, SessId, Silent) ->
-    {ok, #document{value = #file_meta{uid = UID, type = Type, shares = Shares}} = FileDoc} =
+    {ok, #document{value = #file_meta{type = Type, shares = Shares}} = FileDoc} =
         file_meta:get(FileUUID),
+    {ok, UID} = session:get_user_id(SessId),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, UID),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
 

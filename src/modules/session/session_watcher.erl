@@ -273,7 +273,7 @@ is_session_ttl_exceeded(SessId, TTL) ->
 -spec schedule_session_status_checkup(Delay :: non_neg_integer()) ->
     TimeRef :: reference().
 schedule_session_status_checkup(Delay) ->
-    erlang:send_after(Delay, self(), check_session_status).
+    erlang:send_after(timer:seconds(Delay), self(), check_session_status).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -320,8 +320,13 @@ get_event_managers_for_event(#event{} = Evt) ->
     case file_subscription:get(Evt) of
         {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
             get_event_managers(gb_sets:to_list(SessIds));
-        _ ->
-            get_event_managers()
+        {error, no_file_subscription} ->
+            get_event_managers();
+        {error, {error, {not_found, _}}} ->
+            [];
+        {error, Reason} ->
+            ?error("Cannot get event managers for the event ~p due to: ~p", [Evt, Reason]),
+            []
     end;
 get_event_managers_for_event(EvtObject) ->
     get_event_managers_for_event(#event{object = EvtObject}).
