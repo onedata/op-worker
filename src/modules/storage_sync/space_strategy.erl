@@ -18,6 +18,7 @@
 %%% Types
 %%%===================================================================
 
+-type type()            :: storage_import | filename_mapping | file_caching | enoent_handling | file_conflict_resolution.
 -type definition()      :: #space_strategy{}.
 -type name()            :: atom().
 -type arguments()       :: #{argument_name() => argument_type()}.
@@ -38,7 +39,7 @@
 
 %% Types
 -export_type([definition/0, name/0, description/0, argument_name/0, argument_type/0, argument_value/0]).
--export_type([job/0, arguments/0, job_result/0, job_data/0, config/0]).
+-export_type([job/0, arguments/0, job_result/0, job_data/0, config/0, type/0]).
 
 %% API
 -export([]).

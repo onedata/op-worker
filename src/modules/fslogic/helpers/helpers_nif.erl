@@ -30,7 +30,7 @@
 -export([new_helper_obj/2, new_helper_ctx/1, set_user_ctx/2, get_user_ctx/1]).
 -export([username_to_uid/1, groupname_to_gid/1]).
 -export([getattr/3, access/4, mknod/6, mkdir/4, unlink/3, rmdir/3, symlink/4, rename/4, link/4, chmod/4, chown/5]).
--export([truncate/4, open/4, read/5, write/5, release/3, flush/3, fsync/4]).
+-export([truncate/4, open/4, read/5, write/5, release/3, flush/3, fsync/4, readdir/5]).
 
 %%%===================================================================
 %%% API
@@ -97,7 +97,18 @@ groupname_to_gid(_GName) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
+%% @end
+%%--------------------------------------------------------------------
+-spec readdir(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(),
+    Offset :: non_neg_integer(), _Count :: non_neg_integer()) ->
+    {ok, request_id()} | {error, Reason :: helpers:error_code()}.
+readdir(_HelperInstance, _HelperCTX, _File, _Offset, _Count) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+%%--------------------------------------------------------------------
+%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec getattr(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
@@ -107,7 +118,7 @@ getattr(_HelperInstance, _HelperCTX, _File) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec access(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Mask :: non_neg_integer()) ->
@@ -117,7 +128,7 @@ access(_HelperInstance, _HelperCTX, _File, _Mask) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec mknod(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(),
@@ -128,7 +139,7 @@ mknod(_HelperInstance, _HelperCTX, _File, _Mode, _Flags, _Dev) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Mode :: non_neg_integer()) ->
@@ -138,7 +149,7 @@ mkdir(_HelperInstance, _HelperCTX, _File, _Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
@@ -148,7 +159,7 @@ unlink(_HelperInstance, _HelperCTX, _File) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec rmdir(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
@@ -158,7 +169,7 @@ rmdir(_HelperInstance, _HelperCTX, _File) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec symlink(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
@@ -168,7 +179,7 @@ symlink(_HelperInstance, _HelperCTX, _File, _Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
@@ -178,7 +189,7 @@ rename(_HelperInstance, _HelperCTX, _From, _To) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec link(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
@@ -188,7 +199,7 @@ link(_HelperInstance, _HelperCTX, _From, _To) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Mode :: non_neg_integer()) ->
@@ -198,7 +209,7 @@ chmod(_HelperInstance, _HelperCTX, _File, _Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec chown(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), UID :: integer(), GID :: integer()) ->
@@ -208,7 +219,7 @@ chown(_HelperInstance, _HelperCTX, _File, _UID, _GID) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Size :: non_neg_integer()) ->
@@ -218,7 +229,7 @@ truncate(_HelperInstance, _HelperCTX, _File, _Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec open(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(),
@@ -229,7 +240,7 @@ open(_HelperInstance, _HelperCTX, _File, _Flags) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec read(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
@@ -239,7 +250,7 @@ read(_HelperInstance, _HelperCTX, _File, _Offset, _Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec write(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Offset :: non_neg_integer(), Data :: binary()) ->
@@ -249,7 +260,7 @@ write(_HelperInstance, _HelperCTX, _File, _Offset, _Data) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec release(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
@@ -259,7 +270,7 @@ release(_HelperInstance, _HelperCTX, _File) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec flush(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
@@ -269,7 +280,7 @@ flush(_HelperInstance, _HelperCTX, _File) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), IsDataSync :: integer()) ->

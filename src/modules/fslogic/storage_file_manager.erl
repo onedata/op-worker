@@ -23,7 +23,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 -export([new_handle/5, new_handle/6, new_handle/7]).
--export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, symlink/2, link/2]).
+-export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, symlink/2, link/2, readdir/3]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
     fsync/1]).
 -export([open_at_creation/1]).
@@ -292,8 +292,26 @@ link(#sfm_handle{storage = Storage, file = FileFrom, space_uuid = SpaceUUID, ses
 %%--------------------------------------------------------------------
 -spec stat(FileHandle :: handle()) ->
     {ok, undefined} | logical_file_manager:error_reply().
-stat(_FileHandle) ->
-    {ok, undefined}.
+stat(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:getattr(HelperHandle, FileId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes, reading them from storage.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec readdir(FileHandle :: handle(), Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
+    {ok, [helpers:file()]} | logical_file_manager:error_reply().
+readdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Offset, Count) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:readdir(HelperHandle, FileId, Offset, Count).
 
 
 %%--------------------------------------------------------------------

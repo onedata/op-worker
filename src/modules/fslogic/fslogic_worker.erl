@@ -158,7 +158,7 @@ cleanup() ->
     request_type()) ->
     #fuse_response{} | #provider_response{} | #proxyio_response{}.
 run_and_catch_exceptions(Function, Context, Request, RequestType) ->
-    try
+    Response = try
         UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)),
         {NextCTX, Providers, UpdatedRequest} =
             case request_to_file_entry_or_provider(Context, Request) of
@@ -220,7 +220,47 @@ run_and_catch_exceptions(Function, Context, Request, RequestType) ->
         error:Reason ->
             %% Something went horribly wrong. This should not happen.
             report_error(Request, RequestType, Reason, error, erlang:get_stacktrace())
-    end.
+    end,
+    process_response(Context, Request, Response).
+
+process_response(Context, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGUID}} = Request,
+    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
+    SessId = fslogic_context:get_session_id(Context),
+    {ok, Path0} = fslogic_path:gen_path({uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, SessId),
+    {ok, Tokens0} = fslogic_path:verify_file_path(Path0),
+    Tokens = Tokens0 ++ [FileName],
+    Path = fslogic_path:join(Tokens),
+    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+        {path, P} ->
+            {ok, Tokens1} = fslogic_path:verify_file_path(P),
+            case Tokens1 of
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
+                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
+                    space_sync_worker:run(Init);
+                _ -> Response
+            end;
+        _ ->
+            Response
+    end;
+process_response(Context, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
+    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+        {path, P} ->
+            {ok, Tokens1} = fslogic_path:verify_file_path(P),
+            case Tokens1 of
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
+                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
+                    space_sync_worker:run(Init);
+                _ -> Response
+            end;
+        _ ->
+            Response
+    end;
+process_response(_, _, Response) ->
+    Response.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -616,10 +656,20 @@ request_to_file_entry_or_provider(_Ctx, #file_request{context_guid = FileGUID, f
             %% Handle root space dir locally
             {provider, oneprovider:get_provider_id()};
         _ ->
-            {file, {guid, FileGUID}}
+            case file_force_proxy:get(FileGUID) of
+                {ok, #document{value = #file_force_proxy{provider_id = ProviderId}}} ->
+                    {provider, ProviderId};
+                _ ->
+                    {file, {guid, FileGUID}}
+            end
     end;
 request_to_file_entry_or_provider(_Ctx, #file_request{context_guid = ContextGuid}) ->
-    {file, {guid, ContextGuid}};
+    case file_force_proxy:get(ContextGuid) of
+        {ok, #document{value = #file_force_proxy{provider_id = ProviderId}}} ->
+            {provider, ProviderId};
+        _ ->
+            {file, {guid, ContextGuid}}
+    end;
 request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
     {provider, ProviderId};
 request_to_file_entry_or_provider(_Ctx, #provider_request{context_guid = ContextGuid}) ->

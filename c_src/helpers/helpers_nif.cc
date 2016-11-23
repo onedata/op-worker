@@ -537,6 +537,16 @@ ERL_NIF_TERM get_user_ctx(ErlNifEnv *env, helper_ctx_ptr ctx)
     return nifpp::make(env, std::make_tuple(ok, ctx->getUserCTX()));
 }
 
+ERL_NIF_TERM readdir(NifCTX ctx, const std::string file, const int offset, const int count)
+{
+    ctx.helperObj->ash_readdir(
+        ctx.helperCTX, file, offset, count, [=](const std::vector<std::string> & entries, error_t e) {
+            handle_result(ctx, e, entries);
+        });
+
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_getattr(
@@ -734,6 +744,12 @@ static ERL_NIF_TERM sh_set_user_ctx(
     return noctx_wrap(set_user_ctx, env, argv);
 }
 
+static ERL_NIF_TERM sh_readdir(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(readdir, env, argv);
+}
+
 static ERL_NIF_TERM sh_getattr(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -841,7 +857,7 @@ static ERL_NIF_TERM sh_fsync(
 
 static ErlNifFunc nif_funcs[] = {
     {"set_threads_number", 1, sh_set_threads_number},
-    {"getattr", 3, sh_getattr}, {"access", 4, sh_access},
+    {"getattr", 3, sh_getattr}, {"access", 4, sh_access}, {"readdir", 5, sh_readdir},
     {"mknod", 6, sh_mknod}, {"mkdir", 4, sh_mkdir}, {"unlink", 3, sh_unlink},
     {"rmdir", 3, sh_rmdir}, {"symlink", 4, sh_symlink},
     {"rename", 4, sh_rename}, {"link", 4, sh_link}, {"chmod", 4, sh_chmod},

@@ -82,7 +82,7 @@ chmod(CTX, File, Mode) ->
     % remove acl
     {ok, FileUuid} = file_meta:to_uuid(File),
     xattr:delete_by_name(FileUuid, ?ACL_KEY),
-    {ok, _} = file_meta:update(File, #{mode => Mode}),
+    {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
     ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid),
 
     fslogic_times:update_ctime(File, fslogic_context:get_user_id(CTX)),

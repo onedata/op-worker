@@ -227,6 +227,10 @@
     provider_id :: undefined | oneprovider:id()
 }).
 
+-record(file_force_proxy, {
+    provider_id :: oneprovider:id()
+}).
+
 %% User session
 -record(session, {
     status :: undefined | session:status(),
@@ -316,14 +320,21 @@
 }).
 
 %% Model that maps space to storage strategies
--record(space_strategies, {
+-record(storage_strategies, {
     filename_mapping         :: space_strategy:config(),
     storage_import           :: space_strategy:config(),
     storage_update           :: [space_strategy:config()],
+    last_import_time         :: integer() | undefined
+}).
+
+%% Model that maps space to storage strategies
+-record(space_strategies, {
+    storage_strategies = #{} :: #{storage:id() => #storage_strategies{}},
     file_conflict_resolution :: space_strategy:config(),
     file_caching             :: space_strategy:config(),
     enoent_handling          :: space_strategy:config()
 }).
+
 
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {

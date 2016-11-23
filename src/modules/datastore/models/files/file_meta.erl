@@ -41,7 +41,7 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, resolve_path/2, create/2, get_scope/1, list_children/3, get_parent/1,
+-export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1, list_children/3, get_parent/1,
     get_parent_uuid/1, get_parent_uuid/2, get_parent_uuid_in_context/1, rename/2, setup_onedata_user/2,
     get_name/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1, location_ref/1]).
@@ -148,19 +148,28 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
-create({uuid, ParentUUID}, File) ->
+create(Parent, File) ->
+    create(Parent, File, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(entry(), file_meta() | datastore:document(), AllowConflicts :: boolean()) -> {ok, uuid()} | datastore:create_error().
+create({uuid, ParentUUID}, File, AllowConflicts) ->
     ?run(begin
         {ok, Parent} = get(ParentUUID),
-        create(Parent, File)
+        create(Parent, File, AllowConflicts)
     end);
-create({path, Path}, File) ->
+create({path, Path}, File, AllowConflicts) ->
     ?run(begin
         {ok, {Parent, _}} = resolve_path(Path),
-        create(Parent, File)
+        create(Parent, File, AllowConflicts)
     end);
-create(#document{} = Parent, #file_meta{} = File) ->
-    create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V} = FM} = FileDoc0) ->
+create(#document{} = Parent, #file_meta{} = File, AllowConflicts) ->
+    create(Parent, #document{value = File}, AllowConflicts);
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V} = FM} = FileDoc0, AllowConflicts) ->
     ?run(begin
         {ok, Scope} = get_scope(Parent),
         FM1 = FM#file_meta{scope = Scope#document.key, provider_id = oneprovider:get_provider_id()},
@@ -175,8 +184,19 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
         false = is_snapshot(FileName),
         critical_section:run_on_mnesia([?MODEL_NAME, ParentUUID],
             fun() ->
-                case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
-                    {error, {not_found, _}} ->
+                Exists = case AllowConflicts of
+                    true -> false;
+                    false ->
+                        case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
+                            {error, {not_found, _}} ->
+                                false;
+                            {ok, _} ->
+                                true
+                        end
+                end,
+
+                case Exists of
+                    false ->
                         datastore:run_transaction(fun() ->
                             case create(FileDoc) of
                                 {ok, UUID} ->
@@ -189,7 +209,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                                     {error, Reason}
                             end
                         end);
-                    {ok, _} ->
+                    true ->
                         {error, already_exists}
                 end
             end)

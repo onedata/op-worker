@@ -9,14 +9,16 @@
 %%% @todo: write me!
 %%% @end
 %%%-------------------------------------------------------------------
--module(filename_mapping).
+-module(storage_update).
 -author("Rafal Slota").
--behavior(space_strategy_behaviour).
 
--include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/storage_sync/strategy_config.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+
+
+-define(DIR_BATCH, 2).
 
 %%%===================================================================
 %%% Types
@@ -35,7 +37,8 @@
 -export([strategy_merge_result/2, strategy_merge_result/3]).
 
 %% API
--export([to_storage_path/3, to_logical_path/3]).
+-export([]).
+
 
 
 %%%===================================================================
@@ -45,46 +48,39 @@
 
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
-    [
-        #space_strategy{result_merge_type = merge_all, name = simple, arguments = [], description = <<"TODO">>}
-    ].
+    storage_import:available_strategies().
 
 
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
+strategy_init_jobs(no_import, _, _) ->
+    [];
+strategy_init_jobs(_, _, #{last_import_time := undefined}) ->
+    [];
+strategy_init_jobs(bfs_scan, #{scan_interval := ScanIntervalSeconds} = Args,
+    #{last_import_time := LastImportTime} = Data) ->
+    case LastImportTime + timer:seconds(ScanIntervalSeconds) < os:system_time(milli_seconds) of
+        true ->
+            [#space_strategy_job{strategy_name = bfs_scan, strategy_args = Args, data = Data}];
+        false ->
+            []
+    end;
 strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
-    [
-        #space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}
-    ].
+    ?error("Invalid import strategy init: ~p", [{StrategyName, StartegyArgs, InitData}]).
 
 
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
-strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{storage_path := FilePath}}) ->
-    {FilePath, []};
-strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{logical_path := FilePath}}) ->
-    {FilePath, []}.
+strategy_handle_job(Job) ->
+    storage_import:strategy_handle_job(Job).
 
-strategy_merge_result(#space_strategy_job{strategy_name = simple}, LocalResult, _ChildrenResult) ->
-    LocalResult.
 
-strategy_merge_result([#space_strategy_job{strategy_name = simple}], [Result]) ->
-    Result.
+strategy_merge_result(Job, LocalResult, ChildrenResult) ->
+    storage_import:strategy_merge_result(Job, LocalResult, ChildrenResult).
 
+strategy_merge_result(Jobs, Results) ->
+    storage_import:strategy_merge_result(Jobs, Results).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-
-to_storage_path(SpaceId, StorageId, FilePath) ->
-    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{logical_path => FilePath}),
-    space_sync_worker:run(Init).
-
-to_logical_path(SpaceId, StorageId, FilePath) ->
-    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{storage_path => FilePath}),
-    space_sync_worker:run(Init).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

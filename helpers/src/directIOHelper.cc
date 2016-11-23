@@ -158,7 +158,35 @@ void DirectIOHelper::ash_readdir(CTXPtr ctx, const boost::filesystem::path &p,
     GeneralCallback<const std::vector<std::string> &> callback)
 {
     std::vector<std::string> ret;
-    callback(ret, makePosixError(ENOTSUP));
+
+    DIR *dir;
+    struct dirent *dp;
+    dir = opendir(root(p).c_str());
+
+    if(!dir) {
+        callback(ret, makePosixError(errno));
+        return;
+    }
+
+    while ((dp=readdir(dir)) != NULL) {
+        if ( !strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..") ) {
+            continue;
+        }
+
+        if(offset > 0) {
+            --offset;
+            continue;
+        }
+
+        if(count == 0)
+            break;
+
+        --count;
+
+        ret.push_back(std::string(dp->d_name));
+    }
+    closedir(dir);
+    callback(ret, SUCCESS_CODE);
 }
 
 void DirectIOHelper::ash_mknod(CTXPtr rawCTX, const boost::filesystem::path &p,

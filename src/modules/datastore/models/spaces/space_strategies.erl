@@ -18,14 +18,14 @@
 
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
--define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGIES, []).
+-define(DEFAULT_STORAGE_IMPORT_STRATEGY, {bfs_scan, #{scan_interval => 10}}).
+-define(DEFAULT_STORAGE_UPDATE_STRATEGIES, [{bfs_scan, #{scan_interval => 60}}]).
 -define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
 -define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
--define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
+-define(DEFAULT_ENOENT_HANDLING_STRATEGY, {check_globally, #{}}).
 
 %% API
--export([new/0]).
+-export([new/1, add_storage/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -40,9 +40,12 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {filename_mapping, {atom, #{atom => term}}},
-        {storage_import, {atom, #{atom => term}}},
-        {storage_update, [ {atom, #{atom => term}} ]}, %% List of strategies
+        {storage_strategies, #{string => {record, 1, [
+            {filename_mapping, {atom, #{atom => term}}},
+            {storage_import, {atom, #{atom => term}}},
+            {storage_update, [ {atom, #{atom => term}} ]}, %% List of strategies
+            {last_import_time, integer}
+        ]}}},
         {file_conflict_resolution, {atom, #{atom => term}}},
         {file_caching, {atom, #{atom => term}}},
         {enoent_handling, {atom, #{atom => term}}}
@@ -147,16 +150,30 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Returns datastore document for space-strategies mapping.
 %% @end
 %%--------------------------------------------------------------------
--spec new() -> Doc :: #document{}.
-new() ->
-    #document{value = #space_strategies{
-        filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY,
-        storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY,
-        storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGIES,
+-spec new(od_space:id()) -> Doc :: #document{}.
+new(SpaceId) ->
+    #document{key = SpaceId, value = #space_strategies{
         file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY,
         file_caching = ?DEFAULT_FILE_CACHING_STRATEGY,
         enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY
     }}.
+
+add_storage(SpaceId, StorageId) ->
+    #document{value = Value = #space_strategies{storage_strategies = StorageStrategies}} = Doc =
+        case get(SpaceId) of
+            {error, {not_found, _}} ->
+                new(SpaceId);
+            {ok, Doc0} ->
+                Doc0
+        end,
+
+    StorageStrategie = #storage_strategies{
+        filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY,
+        storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY,
+        storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGIES
+    },
+    {ok, _} = save(Doc#document{value = Value#space_strategies{storage_strategies = maps:put(StorageId, StorageStrategie, StorageStrategies)}}),
+    ok.
 
 %%%===================================================================
 %%% Internal functions

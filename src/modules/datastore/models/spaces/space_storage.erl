@@ -17,7 +17,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/2]).
+-export([add/2, get_strategies_id/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -155,6 +155,13 @@ add(SpaceId, StorageId) ->
             {error, Reason}
     end.
 
+-spec get_strategies_id(SpaceId :: binary(), StorageId :: storage:id()) ->
+    datastore:key().
+get_strategies_id(SpaceId, StorageId) ->
+    LinkName = {strategies, StorageId},
+    {ok, {StrategiesId, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, LinkName),
+    StrategiesId.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -194,10 +201,4 @@ add_storage(#space_storage{storage_ids = StorageIds} = SpaceStorage, StorageId) 
 %%--------------------------------------------------------------------
 -spec attach_strategies(SpaceId :: binary(), StorageId :: storage:id()) -> ok.
 attach_strategies(SpaceId, StorageId) ->
-    LinkName = {strategies, StorageId},
-    case datastore:fetch_link(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, LinkName) of
-        {ok, _} -> ok;
-        {error, link_not_found} ->
-            {ok, SKey} = space_strategies:create(space_strategies:new()),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, {LinkName, {SKey, space_strategies}})
-    end.
+    space_strategies:add_storage(SpaceId, StorageId).

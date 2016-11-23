@@ -18,13 +18,15 @@
 }).
 
 -record(space_strategy, {
+    result_merge_type = return_none :: return_none | return_first | merge_all,
     name :: space_strategy:name(),
     arguments = [] :: [#space_strategy_argument{}],
     description :: space_strategy:description()
 }).
 
 -record(space_strategy_job, {
-    strategy_name :: space_strategy:name(),
-    strategy_args :: space_strategy:arguments(),
-    data :: space_strategy:job_data()
+    strategy_type = ?MODULE :: space_strategy:type(),
+    strategy_name           :: space_strategy:name(),
+    strategy_args           :: space_strategy:arguments(),
+    data                    :: space_strategy:job_data()
 }).

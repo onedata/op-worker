@@ -19,7 +19,7 @@
 %% API
 -export([name/1, args/1, new_handle/1, new_handle/2, set_user_ctx/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
--export([chown/4, truncate/3, open/3, read/4, write/4, release/2, flush/2, fsync/3]).
+-export([chown/4, truncate/3, open/3, read/4, write/4, release/2, flush/2, fsync/3, readdir/4]).
 
 %% Internal context record.
 -record(helper_handle, {
@@ -107,6 +107,16 @@ set_user_ctx(#helper_handle{ctx = CTX}, #swift_user_ctx{user_name = UserName, pa
 set_user_ctx(_, Unknown) ->
     ?error("Unknown user context ~p", [Unknown]),
     erlang:error({unknown_user_ctx_type, erlang:element(1, Unknown)}).
+
+%%--------------------------------------------------------------------
+%% @doc Calls the corresponding helper_nif method and receives result.
+%%      First argument shall be #helper_handle{} from new_handle/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec readdir(handle(), File :: file(), Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
+    {ok, [file()]} | {error, term()}.
+readdir(#helper_handle{} = HelperHandle, File, Offset, Count) ->
+    apply_helper_nif(HelperHandle, readdir, [File, Offset, Count]).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
