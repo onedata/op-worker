@@ -139,11 +139,14 @@ add(SpaceId, StorageId) ->
     case space_storage:get(SpaceId) of
         {ok, #document{value = SpaceStorage} = Doc} ->
             NewSpaceStorage = add_storage(SpaceStorage, StorageId),
+            ok = attach_strategies(SpaceId, StorageId),
             space_storage:save(Doc#document{value = NewSpaceStorage});
         {error, {not_found, _}} ->
             SpaceStorage = new(SpaceId, StorageId),
             case create(SpaceStorage) of
-                {ok, SpaceStorageId} -> {ok, SpaceStorageId};
+                {ok, SpaceStorageId} ->
+                    ok = attach_strategies(SpaceId, StorageId),
+                    {ok, SpaceStorageId};
                 {error, already_exists} ->
                     add(SpaceId, StorageId);
                 {error, Reason} -> {error, Reason}
@@ -175,4 +178,26 @@ new(SpaceId, StorageId) ->
 -spec add_storage(SpaceStorage :: #space_storage{}, StorageId :: storage:id()) ->
     NewSpaceStorage :: #space_storage{}.
 add_storage(#space_storage{storage_ids = StorageIds} = SpaceStorage, StorageId) ->
-    SpaceStorage#space_storage{storage_ids = [StorageId | StorageIds]}.
+    case lists:member(StorageId, StorageIds) of
+        true ->
+            SpaceStorage;
+        false ->
+            SpaceStorage#space_storage{storage_ids = [StorageId | StorageIds]}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @todo: write me!
+%% @end
+%%--------------------------------------------------------------------
+-spec attach_strategies(SpaceId :: binary(), StorageId :: storage:id()) -> ok.
+attach_strategies(SpaceId, StorageId) ->
+    LinkName = {strategies, StorageId},
+    case datastore:fetch_link(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, LinkName) of
+        {ok, _} -> ok;
+        {error, link_not_found} ->
+            {ok, SKey} = space_strategies:create(space_strategies:new()),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, {LinkName, {SKey, space_strategies}})
+    end.

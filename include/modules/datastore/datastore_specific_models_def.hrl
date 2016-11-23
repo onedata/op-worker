@@ -315,6 +315,16 @@
     storage_ids = [] :: [storage:id()]
 }).
 
+%% Model that maps space to storage strategies
+-record(space_strategies, {
+    filename_mapping         :: space_strategy:config(),
+    storage_import           :: space_strategy:config(),
+    storage_update           :: [space_strategy:config()],
+    file_conflict_resolution :: space_strategy:config(),
+    file_caching             :: space_strategy:config(),
+    enoent_handling          :: space_strategy:config()
+}).
+
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
     ctx = #{} :: ceph_user_ctx()
