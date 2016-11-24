@@ -180,10 +180,10 @@ delete_record(<<"file-permission">>, _FileId) ->
 %% @private
 %% @doc
 %% Constructs a file acl record for given FileId. There are three possible
-%% values of Status:
-%%      # ok - the ACL is set and can be read by the user
-%%      # ne - the ACL is not set and can be read by the user
-%%      # ea - the ACL cannot be read by the user (we don't know if it's set)
+%% values of Type:
+%%     # posix - the file has POSIX permissions set
+%%     # acl - the file has ACL set and the user can read it
+%%     # eaccess - the user cannot view file permissions
 %% @end
 %%--------------------------------------------------------------------
 -spec file_permissions_record(SessionId :: session:id(),
