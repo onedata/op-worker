@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
--type active_descriptors() :: #{session:id() => non_neg_integer()}.
+-type file_descriptors() :: #{session:id() => non_neg_integer()}.
 -type ceph_user_ctx() :: #{storage:id() => ceph_user:ctx()}.
 -type posix_user_ctx() :: #{storage:id() => posix_user:ctx()}.
 -type s3_user_ctx() :: #{storage:id() => s3_user:ctx()}.
@@ -257,7 +257,7 @@
     space_uuid :: file_meta:uuid(),
     storage :: datastore:document() | undefined,
     storage_id :: undefined | storage:id(),
-    open_mode :: undefined | helpers:open_mode(),
+    open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
     is_local = false :: boolean(),
     provider_id :: undefined | oneprovider:id(),
@@ -301,7 +301,6 @@
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
-    handle_id :: binary() | undefined,
     space_id :: undefined | od_space:id(),
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
@@ -375,10 +374,10 @@
     last_update_time :: undefined | non_neg_integer()
 }).
 
-%% Model that stores open file
--record(open_file, {
-    is_removed = false :: true | false,
-    active_descriptors = #{} :: active_descriptors()
+%% Model that stores file handles
+-record(file_handles, {
+    is_removed = false :: boolean(),
+    descriptors = #{} :: file_descriptors()
 }).
 
 %% Model that holds file's custom metadata

@@ -421,21 +421,26 @@ fslogic_new_file_test(Config) ->
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name2">>),
 
-    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #get_new_file_location{name = <<"test">>, create_handle = false}),
-    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #get_new_file_location{name = <<"test">>, create_handle = false}),
+    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #create_file{name = <<"test">>}),
+    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #create_file{name = <<"test">>}),
 
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp11),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp21),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp11),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp21),
 
-    #fuse_response{fuse_response = #file_location{
-        file_id = FileId11,
-        storage_id = StorageId11,
-        provider_id = ProviderId11}} = Resp11,
+    #fuse_response{fuse_response = #file_created{
+        file_location = #file_location{
+            file_id = FileId11,
+            storage_id = StorageId11,
+            provider_id = ProviderId11
+        }
+    }} = Resp11,
 
-    #fuse_response{fuse_response = #file_location{
-        file_id = FileId21,
-        storage_id = StorageId21,
-        provider_id = ProviderId21}} = Resp21,
+    #fuse_response{fuse_response = #file_created{
+        file_location = #file_location{
+            file_id = FileId21,
+            storage_id = StorageId21,
+            provider_id = ProviderId21}
+    }} = Resp21,
 
     ?assertNotMatch(undefined, FileId11),
     ?assertNotMatch(undefined, FileId21),

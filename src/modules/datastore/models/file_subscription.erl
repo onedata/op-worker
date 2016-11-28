@@ -124,7 +124,7 @@ create(Document) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#event{} = Evt) ->
     case get_key(Evt) of
-        undefined -> {error, {not_found, ?MODULE}};
+        undefined -> {error, no_file_subscription};
         Key -> ?MODULE:get(Key)
     end;
 get(Key) when is_binary(Key) ->

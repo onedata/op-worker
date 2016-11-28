@@ -9,8 +9,9 @@
 %%% Cache that stores open files.
 %%% @end
 %%%-------------------------------------------------------------------
--module(open_file).
+-module(file_handles).
 -author("Michal Wrona").
+-author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -26,7 +27,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 
 %%--------------------------------------------------------------------
@@ -39,7 +40,23 @@ record_struct(1) ->
     {record, [
         {is_removed, boolean},
         {active_descriptors, #{string => integer}}
-    ]}.
+    ]};
+record_struct(2) ->
+    {record, Struct} = record_struct(1),
+    {record, lists:keyreplace(
+        active_descriptors, 1, Struct, {descriptors, #{string => integer}}
+    )}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, IsRemoved, Descriptors}) ->
+    {2, #file_handles{is_removed = IsRemoved, descriptors = Descriptors}}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -116,7 +133,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(open_file_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    Config = ?MODEL_CONFIG(open_file_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -139,16 +157,6 @@ model_init() ->
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Runs given function within locked ResourceId. This function makes sure
-%% that 2 funs with same ResourceId won't run at the same time.
-%% @end
-%%--------------------------------------------------------------------
--spec run_in_critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_in_critical_section(ResourceId, Fun) ->
-    critical_section:run_on_mnesia([?MODEL_NAME, ResourceId], Fun).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -159,39 +167,41 @@ run_in_critical_section(ResourceId, Fun) ->
 %% FileUUID and SessionId.
 %% @end
 %%--------------------------------------------------------------------
--spec register_open(file_meta:uuid(), session:id(), non_neg_integer()) ->
+-spec register_open(file_meta:uuid(), session:id(), pos_integer()) ->
     ok | {error, Reason :: term()}.
-register_open(FileUUID, SessionId, Count) ->
-    run_in_critical_section(FileUUID, fun() ->
-        case open_file:get(FileUUID) of
-            {ok, #document{value = OpenFile} = Doc} ->
-                #open_file{active_descriptors = ActiveDescriptors} = OpenFile,
-
-                ActiveForSession = maps:get(SessionId, ActiveDescriptors, 0),
-                case ActiveForSession of
-                    0 ->
-                        ok = session:add_open_file(SessionId, FileUUID);
-                    _ -> ok
-                end,
-                UpdatedActiveDescriptors = maps:put(SessionId,
-                    ActiveForSession + Count, ActiveDescriptors),
-
-                {ok, _} = open_file:save(Doc#document{value = OpenFile#open_file{
-                    active_descriptors = UpdatedActiveDescriptors}}),
-                ok;
-            {error, {not_found, _}} ->
-                Doc = #document{key = FileUUID, value = #open_file{
-                    active_descriptors = #{SessionId => Count}}},
-
-                case open_file:create(Doc) of
-                    {ok, _} ->
-                        ok = session:add_open_file(SessionId, FileUUID);
+register_open(FileUUID, SessId, Count) ->
+    Diff = fun
+        (#file_handles{is_removed = true}) ->
+            {error, phantom_file};
+        (#file_handles{descriptors = Fds} = Handle) ->
+            case maps:get(SessId, Fds, 0) of
+                0 -> case session:add_open_file(SessId, FileUUID) of
+                    ok -> {ok, Handle#file_handles{
+                        descriptors = maps:put(SessId, Count, Fds)
+                    }};
                     {error, Reason} -> {error, Reason}
                 end;
-            {error, Reason} ->
-                {error, Reason}
-        end
-    end).
+                FdCount -> {ok, Handle#file_handles{
+                    descriptors = maps:put(SessId, FdCount + Count, Fds)
+                }}
+            end
+    end,
+
+    case update(FileUUID, Diff) of
+        {ok, _} -> ok;
+        {error, {not_found, _}} ->
+            Doc = #document{key = FileUUID, value = #file_handles{
+                descriptors = #{SessId => Count}
+            }},
+            case create(Doc) of
+                {ok, _} -> session:add_open_file(SessId, FileUUID);
+                {error, already_exists} ->
+                    register_open(FileUUID, SessId, Count);
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, phantom_file} -> {error, {not_found, ?MODEL_NAME}};
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -200,28 +210,35 @@ register_open(FileUUID, SessionId, Count) ->
 %% is active and file is marked as removed.
 %% @end
 %%--------------------------------------------------------------------
--spec register_release(file_meta:uuid(), session:id(), non_neg_integer()) ->
+-spec register_release(file_meta:uuid(), session:id(), pos_integer() | infinity) ->
     ok | {error, Reason :: term()}.
-register_release(FileUUID, SessionId, Count) ->
-    run_in_critical_section(FileUUID, fun() ->
-        case open_file:get(FileUUID) of
-            {ok, #document{value = #open_file{active_descriptors = ActiveDescriptors} = OpenFile} = Doc} ->
-
-                UpdatedActiveDescriptors = case maps:get(SessionId, ActiveDescriptors, 1) of
-                    ActiveForSession when ActiveForSession =< Count ->
-                        ok = session:remove_open_file(SessionId, FileUUID),
-                        maps:remove(SessionId, ActiveDescriptors);
-                    ActiveForSession ->
-                        maps:put(SessionId, ActiveForSession - Count, ActiveDescriptors)
-                end,
-
-                delete_or_save(FileUUID, UpdatedActiveDescriptors, OpenFile, Doc);
-            {error, {not_found, _}} ->
-                ok;
-            {error, Reason} ->
-                {error, Reason}
+register_release(FileUUID, SessId, Count) ->
+    Diff = fun(#file_handles{is_removed = Removed, descriptors = Fds} = Handle) ->
+        FdCount = maps:get(SessId, Fds, 0),
+        case Count =:= infinity orelse FdCount =< Count of
+            true -> case session:remove_open_file(SessId, FileUUID) of
+                ok ->
+                    Fds2 = maps:remove(SessId, Fds),
+                    case {Removed, maps:size(Fds2)} of
+                        {true, 0} -> {error, phantom_file};
+                        _ -> {ok, Handle#file_handles{descriptors = Fds2}}
+                    end;
+                {error, Reason} -> {error, Reason}
+            end;
+            false -> {ok, Handle#file_handles{
+                descriptors = maps:put(SessId, FdCount - Count, Fds)
+            }}
         end
-    end).
+    end,
+
+    case update(FileUUID, Diff) of
+        {ok, _} -> maybe_delete(FileUUID);
+        {error, phantom_file} ->
+            worker_proxy:cast(file_deletion_worker, {open_file_deletion_request, FileUUID}),
+            delete(FileUUID);
+        {error, {not_found, _}} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -230,17 +247,11 @@ register_release(FileUUID, SessionId, Count) ->
 %%--------------------------------------------------------------------
 -spec mark_to_remove(file_meta:uuid()) -> ok | {error, Reason :: term()}.
 mark_to_remove(FileUUID) ->
-    run_in_critical_section(FileUUID, fun() ->
-        case open_file:get(FileUUID) of
-            {ok, #document{value = OpenFile} = Doc} ->
-                {ok, _} = open_file:save(Doc#document{value = OpenFile#open_file{
-                    is_removed = true}}),
-                ok;
-            {error, Reason} ->
-                {error, Reason}
-        end
-    end).
-
+    case update(FileUUID, #{is_removed => true}) of
+        {ok, _} -> ok;
+        {error, {not_found, _}} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -250,49 +261,28 @@ mark_to_remove(FileUUID) ->
 %%--------------------------------------------------------------------
 -spec invalidate_session_entry(file_meta:uuid(), session:id()) ->
     ok | {error, Reason :: term()}.
-invalidate_session_entry(FileUUID, SessionId) ->
-    run_in_critical_section(FileUUID, fun() ->
-        case open_file:get(FileUUID) of
-            {ok, #document{value = #open_file{active_descriptors = ActiveDescriptors} = OpenFile} = Doc} ->
-                case maps:is_key(SessionId, ActiveDescriptors) of
-                    true ->
-                        UpdatedActiveDescriptors = maps:remove(SessionId, ActiveDescriptors),
-                        delete_or_save(FileUUID, UpdatedActiveDescriptors, OpenFile, Doc);
-                    false -> ok
-                end;
-
-            {error, {not_found, _}} ->
-                ok;
-            {error, Reason} ->
-                {error, Reason}
-        end
-    end).
+invalidate_session_entry(FileUUID, SessId) ->
+    case register_release(FileUUID, SessId, infinity) of
+        ok -> ok;
+        {error, {not_found, _}} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Deletes entry and file if needed or saves updated state.
+%% @private @doc
+%% Removes file handles if descriptors map is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_or_save(file_meta:uuid(), #{session:id() => non_neg_integer()},
-    #open_file{}, #document{}) -> ok.
-delete_or_save(FileUUID, UpdatedActiveDescriptors, OpenFile, Doc) ->
-    case maps:size(UpdatedActiveDescriptors) of
-        0 ->
-            case OpenFile#open_file.is_removed of
-                true ->
-                    worker_proxy:cast(file_deletion_worker,
-                        {open_file_deletion_request, FileUUID});
-                false -> ok
-            end,
-
-            ok = open_file:delete(FileUUID);
-        _ ->
-            {ok, _} = open_file:save(Doc#document{value = OpenFile#open_file{
-                active_descriptors = UpdatedActiveDescriptors}}),
-            ok
-    end.
+-spec maybe_delete(FileUUID :: file_meta:uuid()) -> ok | {error, Reason :: term()}.
+maybe_delete(FileUUID) ->
+    datastore:delete(?STORE_LEVEL, ?MODULE, FileUUID, fun() ->
+        case file_handles:get(FileUUID) of
+            {ok, #document{value = #file_handles{descriptors = Fds}}} ->
+                maps:size(Fds) == 0;
+            {error, _} -> false
+        end
+    end).

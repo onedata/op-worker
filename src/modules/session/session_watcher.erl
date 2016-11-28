@@ -158,7 +158,7 @@ handle_info(check_connections_status, #state{session_id = SessId, overloaded_con
                     [{Pid, NewQueueLen} | AccIn];
                 {message_queue_len, NewQueueLen} ->
                     ?error("Connection ~p on session ~p hang with ~p messages
-                                                        in request queue. Removing.", [Pid, SessId, NewQueueLen]),
+                            in request queue. Removing.", [Pid, SessId, NewQueueLen]),
                     session:remove_connection(SessId, Pid),
                     erlang:exit(Pid, kill),
                     AccIn
@@ -273,7 +273,7 @@ is_session_ttl_exceeded(SessId, TTL) ->
 -spec schedule_session_status_checkup(Delay :: non_neg_integer()) ->
     TimeRef :: reference().
 schedule_session_status_checkup(Delay) ->
-    erlang:send_after(Delay, self(), check_session_status).
+    erlang:send_after(timer:seconds(Delay), self(), check_session_status).
 
 %%--------------------------------------------------------------------
 %% @private

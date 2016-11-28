@@ -230,7 +230,7 @@ create(SessId, Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    OpenType :: helpers:open_mode()) ->
+    OpenType :: helpers:open_flag()) ->
     {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
     ?run(fun() -> lfm_files:open(SessId, FileKey, OpenType) end).
@@ -327,7 +327,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% Checks if current user has given permissions for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(session:id(), file_key(), helpers:open_mode()) ->
+-spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
     {ok, boolean()} | error_reply().
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).

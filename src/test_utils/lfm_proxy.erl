@@ -98,11 +98,11 @@ unlink(Worker, SessId, FileKey) ->
     ?EXEC(Worker, logical_file_manager:unlink(SessId, uuid_to_guid(Worker, FileKey), false)).
 
 -spec open(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
-    OpenType :: helpers:open_mode()) ->
+    OpenType :: helpers:open_flag()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
-open(Worker, SessId, FileKey, OpenMode) ->
+open(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker,
-        case logical_file_manager:open(SessId, uuid_to_guid(Worker, FileKey), OpenMode) of
+        case logical_file_manager:open(SessId, uuid_to_guid(Worker, FileKey), OpenFlag) of
             {ok, Handle} ->
                 TestHandle = crypto:rand_bytes(10),
                 ets:insert(lfm_handles, {TestHandle, Handle}),
@@ -317,10 +317,10 @@ has_custom_metadata(Worker, SessId, FileKey) ->
 remove_metadata(Worker, SessId, FileKey, Type) ->
     ?EXEC(Worker, logical_file_manager:remove_metadata(SessId, FileKey, Type)).
 
--spec check_perms(node(), session:id(), logical_file_manager:file_key(), helpers:open_mode()) ->
+-spec check_perms(node(), session:id(), logical_file_manager:file_key(), helpers:open_flag()) ->
     {ok, boolean()} | {error, term()}.
-check_perms(Worker, SessId, FileKey, OpenMode) ->
-    ?EXEC(Worker, logical_file_manager:check_perms(SessId, FileKey, OpenMode)).
+check_perms(Worker, SessId, FileKey, OpenFlag) ->
+    ?EXEC(Worker, logical_file_manager:check_perms(SessId, FileKey, OpenFlag)).
 
 -spec create_share(node(), session:id(), logical_file_manager:file_key(), od_share:name()) ->
     {ok, {od_share:id(), od_share:share_guid()}} | {error, term()}.

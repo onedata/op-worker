@@ -98,9 +98,9 @@ read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_handle(SessionId :: session:id(), Parameters :: #{binary() => binary()},
-    StorageId :: storage:id(), FileId :: helpers:file(), OpenMode :: helpers:open_mode()) ->
+    StorageId :: storage:id(), FileId :: helpers:file(), OpenFlag :: helpers:open_flag()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
-get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
+get_handle(SessionId, Parameters, StorageId, FileId, OpenFlag)->
     {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
         session:get(SessionId),
     case maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined) of
@@ -112,7 +112,7 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
             {ok, Storage} = storage:get(StorageId),
             SFMHandle =
                 storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId, ShareId),
-            storage_file_manager:open(SFMHandle, OpenMode);
+            storage_file_manager:open(SFMHandle, OpenFlag);
         HandleId ->
             session:get_handle(SessionId, HandleId)
     end.
