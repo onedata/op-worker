@@ -127,7 +127,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ShareId, ProviderI
 %% when handle goes out of scope (term will be released by Erlang's GC).
 %% @end
 %%--------------------------------------------------------------------
--spec open(handle(), OpenMode :: helpers:open_mode()) ->
+-spec open(handle(), OpenFlag :: helpers:open_flag()) ->
     {ok, handle()} | logical_file_manager:error_reply().
 open(#sfm_handle{is_local = true} = SFMHandle, read) ->
     open_for_read(SFMHandle);
@@ -304,8 +304,8 @@ stat(_FileHandle) ->
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
     {ok, non_neg_integer()} | logical_file_manager:error_reply().
-write(#sfm_handle{is_local = true, open_mode = undefined}, _, _) -> throw(?EPERM);
-write(#sfm_handle{is_local = true, open_mode = read}, _, _) -> throw(?EPERM);
+write(#sfm_handle{is_local = true, open_flag = undefined}, _, _) -> throw(?EPERM);
+write(#sfm_handle{is_local = true, open_flag = read}, _, _) -> throw(?EPERM);
 write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, helper_handle = HelperHandle, file = File, file_size = CSize}, Offset, Buffer) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     %% @todo: VFS-2086 handle sparse files
@@ -333,8 +333,8 @@ write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) ->
     {ok, binary()} | logical_file_manager:error_reply().
-read(#sfm_handle{is_local = true, open_mode = undefined}, _, _) -> throw(?EPERM);
-read(#sfm_handle{is_local = true, open_mode = write}, _, _) -> throw(?EPERM);
+read(#sfm_handle{is_local = true, open_flag = undefined}, _, _) -> throw(?EPERM);
+read(#sfm_handle{is_local = true, open_flag = write}, _, _) -> throw(?EPERM);
 read(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
     helpers:read(HelperHandle, File, Offset, MaxSize);
 
@@ -394,8 +394,8 @@ create(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid
 %%--------------------------------------------------------------------
 -spec truncate(handle(), Size :: integer()) ->
     ok | logical_file_manager:error_reply().
-truncate(#sfm_handle{is_local = true, open_mode = undefined}, _) -> throw(?EPERM);
-truncate(#sfm_handle{is_local = true, open_mode = read}, _) -> throw(?EPERM);
+truncate(#sfm_handle{is_local = true, open_flag = undefined}, _) -> throw(?EPERM);
+truncate(#sfm_handle{is_local = true, open_flag = read}, _) -> throw(?EPERM);
 truncate(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Size) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
@@ -466,15 +466,15 @@ open_for_rdwr(SFMHandle) ->
 %% @equiv open/2, but without permission control
 %% @end
 %%--------------------------------------------------------------------
--spec open_impl(handle(), OpenMode :: helpers:open_mode()) ->
+-spec open_impl(handle(), OpenFlag :: helpers:open_flag()) ->
     {ok, handle()} | logical_file_manager:error_reply().
-open_impl(#sfm_handle{is_local = true, storage = Storage, file = FileId, session_id = SessionId, space_uuid = SpaceUUID} = SFMHandle, OpenMode) ->
+open_impl(#sfm_handle{is_local = true, storage = Storage, file = FileId, session_id = SessionId, space_uuid = SpaceUUID} = SFMHandle, OpenFlag) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
-    case helpers:open(HelperHandle, FileId, OpenMode) of
+    case helpers:open(HelperHandle, FileId, OpenFlag) of
         {ok, _} ->
-            {ok, SFMHandle#sfm_handle{helper_handle = HelperHandle, open_mode = OpenMode}};
+            {ok, SFMHandle#sfm_handle{helper_handle = HelperHandle, open_flag = OpenFlag}};
         {error, Reason} ->
             {error, Reason}
     end.

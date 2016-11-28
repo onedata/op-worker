@@ -59,16 +59,22 @@
     target_name :: file_meta:name()
 }).
 
--record(get_new_file_location, {
+-record(create_file, {
     name :: file_meta:name(),
-    flags :: atom(),
     mode = 8#644 :: file_meta:posix_permissions(),
-    create_handle = true :: boolean()
+    flag = rdwr :: fslogic_worker:open_flag()
+}).
+
+-record(make_file, {
+    name :: file_meta:name(),
+    mode = 8#644 :: file_meta:posix_permissions()
+}).
+
+-record(open_file, {
+    flag :: fslogic_worker:open_flag()
 }).
 
 -record(get_file_location, {
-    flags :: fslogic_worker:open_flags(),
-    create_handle = true :: boolean()
 }).
 
 -record(release, {
@@ -90,9 +96,10 @@
 
 -type file_request() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
-    #update_times{} | #change_mode{} | #rename{} | #get_new_file_location{} |
-    #get_file_location{} | #release{} | #truncate{} | #synchronize_block{} |
-    #synchronize_block_and_compute_checksum{} | #get_child_attr{}.
+    #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
+    #open_file{} | #get_file_location{} | #release{} | #truncate{} |
+    #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
+    #get_child_attr{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -154,6 +161,16 @@
     file_location :: #file_location{}
 }).
 
+-record(file_created, {
+    handle_id :: binary(),
+    file_attr :: #file_attr{},
+    file_location :: #file_location{}
+}).
+
+-record(file_opened, {
+    handle_id :: binary()
+}).
+
 -record(file_renamed, {
     new_uuid :: fslogic_worker:file_guid(),
     child_entries :: undefined | [#file_renamed_entry{}]
@@ -161,7 +178,8 @@
 
 -type fuse_response() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
-    #storage_test_file{} | #dir{} | #sync_response{} | #file_renamed{} | undefined.
+    #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
+    #file_opened{} | #file_renamed{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},

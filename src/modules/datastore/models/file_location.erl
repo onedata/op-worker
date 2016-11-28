@@ -22,7 +22,7 @@
     'after'/5, before/4]).
 -export([critical_section/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
     validate_block_data/3]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 -type id() :: binary().
 -type doc() :: datastore:document().
@@ -48,7 +48,26 @@ record_struct(1) ->
         {space_id, string},
         {recent_changes, {[term], [term]}},
         {last_rename, {{string, string}, integer}}
-    ]}.
+    ]};
+record_struct(2) ->
+    {record, Struct} = record_struct(1),
+    {record, proplists:delete(handle_id, Struct)}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
+    VersionVector, Size, _HandleId, SpaceId, RecentChanges, LastRename}) ->
+    {2, #file_location{
+        uuid = Uuid, provider_id = ProviderId, storage_id = StorageId,
+        file_id = FileId, blocks = Blocks, version_vector = VersionVector,
+        size = Size, space_id = SpaceId, recent_changes = RecentChanges,
+        last_rename = LastRename
+    }}.
 
 %%%===================================================================
 %%% API
@@ -81,9 +100,8 @@ save_and_bump_version(FileLocationDoc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_blocks_not_empty(#file_location{}) -> #file_location{}.
-ensure_blocks_not_empty(Loc = #file_location{blocks = [], file_id = FileId, storage_id = StorageId}) ->
-    Loc#file_location{blocks = [#file_block{offset = 0, size = 0,
-        storage_id = StorageId, file_id = FileId}]};
+ensure_blocks_not_empty(Loc = #file_location{blocks = []}) ->
+    Loc#file_location{blocks = [#file_block{offset = 0, size = 0}]};
 ensure_blocks_not_empty(Loc) ->
     Loc.
 
@@ -129,19 +147,19 @@ save(Document = #document{key = Key, value = #file_location{uuid = UUID, space_i
     case get(Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
-            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize - OldSize),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize - OldSize),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize - OldSize);
 
         {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
 
-            space_quota:apply_size_change_and_maybe_emit(OldSpaceId,  -1 * OldSize),
+            space_quota:apply_size_change_and_maybe_emit(OldSpaceId, -1 * OldSize),
             monitoring_event:emit_storage_used_updated(OldSpaceId, UserId, -1 * OldSize),
 
-            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize);
         _ ->
-            space_quota:apply_size_change_and_maybe_emit(SpaceId,  NewSize),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize)
     end,
     datastore:save(?STORE_LEVEL, Document).
@@ -215,7 +233,11 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL)#model_config{sync_enabled = true}.
+    Config = ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{
+        version = 2,
+        sync_enabled = true
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc

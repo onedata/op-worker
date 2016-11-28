@@ -14,10 +14,11 @@
 
 %% Internal opaque file-handle used by logical_file_manager
 -record(lfm_handle, {
+    handle_id :: binary() | undefined,
     file_location :: file_location:model_record(),
     provider_id :: oneprovider:id(),
     sfm_handles = #{} :: sfm_handles_map(),
     fslogic_ctx :: fslogic_worker:ctx(),
     file_guid :: fslogic_worker:file_guid(),
-    open_mode :: helpers:open_mode()
+    open_flag :: fslogic_worker:open_flag()
 }).

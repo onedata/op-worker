@@ -518,30 +518,22 @@ creating_handle_in_create_test(Config) ->
 
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, <<"/space_name2/handle_test_dir">>),
 
-    BaseReq = #get_new_file_location{mode = 8#777},
+    BaseReq = #create_file{mode = 8#777},
 
-    Resp1 = ?file_req(W, SessId, DirGuid, BaseReq#get_new_file_location{
-        name = <<"file1">>, create_handle = true}),
-    Resp2 = ?file_req(W, SessId, DirGuid, BaseReq#get_new_file_location{
-        name = <<"file2">>, create_handle = false}),
-    Resp3 = ?file_req(W, ?ROOT_SESS_ID, DirGuid, BaseReq#get_new_file_location{
-        name = <<"file3">>, create_handle = true}),
-    Resp4 = ?file_req(W, ?ROOT_SESS_ID, DirGuid, BaseReq#get_new_file_location{
-        name = <<"file4">>, create_handle = false}),
+    Resp1 = ?file_req(W, SessId, DirGuid, BaseReq#create_file{
+        name = <<"file1">>
+    }),
+    Resp2 = ?file_req(W, ?ROOT_SESS_ID, DirGuid, BaseReq#create_file{
+        name = <<"file2">>
+    }),
 
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId1}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp1),
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId2}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp2),
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId3}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp3),
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId4}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp4),
+    #fuse_response{fuse_response = #file_created{handle_id = HandleId1}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp1),
+    #fuse_response{fuse_response = #file_created{handle_id = HandleId2}} =
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp2),
 
-    ?assert(undefined =/= HandleId1),
-    ?assertEqual(undefined, HandleId2),
-    ?assertEqual(undefined, HandleId3),
-    ?assertEqual(undefined, HandleId4).
+    ?assertMatch(<<_/binary>>, HandleId1),
+    ?assertMatch(<<_/binary>>, HandleId2).
 
 
 creating_handle_in_open_test(Config) ->
@@ -550,26 +542,11 @@ creating_handle_in_open_test(Config) ->
 
     {ok, Guid} = lfm_proxy:create(W, SessId, <<"/space_name2/handle_test_file">>, 8#777),
 
-    BaseReq = #get_file_location{flags = rdwr},
+    Resp1 = ?file_req(W, SessId, Guid, #get_file_location{}),
+    Resp2 = ?file_req(W, ?ROOT_SESS_ID, Guid, #get_file_location{}),
 
-    Resp1 = ?file_req(W, SessId, Guid, BaseReq#get_file_location{create_handle = true}),
-    Resp2 = ?file_req(W, SessId, Guid, BaseReq#get_file_location{create_handle = false}),
-    Resp3 = ?file_req(W, ?ROOT_SESS_ID, Guid, BaseReq#get_file_location{create_handle = true}),
-    Resp4 = ?file_req(W, ?ROOT_SESS_ID, Guid, BaseReq#get_file_location{create_handle = false}),
-
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId1}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp1),
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId2}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp2),
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId3}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp3),
-    #fuse_response{fuse_response = #file_location{handle_id = HandleId4}} =
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp4),
-
-    ?assert(undefined =/= HandleId1),
-    ?assertEqual(undefined, HandleId2),
-    ?assertEqual(undefined, HandleId3),
-    ?assertEqual(undefined, HandleId4).
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp1),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp2).
 
 
 %%%===================================================================
