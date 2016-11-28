@@ -317,6 +317,84 @@
                         "storage": "/mnt/st5"
                     }
                 }
+            },
+            "space3": {
+                "displayed_name": "space3",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st"
+                    }
+                }
+            },
+            "space4": {
+                "displayed_name": "space4",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space5": {
+                "displayed_name": "space5",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p3": {
+                        "storage": "/mnt/st3"
+                    }
+                }
+            },
+            "space6": {
+                "displayed_name": "space6",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p4": {
+                        "storage": "/mnt/st4"
+                    }
+                }
+            },
+            "space7": {
+                "displayed_name": "space7",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p5": {
+                        "storage": "/mnt/st5"
+                    }
+                }
+            },
+            "space8": {
+                "displayed_name": "space8",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p6": {
+                        "storage": "/mnt/st6"
+                    }
+                }
             }
         }
     }
