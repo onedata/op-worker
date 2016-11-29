@@ -189,10 +189,10 @@ create_file(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, 
             }
     catch
         T:M ->
+            ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
             {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
             lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
             file_meta:delete({uuid, FileUUID}),
-            ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
             throw(?EACCES)
     end.
 
@@ -384,7 +384,7 @@ open_file_for_rdwr(CTX, File) ->
 open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = ShareId} = CTX, File, Flag) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(File),
 
-    {ok, #document{value = Storage}} = fslogic_storage:select_storage(SpaceId),
+    {ok, StorageDoc} = fslogic_storage:select_storage(SpaceId),
     #document{value = #file_location{
         file_id = FileId}
     } = fslogic_utils:get_local_file_location({uuid, FileUUID}),
@@ -392,7 +392,7 @@ open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = 
         FileDoc, fslogic_context:get_user_id(CTX)
     ),
 
-    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId, ShareId),
+    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, StorageDoc, FileId, ShareId),
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
     {ok, HandleId} = save_handle(SessId, Handle),
 

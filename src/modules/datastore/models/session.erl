@@ -18,14 +18,17 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+-define(HELPER_LINK_LEVEL, ?LOCAL_ONLY_LEVEL).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([get_session_supervisor_and_node/1, get_event_manager/1,
+-export([get_session_supervisor_and_node/1, get_event_manager/1, get_helper/3,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
@@ -115,7 +118,11 @@ list() ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     case session:get(Key) of
-        {ok, #document{value = #session{open_files = OpenFiles}}} ->
+        {ok, #document{key = SessId, value = #session{open_files = OpenFiles}}} ->
+
+            worker_proxy:multicast(?SESSION_MANAGER_WORKER,
+                {apply, fun() -> delete_helpers_on_this_node(SessId) end}),
+
             lists:foreach(
                 fun(FileUUID) ->
                     file_handles:invalidate_session_entry(FileUUID, Key)
@@ -517,7 +524,121 @@ get_handle(SessionId, HandleID) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves a helper associated with the session by
+%% {SessionId, SpaceUuid} key. The helper is created and associated
+%% with the session if it doesn't exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_helper(SessionId :: id(), SpaceUuid :: file_meta:uuid(),
+    Storage :: #document{value :: #storage{}} | storage:id()) ->
+    {ok, helpers:handle()} | datastore:generic_error().
+get_helper(SessionId, SpaceUuid, Storage) ->
+    fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, false).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Attempts to fetch a helper instance through link API. If fetching
+%% fails with enoent, enters the critical section and retries the
+%% request, then inserts a new helper if the helper is still missing.
+%% The first, out-of-critical-section fetch is an optimization.
+%% The fetch+insert occurs in the critical section to avoid
+%% instantiating unnecessary helper instances.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_lock_fetch_helper(SessionId :: id(), SpaceUuid :: file_meta:uuid(),
+    Storage :: #document{value :: #storage{}} | storage:id(),
+    InCriticalSection :: boolean()) ->
+    {ok, helpers:handle()} | datastore:generic_error().
+fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, InCriticalSection) ->
+    StorageId = storage_id(Storage),
+    FetchResult = datastore:fetch_link_target(?HELPER_LINK_LEVEL, SessionId,
+                      ?MODEL_NAME, link_key(SpaceUuid, StorageId)),
+
+    case {FetchResult, InCriticalSection} of
+        {{ok, #document{value = Handle}}, _} ->
+            {ok, Handle};
+
+        {{error, link_not_found}, false} ->
+            critical_section:run({SessionId, SpaceUuid, StorageId}, fun() ->
+                fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, true)
+            end);
+
+        {{error, link_not_found}, true} ->
+            {ok, #helper_instance{handle = Handle}} =
+                add_missing_helper(SessionId, SpaceUuid, Storage),
+            {ok, Handle};
+
+        {{error, Reason}, _} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Translates Storage argument used in the module to a storage ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec storage_id(Storage :: #document{value :: #storage{}} | storage:id()) -> storage:id().
+storage_id(#document{key = StorageId, value = #storage{}}) -> StorageId;
+storage_id(StorageId) when is_binary(StorageId) -> StorageId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Creates a new #helper_instance{} document in the database and links
+%% it with current session.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_missing_helper(SessionId :: id(), SpaceUuid :: file_meta:uuid(),
+    Storage :: #document{value :: #storage{}} | storage:id()) ->
+    {ok, #helper_instance{}} | datastore:generic_error().
+add_missing_helper(SessionId, SpaceUuid, Storage) ->
+    StorageId = storage_id(Storage),
+
+    {ok, #document{key = Key, value = HelperInstance}} =
+        helper_instance:create(SessionId, SpaceUuid, Storage),
+
+    case datastore:add_links(?HELPER_LINK_LEVEL, SessionId, ?MODEL_NAME,
+                             [{link_key(StorageId, SpaceUuid),
+                               {Key, helper_instance}}]) of
+        ok ->
+            {ok, HelperInstance};
+
+        {error, Reason} ->
+            helper_instance:delete(Key),
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Removes all associated helper_instances present on the node.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_helpers_on_this_node(SessId :: id()) ->
+    ok | datastore:generic_error().
+delete_helpers_on_this_node(SessId) ->
+    datastore:foreach_link(?HELPER_LINK_LEVEL, SessId, ?MODEL_NAME,
+        fun(_LinkName, {_V, [{_, _, HelperKey, helper_instance}]}, _) ->
+            helper_instance:delete(HelperKey)
+        end, undefined),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Returns a key constructed from StorageId and SpaceUuid used for
+%% link targets.
+%% @end
+%%--------------------------------------------------------------------
+-spec link_key(StorageId :: storage:id(), SpaceUuid :: file_meta:uuid()) ->
+    binary().
+link_key(StorageId, SpaceUuid) ->
+    <<StorageId/binary, ":", SpaceUuid/binary>>.

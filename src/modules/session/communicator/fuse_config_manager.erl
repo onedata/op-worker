@@ -75,7 +75,7 @@ create_storage_test_file(SessId, #create_storage_test_file{storage_id = StorageI
     HelperName = helpers:name(HelperInit),
     HelperArgs = helpers:args(HelperInit),
     UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
-    Handle = helpers_utils:create_test_file_handle(HelperName, HelperArgs, UserCtx),
+    Handle = helpers:new_handle(HelperName, HelperArgs, UserCtx),
     HelperParams = helpers_utils:get_params(HelperInit, UserCtx),
     FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),
     Dirname = fslogic_path:dirname(FileId),
@@ -110,7 +110,7 @@ verify_storage_test_file(SessId, #verify_storage_test_file{storage_id = StorageI
     HelperName = helpers:name(HelperInit),
     HelperArgs = helpers:args(HelperInit),
     UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
-    Handle = helpers_utils:create_test_file_handle(HelperName, HelperArgs, UserCtx),
+    Handle = helpers:new_handle(HelperName, HelperArgs, UserCtx),
     verify_storage_test_file_loop(Handle, FileId, FileContent, ?ENOENT, ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
 %%--------------------------------------------------------------------
