@@ -20,7 +20,7 @@
 
 %% API
 -export([get_file_location/2, open_file/3, create_file/5, make_file/4,
-    truncate/3, get_helper_params/3, release/2]).
+    truncate/3, get_helper_params/3, release/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
@@ -177,6 +177,8 @@ create_file(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, 
                 space_id = SpaceId
             },
 
+            ok = file_handles:register_open(FileUUID, SessId, 1),
+
             #fuse_response{
                 status = #status{code = ?OK},
                 fuse_response = #file_created{
@@ -233,10 +235,11 @@ make_file(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, Pa
 %% @doc Removes file handle saved in session.
 %% @end
 %%--------------------------------------------------------------------
--spec release(#fslogic_ctx{}, HandleId :: binary()) ->
+-spec release(#fslogic_ctx{}, FileUUID :: file_meta:uuid(), HandleId :: binary()) ->
     no_return() | #fuse_response{}.
-release(#fslogic_ctx{session_id = SessId}, HandleId) ->
+release(#fslogic_ctx{session_id = SessId}, FileUUID, HandleId) ->
     ok = session:remove_handle(SessId, HandleId),
+    ok = file_handles:register_release(FileUUID, SessId, 1),
     #fuse_response{status = #status{code = ?OK}}.
 
 
@@ -393,6 +396,8 @@ open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = 
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
     {ok, HandleId} = save_handle(SessId, Handle),
 
+    ok = file_handles:register_open(FileUUID, SessId, 1),
+
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}
@@ -404,7 +409,11 @@ open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = 
 %%--------------------------------------------------------------------
 -spec save_handle(session:id(), storage_file_manager:handle()) ->
     {ok, binary()}.
-save_handle(SessionId, Handle) ->
+save_handle(SessId, Handle) ->
     HandleId = base64:encode(crypto:rand_bytes(20)),
-    ok = session:add_handle(SessionId, HandleId, Handle),
+    case SessId of
+    	?ROOT_SESS_ID -> ok;
+    	?GUEST_SESS_ID -> ok;
+    	_ -> session:add_handle(SessId, HandleId, Handle)
+    end,
     {ok, HandleId}.

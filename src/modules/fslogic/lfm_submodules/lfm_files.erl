@@ -121,7 +121,7 @@ get_file_path(SessId, FileGUID) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file or an empty directory.
-%% If parameter Silent is true, file_removal_event will not be emitted.
+%% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(logical_file_manager:handle(), boolean()) ->

@@ -189,7 +189,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
 %%--------------------------------------------------------------------
 %% @doc Deletes file.
 %% For best performance use following arg types: document -> uuid -> path
-%% If parameter Silent is true, file_removal_event will not be emitted.
+%% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
@@ -711,7 +711,7 @@ delete_file(CTX, File, Silent) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes file or directory
-%% If parameter Silent is true, file_removal_event will not be emitted.
+%% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->

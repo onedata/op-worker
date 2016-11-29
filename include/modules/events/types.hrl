@@ -78,7 +78,7 @@
 
 %% definition of an event triggered when file is removed
 %% file_uuid - UUID of a file
--record(file_removal_event, {
+-record(file_removed_event, {
     file_uuid :: file_meta:uuid()
 }).
 
@@ -93,16 +93,6 @@
 -record(file_renamed_event, {
     top_entry :: #file_renamed_entry{},
     child_entries = [] :: [#file_renamed_entry{}]
-}).
-
-%% definition of an event triggered when file is accessed
-%% file_uuid     - UUID of a file
-%% open_count    - Number of open operation on file
-%% release_count - Number of release operation on file
--record(file_accessed_event, {
-    file_uuid :: file_meta:uuid(),
-    open_count :: non_neg_integer(),
-    release_count :: non_neg_integer()
 }).
 
 %% definition of event triggered when storage usage is changed

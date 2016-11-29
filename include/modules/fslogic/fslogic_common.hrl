@@ -24,6 +24,9 @@
 -define(DIRECTORY_SEPARATOR, "/").
 -define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
 
+%% Hidden file prefix
+-define(HIDDEN_FILE_PREFIX, ".__onedata__").
+
 %% Context definition
 -record(fslogic_ctx, {
     session :: #session{},

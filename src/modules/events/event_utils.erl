@@ -59,11 +59,11 @@ inject_event_stream_definition(#subscription{object = #permission_changed_subscr
         event_stream = ?PERMISSION_CHANGED_EVENT_STREAM
     };
 
-inject_event_stream_definition(#subscription{object = #file_removal_subscription{
+inject_event_stream_definition(#subscription{object = #file_removed_subscription{
     file_uuid = FileUuid}} = Sub) ->
     Sub#subscription{
-        stream_key = <<"file_removal.", FileUuid/binary>>,
-        event_stream = ?FILE_REMOVAL_EVENT_STREAM
+        stream_key = <<"file_removed.", FileUuid/binary>>,
+        event_stream = ?FILE_REMOVED_EVENT_STREAM
     };
 
 inject_event_stream_definition(#subscription{object = #quota_subscription{}} = Sub) ->
@@ -78,10 +78,7 @@ inject_event_stream_definition(#subscription{object = #file_renamed_subscription
     Sub#subscription{
         stream_key = <<"file_renamed.", FileUuid/binary>>,
         event_stream = ?FILE_RENAMED_EVENT_STREAM
-    };
-
-inject_event_stream_definition(#subscription{object = #file_accessed_subscription{}} = Sub) ->
-    Sub#subscription{event_stream = ?FILE_ACCESSED_EVENT_STREAM}.
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
