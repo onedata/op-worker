@@ -81,7 +81,7 @@ synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = Requ
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = fslogic_context:get_session_id(CTX),
-    fslogic_event:emit_file_location_update({uuid, Uuid}, [SessId], Block).
+    fslogic_event:emit_file_location_changed({uuid, Uuid}, [SessId], Block).
 
 %%%===================================================================
 %%% Internal functions

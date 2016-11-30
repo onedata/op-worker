@@ -58,11 +58,11 @@ init([SessId, SessType]) ->
     case SessType of
         root ->
             {ok, {SupFlags, [
-                event_manager_sup_spec(SessId, SessType)
+                event_manager_sup_spec(SessId)
             ]}};
         guest ->
             {ok, {SupFlags, [
-                event_manager_sup_spec(SessId, SessType)
+                event_manager_sup_spec(SessId)
             ]}};
         _ ->
             case lists:member(SessType, SequencerEnabled) of
@@ -70,12 +70,12 @@ init([SessId, SessType]) ->
                     {ok, {SupFlags, [
                         session_watcher_spec(SessId, SessType),
                         sequencer_manager_sup_spec(SessId),
-                        event_manager_sup_spec(SessId, SessType)
+                        event_manager_sup_spec(SessId)
                     ]}};
                 _ ->
                     {ok, {SupFlags, [
                         session_watcher_spec(SessId, SessType),
-                        event_manager_sup_spec(SessId, SessType)
+                        event_manager_sup_spec(SessId)
                     ]}}
             end
     end.
@@ -126,12 +126,12 @@ sequencer_manager_sup_spec(SessId) ->
 %% Creates a supervisor child_spec for a event manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec event_manager_sup_spec(SessId :: session:id(), SessType :: session:type()) ->
+-spec event_manager_sup_spec(SessId :: session:id()) ->
     supervisor:child_spec().
-event_manager_sup_spec(SessId, SessType) ->
+event_manager_sup_spec(SessId) ->
     #{
         id => event_manager_sup,
-        start => {event_manager_sup, start_link, [SessId, SessType]},
+        start => {event_manager_sup, start_link, [SessId]},
         restart => transient,
         shutdown => infinity,
         type => supervisor,

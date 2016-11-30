@@ -31,8 +31,6 @@
     emit_should_aggregate_events_with_the_same_key/1,
     emit_should_not_aggregate_events_with_different_key/1,
     emit_should_execute_event_handler_when_counter_threshold_exceeded/1,
-    emit_should_execute_event_handler_when_size_threshold_exceeded/1,
-    multiple_subscribe_should_create_multiple_subscriptions/1,
     subscribe_should_work_for_multiple_sessions/1]).
 
 %% test_bases
@@ -40,16 +38,12 @@
     emit_should_aggregate_events_with_the_same_key_base/1,
     emit_should_not_aggregate_events_with_different_key_base/1,
     emit_should_execute_event_handler_when_counter_threshold_exceeded_base/1,
-    emit_should_execute_event_handler_when_size_threshold_exceeded_base/1,
-    multiple_subscribe_should_create_multiple_subscriptions_base/1,
     subscribe_should_work_for_multiple_sessions_base/1]).
 
 -define(TEST_CASES, [
     emit_should_aggregate_events_with_the_same_key,
     emit_should_not_aggregate_events_with_different_key,
     emit_should_execute_event_handler_when_counter_threshold_exceeded,
-    emit_should_execute_event_handler_when_size_threshold_exceeded,
-    multiple_subscribe_should_create_multiple_subscriptions,
     subscribe_should_work_for_multiple_sessions
 ]).
 all() ->
@@ -117,7 +111,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
     FileSize = EvtNum * EvtSize,
 
     initializer:remove_pending_messages(),
-    {ok, SubId} = subscribe(Worker,
+    SubId = subscribe(Worker, SessId,
         fun(Meta) -> Meta >= CtrThr end,
         forward_events_handler(Self)
     ),
@@ -126,7 +120,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
-            emit(Worker, #write_event{file_uuid = FileUuid, size = EvtSize,
+            emit(Worker, #file_written_event{file_uuid = FileUuid, size = EvtSize,
                 file_size = N * EvtSize, blocks = [#file_block{
                     offset = (N - 1) * EvtSize, size = EvtSize
                 }]}, SessId)
@@ -137,17 +131,16 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
 
     % Check whether events have been aggregated and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-        ?assertMatch([#event{key = FileUuid, counter = EvtNum,
-            object = #write_event{
-                file_uuid = FileUuid,
-                file_size = FileSize,
-                size = FileSize,
-                blocks = [#file_block{offset = 0, size = FileSize}]
-            }
-        }], receive_write_events(SubId, SessId))
+        ?assertMatch([#file_written_event{
+            counter = EvtNum,
+            file_uuid = FileUuid,
+            file_size = FileSize,
+            size = FileSize,
+            blocks = [#file_block{offset = 0, size = FileSize}]
+        }], receive_file_written_events(SubId, SessId))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SessId, SubId),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -182,7 +175,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
     FileSize = EvtNum * EvtSize,
 
     initializer:remove_pending_messages(),
-    {ok, SubId} = subscribe(Worker,
+    SubId = subscribe(Worker, SessId,
         fun(Meta) -> Meta >= CtrThr end,
         forward_events_handler(Self)
     ),
@@ -192,7 +185,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         utils:pforeach(fun(N) ->
             lists:foreach(fun(M) ->
-                emit(Worker, #write_event{file_uuid = ?FILE_UUID(N), size = EvtSize,
+                emit(Worker, #file_written_event{file_uuid = ?FILE_UUID(N), size = EvtSize,
                     file_size = M * EvtSize, blocks = [#file_block{
                         offset = (M - 1) * EvtSize, size = EvtSize
                     }]}, SessId)
@@ -205,22 +198,22 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
     % Check whether events have been aggregated in terms of the same file ID
     % and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-        RecvEvts = ?assertMatch([_ | _], receive_write_events(SubId, SessId)),
+        RecvEvts = ?assertMatch([_ | _], receive_file_written_events(SubId, SessId)),
         lists:foldl(fun(Evt, FileUuids) ->
-            #event{object = #write_event{file_uuid = FileUuid}} =
-                ?assertMatch(#event{counter = EvtNum,
-                    object = #write_event{
-                        file_size = FileSize,
-                        size = FileSize,
-                        blocks = [#file_block{offset = 0, size = FileSize}]
-                    }
+            #file_written_event{file_uuid = FileUuid} =
+                ?assertMatch(#file_written_event{
+                    counter = EvtNum,
+                    file_size = FileSize,
+                    size = FileSize,
+                    blocks = [#file_block{offset = 0, size = FileSize}]
+
                 }, Evt),
             ?assert(lists:member(FileUuid, FileUuids)),
             lists:delete(FileUuid, FileUuids)
         end, [?FILE_UUID(N) || N <- lists:seq(1, FileNum)], RecvEvts)
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SessId, SubId),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -253,7 +246,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
     EvtNum = ?config(evt_num, Config),
 
     initializer:remove_pending_messages(),
-    {ok, SubId} = subscribe(Worker,
+    SubId = subscribe(Worker, SessId,
         fun(Meta) -> Meta >= EvtNum end,
         forward_events_handler(Self)
     ),
@@ -262,159 +255,18 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            emit(Worker, #write_event{file_uuid = FileUuid}, SessId)
+            emit(Worker, #file_written_event{file_uuid = FileUuid}, SessId)
         end, lists:seq(1, EvtNum))
     end),
 
     % Check whether events have been aggregated and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-        ?assertReceivedMatch({event_handler, SubId, SessId, [#event{
-            key = FileUuid, counter = EvtNum, object = #write_event{}
-        }]}, ?TIMEOUT)
+        ?assertReceivedMatch({event_handler, SubId, SessId, [
+            #file_written_event{counter = EvtNum}
+        ]}, ?TIMEOUT)
     end),
 
-    unsubscribe(Worker, SubId),
-
-    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-        evt_per_sec(EvtNum, EmitUs + AggrUs)].
-
-emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 10},
-        {success_rate, 90},
-        {parameters, [?EVT_NUM(100), ?EVT_SIZE(1)]},
-        {description, "Check whether event stream executes handlers when summary events size "
-        "exceeds size threshold which is equal to the number of events."},
-        {config, [{name, small_size_threshold},
-            {description, "Executes event handler for stream with small size threshold."},
-            {parameters, [?EVT_NUM(500)]}
-        ]},
-        {config, [{name, medium_size_threshold},
-            {description, "Executes event handler for stream with medium size threshold."},
-            {parameters, [?EVT_NUM(5000)]}
-        ]},
-        {config, [{name, large_size_threshold},
-            {description, "Executes event handler for stream with large size threshold."},
-            {parameters, [?EVT_NUM(50000)]}
-        ]}
-    ]).
-emit_should_execute_event_handler_when_size_threshold_exceeded_base(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Self = self(),
-    FileUuid = <<"file_id">>,
-    SessId = ?config(session_id, Config),
-    EvtNum = ?config(evt_num, Config),
-    EvtSize = ?config(evt_size, Config),
-
-    initializer:remove_pending_messages(),
-    {ok, SubId} = subscribe(Worker,
-        infinity,
-        fun(Meta) -> Meta >= EvtNum end,
-        fun(Meta, #event{object = #write_event{size = Size}}) ->
-            Meta + Size
-        end,
-        forward_events_handler(Self)
-    ),
-    ?assertReceivedMatch({stream_initialized, _, SessId}, ?TIMEOUT),
-
-    % Emit events.
-    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        lists:foreach(fun(_) ->
-            emit(Worker, #write_event{file_uuid = FileUuid, size = EvtSize}, SessId)
-        end, lists:seq(1, EvtNum))
-    end),
-
-    % Check whether events have been aggregated and handler has been executed.
-    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-        ?assertReceivedMatch({event_handler, SubId, SessId, [#event{
-            key = FileUuid, counter = EvtNum, object = #write_event{}
-        }]}, ?TIMEOUT)
-    end),
-
-    unsubscribe(Worker, SubId),
-
-    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-        evt_per_sec(EvtNum, EmitUs + AggrUs)].
-
-multiple_subscribe_should_create_multiple_subscriptions(Config) ->
-    ?PERFORMANCE(Config, [
-        {repeats, 10},
-        {success_rate, 90},
-        {parameters, [?SUB_NUM(2), ?EVT_NUM(1000)]},
-        {description, "Check whether multiple subscriptions are properly processed."},
-        {config, [{name, small_subs_num},
-            {description, "Creates subscriptions for events associated with small "
-            "number of different files."},
-            {parameters, [?SUB_NUM(10)]}
-        ]},
-        {config, [{name, medium_subs_num},
-            {description, "Creates subscriptions for events associated with medium "
-            "number of different files."},
-            {parameters, [?SUB_NUM(20)]}
-        ]},
-        {config, [{name, large_subs_num},
-            {description, "Creates subscriptions for events associated with large "
-            "number of different files."},
-            {parameters, [?SUB_NUM(50)]}
-        ]}
-    ]).
-multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
-    Self = self(),
-    FileUuid = <<"file_id">>,
-    SubNum = ?config(sub_num, Config),
-    EvtNum = ?config(evt_num, Config),
-
-    initializer:remove_pending_messages(),
-    % Create subscriptions for events.
-    SubIds = lists:map(fun(N) ->
-        StmId = ?STM_ID(N),
-        {ok, SubId} = subscribe(Worker,
-            StmId,
-            infinity,
-            fun(Meta) -> Meta >= EvtNum end,
-            fun(Meta, #event{counter = Counter}) -> Meta + Counter end,
-            forward_events_handler(Self)
-        ),
-        ?assertReceivedMatch({stream_initialized, StmId, SessId}, ?TIMEOUT),
-        SubId
-    end, lists:seq(1, SubNum)),
-
-    % Emit events for different subscriptions.
-    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        utils:pforeach(fun(N) ->
-            lists:foreach(fun(M) ->
-                emit(Worker, #event{stream_id = ?STM_ID(N), object = #write_event{
-                    file_uuid = FileUuid, size = 1, file_size = M,
-                    blocks = [#file_block{offset = M - 1, size = 1}]
-                }}, SessId)
-            end, lists:seq(1, EvtNum))
-        end, lists:seq(1, SubNum))
-    end),
-
-    lists:foreach(fun(SubId) ->
-        flush(Worker, SubId, SessId)
-    end, SubIds),
-
-    % Check whether events have been aggregated and handler has been executed
-    % for each subscription.
-    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-        lists:foreach(fun(SubId) ->
-            ?assertMatch([#event{counter = EvtNum,
-                object = #write_event{
-                    file_uuid = FileUuid,
-                    file_size = EvtNum,
-                    size = EvtNum,
-                    blocks = [#file_block{offset = 0, size = EvtNum}]
-                }
-            }], receive_write_events(SubId, SessId))
-        end, SubIds)
-    end),
-
-    lists:foreach(fun(SubId) ->
-        unsubscribe(Worker, SubId)
-    end, SubIds),
+    unsubscribe(Worker, SessId, SubId),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -449,57 +301,54 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
     FileSize = EvtNum * EvtSize,
 
     initializer:remove_pending_messages(),
-    SessIds = lists:map(fun(N) ->
+    Sessions = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
         session_setup(Worker, SessId, Iden, Self),
-        SessId
+        SubId = subscribe(Worker, SessId,
+            fun(Meta) -> Meta >= CtrThr end,
+            forward_events_handler(Self)
+        ),
+        {SessId, SubId}
     end, lists:seq(1, CliNum)),
 
-    {ok, SubId} = subscribe(Worker,
-        fun(Meta) -> Meta >= CtrThr end,
-        forward_events_handler(Self)
-    ),
-
-    lists:foreach(fun(SessId) ->
+    lists:foreach(fun({SessId, _}) ->
         ?assertReceivedMatch({stream_initialized, _, SessId}, ?TIMEOUT)
-    end, SessIds),
+    end, Sessions),
 
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        utils:pforeach(fun(SessId) ->
+        utils:pforeach(fun({SessId, _}) ->
             lists:foreach(fun(N) ->
-                emit(Worker, #write_event{file_uuid = FileUuid, size = EvtSize,
+                emit(Worker, #file_written_event{file_uuid = FileUuid, size = EvtSize,
                     file_size = N * EvtSize, blocks = [#file_block{
                         offset = (N - 1) * EvtSize, size = EvtSize
                     }]}, SessId)
             end, lists:seq(1, EvtNum))
-        end, SessIds)
+        end, Sessions)
     end),
 
-    lists:foreach(fun(SessId) ->
+    lists:foreach(fun({SessId, SubId}) ->
         flush(Worker, SubId, SessId)
-    end, SessIds),
+    end, Sessions),
 
     % Check whether events have been aggregated and handler has been executed
     % for each session.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-        lists:foreach(fun(SessId) ->
-            ?assertMatch([#event{key = FileUuid, counter = EvtNum,
-                object = #write_event{
-                    file_uuid = FileUuid,
-                    file_size = FileSize,
-                    size = FileSize,
-                    blocks = [#file_block{offset = 0, size = FileSize}]
-                }
-            }], receive_write_events(SubId, SessId))
-        end, SessIds)
+        lists:foreach(fun({SessId, SubId}) ->
+            ?assertMatch([#file_written_event{
+                counter = EvtNum,
+                file_uuid = FileUuid,
+                file_size = FileSize,
+                size = FileSize,
+                blocks = [#file_block{offset = 0, size = FileSize}]
+            }], receive_file_written_events(SubId, SessId))
+        end, Sessions)
     end),
 
-    unsubscribe(Worker, SubId),
-    lists:foreach(fun(SessId) ->
+    lists:foreach(fun({SessId, _}) ->
         session_teardown(Worker, SessId)
-    end, SessIds),
+    end, Sessions),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)].
@@ -524,7 +373,7 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions = Case, Config) ->
     initializer:remove_pending_messages(),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
-        (#write_subscription{} = Msg, _) -> Self ! Msg, ok;
+        (#file_written_subscription{} = Msg, _) -> Self ! Msg, ok;
         (#subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
         (_, _) -> ok
     end),
@@ -561,7 +410,8 @@ init_per_testcase(Case, Config) ->
     test_utils:mock_expect(Workers, fslogic_spaces, get_space_id,
         fun(_) -> <<"spaceid">> end),
     session_setup(Worker, SessId, Iden, Self),
-    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]),
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
+        [{session_id, SessId} | Config]),
     test_utils:mock_expect(Workers, file_meta, get, fun
         (<<"file_", _/binary>>) -> {ok, #document{}};
         (Entry) -> meck:passthrough([Entry])
@@ -616,8 +466,7 @@ session_teardown(Worker, SessId) ->
 %% Emits an event.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), Evt :: #event{} | event:object(),
-    SessId :: session:id()) -> ok.
+-spec emit(Worker :: node(), Evt :: event:type(), SessId :: session:id()) -> ok.
 emit(Worker, Evt, SessId) ->
     ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt, SessId])).
 
@@ -627,63 +476,27 @@ emit(Worker, Evt, SessId) ->
 %% @equiv subscribe(Worker, Producer, infinity, AdmRule, EmRule, Handler)
 %% @end
 %%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), EmRule :: event_stream:emission_rule(),
+-spec subscribe(Worker :: node(), SessId :: session:id(),
+    EmRule :: event_stream:emission_rule(),
     Handler :: event_stream:event_handler()) -> {ok, SubId :: subscription:id()}.
-subscribe(Worker, EmRule, Handler) ->
-    subscribe(Worker, infinity, EmRule, Handler).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @equiv subscribe(Worker, Producer, infinity, AdmRule, EmRule, TrRule, Handler)
-%% @end
-%%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), EmTime :: event_stream:emission_time(),
-    EmRule :: event_stream:emission_rule(), Handler :: event_stream:event_handler()) ->
-    {ok, SubId :: subscription:id()}.
-subscribe(Worker, EmTime, EmRule, Handler) ->
-    TrRule = fun(Meta, #event{counter = Counter}) -> Meta + Counter end,
-    subscribe(Worker, EmTime, EmRule, TrRule, Handler).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates event subscription.
-%% @end
-%%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), EmTime :: event_stream:emission_time(),
-    EmRule :: event_stream:emission_rule(), TrRule :: event_stream:transition_rule(),
-    Handler :: event_stream:event_handler()) -> {ok, SubId :: subscription:id()}.
-subscribe(Worker, EmTime, EmRule, TrRule, Handler) ->
-    subscribe(Worker, write_event_stream, EmTime, EmRule, TrRule, Handler).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates event subscription.
-%% @end
-%%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), StmId :: event_stream:id(),
-    EmTime :: event_stream:emission_time(), EmRule :: event_stream:emission_rule(),
-    TrRule :: event_stream:transition_rule(), Handler :: event_stream:event_handler()) ->
-    {ok, SubId :: subscription:id()}.
-subscribe(Worker, StmId, EmTime, EmRule, TrRule, Handler) ->
+subscribe(Worker, SessId, EmRule, Handler) ->
     Self = self(),
+    Stm = event_stream_factory:create(#file_written_subscription{}),
     Sub = #subscription{
-        event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-            init_handler = fun(#subscription{id = SubId}, SessId, _) ->
-                Self ! {stream_initialized, StmId, SessId},
-                #{subscription_id => SubId, session_id => SessId}
+        type = #file_written_subscription{},
+        stream = Stm#event_stream{
+            init_handler = fun(_SubId, _SessId) ->
+                Self ! {stream_initialized, file_written, _SessId},
+                #{subscription_id => _SubId, session_id => _SessId}
             end,
-            id = StmId,
-            metadata = 0,
             emission_rule = EmRule,
-            transition_rule = TrRule,
-            emission_time = EmTime,
+            transition_rule = fun(Meta, #file_written_event{counter = C}) ->
+                Meta + C
+            end,
             event_handler = Handler
         }
     },
-    ?assertMatch({ok, _}, rpc:call(Worker, event, subscribe, [Sub])).
+    rpc:call(Worker, event, subscribe, [Sub, SessId]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -691,9 +504,10 @@ subscribe(Worker, StmId, EmTime, EmRule, TrRule, Handler) ->
 %% Removes event subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(Worker :: node(), SubId :: subscription:id()) -> ok.
-unsubscribe(Worker, SubId) ->
-    ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])),
+-spec unsubscribe(Worker :: node(), SessId :: session:id(),
+    SubId :: subscription:id()) -> ok.
+unsubscribe(Worker, SessId, SubId) ->
+    ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId, SessId])),
     ok.
 
 %%--------------------------------------------------------------------
@@ -735,11 +549,11 @@ evt_per_sec(EvtNum, Time) ->
 %% Receives write events and aggregates them by file ID.
 %% @end
 %%--------------------------------------------------------------------
--spec receive_write_events(SubId :: subscription:id(), SessId :: session:id()) ->
-    [#event{}] | {error, timeout}.
-receive_write_events(SubId, SessId) ->
-    receive_write_events(SubId, SessId,
-        ?WRITE_EVENT_STREAM#event_stream_definition.aggregation_rule, #{}).
+-spec receive_file_written_events(SubId :: subscription:id(), SessId :: session:id()) ->
+    [event:type()] | {error, timeout}.
+receive_file_written_events(SubId, SessId) ->
+    receive_file_written_events(SubId, SessId,
+        fun event_utils:aggregate_file_written_events/2, #{}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -747,22 +561,22 @@ receive_write_events(SubId, SessId) ->
 %% Receives write events and aggregates them by file ID.
 %% @end
 %%--------------------------------------------------------------------
--spec receive_write_events(SubId :: subscription:id(), SessId :: session:id(),
+-spec receive_file_written_events(SubId :: subscription:id(), SessId :: session:id(),
     AggRule :: event_stream:aggregation_rule(), AggEvts :: #{}) ->
-    [#event{}] | {error, timeout}.
-receive_write_events(SubId, SessId, AggRule, AggEvts) ->
+    [event:type()] | {error, timeout}.
+receive_file_written_events(SubId, SessId, AggRule, AggEvts) ->
     receive
         {event_handler, SubId, SessId, Evts} ->
-            AggEvts3 = lists:foldl(fun(#event{object = #write_event{
+            AggEvts3 = lists:foldl(fun(#file_written_event{
                 file_uuid = FileUuid
-            }} = Evt, AggEvts2) ->
+            } = Evt, AggEvts2) ->
                 case maps:find(FileUuid, AggEvts2) of
                     {ok, AggEvt} ->
                         maps:put(FileUuid, AggRule(AggEvt, Evt), AggEvts2);
                     error -> maps:put(FileUuid, Evt, AggEvts2)
                 end
             end, AggEvts, Evts),
-            receive_write_events(SubId, SessId, AggRule, AggEvts3);
+            receive_file_written_events(SubId, SessId, AggRule, AggEvts3);
         {stream_flushed, SubId, SessId} ->
             maps:values(AggEvts)
     after

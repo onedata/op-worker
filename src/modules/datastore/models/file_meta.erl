@@ -802,9 +802,11 @@ create_phantom_file(OldUUID, OldScope, NewGUID) ->
 -spec get_guid_from_phantom_file(uuid()) ->
     {ok, fslogic_worker:file_guid()} | datastore:get_error().
 get_guid_from_phantom_file(OldUUID) ->
-    {ok, #document{value = #file_meta{link_value = NewGuid, type = ?PHANTOM_TYPE}}} =
-        get(fslogic_uuid:uuid_to_phantom_uuid(OldUUID)),
-    {ok, NewGuid}.
+    case get(fslogic_uuid:uuid_to_phantom_uuid(OldUUID)) of
+        {ok, #document{value = #file_meta{link_value = NewGuid, type = ?PHANTOM_TYPE}}} ->
+            {ok, NewGuid};
+        {error, Reason} -> {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

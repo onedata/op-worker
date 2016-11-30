@@ -243,7 +243,7 @@ fsync(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID, sfm_handles = 
     lists:foreach(fun({_, SFMHandle}) ->
         ok = storage_file_manager:fsync(SFMHandle)
     end, maps:values(SFMHandles)),
-    RecvRef = event:flush(ProviderId, fslogic_uuid:guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
+    RecvRef = event:flush(ProviderId, fslogic_uuid:guid_to_uuid(FileGUID), ?FILE_WRITTEN_SUB_ID, self(), SessId),
     receive
         {RecvRef, Response} ->
             Response
@@ -311,7 +311,7 @@ truncate(SessId, FileKey, Size) ->
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
         #truncate{size = Size},
         fun(_) ->
-            event:emit(#write_event{file_uuid = FileGUID, blocks = [],
+            event:emit(#file_written_event{file_uuid = FileGUID, blocks = [],
                 file_size = Size}, SessId)
         end).
 
@@ -494,7 +494,7 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_flag
             NewBlocks = fslogic_blocks:merge(WrittenBlocks, CBlocks),
             case GenerateEvents of
                 true ->
-                    ok = event:emit(#write_event{
+                    ok = event:emit(#file_written_event{
                         file_uuid = UUID, blocks = WrittenBlocks
                     }, SessId);
                 false ->
@@ -557,7 +557,7 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = GUID, open_flag 
         {ok, Data} ->
             case GenerateEvents of
                 true ->
-                    ok = event:emit(#read_event{
+                    ok = event:emit(#file_read_event{
                         file_uuid = GUID, blocks = [#file_block{
                             file_id = FileId, storage_id = StorageId, offset = Offset,
                             size = size(Data)

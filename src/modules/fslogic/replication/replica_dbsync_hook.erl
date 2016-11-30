@@ -199,7 +199,7 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
 %%    #document{value = #file_location{blocks = SameBlocks}}) ->
 %%    ok;
 notify_block_change_if_necessary(#document{value = #file_location{uuid = FileUuid}}, _) ->
-    ok = fslogic_event:emit_file_location_update({uuid, FileUuid}, []).
+    ok = fslogic_event:emit_file_location_changed({uuid, FileUuid}, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -211,4 +211,4 @@ notify_size_change_if_necessary(#document{value = #file_location{size = SameSize
         #document{value = #file_location{size = SameSize}}) ->
     ok;
 notify_size_change_if_necessary(#document{value = #file_location{uuid = FileUuid}}, _) ->
-    ok = fslogic_event:emit_file_attr_update({uuid, FileUuid}, []).
+    ok = fslogic_event:emit_file_attr_changed({uuid, FileUuid}, []).

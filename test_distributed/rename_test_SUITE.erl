@@ -502,16 +502,16 @@ attributes_retaining_test(Config) ->
     ],
 
     lists:foreach(
-      fun(Guid) ->
-          ?assertEqual(ok, lfm_proxy:set_acl(W1, SessId1, {guid, Guid}, [Ace])),
-          ?assertEqual(ok, lfm_proxy:set_mimetype(W1, SessId1, {guid, Guid}, Mimetype)),
-          ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W1, SessId1, {guid, Guid}, TransferEncoding)),
-          ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W1, SessId1, {guid, Guid}, CompletionStatus)),
-          lists:foreach(
-              fun(Xattr) ->
-                  ?assertEqual(ok, lfm_proxy:set_xattr(W1, SessId1, {guid, Guid}, Xattr))
-              end, Xattrs)
-      end, PreRenameGuids),
+        fun(Guid) ->
+            ?assertEqual(ok, lfm_proxy:set_acl(W1, SessId1, {guid, Guid}, [Ace])),
+            ?assertEqual(ok, lfm_proxy:set_mimetype(W1, SessId1, {guid, Guid}, Mimetype)),
+            ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W1, SessId1, {guid, Guid}, TransferEncoding)),
+            ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W1, SessId1, {guid, Guid}, CompletionStatus)),
+            lists:foreach(
+                fun(Xattr) ->
+                    ?assertEqual(ok, lfm_proxy:set_xattr(W1, SessId1, {guid, Guid}, Xattr))
+                end, Xattrs)
+        end, PreRenameGuids),
 
     ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, Dir1Guid}, filename(1, TestDir, "/dir1_target"))),
     ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, Dir2Guid}, filename(2, TestDir, "/dir2_target"))),
@@ -679,7 +679,7 @@ reading_from_open_file_after_rename_test(Config) ->
     ok.
 
 redirecting_event_to_renamed_file_test(Config) ->
-    [W1, W2] = sorted_workers(Config),
+    [W1 | _] = sorted_workers(Config),
     TestDir = ?config(test_dir, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
 
@@ -692,27 +692,23 @@ redirecting_event_to_renamed_file_test(Config) ->
     {_, NewFile1Guid} = ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File1Guid}, filename(2, TestDir, "/file1_target"))),
     {_, NewFile2Guid} = ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId, {guid, File2Guid}, filename(3, TestDir, "/file2_target"))),
 
-    Self = self(),
-    lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, event, unsubscribe, [?FSLOGIC_SUB_ID])),
-        ?assertMatch({ok, _}, rpc:call(W, event, subscribe, [#subscription{
-            object = #write_subscription{},
-            event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
-                event_handler = fun(Events, _) -> Self ! {events, Events} end
-            }
-        }]))
-    end, [W1, W2]),
-
-    BaseEvent = #write_event{size = 1, file_size = 1,
+    BaseEvent = #file_written_event{size = 1, file_size = 1,
         blocks = [#file_block{offset = 0, size = 1}]},
 
-    ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#write_event{file_uuid = File1Guid}])),
-    {_, [#event{key = Evt1Guid}]} = ?assertReceivedMatch({events, [#event{}]}, ?TIMEOUT),
+    flush(),
+    ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#file_written_event{
+        file_uuid = File1Guid
+    }, SessId])),
+    {_, [#file_written_event{file_uuid = Evt1Guid}]} =
+        ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
     ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile1Guid), fslogic_uuid:guid_to_uuid(Evt1Guid)),
 
     flush(),
-    ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#write_event{file_uuid = File2Guid}])),
-    {_, [#event{key = Evt2Guid}]} = ?assertReceivedMatch({events, [#event{}]}, ?TIMEOUT),
+    ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#file_written_event{
+        file_uuid = File2Guid
+    }, SessId])),
+    {_, [#file_written_event{file_uuid = Evt2Guid}]} =
+        ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
     ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile2Guid), fslogic_uuid:guid_to_uuid(Evt2Guid)),
 
     ok.
@@ -729,6 +725,25 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     ?TEST_STOP(Config).
 
+init_per_testcase(Case = redirecting_event_to_renamed_file_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    Self = self(),
+    Stm = event_stream_factory:create(#file_written_subscription{time_threshold = 1000}),
+    rpc:multicall(Workers, subscription, save, [#document{
+        key = ?FILE_WRITTEN_SUB_ID,
+        value = #subscription{
+            id = ?FILE_WRITTEN_SUB_ID,
+            type = #file_written_subscription{},
+            stream = Stm#event_stream{
+                event_handler = fun(Events, Ctx) ->
+                    Self ! {events, Events},
+                    apply(Stm#event_stream.event_handler, [Events, Ctx])
+                end
+            }
+        }
+    }]),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(CaseName, Config) ->
     ?CASE_START(CaseName),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
@@ -744,7 +759,7 @@ init_per_testcase(CaseName, Config) ->
             test_utils:mock_expect(Workers, storage_file_manager, link,
                 fun(_, _) -> ?FAILURE_RETURN_VALUE end),
             test_utils:mock_expect(Workers, storage_file_manager, mv,
-                    fun(_, _) -> ?FAILURE_RETURN_VALUE end);
+                fun(_, _) -> ?FAILURE_RETURN_VALUE end);
         false ->
             case lists:suffix(?LINK_FAILURE_SUFFIX, CaseNameString) of
                 true ->

@@ -18,68 +18,9 @@
 -include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
-%% API
--export([add/2, remove/2, cleanup/1]).
-
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For subscriptions concerning file changes adds session to the list of
-%% sessions that are interested in receiving notifications.
-%% @end
-%%--------------------------------------------------------------------
--spec add(SessId :: session:id(), Sub :: #subscription{}) ->
-    ok | {error, Reason :: term()}.
-add(SessId, #subscription{} = Sub) ->
-    case get_key(Sub) of
-        undefined -> ok;
-        Key -> do_add(Key, SessId)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For subscriptions concerning file changes removes session from the list of
-%% sessions that are interested in receiving notifications.
-%% @end
-%%--------------------------------------------------------------------
--spec remove(SessId :: session:id(), Sub :: #subscription{}) ->
-    ok | {error, Reason :: term()}.
-remove(SessId, #subscription{} = Sub) ->
-    case get_key(Sub) of
-        undefined -> ok;
-        Key -> do_remove(Key, SessId)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file subscription mapping if there are no sessions interested in
-%% receiving notifications.
-%% @end
-%%--------------------------------------------------------------------
--spec cleanup(Ref :: #subscription{} | datastore:key()) ->
-    ok | {error, Reason :: term()}.
-cleanup(#subscription{} = Sub) ->
-    case get_key(Sub) of
-        undefined -> ok;
-        Key -> cleanup(Key)
-    end;
-cleanup(Key) when is_binary(Key) ->
-    Pred = fun() ->
-        case ?MODULE:get(Key) of
-            {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
-                gb_sets:size(SessIds) == 0;
-            _ ->
-                false
-        end
-    end,
-    datastore:delete(?STORE_LEVEL, ?MODEL_NAME, Key, Pred).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -122,11 +63,6 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key() | #event{}) ->
     {ok, datastore:document()} | datastore:get_error().
-get(#event{} = Evt) ->
-    case get_key(Evt) of
-        undefined -> {error, no_file_subscription};
-        Key -> ?MODULE:get(Key)
-    end;
 get(Key) when is_binary(Key) ->
     datastore:get(?STORE_LEVEL, ?MODEL_NAME, Key).
 
@@ -189,86 +125,3 @@ model_init() ->
     ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns datastore key for subscription concerning file updates. If subscription
-%% does not concern file changes 'undefined' is returned.
-%% @end
-%%--------------------------------------------------------------------
--spec get_key(Object :: #event{} | #subscription{}) ->
-    Key :: datastore:key() | undefiend.
-get_key(#event{stream_key = Key}) when is_binary(Key) ->
-    Key;
-get_key(#subscription{stream_key = Key}) when is_binary(Key) ->
-    Key;
-get_key(_) ->
-    undefined.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add session to the list of sessions that are interested in receiving
-%% notifications about file changes.
-%% @end
-%%--------------------------------------------------------------------
--spec do_add(Key :: datastore:key(), SessId :: session:id()) -> ok | {error, Reason :: term()}.
-do_add(Key, SessId) ->
-    Diff = fun(#file_subscription{sessions = SessIds} = Sub) ->
-        {ok, Sub#file_subscription{sessions = gb_sets:add_element(SessId, SessIds)}}
-    end,
-    case update(Key, Diff) of
-        {ok, _} -> ok;
-        {error, {not_found, _}} -> do_create(Key, SessId);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes session from the list of sessions that are interested in receiving
-%% notifications about file changes.
-%% @end
-%%--------------------------------------------------------------------
--spec do_remove(Key :: datastore:key(), SessId :: session:id()) ->
-    ok | {error, Reason :: term()}.
-do_remove(Key, SessId) ->
-    Diff = fun(#file_subscription{sessions = SessIds} = Sub) ->
-        NewSessIds = gb_sets:del_element(SessId, SessIds),
-        case gb_sets:size(NewSessIds) of
-            0 ->
-                task_manager:start_task(fun() ->
-                    ?MODULE:cleanup(Key)
-                end, ?NODE_LEVEL);
-            _ ->
-                ok
-        end,
-        {ok, Sub#file_subscription{sessions = NewSessIds}}
-    end,
-    case update(Key, Diff) of
-        {ok, _} -> ok;
-        {error, {not_found, _}} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates file subscription entry for given sessions or if it already exists 
-%% adds session to the list of sessions that are interested in receiving
-%% notifications about file changes.
-%% @end
-%%--------------------------------------------------------------------
--spec do_create(Key :: datastore:key(), SessId :: session:id()) -> ok | {error, Reason :: term()}.
-do_create(Key, SessId) ->
-    case create(#document{key = Key, value = #file_subscription{
-        sessions = gb_sets:from_list([SessId])}}) of
-        {ok, _} -> ok;
-        {error, already_exists} -> do_add(Key, SessId);
-        {error, Reason} -> {error, Reason}
-    end.

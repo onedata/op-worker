@@ -86,10 +86,7 @@ chmod(CTX, File, Mode) ->
     ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid),
 
     fslogic_times:update_ctime(File, fslogic_context:get_user_id(CTX)),
-    spawn(
-        fun() ->
-            fslogic_event:emit_permission_changed(FileUuid)
-        end),
+    fslogic_event:emit_file_perm_changed(FileUuid),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -378,7 +375,7 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
                 {uuid, FileUuid}, Mode
             ),
-            ok = fslogic_event:emit_permission_changed(FileUuid),
+            ok = fslogic_event:emit_file_perm_changed(FileUuid),
             fslogic_times:update_ctime(FileEntry, fslogic_context:get_user_id(CTX)),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
