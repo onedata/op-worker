@@ -27,10 +27,10 @@
 
 %% API
 -export([init/0, set_threads_number/1]).
--export([new_helper_obj/2, new_helper_ctx/1, set_user_ctx/2, get_user_ctx/1]).
+-export([new_helper_obj/2]).
 -export([username_to_uid/1, groupname_to_gid/1]).
--export([getattr/3, access/4, mknod/6, mkdir/4, unlink/3, rmdir/3, symlink/4, rename/4, link/4, chmod/4, chown/5]).
--export([truncate/4, open/4, read/5, write/5, release/3, flush/3, fsync/4]).
+-export([getattr/2, access/3, mknod/5, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3, chown/4]).
+-export([truncate/3, open/3, read/3, write/3, release/1, flush/1, fsync/2]).
 
 %%%===================================================================
 %%% API
@@ -54,32 +54,6 @@ new_helper_obj(_HelperName, _HelperArgs) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Creates new helper context object. Returned handle is only valid within local Erlang-VM.
-%% @end
-%%--------------------------------------------------------------------
--spec new_helper_ctx(HelperObj :: resource_handle()) -> {ok, HelperCTX :: resource_handle()}.
-new_helper_ctx(_HelperObj) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-
-%%--------------------------------------------------------------------
-%% @doc Sets FS UID / FS GID in given helper context.
-%% @end
-%%--------------------------------------------------------------------
--spec set_user_ctx(HelperCTX :: resource_handle(), UserCTX :: helpers_user:ctx_map()) -> ok.
-set_user_ctx(_HelperCTX, _UserCTX) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-
-%%--------------------------------------------------------------------
-%% @doc Gets current FS UID / FS GID from given helper context.
-%% @end
-%%--------------------------------------------------------------------
--spec get_user_ctx(HelperCTX :: resource_handle()) -> {ok, UserCTX :: helpers_user:ctx_map()}.
-get_user_ctx(_HelperCTX) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-%%--------------------------------------------------------------------
 %% @doc Transalates given username to UID.
 %% @end
 %%--------------------------------------------------------------------
@@ -96,185 +70,203 @@ groupname_to_gid(_GName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec getattr(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
+-spec getattr(HelperInstance :: resource_handle(), File :: helpers:file()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-getattr(_HelperInstance, _HelperCTX, _File) ->
+getattr(_HelperInstance, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec access(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Mask :: non_neg_integer()) ->
+-spec access(HelperInstance :: resource_handle(), File :: helpers:file(), Mask :: non_neg_integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-access(_HelperInstance, _HelperCTX, _File, _Mask) ->
+access(_HelperInstance, _File, _Mask) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec mknod(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(),
+-spec mknod(HelperInstance :: resource_handle(), File :: helpers:file(),
     Mode :: non_neg_integer(), Flags :: [flag()], Dev :: integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-mknod(_HelperInstance, _HelperCTX, _File, _Mode, _Flags, _Dev) ->
+mknod(_HelperInstance, _File, _Mode, _Flags, _Dev) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Mode :: non_neg_integer()) ->
+-spec mkdir(HelperInstance :: resource_handle(), File :: helpers:file(), Mode :: non_neg_integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-mkdir(_HelperInstance, _HelperCTX, _File, _Mode) ->
+mkdir(_HelperInstance, _File, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
+-spec unlink(HelperInstance :: resource_handle(), File :: helpers:file()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-unlink(_HelperInstance, _HelperCTX, _File) ->
+unlink(_HelperInstance, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec rmdir(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
+-spec rmdir(HelperInstance :: resource_handle(), File :: helpers:file()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-rmdir(_HelperInstance, _HelperCTX, _File) ->
+rmdir(_HelperInstance, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec symlink(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
+-spec symlink(HelperInstance :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-symlink(_HelperInstance, _HelperCTX, _File, _Mode) ->
+symlink(_HelperInstance, _File, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec rename(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
+-spec rename(HelperInstance :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-rename(_HelperInstance, _HelperCTX, _From, _To) ->
+rename(_HelperInstance, _From, _To) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec link(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
+-spec link(HelperInstance :: resource_handle(), From :: helpers:file(), To :: helpers:file()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-link(_HelperInstance, _HelperCTX, _From, _To) ->
+link(_HelperInstance, _From, _To) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Mode :: non_neg_integer()) ->
+-spec chmod(HelperInstance :: resource_handle(), File :: helpers:file(), Mode :: non_neg_integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-chmod(_HelperInstance, _HelperCTX, _File, _Mode) ->
+chmod(_HelperInstance, _File, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec chown(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), UID :: integer(), GID :: integer()) ->
+-spec chown(HelperInstance :: resource_handle(), File :: helpers:file(), UID :: integer(), GID :: integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-chown(_HelperInstance, _HelperCTX, _File, _UID, _GID) ->
+chown(_HelperInstance, _File, _UID, _GID) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Size :: non_neg_integer()) ->
+-spec truncate(HelperInstance :: resource_handle(), File :: helpers:file(), Size :: non_neg_integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-truncate(_HelperInstance, _HelperCTX, _File, _Size) ->
+truncate(_HelperInstance, _File, _Size) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec open(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(),
+-spec open(HelperInstance :: resource_handle(),
     File :: helpers:file(), Flags :: [flag()]) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-open(_HelperInstance, _HelperCTX, _File, _Flags) ->
+open(_HelperInstance, _File, _Flags) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from open/3.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec read(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+-spec read(HandleInstance :: resource_handle(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-read(_HelperInstance, _HelperCTX, _File, _Offset, _Size) ->
+read(_HandleInstance, _Offset, _Size) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from open/3.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec write(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Offset :: non_neg_integer(), Data :: binary()) ->
+-spec write(HandleInstance :: resource_handle(), Offset :: non_neg_integer(), Data :: binary()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-write(_HelperInstance, _HelperCTX, _File, _Offset, _Data) ->
+write(_HandleInstance, _Offset, _Data) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from open/3.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec release(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
+-spec release(HandleInstance :: resource_handle()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-release(_HelperInstance, _HelperCTX, _File) ->
+release(_HandleInstance) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from open/3.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec flush(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
+-spec flush(HandleInstance :: resource_handle()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-flush(_HelperInstance, _HelperCTX, _File) ->
+flush(_HandleInstance) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from open/3.
+%% Other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), IsDataSync :: integer()) ->
+-spec fsync(HandleInstance :: resource_handle(), IsDataSync :: integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-fsync(_HelperInstance, _HelperCTX, _File, _IsDataSync) ->
+fsync(_HandleInstance, _IsDataSync) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
