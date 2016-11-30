@@ -154,10 +154,11 @@ update_record(<<"file-permission">>, FileId, Data) ->
                 end
         end
     catch Error:Message ->
-        ?error_stacktrace("Cannot set ACL for file ~p - ~p:~p", [
+        ?error_stacktrace("Cannot set permissions for file ~p - ~p:~p", [
             FileId, Error, Message
         ]),
-        gui_error:report_warning(<<"Cannot change ACL due to unknown error.">>)
+        gui_error:report_warning(
+            <<"Cannot change permissions due to unknown error.">>)
     end.
 
 
