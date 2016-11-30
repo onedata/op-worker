@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--define(DIR_BATCH, 2).
+-define(DIR_BATCH, 100).
 
 %%%===================================================================
 %%% Types
@@ -40,12 +40,16 @@
 -export([]).
 
 
-
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback available_strategies/0.
+%% @end
+%%--------------------------------------------------------------------
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
     [
@@ -59,6 +63,11 @@ available_strategies() ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
+%% @end
+%%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
 strategy_init_jobs(no_import, _, _) ->
@@ -71,6 +80,11 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     ?error("Invalid import strategy init: ~p", [{StrategyName, StartegyArgs, InitData}]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_handle_job/1.
+%% @end
+%%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = bfs_scan} = Job) ->
     run_bfs_scan(Job);
@@ -78,6 +92,31 @@ strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec strategy_merge_result(ChildrenJobs :: [space_strategy:job()],
+    ChildrenResults :: [space_strategy:job_result()]) ->
+    space_strategy:job_result().
+strategy_merge_result(_Jobs, Results) ->
+    Reasons = [Reason || {error, Reason} <- Results],
+    case Reasons of
+        [] -> ok;
+        _ ->
+            {error, Reasons}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
+    ChildrenResult :: space_strategy:job_result()) ->
+    space_strategy:job_result().
 strategy_merge_result(_Job, ok, ok) ->
     ok;
 strategy_merge_result(_Job, Error, ok) ->
@@ -87,18 +126,18 @@ strategy_merge_result(_Job, ok, Error) ->
 strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
     {error, [Reason1, Reason2]}.
 
-strategy_merge_result(_Jobs, Results) ->
-    Reasons = [Reason || {error, Reason} <- Results],
-    case Reasons of
-        [] -> ok;
-        _ ->
-            {error, Reasons}
-    end.
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Implementation for 'bfs_scan' strategy.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_bfs_scan(space_strategy:job()) ->
+    {space_strategy:job_result(), [space_strategy:job()]}.
 run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
     #{
         storage_file_id := FileId,
@@ -112,7 +151,6 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
             FileType = file_type(Mode),
             ConvertFilePath = space_sync_worker:init(filename_mapping, SpaceId, StorageId, #{storage_path => FileId}),
             LogicalPath = space_sync_worker:run(ConvertFilePath),
-%%            ?critical("run_bfs_scan ~p", [{FileId, IsImported, LogicalPath}]),
 
             LogicalAttrsResponse = fslogic_req_generic:get_file_attr(fslogic_context:new(?ROOT_SESS_ID), {path, LogicalPath}),
             IsImported = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse),
@@ -161,13 +199,17 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
     end.
 
 
-
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether given file on given storage is already imported to onedata filesystem.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_imported(storage:id(), helpers:file(), file_meta:type(), #fuse_response{}) ->
+    boolean().
 is_imported(_StorageId, _FileId, FileType, #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{type = FileType = ?DIRECTORY_TYPE}}) ->
     true;
 is_imported(StorageId, FileId, FileType, #fuse_response{status = #status{code = ?OK},
@@ -180,10 +222,17 @@ is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code
     false.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Imports given storage file to onedata filesystem.
+%% @end
+%%--------------------------------------------------------------------
+-spec import_file(storage:id(), od_space:id(), #statbuf{}, space_strategy:job(), file_meta:path()) ->
+    ok | no_return().
 import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data} = Job, LogicalPath) ->
     #{storage_file_id := FileId} = Data,
     {FileName, ParentPath} = fslogic_path:basename_and_parent(LogicalPath),
-    {StorageFileName, StorageParentPath} = fslogic_path:basename_and_parent(FileId),
+    {_StorageFileName, StorageParentPath} = fslogic_path:basename_and_parent(FileId),
     #statbuf{
         st_mode = Mode,
         st_atime = ATime,
@@ -216,22 +265,27 @@ import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data} = Job,
         ?REGULAR_FILE_TYPE ->
             Location = #file_location{blocks = [#file_block{offset = 0, size = FSize, file_id = FileId, storage_id = StorageId}],
                 provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUUID,
-                space_id = SpaceId, size = undefined},
+                space_id = SpaceId, size = FSize},
             {ok, LocId} = file_location:create(#document{value = Location}),
             ok = file_meta:attach_location({uuid, FileUUID}, LocId, oneprovider:get_provider_id());
         _ ->
             ok
     end,
 
-    ?critical("import_file ~p", [{FileId, LogicalPath}]),
+    ?debug("Import storage file ~p", [{FileId, LogicalPath}]),
     ok.
-
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates jobs for importing children of given directory to onedata filesystem.
+%% @end
+%%--------------------------------------------------------------------
+-spec import_children(storage_file_manager:handle(), file_meta:type(), space_strategy:job(),
+    file_meta:path(), Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
+    [space_strategy:job()].
 import_children(SFMHandle, ?DIRECTORY_TYPE, Job = #space_strategy_job{data = Data = #{max_depth := MaxDepth}},
     LogicalPath, Offset, Count) when MaxDepth > 0 ->
     #{storage_file_id := FileId} = Data,
     {ok, ChildrenIds} = storage_file_manager:readdir(SFMHandle, Offset, Count),
-%%    ?critical("import_dir ~p", [{FileId}]),
     case ChildrenIds of
         [] -> [];
         _ ->
@@ -241,10 +295,12 @@ import_children(SFMHandle, ?DIRECTORY_TYPE, Job = #space_strategy_job{data = Dat
                 || ChildId <- ChildrenIds],
             [Job#space_strategy_job{data = Data#{dir_offset => Offset + length(ChildrenIds)}}| Jobs]
     end;
-import_children(SFMHandle, _, Job = #space_strategy_job{data = Data}, LogicalPath, Offset, Count) ->
+import_children(_SFMHandle, _, _Job = #space_strategy_job{data = _Data}, _LogicalPath, _Offset, _Count) ->
     [].
 
 
+-spec file_type(Mode :: non_neg_integer()) ->
+    file_meta:type().
 file_type(Mode) ->
     IsDir = (Mode band 8#100000) == 0,
     case IsDir of

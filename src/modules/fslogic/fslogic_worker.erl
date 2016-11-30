@@ -220,7 +220,24 @@ run_and_catch_exceptions(Function, Context, Request, RequestType) ->
             %% Something went horribly wrong. This should not happen.
             report_error(Request, RequestType, Reason, error, erlang:get_stacktrace())
     end,
-    process_response(Context, Request, Response).
+
+
+    try
+        process_response(Context, Request, Response)
+    catch
+        Reason1 ->
+            %% Manually thrown error, normal interrupt case.
+            report_error(Request, RequestType, Reason1, debug, erlang:get_stacktrace());
+        error:{badmatch, Reason1} ->
+            %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
+            report_error(Request, RequestType, Reason1, warning, erlang:get_stacktrace());
+        error:{case_clause, Reason1} ->
+            %% Case Clause assertion - something went seriously wrong and we should know about it.
+            report_error(Request, RequestType, Reason1, error, erlang:get_stacktrace());
+        error:Reason1 ->
+            %% Something went horribly wrong. This should not happen.
+            report_error(Request, RequestType, Reason1, error, erlang:get_stacktrace())
+    end.
 
 process_response(Context, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGUID}} = Request,
     #fuse_response{status = #status{code = ?ENOENT}} = Response) ->

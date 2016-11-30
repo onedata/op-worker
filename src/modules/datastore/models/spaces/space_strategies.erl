@@ -18,14 +18,15 @@
 
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
--define(DEFAULT_STORAGE_IMPORT_STRATEGY, {bfs_scan, #{scan_interval => 10}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGIES, [{bfs_scan, #{scan_interval => 60}}]).
+-define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
+-define(DEFAULT_STORAGE_UPDATE_STRATEGIES, [{no_import, #{}}]).
 -define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
 -define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
--define(DEFAULT_ENOENT_HANDLING_STRATEGY, {check_globally, #{}}).
+-define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
 
 %% API
 -export([new/1, add_storage/2]).
+-export([set_strategy/4, set_strategy/5]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -158,6 +159,12 @@ new(SpaceId) ->
         enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY
     }}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds default strategies for new storage in this space.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_storage(od_space:id(), storage:id()) -> ok | no_return().
 add_storage(SpaceId, StorageId) ->
     #document{value = Value = #space_strategies{storage_strategies = StorageStrategies}} = Doc =
         case get(SpaceId) of
@@ -174,6 +181,44 @@ add_storage(SpaceId, StorageId) ->
     },
     {ok, _} = save(Doc#document{value = Value#space_strategies{storage_strategies = maps:put(StorageId, StorageStrategie, StorageStrategies)}}),
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets strategy of given type in this space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_strategy(od_space:id(), space_strategy:type(), space_strategy:name(), space_strategy:arguments()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+set_strategy(SpaceId, StrategyType, StrategyName, StrategyArgs) ->
+    update(SpaceId, #{StrategyType => {StrategyName, StrategyArgs}}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets strategy of given type for the storage in this space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_strategy(od_space:id(), storage:id(), space_strategy:type(), space_strategy:name(), space_strategy:arguments()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
+    update(SpaceId, fun(#space_strategies{storage_strategies = Strategies} = OldValue) ->
+        OldSS = #storage_strategies{} = maps:get(StorageId, Strategies, #storage_strategies{
+            filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY,
+            storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY,
+            storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGIES
+        }),
+
+        NewSS = case StrategyType of
+            filename_mapping ->
+                OldSS#storage_strategies{filename_mapping = {StrategyName, StrategyArgs}};
+            storage_import ->
+                OldSS#storage_strategies{storage_import = {StrategyName, StrategyArgs}};
+            storage_update ->
+                OldSS#storage_strategies{storage_update = {StrategyName, StrategyArgs}}
+        end,
+
+        {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}
+    end).
 
 %%%===================================================================
 %%% Internal functions

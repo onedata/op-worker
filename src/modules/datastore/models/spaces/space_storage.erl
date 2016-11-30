@@ -196,7 +196,7 @@ add_storage(#space_storage{storage_ids = StorageIds} = SpaceStorage, StorageId) 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @todo: write me!
+%% Add space strategies for this new storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec attach_strategies(SpaceId :: binary(), StorageId :: storage:id()) -> ok.

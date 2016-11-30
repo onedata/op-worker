@@ -43,6 +43,11 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback available_strategies/0.
+%% @end
+%%--------------------------------------------------------------------
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
     [
@@ -50,6 +55,11 @@ available_strategies() ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
+%% @end
+%%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
 strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
@@ -58,17 +68,42 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_handle_job/1.
+%% @end
+%%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{storage_path := FilePath}}) ->
     {FilePath, []};
 strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{logical_path := FilePath}}) ->
     {FilePath, []}.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec strategy_merge_result(ChildrenJobs :: [space_strategy:job()],
+    ChildrenResults :: [space_strategy:job_result()]) ->
+    space_strategy:job_result().
+strategy_merge_result([#space_strategy_job{strategy_name = simple}], [Result]) ->
+    Result.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
+    ChildrenResult :: space_strategy:job_result()) ->
+    space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{strategy_name = simple}, LocalResult, _ChildrenResult) ->
     LocalResult.
 
-strategy_merge_result([#space_strategy_job{strategy_name = simple}], [Result]) ->
-    Result.
+
 
 
 %%%===================================================================

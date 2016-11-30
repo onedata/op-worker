@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Main space strategy worker. Checks all set strategies in system and runs all scheduled
+%%  strategies.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_sync_worker).
@@ -71,7 +72,7 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle(check_strategies = Request) ->
-    ?critical("space_sync_worker ~p", [Request]),
+    ?debug("Check strategies ~p", [Request]),
     try
         {ok, #document{value = #od_provider{spaces = SpaceIds}}} =
             od_provider:get_or_fetch(oneprovider:get_provider_id()),
@@ -83,20 +84,18 @@ handle(check_strategies = Request) ->
     timer:apply_after(?SPACE_STRATEGIES_CHECK_INTERVAL, worker_proxy, cast, [?MODULE, check_strategies]),
     ok;
 handle({check_strategies, SpaceId} = Request) ->
-    ?critical("space_sync_worker ~p", [Request]),
+    ?debug("Check strategies ~p", [Request]),
 
     {ok, #document{value = #space_storage{storage_ids = StorageIds}}} = space_storage:get(SpaceId),
     [worker_proxy:cast(?MODULE, {check_strategies, SpaceId, StorageId}) || StorageId <- StorageIds];
 handle({check_strategies, SpaceId, StorageId} = Request) ->
-    ?critical("space_sync_worker ~p", [Request]),
+    ?debug("Check strategies ~p", [Request]),
 
     {ok, #document{value = #space_strategies{
         storage_strategies = StorageStrategies
     }}} = space_strategies:get(SpaceId),
 
     #storage_strategies{
-        storage_import = {ImportStrategy, ImportArgs},
-        storage_update = UpdateStrategies,
         last_import_time = LastImportTime
     } = maps:get(StorageId, StorageStrategies),
 
@@ -112,13 +111,13 @@ handle({check_strategies, SpaceId, StorageId} = Request) ->
     %% Handle initial import
     Import = init(storage_import, SpaceId, StorageId, InitialImportJobData),
     ImportRes = run(Import),
-
-    ?critical("space_sync_worker ImportRes ~p", [ImportRes]),
+    %% @todo: do smth with this result and save new last_import_time
+    ?debug("space_sync_worker ImportRes ~p", [ImportRes]),
 
     Update = init(storage_update, SpaceId, StorageId, InitialImportJobData),
     UpdateRes = run(Update),
-
-    ?critical("space_sync_worker UpdateRes ~p", [UpdateRes]),
+    %% @todo: do smth with this result
+    ?debug("space_sync_worker UpdateRes ~p", [UpdateRes]),
 
     ok;
 handle({run_job, _, Job = #space_strategy_job{strategy_type = StrategyType}}) ->
@@ -131,7 +130,6 @@ handle({run_job, _, Job = #space_strategy_job{strategy_type = StrategyType}}) ->
             _:Reason ->
                 {{error, Reason}, []}
         end,
-%%    ?critical("{run_job, ~p, ~p}: ~p", [MergeType, Job, {LocalResult, NextJobs}]),
     ChildrenResult = run({MergeType, NextJobs}),
     StrategyType:strategy_merge_result(Job, LocalResult, ChildrenResult);
 handle(_Request) ->
@@ -150,11 +148,19 @@ cleanup() ->
     ok.
 
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes strategy operation. Context returned by this function can be used to run
+%% given strategy with run/1 function.
+%% @end
+%%--------------------------------------------------------------------
+-spec init(StrategyType :: space_strategy:type(), SpaceId :: od_space:id(),
+    StorageId :: storage:id(), InitData :: space_strategy:job_data()) ->
+    space_strategy:runnable().
 init(StrategyType, SpaceId, StorageId, InitData) ->
     {ok, #document{value = SpaceStrategies}} = space_strategies:get(SpaceId),
 
@@ -166,25 +172,30 @@ init(StrategyType, SpaceId, StorageId, InitData) ->
                 || {Strategy, Args} <- Strategies]
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes initialized with init/4 strategy operation. It's possible to
+%% pass multiple initialized operations to this functions to get list of results.
+%% @end
+%%--------------------------------------------------------------------
+-spec run([space_strategy:runnable()] | space_strategy:runnable()) ->
+    [space_strategy:job_result()] | space_strategy:job_result().
 run(JobsWithMerge) when is_list(JobsWithMerge) ->
     [run(JobWithMerge) || JobWithMerge <- JobsWithMerge];
 
 run({_, []}) ->
     ok;
-
 run({merge_all, [#space_strategy_job{strategy_type = StrategyType} | _ ] = Jobs}) ->
     Responses = utils:pmap(fun(Job) -> worker_proxy:call(?MODULE, {run_job, undefined, Job}, timer:hours(24)) end, Jobs),
     StrategyType:strategy_merge_result(Jobs, Responses);
-
 run({return_first, Jobs}) ->
     [worker_proxy:cast(?MODULE, {run_job, undefined, Job}, {proc, self()}) || Job <- Jobs],
     receive
         Response ->
             Response
-    after 5000 ->
-        receive Cos -> ?critical("OMG ~p", [Cos]) after 0 -> {error, timeout} end
+    after timer:seconds(10) ->
+        {error, timeout}
     end;
-
 run({return_none, Jobs}) ->
     [worker_proxy:cast(?MODULE, {run_job, undefined, Job}) || Job <- Jobs],
     ok.
@@ -194,15 +205,37 @@ run({return_none, Jobs}) ->
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% For given strategy job, returns job result's merge type.
+%% @end
+%%--------------------------------------------------------------------
+-spec merge_type(space_strategy:job()) ->
+    space_strategy:job_merge_type().
 merge_type(#space_strategy_job{strategy_type = StrategyType, strategy_name = StrategyName}) ->
     merge_type(StrategyType, StrategyName).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% For given strategy type and name, returns job result's merge type.
+%% @end
+%%--------------------------------------------------------------------
+-spec merge_type(space_strategy:type(), space_strategy:name()) ->
+    space_strategy:job_merge_type().
 merge_type(StrategyType, StrategyName) ->
     [#space_strategy{result_merge_type = MergeType}] =
         [Strategy || #space_strategy{name = Name}
             = Strategy <- StrategyType:available_strategies(), Name == StrategyName],
     MergeType.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given strategy type extracts and returns strategy name and strategy arguments (aka strategy config).
+%% @end
+%%--------------------------------------------------------------------
+-spec strategy_config(space_strategy:type(), storage:id() | undefined, #space_strategies{}) ->
+    space_strategy:config().
 strategy_config(StrategyType, StorageId, SpaceStrategies = #space_strategies{storage_strategies = StorageStrategies}) ->
     case StrategyType of
         filename_mapping ->

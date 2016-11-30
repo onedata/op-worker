@@ -43,39 +43,42 @@ all() -> ?ALL(?TEST_CASES).
 %%%===================================================================
 
 simple_file_import_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [W1, W2] = Workers = ?config(op_worker_nodes, Config),
 
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
 
-    tracer:trace_calls(luma_provider, get_or_create_user),
+    tracer:start(Workers),
 
     {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/test1">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/test2">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/test3">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/test4">>, 8#777),
 
-    {ok, _} = lfm_proxy:mkdir(W1, SessId, <<"/space_name1/dir1">>),
-    {ok, _} = lfm_proxy:mkdir(W1, SessId, <<"/space_name1/dir2">>),
-    {ok, _} = lfm_proxy:mkdir(W1, SessId, <<"/space_name1/dir1/dir1">>),
+    {ok, [W1Storage | _]} = rpc:call(W1, storage, list, []),
+    {ok, [W2Storage | _]} = rpc:call(W2, storage, list, []),
 
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/test1">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/test2">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/test3">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/test4">>, 8#777),
+    %% Enable import
+    #document{key = W1StorageId, value = #storage{helpers = [W1Helpers]}} = W1Storage,
+    {ok, _} = rpc:call(W1, space_strategies, set_strategy, [
+        <<"space1">>, W1StorageId, storage_import, bfs_scan, #{scan_interval => 10}]),
 
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir2/test1">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir2/test2">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir2/test3">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir2/test4">>, 8#777),
+    #helper_init{args = #{<<"root_path">> := W1MountPoint}} = W1Helpers,
 
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/dir1/test1">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/dir1/test2">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/dir1/test3">>, 8#777),
-    {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/dir1/dir1/test4">>, 8#777),
+    %% Create dir on storage
+    ok = rpc:call(W1, file, make_dir, [<<W1MountPoint/binary, "/space1/", "test_dir">>]),
 
+    %% Create file on storage
+    TestFilePath = <<"/space_name1/test_dir/test_file">>,
+    ok = rpc:call(W1, file, write_file, [<<W1MountPoint/binary, "/space1/", "test_dir/test_file">>, <<"test">>]),
 
-    ct:print("SessId ~p", [SessId]),
-    timer:sleep(timer:minutes(1)),
+    timer:sleep(timer:seconds(15)),
+
+    %% Check if dir was imported
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, <<"/space_name1/test_dir">>})),
+
+    %% Check if file was imported
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, TestFilePath})),
+    OpenRes1 = lfm_proxy:open(W1, SessId, {path, TestFilePath}, rdwr),
+    ?assertMatch({ok, _}, OpenRes1),
+    {ok, Handle1} = OpenRes1,
+    ?assertMatch({ok, <<"test">>}, lfm_proxy:read(W1, Handle1, 0, 4)),
 
     ok.
 

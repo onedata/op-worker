@@ -43,6 +43,11 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback available_strategies/0.
+%% @end
+%%--------------------------------------------------------------------
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
     [
@@ -55,6 +60,11 @@ available_strategies() ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
+%% @end
+%%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
 strategy_init_jobs(check_globally, StartegyArgs, InitData) ->
@@ -64,6 +74,11 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     [#space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}].
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_handle_job/1.
+%% @end
+%%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = error_passthrough, data = #{response := Response}}) ->
     {Response, []};
@@ -143,20 +158,14 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
     end.
 
 
-strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
-    #file_attr{uuid = FileGUID, provider_id = ProviderId} = FResponse,
-    case oneprovider:get_provider_id() of
-        ProviderId -> ChildrenResult;
-        _ ->
-            #file_attr{uuid = FileGUID} = FResponse,
-            ?critical("OMG Map ~p to ~p", [FileGUID, ProviderId]),
-            file_force_proxy:save(#document{key = FileGUID, value = #file_force_proxy{provider_id = ProviderId}}),
-            ChildrenResult
-    end;
-strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
-    LocalResult.
-
-
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec strategy_merge_result(ChildrenJobs :: [space_strategy:job()],
+    ChildrenResults :: [space_strategy:job_result()]) ->
+    space_strategy:job_result().
 strategy_merge_result([_Job | _], [#fuse_response{status = #status{code = ?OK}} = Result | _]) ->
     Result;
 strategy_merge_result(_Jobs, [OnlyResponse]) ->
@@ -164,6 +173,26 @@ strategy_merge_result(_Jobs, [OnlyResponse]) ->
 strategy_merge_result([_ | JobsR], [_ | R]) ->
     strategy_merge_result(JobsR, R).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
+    ChildrenResult :: space_strategy:job_result()) ->
+    space_strategy:job_result().
+strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
+    #file_attr{uuid = FileGUID, provider_id = ProviderId} = FResponse,
+    case oneprovider:get_provider_id() of
+        ProviderId -> ChildrenResult;
+        _ ->
+            #file_attr{uuid = FileGUID} = FResponse,
+            file_force_proxy:save(#document{key = FileGUID, value = #file_force_proxy{provider_id = ProviderId}}),
+            ChildrenResult
+    end;
+strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
+    LocalResult.
 
 
 %%%===================================================================

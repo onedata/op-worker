@@ -18,7 +18,7 @@
 }).
 
 -record(space_strategy, {
-    result_merge_type = return_none :: return_none | return_first | merge_all,
+    result_merge_type = return_none :: space_strategy:job_merge_type(),
     name :: space_strategy:name(),
     arguments = [] :: [#space_strategy_argument{}],
     description :: space_strategy:description()
