@@ -87,7 +87,7 @@ all() ->
         changes_stream_json_metadata_test,
         changes_stream_times_test,
         changes_stream_file_location_test,
-%%        changes_stream_on_multi_provider_test, %todo fix VFS-2864
+        changes_stream_on_multi_provider_test, %todo fix VFS-2864
         list_spaces,
         get_space,
         set_get_json_metadata,
