@@ -591,7 +591,7 @@ apply_changes(SpaceId,
                 _ ->
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     []
-            end
+            end,
 %%        end),
 
         case Value of
