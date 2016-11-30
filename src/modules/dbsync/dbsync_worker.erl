@@ -572,8 +572,8 @@ apply_changes(SpaceId,
                 Key
         end,
         MyProvId = oneprovider:get_provider_id(),
-        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_link_key(ModelConfig, MainDocKey), fun() ->
-            case Value of
+%%        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_link_key(ModelConfig, MainDocKey), fun() ->
+            ChangedLinks = case Value of
                 #links{origin = MyProvId} ->
                     ?warning("Received private, local links change from other provider ~p", [Change]),
                     [];
@@ -592,7 +592,7 @@ apply_changes(SpaceId,
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     []
             end
-        end),
+%%        end),
 
         case Value of
             #links{} ->
