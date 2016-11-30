@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([acl_to_json/2, json_to_acl/1]).
+-export([acl_to_json/1, json_to_acl/1]).
 
 %%%===================================================================
 %%% API
@@ -25,28 +25,22 @@
 %%--------------------------------------------------------------------
 %% @doc Convert acl to gui compatible json.
 %%--------------------------------------------------------------------
--spec acl_to_json(binary(), [#accesscontrolentity{}]) -> list().
-acl_to_json(FileId, Acl) ->
-    AclJson =
-        lists:map(
-            fun(#accesscontrolentity{aceflags = Flag, acemask = Mask, acetype = Type, identifier = Identifier}) ->
-                [
-                    {<<"type">>, type_enum(Type)},
-                    {<<"permissions">>, Mask}
-                ] ++ subject(Flag, Identifier)
-            end, Acl),
-    [
-        {<<"id">>, FileId},
-        {<<"file">>, FileId},
-        {<<"acl">>, AclJson}
-    ].
+-spec acl_to_json([#accesscontrolentity{}]) -> list().
+acl_to_json(Acl) ->
+    lists:map(
+        fun(#accesscontrolentity{aceflags = Flag, acemask = Mask,
+            acetype = Type, identifier = Identifier}) ->
+            [
+                {<<"type">>, type_enum(Type)},
+                {<<"permissions">>, Mask}
+            ] ++ subject(Flag, Identifier)
+        end, Acl).
 
 %%--------------------------------------------------------------------
 %% @doc Convert gui compatible json to acl.
 %%--------------------------------------------------------------------
 -spec json_to_acl(list()) -> [#accesscontrolentity{}].
-json_to_acl(Json) ->
-    AclJson = proplists:get_value(<<"acl">>, Json),
+json_to_acl(AclJson) ->
     lists:map(fun(Ace) ->
         Type = proplists:get_value(<<"type">>, Ace),
         Mask = proplists:get_value(<<"permissions">>, Ace),
