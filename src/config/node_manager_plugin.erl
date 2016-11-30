@@ -22,8 +22,9 @@
 
 %% node_manager_plugin_behaviour callbacks
 -export([before_init/1, after_init/1, on_terminate/2, on_code_change/3,
-    handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2, renamed_models/0,
-    modules_with_args/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0, app_name/0, clear_memory/1]).
+    handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
+    modules_with_args/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0,
+    app_name/0, clear_memory/1, renamed_models/0]).
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -55,17 +56,6 @@ cm_nodes() ->
 -spec db_nodes() -> {ok, Nodes :: [atom()]} | undefined.
 db_nodes() ->
     application:get_env(?APP_NAME, db_nodes).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Maps old model name to new one.
-%% @end
-%%--------------------------------------------------------------------
--spec renamed_models() ->
-    #{OldName :: model_behaviour:model_type() =>
-    {RenameVersion :: datastore_json:record_version(), NewName :: model_behaviour:model_type()}}.
-renamed_models() ->
-    #{}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -100,6 +90,19 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     {file_deletion_worker, []},
     {space_sync_worker, []}
 ].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Maps old model name to new one.
+%% @end
+%%--------------------------------------------------------------------
+-spec renamed_models() ->
+    #{OldName :: model_behaviour:model_type() => {
+        RenameVersion :: datastore_json:record_version(),
+        NewName :: model_behaviour:model_type()
+    }}.
+renamed_models() ->
+    #{open_file => {1, file_handles}}.
 
 %%--------------------------------------------------------------------
 %% @doc

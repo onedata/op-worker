@@ -122,20 +122,14 @@
 }).
 
 %% Default file removal stream specialization
--define(FILE_REMOVAL_EVENT_STREAM, #event_stream_definition{
-    id = file_removal_event_stream,
+-define(FILE_REMOVED_EVENT_STREAM, #event_stream_definition{
+    id = file_removed_event_stream,
     event_handler = event_utils:send_events_handler()
 }).
 
 %% Default file renamed event stream specialization
 -define(FILE_RENAMED_EVENT_STREAM, #event_stream_definition{
     id = file_renamed_event_stream,
-    event_handler = event_utils:send_events_handler()
-}).
-
-%% Default file accessed event stream specialization
--define(FILE_ACCESSED_EVENT_STREAM, #event_stream_definition{
-    id = file_accessed_event_stream,
     event_handler = event_utils:send_events_handler()
 }).
 

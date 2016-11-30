@@ -30,14 +30,14 @@
 }).
 
 -type file() :: binary().
--type open_mode() :: write | read | rdwr.
+-type open_flag() :: fslogic_worker:open_flag().
 -type error_code() :: atom().
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
 -type args() :: helpers_nif:helper_args().
 -type init() :: #helper_init{}.
 
--export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0,
+-export_type([file/0, open_flag/0, error_code/0, handle/0, name/0, args/0,
     init/0]).
 
 %%%===================================================================
@@ -239,7 +239,7 @@ truncate(#helper_handle{} = HelperHandle, File, Size) ->
 %%      First argument shall be #helper_handle{} from new_handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec open(handle(), File :: file(), OpenMode :: open_mode()) -> {ok, FD :: non_neg_integer()} | {error, term()}.
+-spec open(handle(), File :: file(), Flag :: open_flag()) -> {ok, FD :: non_neg_integer()} | {error, term()}.
 open(#helper_handle{} = HelperHandle, File, write) ->
     apply_helper_nif(HelperHandle, open, [File, ['O_WRONLY']]);
 open(#helper_handle{} = HelperHandle, File, read) ->

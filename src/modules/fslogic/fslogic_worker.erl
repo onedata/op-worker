@@ -37,14 +37,14 @@
 -type ctx() :: #fslogic_ctx{}.
 -type file() :: file_meta:entry(). %% Type alias for better code organization
 -type ext_file() :: file_meta:entry() | {guid, file_guid()}.
--type open_flags() :: rdwr | write | read.
+-type open_flag() :: rdwr | write | read.
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 -type request_type() :: fuse_request | file_request | provider_request |
     proxyio_request.
 
--export_type([ctx/0, file/0, ext_file/0, open_flags/0, posix_permissions/0,
+-export_type([ctx/0, file/0, ext_file/0, open_flag/0, posix_permissions/0,
     file_guid/0, file_guid_or_path/0, request_type/0]).
 
 %%%===================================================================
@@ -71,8 +71,7 @@ init(_Args) ->
         end
     end, [
         event_subscriptions:read_subscription(fun handle_read_events/2),
-        event_subscriptions:write_subscription(fun handle_write_events/2),
-        event_subscriptions:file_accessed_subscription(fun handle_file_accessed_events/2)
+        event_subscriptions:write_subscription(fun handle_write_events/2)
     ]),
 
     case session_manager:create_root_session() of
@@ -397,17 +396,23 @@ handle_fuse_request(#fslogic_ctx{session_id = SessId} = Ctx, #file_request{conte
     fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, TargetPath);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, ATime, MTime, CTime);
-handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #get_new_file_location{name = Name,
-    flags = Flags, mode = Mode, create_handle = CreateHandle}}) ->
+handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #create_file{name = Name,
+    flag = Flag, mode = Mode}}) ->
     NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, ParentGUID}),
-    fslogic_req_regular:get_new_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, Name, Mode, Flags, CreateHandle);
-handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_file_location{flags = Flags, create_handle = CreateHandle}}) ->
+    fslogic_req_regular:create_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, Name, Mode, Flag);
+handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #make_file{name = Name, mode = Mode}}) ->
+    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, ParentGUID}),
+    fslogic_req_regular:make_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, Name, Mode);
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #open_file{flag = Flag}}) ->
     NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
-    fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Flags, CreateHandle);
+    fslogic_req_regular:open_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Flag);
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_file_location{}}) ->
+    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
+    fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #truncate{size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Size);
-handle_fuse_request(Ctx, #file_request{file_request = #release{handle_id = HandleId}}) ->
-    fslogic_req_regular:release(Ctx, HandleId);
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #release{handle_id = HandleId}}) ->
+    fslogic_req_regular:release(Ctx, fslogic_uuid:guid_to_uuid(GUID), HandleId);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID,
     file_request = #synchronize_block{block = Block, prefetch = Prefetch}}) ->
     fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Block, Prefetch);
@@ -469,8 +474,8 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
     fslogic_req_generic:set_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Type, Value, Names);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #remove_metadata{type = Type}}) ->
     fslogic_req_generic:remove_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Type);
-handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #check_perms{flags = Flags}}) ->
-    fslogic_req_generic:check_perms(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Flags);
+handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #check_perms{flag = Flag}}) ->
+    fslogic_req_generic:check_perms(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Flag);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #create_share{name = Name}}) ->
     fslogic_req_generic:create_share(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Name);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #remove_share{}}) ->
@@ -602,23 +607,6 @@ handle_read_event(Event, SessId) ->
     {ok, #document{value = #session{identity = #user_identity{
         user_id = UserId}}}} = session:get(SessId),
     fslogic_times:update_atime({uuid, FileUUID}, UserId).
-
-
-handle_file_accessed_events(Evts, #{session_id := SessId}) ->
-    lists:foreach(fun(Ev) -> try_handle_event(fun() ->
-        #event{object = #file_accessed_event{file_uuid = FileGUID,
-            open_count = OpenCount, release_count = ReleaseCount}} = Ev,
-
-        {ok, FileUUID} = file_meta:to_uuid({guid, FileGUID}),
-
-        case OpenCount - ReleaseCount of
-            Count when Count > 0 ->
-                ok = open_file:register_open(FileUUID, SessId, Count);
-            Count when Count < 0 ->
-                ok = open_file:register_release(FileUUID, SessId, -Count);
-            _ -> ok
-        end
-    end) end, Evts).
 
 %%--------------------------------------------------------------------
 %% @private

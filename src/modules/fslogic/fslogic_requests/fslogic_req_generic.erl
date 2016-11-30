@@ -189,7 +189,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId, share_id = ShareId} = CTX, File)
 %%--------------------------------------------------------------------
 %% @doc Deletes file.
 %% For best performance use following arg types: document -> uuid -> path
-%% If parameter Silent is true, file_removal_event will not be emitted.
+%% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
@@ -578,7 +578,7 @@ remove_metadata(_CTX, {uuid, FileUuid}, rdf) ->
 %% Check given permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_worker:open_flags()) ->
+-spec check_perms(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_worker:open_flag()) ->
     #provider_response{}.
 check_perms(Ctx, Uuid, read) ->
     check_perms_read(Ctx, Uuid);
@@ -711,7 +711,7 @@ delete_file(CTX, File, Silent) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes file or directory
-%% If parameter Silent is true, file_removal_event will not be emitted.
+%% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->

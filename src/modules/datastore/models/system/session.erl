@@ -118,7 +118,7 @@ delete(Key) ->
         {ok, #document{value = #session{open_files = OpenFiles}}} ->
             lists:foreach(
                 fun(FileUUID) ->
-                    open_file:invalidate_session_entry(FileUUID, Key)
+                    file_handles:invalidate_session_entry(FileUUID, Key)
                 end, sets:to_list(OpenFiles));
         _ -> ok
     end,
@@ -243,7 +243,7 @@ get_event_manager(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_event_managers() -> {ok, [{ok, EvtMan :: pid()} | {error, {not_found,
-    SessId :: session:id()}}]} | {error, Reason :: term()}.
+    SessId :: id()}}]} | {error, Reason :: term()}.
 get_event_managers() ->
     case session:list() of
         {ok, Docs} ->
@@ -280,7 +280,7 @@ get_sequencer_manager(SessId) ->
 %% Returns random connection associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_random_connection(SessId :: session:id()) ->
+-spec get_random_connection(SessId :: id()) ->
     {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId) ->
     get_random_connection(SessId, false).
@@ -291,7 +291,7 @@ get_random_connection(SessId) ->
 %% Returns random connection associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_random_connection(SessId :: session:id(), HideOverloaded :: boolean()) ->
+-spec get_random_connection(SessId :: id(), HideOverloaded :: boolean()) ->
     {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId, HideOverloaded) ->
     case get_connections(SessId, HideOverloaded) of
@@ -357,7 +357,7 @@ get_connections(SessId, HideOverloaded) ->
 %% session removal.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_connection(SessId :: session:id(), Con :: pid()) ->
+-spec remove_connection(SessId :: id(), Con :: pid()) ->
     ok | datastore:update_error().
 remove_connection(SessId, Con) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
@@ -389,7 +389,7 @@ get_auth(SessId) ->
 %% Returns rest session id for given identity.
 %% @end
 %%--------------------------------------------------------------------
--spec get_rest_session_id(session:identity()) -> id().
+-spec get_rest_session_id(identity()) -> id().
 get_rest_session_id(#user_identity{user_id = Uid}) ->
     <<(oneprovider:get_provider_id())/binary, "_", Uid/binary, "_rest_session">>.
 
@@ -398,17 +398,16 @@ get_rest_session_id(#user_identity{user_id = Uid}) ->
 %% Adds open file UUID to session.
 %% @end
 %%--------------------------------------------------------------------
--spec add_open_file(session:id(), file_meta:uuid()) ->
+-spec add_open_file(id(), file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
-add_open_file(SessionId, FileUUID) ->
-    case session:get(SessionId) of
-        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
-            UpdatedOpenFiles= sets:add_element(FileUUID, OpenFiles),
-            {ok, _} = session:save(Doc#document{value = Session#session{
-                open_files = UpdatedOpenFiles}}),
-            ok;
-        {error, Reason} ->
-            {error, Reason}
+add_open_file(SessId, FileUUID) ->
+    Diff = fun(#session{open_files = OpenFiles} = Sess) ->
+        {ok, Sess#session{open_files = sets:add_element(FileUUID, OpenFiles)}}
+    end,
+
+    case update(SessId, Diff) of
+        {ok, _} -> ok;
+        {error, Reason} -> {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -416,17 +415,16 @@ add_open_file(SessionId, FileUUID) ->
 %% Removes open file UUID from session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_open_file(session:id(), file_meta:uuid()) ->
+-spec remove_open_file(id(), file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
-remove_open_file(SessionId, FileUUID) ->
-    case session:get(SessionId) of
-        {ok, #document{value = #session{open_files = OpenFiles} = Session} = Doc} ->
-            UpdatedOpenFiles= sets:del_element(FileUUID, OpenFiles),
-            {ok, _} = session:save(Doc#document{value = Session#session{
-                open_files = UpdatedOpenFiles}}),
-            ok;
-        {error, Reason} ->
-            {error, Reason}
+remove_open_file(SessId, FileUUID) ->
+    Diff = fun(#session{open_files = OpenFiles} = Sess) ->
+        {ok, Sess#session{open_files = sets:del_element(FileUUID, OpenFiles)}}
+    end,
+
+    case update(SessId, Diff) of
+        {ok, _} -> ok;
+        {error, Reason} -> {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -434,7 +432,7 @@ remove_open_file(SessionId, FileUUID) ->
 %% Removes open file UUID from session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_transfers(session:id()) -> {ok, [binary()]} | {error, Reason :: term()}.
+-spec get_transfers(id()) -> {ok, [binary()]} | {error, Reason :: term()}.
 get_transfers(SessionId) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{transfers = Transfers}}} ->
@@ -448,32 +446,32 @@ get_transfers(SessionId) ->
 %% Removes transfer from session memory
 %% @end
 %%--------------------------------------------------------------------
--spec remove_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+-spec remove_transfer(id(), transfer:id()) -> {ok, datastore:key()}.
 remove_transfer(SessionId, TransferId) ->
     session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
-            FilteredTransfers = lists:filter(fun(T) ->
-                    T =/= TransferId
-                end, Transfers),
+        FilteredTransfers = lists:filter(fun(T) ->
+            T =/= TransferId
+        end, Transfers),
         {ok, Sess#session{transfers = FilteredTransfers}}
-        end).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Add transfer to session memory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_transfer(session:id(), transfer:id()) -> {ok, datastore:key()}.
+-spec add_transfer(id(), transfer:id()) -> {ok, datastore:key()}.
 add_transfer(SessionId, TransferId) ->
     session:update(SessionId, fun(Sess = #session{transfers = Transfers}) ->
         {ok, Sess#session{transfers = [TransferId | Transfers]}}
-        end).
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Add link to handle.
 %% @end
 %%--------------------------------------------------------------------
--spec add_handle(SessionId :: session:id(), HandleID :: binary(),
+-spec add_handle(SessionId :: id(), HandleID :: binary(),
     Handle :: storage_file_manager:handle()) -> ok | datastore:generic_error().
 add_handle(SessionId, HandleID, Handle) ->
     case sfm_handle:create(#document{value = Handle}) of
@@ -488,7 +486,7 @@ add_handle(SessionId, HandleID, Handle) ->
 %% Remove link to handle.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_handle(SessionId :: session:id(), HandleID :: binary()) -> ok | datastore:generic_error().
+-spec remove_handle(SessionId :: id(), HandleID :: binary()) -> ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
     case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
         {ok, {HandleKey, sfm_handle}} ->
@@ -509,7 +507,7 @@ remove_handle(SessionId, HandleID) ->
 %% Gets handle.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(SessionId :: session:id(), HandleID :: binary()) ->
+-spec get_handle(SessionId :: id(), HandleID :: binary()) ->
     {ok, storage_file_manager:handle()} | datastore:generic_error().
 get_handle(SessionId, HandleID) ->
     case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of

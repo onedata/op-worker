@@ -19,8 +19,8 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/4, get_new_file_location/6, truncate/3,
-    get_helper_params/3, release/2]).
+-export([get_file_location/2, open_file/3, create_file/5, make_file/4,
+    truncate/3, get_helper_params/3, release/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
@@ -74,6 +74,7 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc Gets helper params based on given storage ID.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_helper_params(fslogic_worker:ctx(), StorageId :: storage:id(),
     ForceCL :: boolean()) -> FuseResponse :: #fuse_response{} | no_return().
@@ -91,30 +92,55 @@ get_helper_params(#fslogic_ctx{session_id = SessId, space_id = SpaceId},
     HelperParams = helpers_utils:get_params(HelperInit, UserCtx),
     #fuse_response{status = #status{code = ?OK}, fuse_response = HelperParams}.
 
-
 %%--------------------------------------------------------------------
-%% @equiv get_file_location(CTX, File, CreateHandle) with permission
-%% check depending on open mode
-%%--------------------------------------------------------------------
--spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(),
-    OpenMode :: fslogic_worker:open_flags(), CreateHandle :: boolean()) ->
-    no_return() | #fuse_response{}.
-get_file_location(CTX, File, read, CreateHandle) ->
-    get_file_location_for_read(CTX, File, CreateHandle);
-get_file_location(CTX, File, write, CreateHandle) ->
-    get_file_location_for_write(CTX, File, CreateHandle);
-get_file_location(CTX, File, rdwr, CreateHandle) ->
-    get_file_location_for_rdwr(CTX, File, CreateHandle).
-
-%%--------------------------------------------------------------------
-%% @doc Gets new file location (implicit mknod operation).
+%% @doc Returns file location.
 %% @end
 %%--------------------------------------------------------------------
--spec get_new_file_location(fslogic_worker:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
-    Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(), CreateHandle :: boolean()) ->
+-spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+    no_return() | #fuse_response{}.
+-check_permissions([{traverse_ancestors, 2}]).
+get_file_location(#fslogic_ctx{space_id = SpaceId}, File) ->
+    {ok, #document{key = FileUUID}} = file_meta:get(File),
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    #document{value = #file_location{
+        blocks = Blocks, file_id = FileId
+    }} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
+            uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
+            provider_id = oneprovider:get_provider_id(),
+            storage_id = StorageId,
+            file_id = FileId,
+            blocks = Blocks,
+            space_id = SpaceId
+        })
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc @equiv open_file(CTX, File, CreateHandle) with permission check
+%% depending on the open flag
+%%--------------------------------------------------------------------
+-spec open_file(fslogic_worker:ctx(), File :: fslogic_worker:file(),
+    OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
+open_file(CTX, File, read) ->
+    open_file_for_read(CTX, File);
+open_file(CTX, File, write) ->
+    open_file_for_write(CTX, File);
+open_file(CTX, File, rdwr) ->
+    open_file_for_rdwr(CTX, File).
+
+%%--------------------------------------------------------------------
+%% @doc Creates and opens file. Returns handle to the file, its attributes
+%% and location.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file(fslogic_worker:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
-get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags, CreateHandle) ->
+create_file(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flag) ->
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
@@ -126,27 +152,75 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
     {ok, FileUUID} = file_meta:create({uuid, ParentUUID}, File),
     {ok, _} = times:create(#document{key = FileUUID, value = #times{
-        mtime = CTime, atime = CTime, ctime = CTime}}),
+        mtime = CTime, atime = CTime, ctime = CTime
+    }}),
 
     try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         {StorageId, FileId} ->
             fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
 
-            {ok, HandleId} = case (SessId =/= ?ROOT_SESS_ID) andalso (SessId =/= ?GUEST_SESS_ID) andalso CreateHandle of
-                true ->
-                    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID,
-                        Storage, FileId),
-                    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
-                    save_handle(SessId, Handle);
-                false ->
-                    {ok, undefined}
-            end,
+            {ok, Storage} = fslogic_storage:select_storage(SpaceId),
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID,
+                Storage, FileId),
+            {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
+            {ok, HandleId} = save_handle(SessId, Handle),
 
-            #fuse_response{status = #status{code = ?OK},
-                fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-                    uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
-                    storage_id = StorageId, file_id = FileId, blocks = [], handle_id = HandleId, space_id = SpaceId})}
+            #fuse_response{fuse_response = #file_attr{} = FileAttr} =
+                fslogic_req_generic:get_file_attr(CTX, {uuid, FileUUID}),
+
+            FileLocation = #file_location{
+                uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
+                provider_id = oneprovider:get_provider_id(),
+                storage_id = StorageId,
+                file_id = FileId,
+                blocks = [#file_block{offset = 0, size = 0}],
+                space_id = SpaceId
+            },
+
+            ok = file_handles:register_open(FileUUID, SessId, 1),
+
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = #file_created{
+                    handle_id = HandleId,
+                    file_attr = FileAttr,
+                    file_location = FileLocation
+                }
+            }
+    catch
+        T:M ->
+            {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
+            lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
+            file_meta:delete({uuid, FileUUID}),
+            ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
+            throw(?EACCES)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Creates file. Returns its attributes.
+%% @end
+%%--------------------------------------------------------------------
+-spec make_file(fslogic_worker:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions()) -> no_return() | #fuse_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
+make_file(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, ParentUUID}, Name, Mode) ->
+    CTime = erlang:system_time(seconds),
+    File = #document{value = #file_meta{
+        name = Name,
+        type = ?REGULAR_FILE_TYPE,
+        mode = Mode,
+        uid = fslogic_context:get_user_id(CTX)
+    }},
+
+    {ok, FileUUID} = file_meta:create({uuid, ParentUUID}, File),
+    {ok, _} = times:create(#document{key = FileUUID, value = #times{
+        mtime = CTime, atime = CTime, ctime = CTime
+    }}),
+
+    try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
+        _ ->
+            fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
+            fslogic_req_generic:get_file_attr(CTX, {uuid, FileUUID})
     catch
         T:M ->
             {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
@@ -161,10 +235,11 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 %% @doc Removes file handle saved in session.
 %% @end
 %%--------------------------------------------------------------------
--spec release(#fslogic_ctx{}, HandleId :: binary()) ->
+-spec release(#fslogic_ctx{}, FileUUID :: file_meta:uuid(), HandleId :: binary()) ->
     no_return() | #fuse_response{}.
-release(#fslogic_ctx{session_id = SessId}, HandleId) ->
+release(#fslogic_ctx{session_id = SessId}, FileUUID, HandleId) ->
     ok = session:remove_handle(SessId, HandleId),
+    ok = file_handles:register_release(FileUUID, SessId, 1),
     #fuse_response{status = #status{code = ?OK}}.
 
 
@@ -200,7 +275,7 @@ get_parent(CTX, File) ->
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #dir{uuid =
-                    fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(CTX)), undefined)}
+                fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(CTX)), undefined)}
             };
         _ ->
             #provider_response{
@@ -217,10 +292,10 @@ get_parent(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block(), boolean()) ->
     #fuse_response{}.
-synchronize_block(CTX, {uuid, FileUUID}, undefined, Prefetch)  ->
+synchronize_block(CTX, {uuid, FileUUID}, undefined, Prefetch) ->
     Size = fslogic_blocks:get_file_size({uuid, FileUUID}),
     synchronize_block(CTX, {uuid, FileUUID}, #file_block{offset = 0, size = Size}, Prefetch);
-synchronize_block(CTX, {uuid, FileUUID}, Block, Prefetch)  ->
+synchronize_block(CTX, {uuid, FileUUID}, Block, Prefetch) ->
     ok = replica_synchronizer:synchronize(CTX, FileUUID, Block, Prefetch),
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -234,7 +309,7 @@ synchronize_block(CTX, {uuid, FileUUID}, Block, Prefetch)  ->
 -spec synchronize_block_and_compute_checksum(fslogic_worker:ctx(),
     {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
 synchronize_block_and_compute_checksum(#fslogic_ctx{session_id = SessId}, {uuid, FileUUID},
-    Range = #file_block{offset = Offset, size = Size})  ->
+    Range = #file_block{offset = Offset, size = Size}) ->
     {ok, Handle} = lfm_files:open(SessId, {guid, fslogic_uuid:uuid_to_guid(FileUUID)}, read),
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
     Checksum = crypto:hash(md4, Data),
@@ -251,7 +326,7 @@ synchronize_block_and_compute_checksum(#fslogic_ctx{session_id = SessId}, {uuid,
 %%--------------------------------------------------------------------
 -spec get_file_distribution(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     #provider_response{}.
-get_file_distribution(_CTX, {uuid, UUID})  ->
+get_file_distribution(_CTX, {uuid, UUID}) ->
     {ok, Locations} = file_meta:get_locations({uuid, UUID}),
     ProviderDistributions = lists:map(
         fun(LocationId) ->
@@ -266,68 +341,67 @@ get_file_distribution(_CTX, {uuid, UUID})  ->
             }
         end, Locations),
     #provider_response{status = #status{code = ?OK}, provider_response =
-        #file_distribution{provider_file_distributions = ProviderDistributions}}.
+    #file_distribution{provider_file_distributions = ProviderDistributions}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv get_file_location_impl(CTX, File, read, CreateHandle) with permission check
+%% @equiv open_file_impl(CTX, File, read, CreateHandle) with permission check
 %%--------------------------------------------------------------------
--spec get_file_location_for_read(fslogic_worker:ctx(), fslogic_worker:file(), boolean()) ->
+-spec open_file_for_read(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
-get_file_location_for_read(CTX, File, CreateHandle) ->
-    get_file_location_impl(CTX, File, read, CreateHandle).
+open_file_for_read(CTX, File) ->
+    open_file_impl(CTX, File, read).
 
 %%--------------------------------------------------------------------
-%% @equiv get_file_location_impl(CTX, File, write, CreateHandle) with permission check
+%% @equiv open_file_impl(CTX, File, write, CreateHandle) with permission check
 %%--------------------------------------------------------------------
--spec get_file_location_for_write(fslogic_worker:ctx(), fslogic_worker:file(), boolean()) ->
+-spec open_file_for_write(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-get_file_location_for_write(CTX, File, CreateHandle) ->
-    get_file_location_impl(CTX, File, write, CreateHandle).
+open_file_for_write(CTX, File) ->
+    open_file_impl(CTX, File, write).
 
 %%--------------------------------------------------------------------
-%% @equiv get_file_location_impl(CTX, File, rdwr, CreateHandle) with permission check
+%% @equiv open_file_impl(CTX, File, rdwr, CreateHandle) with permission check
 %%--------------------------------------------------------------------
--spec get_file_location_for_rdwr(fslogic_worker:ctx(), fslogic_worker:file(), boolean()) ->
+-spec open_file_for_rdwr(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
-get_file_location_for_rdwr(CTX, File, CreateHandle) ->
-    get_file_location_impl(CTX, File, rdwr, CreateHandle).
+open_file_for_rdwr(CTX, File) ->
+    open_file_impl(CTX, File, rdwr).
 
 %%--------------------------------------------------------------------
-%% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.
+%% @doc Opens a file and returns a handle to it.
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(),
-    helpers:open_mode(), boolean()) ->
-    no_return() | #fuse_response{}.
-get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = ShareId} = CTX, File, Mode, CreateHandle) ->
+-spec open_file_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(),
+    fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
+open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = ShareId} = CTX, File, Flag) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(File),
 
-    {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
-    #document{value = #file_location{blocks = Blocks, file_id = FileId}} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
+    {ok, #document{value = Storage}} = fslogic_storage:select_storage(SpaceId),
+    #document{value = #file_location{
+        file_id = FileId}
+    } = fslogic_utils:get_local_file_location({uuid, FileUUID}),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(
+        FileDoc, fslogic_context:get_user_id(CTX)
+    ),
 
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId, ShareId),
+    {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
+    {ok, HandleId} = save_handle(SessId, Handle),
 
-    {ok, HandleId} = case (SessId =/= ?ROOT_SESS_ID) andalso (SessId =/= ?GUEST_SESS_ID) andalso CreateHandle of
-        true ->
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId, ShareId),
-            {ok, Handle} = storage_file_manager:open(SFMHandle, Mode),
-            save_handle(SessId, Handle);
-        false ->
-            {ok, undefined}
-    end,
+    ok = file_handles:register_open(FileUUID, SessId, 1),
 
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
-            storage_id = StorageId, file_id = FileId, blocks = Blocks, handle_id = HandleId, space_id = SpaceId})}.
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened{handle_id = HandleId}
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc Saves file handle in user's session, returns id of saved handle
@@ -335,7 +409,11 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, sha
 %%--------------------------------------------------------------------
 -spec save_handle(session:id(), storage_file_manager:handle()) ->
     {ok, binary()}.
-save_handle(SessionId, Handle) ->
+save_handle(SessId, Handle) ->
     HandleId = base64:encode(crypto:rand_bytes(20)),
-    ok = session:add_handle(SessionId, HandleId, Handle),
+    case SessId of
+    	?ROOT_SESS_ID -> ok;
+    	?GUEST_SESS_ID -> ok;
+    	_ -> session:add_handle(SessId, HandleId, Handle)
+    end,
     {ok, HandleId}.

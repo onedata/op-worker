@@ -35,23 +35,22 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case open_file:list() of
+    case file_handles:list() of
         {ok, Docs} ->
-            RemovedFiles = lists:filter(
-                fun(#document{value = #open_file{is_removed = IsRemoved}}) ->
-                    IsRemoved
-                end, Docs),
+            RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
+                Handle#file_handles.is_removed
+            end, Docs),
 
             lists:foreach(fun(#document{key = FileUUID}) ->
-                try remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false)
+                try
+                    remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false)
                 catch
-                    T:M ->
-                        ?error_stacktrace("Cannot remove file - ~p:~p", [T, M])
+                    T:M -> ?error_stacktrace("Cannot remove file - ~p:~p", [T, M])
                 end
             end, RemovedFiles),
 
             lists:foreach(fun(#document{key = FileUUID}) ->
-                ok = open_file:delete(FileUUID)
+                ok = file_handles:delete(FileUUID)
             end, Docs);
         {error, Reason} ->
             ?error_stacktrace("Cannot clean open files descriptors - ~p", [Reason])
@@ -77,21 +76,17 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(FileUUID),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
 
-    case open_file:exists(FileUUID) of
+    case file_handles:exists(FileUUID) of
         true ->
             {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId),
 
-            NewName = <<".onedata_hidden", FileUUID/binary>>,
+            NewName = <<?HIDDEN_FILE_PREFIX, FileUUID/binary>>,
             Path = <<ParentPath/binary, ?DIRECTORY_SEPARATOR, NewName/binary>>,
             #fuse_response{status = #status{code = ?OK}} = fslogic_rename:rename(
                 CTX, {uuid, FileUUID}, Path),
 
-            case open_file:mark_to_remove(FileUUID) of
-                ok ->
-                    fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
-                {error, {not_found, _}} ->
-                    remove_file_and_file_meta(FileUUID, SessId, Silent)
-            end;
+            ok = file_handles:mark_to_remove(FileUUID),
+            fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
         false ->
             remove_file_and_file_meta(FileUUID, SessId, Silent)
     end,
@@ -121,14 +116,15 @@ cleanup() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes file and file meta. If parameter Silent is true, file_removal_event
+%% Removes file and file meta. If parameter Silent is true, file_removed_event
 %% will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_meta:uuid(), session:id(), boolean()) -> ok.
 remove_file_and_file_meta(FileUUID, SessId, Silent) ->
-    {ok, #document{value = #file_meta{uid = UID, type = Type, shares = Shares}} = FileDoc} =
+    {ok, #document{value = #file_meta{type = Type, shares = Shares}} = FileDoc} =
         file_meta:get(FileUUID),
+    {ok, UID} = session:get_user_id(SessId),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, UID),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
 
@@ -148,7 +144,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
     case Silent of
         true -> ok;
         false ->
-            fslogic_event:emit_file_removal(
+            fslogic_event:emit_file_removed(
                 fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), [SessId])
     end,
     ok.
@@ -176,7 +172,7 @@ delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
                                     ok -> ok;
                                     {error, Reason1} ->
                                         {{StorageId, FileId}, {error, Reason1}}
-                                end ;
+                                end;
                             {error, Reason2} ->
                                 {{StorageId, FileId}, {error, Reason2}}
                         end
