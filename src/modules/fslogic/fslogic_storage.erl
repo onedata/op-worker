@@ -30,7 +30,6 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new user's storage context based on given helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_user_ctx(HelperInit :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->

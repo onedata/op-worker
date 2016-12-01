@@ -48,7 +48,7 @@ models() -> [
     message_id,
     space_quota,
     monitoring_state,
-    open_file,
+    file_handles,
     swift_user,
     sfm_handle,
     dbsync_batches,
@@ -58,7 +58,8 @@ models() -> [
     permissions_cache,
     permissions_cache_helper,
     change_propagation_controller,
-    times
+    times,
+    helper_instance
 ].
 
 %%--------------------------------------------------------------------

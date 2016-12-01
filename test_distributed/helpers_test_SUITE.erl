@@ -126,32 +126,37 @@ open_test(Config) ->
     File = gen_filename(),
 
     call(Config, file, open, [?path(Config, File), write]),
-    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, write])),
-    ?assertMatch({ok, 4}, call(Config, write, [File, 0, <<"test">>])),
-    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, read])),
-    ?assertMatch({ok, <<"test">>}, call(Config, read, [File, 0, 4])),
-    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, rdwr])),
-    ?assertMatch({ok, 5}, call(Config, write, [File, 0, <<"test2">>])),
-    ?assertMatch({ok, <<"test2">>}, call(Config, read, [File, 0, 5])).
+    {ok, WriteHandle} = ?assertMatch({ok, _}, call(Config, open, [File, write])),
+    ?assertMatch({ok, 4}, call(WriteHandle, write, [0, <<"test">>])),
+    {ok, ReadHandle} = ?assertMatch({ok, _}, call(Config, open, [File, read])),
+    ?assertMatch({ok, <<"test">>}, call(ReadHandle, read, [0, 4])),
+    {ok, RdWrHandle} = ?assertMatch({ok, _}, call(Config, open, [File, rdwr])),
+    ?assertMatch({ok, 5}, call(RdWrHandle, write, [0, <<"test2">>])),
+    ?assertMatch({ok, <<"test2">>}, call(RdWrHandle, read, [0, 5])).
 
 read_test(Config) ->
     File = gen_filename(),
 
     {ok, Dev} = call(Config, file, open, [?path(Config, File), write]),
     ok = call(Config, file, write, [Dev, <<"test">>]),
-    ?assertMatch({ok, <<"st">>}, call(Config, read, [File, 2, 10])),
-    ?assertMatch({ok, <<"s">>}, call(Config, read, [File, 2, 1])).
+
+    {ok, Handle} = call(Config, open, [File, read]),
+
+    ?assertMatch({ok, <<"st">>}, call(Handle, read, [2, 10])),
+    ?assertMatch({ok, <<"s">>}, call(Handle, read, [2, 1])).
 
 write_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
 
-    ?assertMatch({ok, 4}, call(Config, write, [File, 0, <<"test">>])),
+    {ok, Handle} = call(Config, open, [File, write]),
+
+    ?assertMatch({ok, 4}, call(Handle, write, [0, <<"test">>])),
     {ok, Dev1} = call(Config, file, open, [?path(Config, File), [read, binary]]),
     {ok, <<"test">>} = call(Config, file, read, [Dev1, 5]),
 
-    ?assertMatch({ok, 4}, call(Config, write, [File, 2, <<"test">>])),
+    ?assertMatch({ok, 4}, call(Handle, write, [2, <<"test">>])),
     {ok, Dev2} = call(Config, file, open, [?path(Config, File), [read, binary]]),
     {ok, <<"tetest">>} = call(Config, file, read, [Dev2, 6]).
 
@@ -164,13 +169,17 @@ flush_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, flush, [File])).
+
+    {ok, Handle} = call(Config, open, [File, write]),
+    ?assertMatch(ok, call(Handle, flush, [])).
 
 fsync_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, fsync, [File, false])).
+
+    {ok, Handle} = call(Config, open, [File, write]),
+    ?assertMatch(ok, call(Handle, fsync, [false])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -206,13 +215,17 @@ gen_filename() ->
     http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:rand_bytes(20)))/binary>>).
 
 ctx_server(Config) ->
-    CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),
-    helpers:set_user_ctx(CTX, #posix_user_ctx{uid = 0, gid = 0}),
+    CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")},
+                             #posix_user_ctx{uid = 0, gid = 0}),
     ctx_server(Config, CTX).
 ctx_server(Config, CTX) ->
     receive
         {Pid, get} ->
             Pid ! CTX;
+        {Pid, {run_helpers, open, Args}} ->
+            {ok, FileHandle} = apply(helpers, open, [CTX | Args]),
+            HandlePid = spawn_link(fun() -> file_handle_server(FileHandle) end),
+            Pid ! {ok, HandlePid};
         {Pid, {run_helpers, Method, Args}} ->
             Pid ! apply(helpers, Method, [CTX | Args]);
         {Pid, {run, Module, Method, Args}} ->
@@ -221,6 +234,27 @@ ctx_server(Config, CTX) ->
             exit(normal)
     end,
     ctx_server(Config, CTX).
+
+
+file_handle_server(FileHandle) ->
+    process_flag(trap_exit, true),
+    receive
+        {'EXIT', _, _} ->
+            helpers:release(FileHandle);
+
+        {Pid, {run_helpers, Method, Args}} ->
+            Pid ! apply(helpers, Method, [FileHandle | Args]),
+            file_handle_server(FileHandle)
+    end.
+
+
+call(Handle, Method, Args) when is_pid(Handle) ->
+    Handle ! {self(), {run_helpers, Method, Args}},
+    receive
+        Resp -> Resp
+    after
+        ?CALL_TIMEOUT_MILLIS -> {error, timeout}
+    end;
 
 call(Config, Method, Args) ->
     CTXServer = ?config(ctx_server, Config),

@@ -102,7 +102,7 @@
 }).
 
 -record(check_perms, {
-    flags :: fslogic_worker:open_flags()
+    flag :: fslogic_worker:open_flag()
 }).
 
 -record(create_share, {
