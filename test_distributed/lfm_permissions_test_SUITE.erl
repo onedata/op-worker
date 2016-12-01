@@ -1024,6 +1024,16 @@ acl_write_acl_group_test(Config) ->
 -define(PERMISSION_CACHE_STATUS_UUID, <<"status">>).
 permission_cache_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
+
+    case ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]) of
+        {ok, #document{value = #permissions_cache{value = {permissions_cache_helper, _}}}} ->
+            ?assertEqual(ok, ?rpcCache(W, invalidate_permissions_cache, [])),
+            ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache, permissions_cache_helper}}}},
+                ?rpcCache(W, get, [?PERMISSION_CACHE_STATUS_UUID]), 3);
+        _ ->
+            ok
+    end,
+
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
     ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
