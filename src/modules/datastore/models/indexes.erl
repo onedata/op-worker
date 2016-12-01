@@ -28,6 +28,9 @@
 -type view_name() :: binary().
 -type index_id() :: binary().
 -type view_function() :: binary().
+% when set to true, view is of spatial type. It should emit geospatial json keys,
+% and can be queried with use of bbox, start_range, end_range params. More info
+% here: http://developer.couchbase.com/documentation/server/current/indexes/writing-spatial-views.html
 -type spatial() :: boolean().
 -type index() :: #{name => indexes:view_name(), space_id => od_space:id(), function => indexes:view_function(), spatial => indexes:spatial()}.
 
@@ -49,7 +52,7 @@ record_struct(1) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
+%% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, datastore_utils:gen_uuid()).
 %%--------------------------------------------------------------------
 -spec add_index(od_user:id(), view_name(), view_function(), od_space:id(), spatial()) ->
     {ok, index_id()} | {error, any()}.
@@ -58,7 +61,7 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add view defined by given function.
+%% Add or update view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_index(od_user:id(), view_name() | undefined, view_function(),
@@ -158,8 +161,8 @@ query_view(Id, Options) ->
         try
             {true, fslogic_uuid:uuid_to_guid(Uuid)}
         catch
-            _:_  ->
-                ?error("Cannot resolve uuid of file ~p in index ~p",[Uuid, Id]),
+            _:Error  ->
+                ?error("Cannot resolve uuid of file ~p in index ~p, error ~p",[Uuid, Id, Error]),
                 false
         end
     end, FileUuids)}.

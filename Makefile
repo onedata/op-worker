@@ -34,7 +34,6 @@ all: test_rel
 
 compile:
 	$(REBAR) compile
-	CLUSTER_WORKER_DIR="a"
 	if [ -d $(LIB_DIR)/cluster_worker/ ]; then \
 	    make -C $(LIB_DIR)/cluster_worker/ priv/sync_gateway ; \
 	else \
