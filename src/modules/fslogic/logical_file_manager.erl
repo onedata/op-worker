@@ -162,7 +162,7 @@ exists(FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(session:id(), fslogic_worker:file(), file_meta:path()) ->
+-spec mv(session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 mv(SessId, FileEntry, TargetPath) ->
     ?run(fun() -> lfm_files:mv(SessId, FileEntry, TargetPath) end).

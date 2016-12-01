@@ -150,31 +150,31 @@ update_record(<<"file-shared">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
 update_record(<<"file-public">>, _Id, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-update_record(<<"file">>, FileId, Data) ->
+update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
     try
         SessionId = gui_session:get_session_id(),
-        case proplists:get_value(<<"permissions">>, Data, undefined) of
-            undefined ->
+        {ok, OldPath} = logical_file_manager:get_file_path(
+            SessionId, FileId
+        ),
+        DirPathTokens = fslogic_path:split(fslogic_path:dirname(OldPath)),
+        NewPath = fslogic_path:join(DirPathTokens ++ [NewName]),
+        case logical_file_manager:mv(SessionId, {guid, FileId}, NewPath) of
+            {ok, _} ->
                 ok;
-            NewPerms ->
-                Perms = case is_integer(NewPerms) of
-                    true ->
-                        binary_to_integer(integer_to_binary(NewPerms), 8);
-                    false ->
-                        binary_to_integer(NewPerms, 8)
-                end,
-                case Perms >= 0 andalso Perms =< 8#777 of
-                    true ->
-                        ok = logical_file_manager:set_perms(
-                            SessionId, {guid, FileId}, Perms);
-                    false ->
-                        gui_error:report_warning(<<"Cannot change permissions, "
-                        "invalid octal value.">>)
-                end
+            {error, ?EPERM} ->
+                gui_error:report_warning(<<"Permission denied.">>);
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Access denied.">>)
         end
-    catch _:_ ->
-        gui_error:report_warning(<<"Cannot change permissions.">>)
-    end.
+    catch Error:Message ->
+        ?error_stacktrace("Cannot rename file via GUI - ~p:~p", [
+            Error, Message
+        ]),
+        gui_error:report_warning(
+            <<"Cannot rename file due to unknown error.">>)
+    end;
+update_record(<<"file">>, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -251,13 +251,12 @@ file_record(<<"file-shared">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
         {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
         {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, FileId)]},
-        {<<"fileAcl">>, null},
+        {<<"filePermission">>, null},
         {<<"share">>, null},
         {<<"provider">>, null},
         {<<"fileProperty">>, null}
@@ -274,13 +273,12 @@ file_record(<<"file-public">>, _, <<"containerDir.", ShareId/binary>>, _, _) ->
         {<<"id">>, <<"containerDir.", ShareId/binary>>},
         {<<"name">>, Name},
         {<<"type">>, <<"dir">>},
-        {<<"permissions">>, 0},
         {<<"modificationTime">>, 0},
         {<<"size">>, null},
         {<<"totalChildrenCount">>, 1},
         {<<"parent">>, null},
         {<<"children">>, [op_gui_utils:ids_to_association(ShareId, RootFile)]},
-        {<<"fileAcl">>, null},
+        {<<"filePermission">>, null},
         {<<"share">>, null},
         {<<"provider">>, null},
         {<<"fileProperty">>, null}
@@ -304,7 +302,6 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 type = TypeAttr,
                 size = SizeAttr,
                 mtime = ModificationTime,
-                mode = PermissionsAttr,
                 shares = Shares,
                 provider_id = ProviderId
             } = FileAttr,
@@ -330,7 +327,6 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                     end
             end,
 
-            Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
 
             {Type, Size, ChildrenIds, TotalChildrenCount} = case TypeAttr of
                 ?DIRECTORY_TYPE ->
@@ -354,6 +350,13 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                             op_gui_utils:ids_to_association(ShareId, FId)
                         end, ChildrenIds)
             end,
+            % Depending on model name, properly set the ACL field
+            FileAcl = case ModelType of
+                <<"file">> ->
+                    FileId;
+                _ ->
+                    null
+            end,
 
             % Currently only one share per file is allowed.
             % Share is always null for file-shared and file-public so as not to
@@ -375,13 +378,12 @@ file_record(ModelType, SessionId, ResId, ChildrenFromCache, ChildrenLimit) ->
                 {<<"id">>, ResId},
                 {<<"name">>, Name},
                 {<<"type">>, Type},
-                {<<"permissions">>, Permissions},
                 {<<"modificationTime">>, ModificationTime},
                 {<<"size">>, Size},
                 {<<"totalChildrenCount">>, TotalChildrenCount},
                 {<<"parent">>, Parent},
                 {<<"children">>, Children},
-                {<<"fileAcl">>, FileId},
+                {<<"filePermission">>, FileAcl},
                 {<<"share">>, Share},
                 {<<"provider">>, ProviderId},
                 {<<"fileProperty">>, Metadata}
@@ -404,20 +406,25 @@ create_file(SessionId, Name, ParentId, Type) ->
         {ok, ParentPath} = logical_file_manager:get_file_path(
             SessionId, ParentId),
         Path = filename:join([ParentPath, Name]),
-        FileId = case Type of
+        Result = case Type of
             <<"file">> ->
-                {ok, FId} = logical_file_manager:create(SessionId, Path),
-                FId;
+                logical_file_manager:create(SessionId, Path);
             <<"dir">> ->
-                {ok, DirId} = logical_file_manager:mkdir(SessionId, Path),
-                DirId
+                logical_file_manager:mkdir(SessionId, Path)
         end,
-        NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
-        {ok, FileData} = file_record(
-            <<"file">>, SessionId, ParentId, true, NewChildrenCount
-        ),
-        gui_async:push_updated(<<"file">>, FileData),
-        {ok, FileId}
+        case Result of
+            {ok, FileId} ->
+                NewChildrenCount = modify_ls_cache(add, FileId, ParentId),
+                {ok, FileData} = file_record(
+                    <<"file">>, SessionId, ParentId, true, NewChildrenCount
+                ),
+                gui_async:push_updated(<<"file">>, FileData),
+                {ok, FileId};
+            {error, ?EPERM} ->
+                gui_error:report_warning(<<"Permission denied.">>);
+            {error, ?EACCES} ->
+                gui_error:report_warning(<<"Access denied.">>)
+        end
     catch Error:Message ->
         ?error_stacktrace(
             "Cannot create file via GUI - ~p:~p", [Error, Message]
