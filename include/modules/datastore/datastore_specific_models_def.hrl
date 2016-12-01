@@ -252,9 +252,14 @@
     transfers = [] :: [transfer:id()]
 }).
 
+%% Datastore model for initialized helper handles.
+-record(helper_instance, {
+    handle :: undefined | helpers:handle()
+}).
+
 %% File handle used by the module
 -record(sfm_handle, {
-    helper_handle :: undefined | helpers:handle(),
+    file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file(),
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),

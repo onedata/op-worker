@@ -59,6 +59,7 @@ models() -> [
     permissions_cache_helper,
     change_propagation_controller,
     times,
+    helper_instance,
     space_strategies,
     file_force_proxy
 ].

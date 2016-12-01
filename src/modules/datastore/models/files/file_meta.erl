@@ -874,6 +874,8 @@ delete_child_link_in_parent(ParentUUID, ChildName, ChildUUID) ->
                         _ -> ok
                     end
                 end, ParentTargets);
+        {error,link_not_found} ->
+            ok;
         Error -> Error
     end.
 
