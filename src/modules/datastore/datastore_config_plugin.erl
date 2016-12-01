@@ -58,7 +58,8 @@ models() -> [
     permissions_cache,
     permissions_cache_helper,
     change_propagation_controller,
-    times
+    times,
+    helper_instance
 ].
 
 %%--------------------------------------------------------------------

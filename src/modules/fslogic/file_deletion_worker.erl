@@ -80,17 +80,13 @@ handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = S
         true ->
             {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId),
 
-            NewName = <<".onedata_hidden", FileUUID/binary>>,
+            NewName = <<?HIDDEN_FILE_PREFIX, FileUUID/binary>>,
             Path = <<ParentPath/binary, ?DIRECTORY_SEPARATOR, NewName/binary>>,
             #fuse_response{status = #status{code = ?OK}} = fslogic_rename:rename(
                 CTX, {uuid, FileUUID}, Path),
 
-            case file_handles:mark_to_remove(FileUUID) of
-                ok ->
-                    fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
-                {error, {not_found, _}} ->
-                    remove_file_and_file_meta(FileUUID, SessId, Silent)
-            end;
+            ok = file_handles:mark_to_remove(FileUUID),
+            fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
         false ->
             remove_file_and_file_meta(FileUUID, SessId, Silent)
     end,
@@ -120,7 +116,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes file and file meta. If parameter Silent is true, file_removal_event
+%% Removes file and file meta. If parameter Silent is true, file_removed_event
 %% will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
@@ -148,7 +144,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
     case Silent of
         true -> ok;
         false ->
-            fslogic_event:emit_file_removal(
+            fslogic_event:emit_file_removed(
                 fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), [SessId])
     end,
     ok.

@@ -301,6 +301,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         Offset = size(Acc),
         WriteSize = size(WriteBuf),
         ?assertMatch({ok, WriteSize}, lfm_proxy:write(W, Handle, Offset, WriteBuf)),
+        ?assertEqual(ok, lfm_proxy:close(W, Handle)),
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         verify(Config, fun(W2) ->
@@ -308,7 +309,8 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
             OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
             ?assertMatch({ok, _}, OpenAns2),
             {ok, Handle2} = OpenAns2,
-            ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts)
+            ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts),
+            ?assertEqual(ok, lfm_proxy:close(W2, Handle2))
         end),
         ct:print("Changes of file from node ~p verified", [W]),
         NewAcc
@@ -452,7 +454,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
         ?match({ok, <<"abc">>}, lfm_proxy:read(Worker2, Handle, 0, 10), Attempts),
-        ?assertMatch(ok, lfm_proxy:close(Worker2, Handle))
+        ?assertEqual(ok, lfm_proxy:close(Worker2, Handle))
     end,
 
     {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
@@ -877,7 +879,8 @@ create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
     Size = size(File),
     Offset2 = Offset rem 5 + 1,
     ?assertMatch({ok, Size}, lfm_proxy:write(WriteWorker, Handle, Offset2, File)),
-    ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId(WriteWorker), {path, File}, 2*Offset2)).
+    ?assertMatch(ok, lfm_proxy:truncate(WriteWorker, SessId(WriteWorker), {path, File}, 2*Offset2)),
+    ?assertEqual(ok, lfm_proxy:close(WriteWorker, Handle)).
 
 create_file(Config, FileBeg, {Offset, File}) ->
     Worker1 = ?config(worker1, Config),
@@ -911,7 +914,8 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
-        ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts)
+        ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts),
+        ?assertEqual(ok, lfm_proxy:close(W, Handle))
     end),
 
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},

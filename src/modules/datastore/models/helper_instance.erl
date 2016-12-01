@@ -1,49 +1,27 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Konrad Zemek
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Event stream definition model.
+%%% @doc
+%%% Model for holding a local helper instance.
 %%% @end
 %%%-------------------------------------------------------------------
--module(subscription).
--author("Krzysztof Trzepla").
+-module(helper_instance).
+-author("Konrad Zemek").
 -behaviour(model_behaviour).
 
--include_lib("ctool/include/logging.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
-
-%% API
--export([generate_id/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--export_type([id/0, object/0, cancellation/0]).
-
--type id() :: integer().
--type object() :: #file_attr_subscription{} | #file_location_subscription{} |
-#read_subscription{} | #write_subscription{} | #permission_changed_subscription{} |
-#file_removed_subscription{} | #quota_subscription{} | #file_renamed_subscription{}.
--type cancellation() :: #subscription_cancellation{}.
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns increasing subscription IDs based on the monotonic time.
-%% Should be used only for temporary subscriptions.
-%% @end
-%%--------------------------------------------------------------------
--spec generate_id() -> SubId :: id().
-generate_id() ->
-    erlang:unique_integer([monotonic, positive]) .
+%% API
+-export([create/3]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -54,8 +32,7 @@ generate_id() ->
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+-spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
@@ -67,16 +44,15 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODEL_NAME, Key, Diff).
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
+-spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+create(#document{} = Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -86,7 +62,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODEL_NAME, Key).
+    datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -104,7 +80,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODEL_NAME, Key).
+    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -113,7 +89,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODEL_NAME, Key)).
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -122,15 +98,14 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(subscription_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(helper_instance_bucket, [], ?LOCAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
+-spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
@@ -141,9 +116,40 @@ model_init() ->
 %% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) ->
-    ok | datastore:generic_error().
+-spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a helper instance for the specified session.
+%% The instance is retained in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(session:id(), SpaceUuid :: file_meta:uuid(),
+    Storage :: #document{value :: #storage{}} | storage:id()) ->
+    {ok, #document{value :: #helper_instance{}}}.
+create(SessionId, SpaceUuid, #storage{} = Storage) ->
+    {ok, HelperInit} = fslogic_storage:select_helper(Storage),
+    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUuid),
+    HelperHandle = helpers:new_handle(HelperInit, UserCtx),
+    HelperDoc = #document{value = #helper_instance{handle = HelperHandle}},
+
+    {ok, Key} = create(HelperDoc),
+    {ok, HelperDoc#document{key = Key}};
+
+create(SessionId, SpaceUuid, #document{value = Storage}) ->
+    create(SessionId, SpaceUuid, Storage);
+
+create(SessionId, SpaceUuid, StorageId) ->
+    {ok, StorageDoc} = storage:get(StorageId),
+    create(SessionId, SpaceUuid, StorageDoc).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

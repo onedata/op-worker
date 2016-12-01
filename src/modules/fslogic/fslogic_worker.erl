@@ -71,8 +71,7 @@ init(_Args) ->
         end
     end, [
         event_subscriptions:read_subscription(fun handle_read_events/2),
-        event_subscriptions:write_subscription(fun handle_write_events/2),
-        event_subscriptions:file_accessed_subscription(fun handle_file_accessed_events/2)
+        event_subscriptions:write_subscription(fun handle_write_events/2)
     ]),
 
     case session_manager:create_root_session() of
@@ -372,8 +371,8 @@ handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_
     fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #truncate{size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Size);
-handle_fuse_request(Ctx, #file_request{file_request = #release{handle_id = HandleId}}) ->
-    fslogic_req_regular:release(Ctx, HandleId);
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #release{handle_id = HandleId}}) ->
+    fslogic_req_regular:release(Ctx, fslogic_uuid:guid_to_uuid(GUID), HandleId);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID,
     file_request = #synchronize_block{block = Block, prefetch = Prefetch}}) ->
     fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Block, Prefetch);
@@ -568,23 +567,6 @@ handle_read_event(Event, SessId) ->
     {ok, #document{value = #session{identity = #user_identity{
         user_id = UserId}}}} = session:get(SessId),
     fslogic_times:update_atime({uuid, FileUUID}, UserId).
-
-
-handle_file_accessed_events(Evts, #{session_id := SessId}) ->
-    lists:foreach(fun(Ev) -> try_handle_event(fun() ->
-        #event{object = #file_accessed_event{file_uuid = FileGUID,
-            open_count = OpenCount, release_count = ReleaseCount}} = Ev,
-
-        {ok, FileUUID} = file_meta:to_uuid({guid, FileGUID}),
-
-        case OpenCount - ReleaseCount of
-            Count when Count > 0 ->
-                ok = file_handles:register_open(FileUUID, SessId, Count);
-            Count when Count < 0 ->
-                ok = file_handles:register_release(FileUUID, SessId, -Count);
-            _ -> ok
-        end
-    end) end, Evts).
 
 %%--------------------------------------------------------------------
 %% @private

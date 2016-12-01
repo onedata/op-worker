@@ -18,7 +18,7 @@
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_file_location_update/3,
-    emit_permission_changed/1, emit_file_removal/2, emit_file_renamed/3,
+    emit_permission_changed/1, emit_file_removed/2, emit_file_renamed/3,
     emit_quota_exeeded/0, emit_file_renamed/4]).
 
 %%%===================================================================
@@ -126,11 +126,11 @@ emit_permission_changed(FileUuid) ->
 %% Send event informing subscribed client about file removal.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_removal(FileGUID :: fslogic_worker:file_guid(),
+-spec emit_file_removed(FileGUID :: fslogic_worker:file_guid(),
     ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
-emit_file_removal(FileGUID, ExcludedSessions) ->
-    event:emit(#event{object = #file_removal_event{file_uuid = FileGUID}},
+emit_file_removed(FileGUID, ExcludedSessions) ->
+    event:emit(#event{object = #file_removed_event{file_uuid = FileGUID}},
         {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------

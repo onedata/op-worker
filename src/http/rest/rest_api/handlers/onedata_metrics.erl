@@ -92,7 +92,13 @@ get_metric(Req, State) ->
     {Metric, Req4} = cowboy_req:qs_val(<<"metric">>, Req3), %todo use validator
     {Step, Req5} = cowboy_req:qs_val(<<"step">>, Req4),
 
-    #{auth := Auth, subject_type := SubjectType, secondary_subject_type := SecondarySubjectType, space_id := SpaceId, user_id := UId} = State3,
+    #{
+        auth := Auth,
+        subject_type := SubjectType,
+        secondary_subject_type := SecondarySubjectType,
+        space_id := SpaceId,
+        user_id := UId
+    } = State3,
 
     space_membership:check_with_auth(Auth, SpaceId),
     case od_space:get_or_fetch(Auth, SpaceId) of

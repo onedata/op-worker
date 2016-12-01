@@ -451,8 +451,6 @@ rename_interprovider(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, Logic
     SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
     TargetSpaceId = fslogic_spaces:get_space_id(CTX, TargetParentPath),
 
-    {ok, UserId} = session:get_user_id(SessId),
-
     RenamedEntries = for_each_child_file(SourceEntry,
         fun(#document{key = SourceUuid} = Doc, Acc) ->
             SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
