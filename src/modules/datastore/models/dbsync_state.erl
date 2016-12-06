@@ -108,7 +108,9 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(dbsync_bucket, [], ?LOCALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(dbsync_bucket, [{file_meta, delete}, {file_meta, delete_links}, {times, delete},
+        {custom_metadata, delete}, {file_location, delete}, {change_propagation_controller, delete},
+        {change_propagation_controller, delete_links}], ?LOCALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -118,6 +120,12 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
+'after'(change_propagation_controller = ModelName, delete, _Level, [Key, _Pred], _ReturnValue) ->
+    verify_and_del_key(Key, ModelName);
+'after'(_ModelName, delete, _Level, [Key, _Pred], _ReturnValue) ->
+    verify_and_del_key(Key, file_meta);
+'after'(ModelName, delete_links, _Level, [Key, _Links], _ReturnValue) ->
+    verify_and_del_key(Key, ModelName);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -128,6 +136,10 @@ model_init() ->
 %%--------------------------------------------------------------------
 -spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+before(file_meta = ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred]) ->
+    save_space_id(ModelName, Key);
+before(change_propagation_controller = ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred]) ->
+    save_space_id(ModelName, Key);
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -135,3 +147,44 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% Internal functions
 %%%===================================================================
 
+verify_and_del_key(Key, change_propagation_controller = ModelName) ->
+    Checks = [{change_propagation_controller, exists_link_doc}],
+    verify_and_del_key(Key, ModelName, Checks);
+verify_and_del_key(Key, ModelName) ->
+    Checks = [{file_meta, exists_link_doc}, {times, exists},
+        {custom_metadata, exists}, {file_location, exists}],
+    verify_and_del_key(Key, ModelName, Checks).
+
+verify_and_del_key(Key, ModelName, Checks) ->
+    VerAns = lists:foldl(fun
+        ({ModelName, Op}, ok) ->
+            case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(disk_only)),
+                Op, [ModelName:model_init(), Key]) of
+                {ok, false} ->
+                    ok;
+                _ ->
+                    cannot_clear
+            end;
+        (_, Acc) ->
+            Acc
+    end, ok, Checks),
+
+    case VerAns of
+        ok ->
+            delete({sid, ModelName, Key});
+        _ ->
+            ok
+    end.
+
+save_space_id(ModelName, Key) ->
+    case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(disk_only)),
+        get, [ModelName:model_init(), Key]) of
+        {ok, Doc} ->
+            {ok, SID} = dbsync_worker:get_space_id(Doc),
+            {ok, _} = save(#document{key = {sid, ModelName, Key}, value = #dbsync_state{entry = SID}}),
+            ok;
+        {error, {not_found, _}} ->
+            ok;
+        Other ->
+            {prehook_error, Other}
+    end.

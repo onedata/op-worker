@@ -736,61 +736,52 @@ get_space_id(#document{value = #monitoring_state{monitoring_id = MonitoringId}})
     {ok, SpaceId};
 get_space_id(#document{value = #change_propagation_controller{space_id = SpaceId}}) ->
     {ok, SpaceId};
-get_space_id(#document{key = Key} = Doc) ->
-    try state_get({sid, Key}) of
-        undefined ->
-            get_not_cached_space_id(Key, Doc);
-        SpaceId ->
-            {ok, SpaceId}
-    catch
-        _:Reason ->
-            ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Key, Reason]),
-            get_not_cached_space_id(Key, Doc)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given document returns SpaceId and puts this value to cache using given key.
-%% This cache may be used later on by get_space_id/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get_not_cached_space_id(KeyToCache :: term(), datastore:document()) ->
-    {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
-get_not_cached_space_id(KeyToCache, #document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
+get_space_id(#document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
     #model_config{store_level = StoreLevel} = change_propagation_controller:model_init(),
     case datastore:get(StoreLevel, change_propagation_controller, DocKey) of
-    {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
-        state_put({sid, KeyToCache}, SpaceId),
-        {ok, SpaceId};
-    {error, Reason} ->
-        {error, Reason}
+        {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
+            {ok, SpaceId};
+        {error, {not_found, _}} ->
+            case dbsync_state:get({sid, change_propagation_controller, DocKey}) of
+                {ok, #document{value = #dbsync_state{entry = Value}}} ->
+                    {ok, Value};
+                Other ->
+                    Other
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end;
-get_not_cached_space_id(KeyToCache, #document{key = Key} = Doc) ->
+get_space_id(#document{key = Key, value = V} = Doc) ->
     Context = get_sync_context(Doc),
-    case file_meta:get_scope(Context) of
-        {ok, #document{key = <<"">> = Root}} ->
+    case file_meta:get_scope_id(Context) of
+        {ok, <<"">>} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Key),
-                state_put({sid, KeyToCache}, {space_doc, SpaceId}),
                 {ok, {space_doc, SpaceId}}
             catch
-                _:_ ->
-                    state_put({sid, KeyToCache}, Root),
-                    {ok, Root}
+                _:Reason ->
+                    ?debug_stacktrace("Cannot get spaceID from document ~p due to: ~p", [Doc, Reason]),
+                    {ok, <<"">>}
             end;
-        {ok, #document{key = ScopeUUID}} ->
+        {ok, ScopeUUID} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-                state_put({sid, KeyToCache}, SpaceId),
                 {ok, SpaceId}
             catch
-                _:_ -> {error, not_a_space}
+                _:Reason ->
+                    ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Doc, Reason]),
+                    {error, not_a_space}
+            end;
+        {error, {not_found, _}} ->
+            case dbsync_state:get({sid, element(1, V), Key}) of
+                {ok, #document{value = #dbsync_state{entry = Value}}} ->
+                    {ok, Value};
+                Other ->
+                    Other
             end;
         {error, Reason} ->
             {error, Reason}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
