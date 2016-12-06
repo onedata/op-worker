@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Space strategy configuration macros.
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").

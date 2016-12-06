@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Strategy for caching files.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_caching).
@@ -22,7 +22,6 @@
 %%% Types
 %%%===================================================================
 
-
 %%%===================================================================
 %%% Exports
 %%%===================================================================
@@ -37,11 +36,9 @@
 %% API
 -export([]).
 
-
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
 %%%===================================================================
-
 
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
@@ -50,7 +47,6 @@ available_strategies() ->
             description = <<"Don't cache files">>}
     ].
 
-
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
 strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
@@ -58,11 +54,9 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
         #space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}
     ].
 
-
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = no_cache}) ->
     {ok, []}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,11 +80,9 @@ strategy_merge_result([_Job | _], [Result | _]) ->
 strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
     LocalResult.
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
 
 %%%===================================================================
 %%% Internal functions

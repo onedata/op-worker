@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Model storing strategies for operations related to storage <-> space sync
+%%% process.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_strategies).
@@ -15,14 +16,6 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
-
-
--define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
--define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGIES, [{no_import, #{}}]).
--define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
--define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
--define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
 
 %% API
 -export([new/1, add_storage/2]).
@@ -153,11 +146,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec new(od_space:id()) -> Doc :: #document{}.
 new(SpaceId) ->
-    #document{key = SpaceId, value = #space_strategies{
-        file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY,
-        file_caching = ?DEFAULT_FILE_CACHING_STRATEGY,
-        enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY
-    }}.
+    #document{key = SpaceId, value = #space_strategies{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -174,11 +163,7 @@ add_storage(SpaceId, StorageId) ->
                 Doc0
         end,
 
-    StorageStrategie = #storage_strategies{
-        filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY,
-        storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY,
-        storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGIES
-    },
+    StorageStrategie = #storage_strategies{},
     {ok, _} = save(Doc#document{value = Value#space_strategies{storage_strategies = maps:put(StorageId, StorageStrategie, StorageStrategies)}}),
     ok.
 
@@ -202,11 +187,7 @@ set_strategy(SpaceId, StrategyType, StrategyName, StrategyArgs) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
     update(SpaceId, fun(#space_strategies{storage_strategies = Strategies} = OldValue) ->
-        OldSS = #storage_strategies{} = maps:get(StorageId, Strategies, #storage_strategies{
-            filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY,
-            storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY,
-            storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGIES
-        }),
+        OldSS = #storage_strategies{} = maps:get(StorageId, Strategies, #storage_strategies{}),
 
         NewSS = case StrategyType of
             filename_mapping ->
@@ -214,7 +195,7 @@ set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
             storage_import ->
                 OldSS#storage_strategies{storage_import = {StrategyName, StrategyArgs}};
             storage_update ->
-                OldSS#storage_strategies{storage_update = {StrategyName, StrategyArgs}}
+                OldSS#storage_strategies{storage_update = [{StrategyName, StrategyArgs}]}
         end,
 
         {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}

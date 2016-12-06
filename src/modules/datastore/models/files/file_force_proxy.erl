@@ -5,11 +5,11 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: write me!
+%%% @doc Model storing ids of files that should be read by proxy.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_force_proxy).
--author("Rafal Slota ").
+-author("Rafal Slota").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -30,7 +30,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 %%%===================================================================
 %%% model_behaviour callbacks

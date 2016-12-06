@@ -206,7 +206,6 @@ mkdir(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid 
 %%--------------------------------------------------------------------
 %% @doc
 %% Moves a file or directory to a new location on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
@@ -219,7 +218,6 @@ mv(#sfm_handle{storage = Storage, file = FileFrom, space_uuid = SpaceUUID, sessi
 %%--------------------------------------------------------------------
 %% @doc
 %% Changes the permissions of a file on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(handle(), NewMode :: file_meta:posix_permissions()) ->
@@ -232,7 +230,6 @@ chmod(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid 
 %%--------------------------------------------------------------------
 %% @doc
 %% Changes owner of a file on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) ->
@@ -255,7 +252,6 @@ chown(_,_,_) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a symbolic link on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec symlink(Path :: binary(), TargetFileHandle :: handle()) ->
@@ -266,7 +262,6 @@ symlink(_Path, _TargetFileHandle) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a link on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec link(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
@@ -278,37 +273,30 @@ link(#sfm_handle{storage = Storage, file = FileFrom, space_uuid = SpaceUUID, ses
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file attributes, reading them from storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(FileHandle :: handle()) ->
     {ok, undefined} | logical_file_manager:error_reply().
 stat(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
-    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
-    HelperHandle = helpers:new_handle(HelperInit),
-    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    {ok, HelperHandle} = session:get_helper(SessionId, SpaceUUID, Storage),
     helpers:getattr(HelperHandle, FileId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file attributes, reading them from storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec readdir(FileHandle :: handle(), Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
     {ok, [helpers:file()]} | logical_file_manager:error_reply().
 readdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Offset, Count) ->
-    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
-    HelperHandle = helpers:new_handle(HelperInit),
-    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    {ok, HelperHandle} = session:get_helper(SessionId, SpaceUUID, Storage),
     helpers:readdir(HelperHandle, FileId, Offset, Count).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Writes data to a file on storage. Returns number of written bytes.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
@@ -337,7 +325,6 @@ write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID
 %%--------------------------------------------------------------------
 %% @doc
 %% Reads requested part of a file from storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) ->
@@ -363,7 +350,6 @@ read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID,
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new file on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec create(handle(), Mode :: non_neg_integer()) ->
@@ -396,7 +382,6 @@ create(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates a file on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(handle(), Size :: integer()) ->
@@ -411,7 +396,6 @@ truncate(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uu
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file or an empty directory.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(handle()) -> ok | logical_file_manager:error_reply().

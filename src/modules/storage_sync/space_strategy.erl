@@ -18,10 +18,11 @@
 %%% Types
 %%%===================================================================
 
--type type()            :: storage_import | filename_mapping | file_caching | enoent_handling | file_conflict_resolution.
+-type type()            :: storage_update | storage_import | filename_mapping
+   | file_caching | enoent_handling | file_conflict_resolution.
 -type definition()      :: #space_strategy{}.
 -type name()            :: atom().
--type arguments()       :: #{argument_name() => argument_type()}.
+-type arguments()       :: maps:map(). %todo dialyzer crashes on: #{argument_name() => argument_type()}.
 -type argument_name()   :: atom().
 -type argument_type()   :: integer   | float   | string   | boolean.
 -type argument_value()  :: integer() | float() | binary() | boolean().
@@ -48,12 +49,9 @@
 %% API
 -export([]).
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-
 
 %%%===================================================================
 %%% Internal functions

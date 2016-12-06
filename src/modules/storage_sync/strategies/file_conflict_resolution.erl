@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Strategy for resolving file configs.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_conflict_resolution).
@@ -22,7 +22,6 @@
 %%% Types
 %%%===================================================================
 
-
 %%%===================================================================
 %%% Exports
 %%%===================================================================
@@ -37,11 +36,9 @@
 %% API
 -export([]).
 
-
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
 %%%===================================================================
-
 
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
@@ -50,14 +47,12 @@ available_strategies() ->
             description = <<"Ignore all file conflicts">>}
     ].
 
-
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
 strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     [
         #space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}
     ].
-
 
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = ignore_conflicts}) ->
@@ -85,13 +80,10 @@ strategy_merge_result([_Job | _], [Result | _]) ->
 strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
     LocalResult.
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-

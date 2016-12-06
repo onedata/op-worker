@@ -17,7 +17,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/2, get_strategies_id/2]).
+-export([add/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -154,13 +154,6 @@ add(SpaceId, StorageId) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
--spec get_strategies_id(SpaceId :: binary(), StorageId :: storage:id()) ->
-    datastore:key().
-get_strategies_id(SpaceId, StorageId) ->
-    LinkName = {strategies, StorageId},
-    {ok, {StrategiesId, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, LinkName),
-    StrategiesId.
 
 %%%===================================================================
 %%% Internal functions

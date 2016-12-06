@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Strategy for handling enoent.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(enoent_handling).
@@ -22,7 +22,6 @@
 %%% Types
 %%%===================================================================
 
-
 %%%===================================================================
 %%% Exports
 %%%===================================================================
@@ -37,11 +36,9 @@
 %% API
 -export([]).
 
-
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,7 +56,6 @@ available_strategies() ->
             description = <<"TODO">>}
     ].
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
@@ -73,7 +69,6 @@ strategy_init_jobs(check_globally, StartegyArgs, InitData) ->
 strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     [#space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}].
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_handle_job/1.
@@ -82,7 +77,6 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = error_passthrough, data = #{response := Response}}) ->
     {Response, []};
-
 strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = Data} = Job) ->
     #{
         response := OriginalResponse,
@@ -92,7 +86,6 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
         request := Request
     } = Data,
     {ok, #document{value = #od_space{providers = ProviderIds0}}} = od_space:get(SpaceId),
-    ?info("WTF ~p", [{ProviderId, ProviderIds0}]),
     case oneprovider:get_provider_id() == ProviderId of
         true ->
             {MergeType, Jobs} = space_sync_worker:init(?MODULE, SpaceId, undefined, Data),
@@ -100,7 +93,6 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                 #fuse_response{status = #status{code = ?OK}} = Response ->
                     {Response, []};
                 OtherResp ->
-
                     ProviderIds = ProviderIds0 -- [oneprovider:get_provider_id()],
                     SessionId = fslogic_context:get_session_id(CTX),
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
@@ -109,14 +101,11 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                         false ->
                             [Job#space_strategy_job{data = Data#{provider_id => RProviderId}} || RProviderId <- ProviderIds]
                     end,
-                    ?info("WTF 1 ~p", [{ProxyVia, OriginalResponse, OtherResp, NewJobs}]),
                     {OriginalResponse, NewJobs}
             end;
         false ->
-            ?info("WTF 2 ~p", [{ProviderId}]),
             {fslogic_remote:reroute(CTX, ProviderId, Request), []}
     end;
-
 strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Data}) ->
     #{
         space_id := SpaceId,
@@ -157,7 +146,6 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
             {Response, []}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_merge_result/2.
@@ -172,7 +160,6 @@ strategy_merge_result(_Jobs, [OnlyResponse]) ->
     OnlyResponse;
 strategy_merge_result([_ | JobsR], [_ | R]) ->
     strategy_merge_result(JobsR, R).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -194,13 +181,10 @@ strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status
 strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
     LocalResult.
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-

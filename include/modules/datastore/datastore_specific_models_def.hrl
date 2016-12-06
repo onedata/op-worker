@@ -228,7 +228,7 @@
 }).
 
 -record(file_force_proxy, {
-    provider_id :: oneprovider:id()
+    provider_id :: undefined | oneprovider:id()
 }).
 
 %% User session
@@ -323,20 +323,28 @@
     storage_ids = [] :: [storage:id()]
 }).
 
+-define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
+-define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
+-define(DEFAULT_STORAGE_UPDATE_STRATEGIES, [{no_import, #{}}]).
+
 %% Model that maps space to storage strategies
 -record(storage_strategies, {
-    filename_mapping         :: space_strategy:config(),
-    storage_import           :: space_strategy:config(),
-    storage_update           :: [space_strategy:config()],
-    last_import_time         :: integer() | undefined
+    filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY :: space_strategy:config(),
+    storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
+    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGIES :: [space_strategy:config()],
+    last_import_time :: integer() | undefined
 }).
+
+-define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
+-define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
+-define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    storage_strategies = #{} :: #{storage:id() => #storage_strategies{}},
-    file_conflict_resolution :: space_strategy:config(),
-    file_caching             :: space_strategy:config(),
-    enoent_handling          :: space_strategy:config()
+    storage_strategies = #{} :: maps:map(), %todo dializer crashes on: #{storage:id() => #storage_strategies{}},
+    file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
+    file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
+    enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
 }).
 
 

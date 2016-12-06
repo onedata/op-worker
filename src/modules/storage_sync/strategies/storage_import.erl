@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Strategy for storage import.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import).
@@ -17,13 +17,11 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 -define(DIR_BATCH, 100).
 
 %%%===================================================================
 %%% Types
 %%%===================================================================
-
 
 %%%===================================================================
 %%% Exports
@@ -39,11 +37,9 @@
 %% API
 -export([]).
 
-
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -62,7 +58,6 @@ available_strategies() ->
         }
     ].
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
@@ -79,7 +74,6 @@ strategy_init_jobs(bfs_scan, Args, #{last_import_time := undefined} = Data) ->
 strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     ?error("Invalid import strategy init: ~p", [{StrategyName, StartegyArgs, InitData}]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_handle_job/1.
@@ -90,7 +84,6 @@ strategy_handle_job(#space_strategy_job{strategy_name = bfs_scan} = Job) ->
     run_bfs_scan(Job);
 strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -108,7 +101,6 @@ strategy_merge_result(_Jobs, Results) ->
             {error, Reasons}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_merge_result/3.
@@ -125,7 +117,6 @@ strategy_merge_result(_Job, ok, Error) ->
     Error;
 strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
     {error, [Reason1, Reason2]}.
-
 
 %%%===================================================================
 %%% API functions
@@ -162,7 +153,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         OldMode ->
                             ok;
                         NewMode ->
-%%                            fslogic_req_generic:chmod(fslogic_context:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode),
+%%                            fslogic_req_generic:chmod(fslogic_context:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo why is that code commented?
                             ok
                     end,
 
@@ -198,7 +189,6 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
             {LocalResult, SubJobs}
     end.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -220,7 +210,6 @@ is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code
     false;
 is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code = ?ENOENT}}) ->
     false.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -274,6 +263,7 @@ import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data} = Job,
 
     ?debug("Import storage file ~p", [{FileId, LogicalPath}]),
     ok.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Generates jobs for importing children of given directory to onedata filesystem.

@@ -12,11 +12,9 @@
 -module(space_strategy_behaviour).
 -author("Rafal Slota").
 
-
 %%%===================================================================
 %%% Callback definitions
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,4 +58,3 @@
 -callback strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
-

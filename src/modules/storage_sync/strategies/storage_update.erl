@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% @todo: write me!
+%%% Strategy for updating storage.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_update).
@@ -17,11 +17,9 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 %%%===================================================================
 %%% Types
 %%%===================================================================
-
 
 %%%===================================================================
 %%% Exports
@@ -37,11 +35,9 @@
 %% API
 -export([]).
 
-
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,7 +47,6 @@
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
     storage_import:available_strategies().
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,7 +70,6 @@ strategy_init_jobs(bfs_scan, #{scan_interval := ScanIntervalSeconds} = Args,
 strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     ?error("Invalid import strategy init: ~p", [{StrategyName, StartegyArgs, InitData}]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_handle_job/1.
@@ -84,7 +78,6 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(Job) ->
     storage_import:strategy_handle_job(Job).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -97,7 +90,6 @@ strategy_handle_job(Job) ->
 strategy_merge_result(Jobs, Results) ->
     storage_import:strategy_merge_result(Jobs, Results).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link space_strategy_behaviour} callback strategy_merge_result/3.
@@ -109,8 +101,6 @@ strategy_merge_result(Jobs, Results) ->
 strategy_merge_result(Job, LocalResult, ChildrenResult) ->
     storage_import:strategy_merge_result(Job, LocalResult, ChildrenResult).
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-

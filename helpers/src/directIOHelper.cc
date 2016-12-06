@@ -240,41 +240,48 @@ folly::Future<folly::Unit> DirectIOHelper::access(
         });
 }
 
-//void DirectIOHelper::ash_readdir(CTXPtr ctx, const boost::filesystem::path &p,
-//    off_t offset, size_t count,
-//    GeneralCallback<const std::vector<std::string> &> callback)
-//{
-//    std::vector<std::string> ret;
-//
-//    DIR *dir;
-//    struct dirent *dp;
-//    dir = opendir(root(p).c_str());
-//
-//    if(!dir) {
-//        callback(ret, makePosixError(errno));
-//        return;
-//    }
-//
-//    while ((dp=readdir(dir)) != NULL) {
-//        if ( !strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..") ) {
-//            continue;
-//        }
-//
-//        if(offset > 0) {
-//            --offset;
-//            continue;
-//        }
-//
-//        if(count == 0)
-//            break;
-//
-//        --count;
-//
-//        ret.push_back(std::string(dp->d_name));
-//    }
-//    closedir(dir);
-//    callback(ret, SUCCESS_CODE);
-//} todo implement
+folly::Future<folly::fbvector<folly::fbstring>> DirectIOHelper::readdir(
+    const folly::fbstring &fileId, off_t offset, size_t count)
+{
+    return folly::via(m_executor.get(),
+        [ filePath = root(fileId), offset, count, uid = m_uid, gid = m_gid] {
+            UserCtxSetter userCTX{uid, gid};
+            if (!userCTX.valid())
+                return makeFuturePosixException<folly::fbvector<folly::fbstring>>(EDOM);
+
+            folly::fbvector<folly::fbstring> ret;
+
+            DIR *dir;
+            struct dirent *dp;
+            dir = opendir(filePath.c_str());
+
+            if(!dir)
+                return makeFuturePosixException<folly::fbvector<folly::fbstring>>(errno);
+
+            int tmpOffset = offset;
+            int tmpCount = count;
+            while ((dp=::readdir(dir)) != NULL) {
+                if ( !strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..") ) {
+                    continue;
+                }
+
+                if(tmpOffset > 0) {
+                    --tmpOffset;
+                    continue;
+                }
+
+                if(tmpCount == 0)
+                    break;
+
+                --tmpCount;
+
+                ret.push_back(folly::fbstring(dp->d_name));
+            }
+            closedir(dir);
+
+            return folly::makeFuture<folly::fbvector<folly::fbstring>>(std::move(ret));
+        });
+}
 
 folly::Future<folly::fbstring> DirectIOHelper::readlink(
     const folly::fbstring &fileId)

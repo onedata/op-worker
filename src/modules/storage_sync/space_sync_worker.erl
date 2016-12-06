@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -26,7 +26,6 @@
 %%% Types
 %%%===================================================================
 
-
 %%%===================================================================
 %%% Exports
 %%%===================================================================
@@ -39,7 +38,6 @@
 
 %% API
 -export([init/4, run/1]).
-
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -147,7 +145,6 @@ handle(_Request) ->
 cleanup() ->
     ok.
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -159,7 +156,7 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(StrategyType :: space_strategy:type(), SpaceId :: od_space:id(),
-    StorageId :: storage:id(), InitData :: space_strategy:job_data()) ->
+    StorageId :: storage:id() | undefined, InitData :: space_strategy:job_data()) ->
     space_strategy:runnable().
 init(StrategyType, SpaceId, StorageId, InitData) ->
     {ok, #document{value = SpaceStrategies}} = space_strategies:get(SpaceId),
@@ -204,7 +201,6 @@ run({return_none, Jobs}) ->
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% For given strategy job, returns job result's merge type.
@@ -228,14 +224,13 @@ merge_type(StrategyType, StrategyName) ->
             = Strategy <- StrategyType:available_strategies(), Name == StrategyName],
     MergeType.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% For given strategy type extracts and returns strategy name and strategy arguments (aka strategy config).
 %% @end
 %%--------------------------------------------------------------------
 -spec strategy_config(space_strategy:type(), storage:id() | undefined, #space_strategies{}) ->
-    space_strategy:config().
+    space_strategy:config() | [space_strategy:config()].
 strategy_config(StrategyType, StorageId, SpaceStrategies = #space_strategies{storage_strategies = StorageStrategies}) ->
     case StrategyType of
         filename_mapping ->

@@ -283,8 +283,8 @@ struct NifCTX {
     template <typename T> int send(T &&value) const
     {
         return enif_send(nullptr, &reqPid, localEnv,
-            nifpp::make(localEnv,
-                             std::make_tuple(reqId, std::forward<T>(value))));
+            nifpp::make(
+                localEnv, std::make_tuple(reqId, std::forward<T>(value))));
     }
 
     ErlNifEnv *env;
@@ -456,9 +456,9 @@ ERL_NIF_TERM set_threads_number(
                         service, workers, result->second)) {
                     return nifpp::make(
                         env, std::make_tuple(error,
-                                 std::make_tuple(nifpp::str_atom(
-                                                     "wrong_thread_number"),
-                                                 name, result->second)));
+                                 std::make_tuple(
+                                     nifpp::str_atom("wrong_thread_number"),
+                                     name, result->second)));
                 }
             }
         }
@@ -510,15 +510,12 @@ ERL_NIF_TERM getattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-//ERL_NIF_TERM readdir(NifCTX ctx, const std::string file, const int offset, const int count)
-//{
-//    ctx.helperObj->ash_readdir(
-//        ctx.helperCTX, file, offset, count, [=](const std::vector<std::string> & entries, error_t e) {
-//            handle_result(ctx, e, entries);
-//        });
-//
-//    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
-//} //todo implement
+ERL_NIF_TERM readdir(NifCTX ctx, helper_ptr helper, folly::fbstring file,
+    const off_t offset, const size_t count)
+{
+    handle_result(ctx, helper->readdir(file, offset, count));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
 
 ERL_NIF_TERM access(
     NifCTX ctx, helper_ptr helper, folly::fbstring file, const int mask)
@@ -645,7 +642,7 @@ static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
         nifpp::register_resource<helper_handle_ptr>(
-                 env, nullptr, "helper_handle_ptr"));
+            env, nullptr, "helper_handle_ptr"));
 }
 
 static ERL_NIF_TERM sh_set_threads_number(
@@ -654,11 +651,11 @@ static ERL_NIF_TERM sh_set_threads_number(
     return noctx_wrap(set_threads_number, env, argv);
 }
 
-//static ERL_NIF_TERM sh_readdir(
-//    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-//{
-//    return wrap(readdir, env, argv);
-//} //todo implement
+static ERL_NIF_TERM sh_readdir(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(readdir, env, argv);
+}
 
 static ERL_NIF_TERM sh_getattr(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
@@ -767,14 +764,14 @@ static ERL_NIF_TERM sh_fsync(
 
 static ErlNifFunc nif_funcs[] = {
     {"set_threads_number", 1, sh_set_threads_number},
-    {"getattr", 2, sh_getattr}, {"access", 3, sh_access}, //{"readdir", 5, sh_readdir}, todo implemet
-    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 2, sh_unlink},
-    {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
-    {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
-    {"chown", 4, sh_chown}, {"truncate", 3, sh_truncate}, {"open", 3, sh_open},
-    {"read", 3, sh_read}, {"write", 3, sh_write}, {"release", 1, sh_release},
-    {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync},
-    {"username_to_uid", 1, username_to_uid},
+    {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
+    {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
+    {"unlink", 2, sh_unlink}, {"rmdir", 2, sh_rmdir},
+    {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
+    {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
+    {"truncate", 3, sh_truncate}, {"open", 3, sh_open}, {"read", 3, sh_read},
+    {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
+    {"fsync", 2, sh_fsync}, {"username_to_uid", 1, username_to_uid},
     {"groupname_to_gid", 1, groupname_to_gid},
     {"new_helper_obj", 2, new_helper_obj}};
 

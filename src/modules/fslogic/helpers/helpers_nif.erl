@@ -70,11 +70,12 @@ groupname_to_gid(_GName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
-%%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
+%% shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
 %% @end
 %%--------------------------------------------------------------------
--spec readdir(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(),
+-spec readdir(HelperInstance :: resource_handle(), File :: helpers:file(),
     Offset :: non_neg_integer(), _Count :: non_neg_integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
 readdir(_HelperInstance, _File, _Offset, _Count) ->
