@@ -390,6 +390,14 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     SpaceKey = SpaceDoc#document.key,
 %%    ct:print("Space key ~p", [SpaceKey]),
 
+    Workers = ?config(op_worker_nodes, Config),
+    P1Workers = lists:foldl(fun(W, Acc) ->
+        case string:str(atom_to_list(W), "p1") of
+            0 -> Acc;
+            _ -> [W | Acc]
+        end
+    end, [], Workers),
+
     DoTest = fun(TaskList) ->
 %%        ct:print("Do test"),
 
@@ -443,6 +451,10 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         lists:foreach(fun(
             {sleep, Sek}) ->
             timer:sleep(timer:seconds(Sek));
+            ({add_dbsync_state = Fun, DocNum}) ->
+                lists:foreach(fun(W) ->
+                    ?assertEqual(ok, ?rpcTest(W, Fun, proplists:get_value(DocNum, DocsList)))
+                end, P1Workers);
             ({Fun, DocNum}) ->
                 ?assertEqual(ok, ?rpcTest(Worker1, Fun, proplists:get_value(DocNum, DocsList)));
             ({Fun, DocNum, W}) ->
