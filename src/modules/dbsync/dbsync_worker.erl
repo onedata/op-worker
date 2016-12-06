@@ -742,12 +742,7 @@ get_space_id(#document{value = #links{doc_key = DocKey, model = change_propagati
         {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
             {ok, SpaceId};
         {error, {not_found, _}} ->
-            case dbsync_state:get({sid, change_propagation_controller, DocKey}) of
-                {ok, #document{value = #dbsync_state{entry = Value}}} ->
-                    {ok, Value};
-                Other ->
-                    Other
-            end;
+            get_sid_from_state(change_propagation_controller, DocKey);
         {error, Reason} ->
             {error, Reason}
     end;
@@ -769,18 +764,23 @@ get_space_id(#document{key = Key, value = V} = Doc) ->
                 {ok, SpaceId}
             catch
                 _:Reason ->
-                    ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Doc, Reason]),
+                    ?debug_stacktrace("Unable to get space_id for document ~p due to: ~p", [Doc, Reason]),
                     {error, not_a_space}
             end;
         {error, {not_found, _}} ->
-            case dbsync_state:get({sid, element(1, V), Key}) of
-                {ok, #document{value = #dbsync_state{entry = Value}}} ->
-                    {ok, Value};
-                Other ->
-                    Other
-            end;
+            get_sid_from_state(file_meta, Context);
         {error, Reason} ->
             {error, Reason}
+    end.
+
+get_sid_from_state(ModelName, #document{key = Key}) ->
+    get_sid_from_state(ModelName, Key);
+get_sid_from_state(ModelName, Key) ->
+    case dbsync_state:get({sid, ModelName, Key}) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            Value;
+        Other ->
+            Other
     end.
 
 %%--------------------------------------------------------------------

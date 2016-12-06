@@ -120,11 +120,11 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(change_propagation_controller = ModelName, delete, _Level, [Key, _Pred], _ReturnValue) ->
+'after'(change_propagation_controller = ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred], _ReturnValue) ->
     verify_and_del_key(Key, ModelName);
-'after'(_ModelName, delete, _Level, [Key, _Pred], _ReturnValue) ->
+'after'(_ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred], _ReturnValue) ->
     verify_and_del_key(Key, file_meta);
-'after'(ModelName, delete_links, _Level, [Key, _Links], _ReturnValue) ->
+'after'(ModelName, delete_links, ?DISK_ONLY_LEVEL, [Key, _Links], _ReturnValue) ->
     verify_and_del_key(Key, ModelName);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -136,9 +136,9 @@ model_init() ->
 %%--------------------------------------------------------------------
 -spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
-before(file_meta = ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred]) ->
+before(file_meta = ModelName, delete, ?GLOBAL_ONLY_LEVEL, [Key, _Pred]) ->
     save_space_id(ModelName, Key);
-before(change_propagation_controller = ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred]) ->
+before(change_propagation_controller = ModelName, delete, ?GLOBAL_ONLY_LEVEL, [Key, _Pred]) ->
     save_space_id(ModelName, Key);
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
@@ -151,14 +151,26 @@ verify_and_del_key(Key, change_propagation_controller = ModelName) ->
     Checks = [{change_propagation_controller, exists_link_doc}],
     verify_and_del_key(Key, ModelName, Checks);
 verify_and_del_key(Key, ModelName) ->
-    Checks = [{file_meta, exists_link_doc}, {times, exists},
+    Checks = [{file_meta, foreach_link}, {times, exists},
         {custom_metadata, exists}, {file_location, exists}],
     verify_and_del_key(Key, ModelName, Checks).
 
 verify_and_del_key(Key, ModelName, Checks) ->
     VerAns = lists:foldl(fun
+        ({ModelName, foreach_link}, ok) ->
+            HelperFun = fun(LinkName, LinkTarget, Acc) ->
+                maps:put(LinkName, LinkTarget, Acc)
+            end,
+
+            case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
+                foreach_link, [ModelName:model_init(), Key, HelperFun, #{}]) of
+                {ok, #{}} ->
+                    ok;
+                _ ->
+                    cannot_clear
+            end;
         ({ModelName, Op}, ok) ->
-            case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(disk_only)),
+            case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
                 Op, [ModelName:model_init(), Key]) of
                 {ok, false} ->
                     ok;
@@ -177,14 +189,21 @@ verify_and_del_key(Key, ModelName, Checks) ->
     end.
 
 save_space_id(ModelName, Key) ->
-    case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(disk_only)),
+    case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?GLOBAL_ONLY_LEVEL)),
         get, [ModelName:model_init(), Key]) of
         {ok, Doc} ->
-            {ok, SID} = dbsync_worker:get_space_id(Doc),
-            {ok, _} = save(#document{key = {sid, ModelName, Key}, value = #dbsync_state{entry = SID}}),
-            ok;
+            case dbsync_worker:get_space_id(Doc) of
+                {ok, SID} ->
+                    {ok, _} = save(#document{key = {sid, ModelName, Key}, value = #dbsync_state{entry = {ok, SID}}}),
+                    ok;
+                {error,not_a_space} ->
+                    {ok, _} = save(#document{key = {sid, ModelName, Key}, value = #dbsync_state{entry = {error,not_a_space}}}),
+                    ok;
+                Other ->
+                    {prehook_error, Other}
+            end;
         {error, {not_found, _}} ->
             ok;
-        Other ->
-            {prehook_error, Other}
+        Other2 ->
+            {prehook_error, Other2}
     end.

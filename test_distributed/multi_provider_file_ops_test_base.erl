@@ -29,7 +29,8 @@
 ]).
 
 % for file consistency testing
--export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4]).
+-export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
+    add_dbsync_state/4]).
 
 
 -define(match(Expect, Expr, Attempts),
@@ -537,6 +538,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {sleep, SleepTime},
@@ -553,6 +555,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {create_location, 3},
@@ -569,6 +572,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {set_link_to_location, 3},
@@ -585,6 +589,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {create_location, 3},
@@ -645,6 +650,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_location, 3},
@@ -657,6 +663,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         ],
 
         _T13 = [
+            {add_dbsync_state, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_location, 3},
@@ -667,12 +674,14 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {sleep, SleepTime},
             {create_doc, 3},
             {sleep, SleepTime},
+            {add_dbsync_state, 2},
             {set_parent_link, 2},
             {sleep, SleepTime},
             {set_link_to_parent, 2},
             {sleep, SleepTime},
             {create_doc, 2},
             {sleep, SleepTime},
+            {add_dbsync_state, 1},
             {set_parent_link, 1},
             {sleep, SleepTime},
             {set_link_to_parent, 1},
@@ -805,12 +814,17 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     storage_file_manager:fsync(SFMHandle2),
     ok.
 
-set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
+set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
     FileUuid = Doc#document.key,
     MC = file_meta:model_init(),
     LSL = MC#model_config.link_store_level,
     ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
     ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).
+
+add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
+    {ok, SID} = dbsync_worker:get_space_id(Doc),
+    {ok, _} = dbsync_state:save(#document{key = {sid, file_meta, Doc#document.key}, value = #dbsync_state{entry = {ok, SID}}}),
+    ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
