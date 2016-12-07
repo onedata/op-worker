@@ -147,6 +147,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Verifies if key may be deleted and deletes it.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_and_del_key(Key :: datastore:ext_key(), ModelName :: model_behaviour:model_type()) -> ok.
 verify_and_del_key(Key, change_propagation_controller = ModelName) ->
     Checks = [{change_propagation_controller, exists_link_doc}],
     verify_and_del_key(Key, ModelName, Checks);
@@ -155,6 +162,14 @@ verify_and_del_key(Key, ModelName) ->
         {custom_metadata, exists}, {file_location, exists}],
     verify_and_del_key(Key, ModelName, Checks).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Verifies if key may be deleted and deletes it.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_and_del_key(Key :: datastore:ext_key(), ModelName :: model_behaviour:model_type(),
+    ToCheck :: list()) -> ok.
 verify_and_del_key(Key, ModelName, Checks) ->
     VerAns = lists:foldl(fun
         ({ModelName, foreach_link}, ok) ->
@@ -186,21 +201,32 @@ verify_and_del_key(Key, ModelName, Checks) ->
             spawn(fun() ->
                 timer:sleep(timer:minutes(1)),
                 delete({sid, ModelName, Key})
-            end);
+            end),
+            ok;
         _ ->
             ok
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks and saves space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_space_id(ModelName :: model_behaviour:model_type(), Key :: datastore:ext_key()) ->
+    ok | {prehook_error, datastore:generic_error()}.
 save_space_id(ModelName, Key) ->
     case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?GLOBAL_ONLY_LEVEL)),
         get, [ModelName:model_init(), Key]) of
         {ok, Doc} ->
             case dbsync_worker:get_space_id(Doc) of
                 {ok, SID} ->
-                    {ok, _} = save(#document{key = {sid, ModelName, Key}, value = #dbsync_state{entry = {ok, SID}}}),
+                    {ok, _} = save(#document{key = {sid, ModelName, Key},
+                        value = #dbsync_state{entry = {ok, SID}}}),
                     ok;
-                {error,not_a_space} ->
-                    {ok, _} = save(#document{key = {sid, ModelName, Key}, value = #dbsync_state{entry = {error,not_a_space}}}),
+                {error, not_a_space} ->
+                    {ok, _} = save(#document{key = {sid, ModelName, Key},
+                        value = #dbsync_state{entry = {error, not_a_space}}}),
                     ok;
                 Other ->
                     {prehook_error, Other}

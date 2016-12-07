@@ -773,16 +773,6 @@ get_space_id(#document{key = Key, value = V} = Doc) ->
             {error, Reason}
     end.
 
-get_sid_from_state(ModelName, #document{key = Key}) ->
-    get_sid_from_state(ModelName, Key);
-get_sid_from_state(ModelName, Key) ->
-    case dbsync_state:get({sid, ModelName, Key}) of
-        {ok, #document{value = #dbsync_state{entry = Value}}} ->
-            Value;
-        Other ->
-            Other
-    end.
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates sequence number for given Provider and Space.
@@ -1113,4 +1103,21 @@ ensure_global_stream_active() ->
             Since = state_get(global_resume_seq),
             timer:send_after(0, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
             ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets space ID from state.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sid_from_state(ModelName :: model_behaviour:model_type(), datastore:ext_key() | datastore:document()) ->
+    {ok, SpaceId :: od_space:id()} | {error, not_a_space} | datastore:generic_error().
+get_sid_from_state(ModelName, #document{key = Key}) ->
+    get_sid_from_state(ModelName, Key);
+get_sid_from_state(ModelName, Key) ->
+    case dbsync_state:get({sid, ModelName, Key}) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            Value;
+        Other ->
+            Other
     end.
