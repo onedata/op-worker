@@ -17,7 +17,7 @@
   0},
  {<<"cluster_worker">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/cluster-worker.git",
-       {ref,"a908409a28f6234ca0fc02d75f047778a8f8eb6d"}},
+       {ref,"aa4d10a4e86278d1c4c72113bd5108d44dad67c9"}},
   0},
  {<<"corman">>,
   {git,"git://github.com/RoXeon/corman.git",
