@@ -75,6 +75,8 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
     end, Workers),
     WS = lists:zip(Workers, SessIds),
 
+    ct:print("aaaa ~p", [{CheckedModule, Worker1}]),
+
     [LastTreeDir | _] = TreeDirsReversed = lists:foldl(fun(_, [H | _] = Acc) ->
         NewDir = <<H/binary, "/", (generator:gen_name())/binary>>,
         [NewDir | Acc]
@@ -105,16 +107,17 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
     end, WS),
 
     lists:foreach(fun(Worker) ->
+        ct:print("bbbb ~p", [{Worker}]),
         ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
-            [ControllerUUID]), Attempts * length(Workers))
+            [ControllerUUID]), Attempts * length(Workers)),
         % TODO - uncomment after VFS-2678
-%%        ListFun = fun(LinkName, _LinkTarget, Acc) ->
-%%            [LinkName | Acc]
-%%                  end,
-%%        MC = change_propagation_controller:model_init(),
-%%        LSL = MC#model_config.link_store_level,
-%%        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
-%%            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
+        ListFun = fun(LinkName, _LinkTarget, Acc) ->
+            [LinkName | Acc]
+                  end,
+        MC = change_propagation_controller:model_init(),
+        LSL = MC#model_config.link_store_level,
+        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
+            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
     end, Workers),
 
     ok.
