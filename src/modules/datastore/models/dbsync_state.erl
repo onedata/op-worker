@@ -155,7 +155,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec verify_and_del_key(Key :: datastore:ext_key(), ModelName :: model_behaviour:model_type()) -> ok.
 verify_and_del_key(Key, change_propagation_controller = ModelName) ->
-    Checks = [{change_propagation_controller, exists_link_doc}],
+    Checks = [{change_propagation_controller, foreach_link}],
     verify_and_del_key(Key, ModelName, Checks);
 verify_and_del_key(Key, ModelName) ->
     Checks = [{file_meta, foreach_link}, {times, exists},
@@ -216,8 +216,18 @@ verify_and_del_key(Key, ModelName, Checks) ->
 -spec save_space_id(ModelName :: model_behaviour:model_type(), Key :: datastore:ext_key()) ->
     ok | {prehook_error, datastore:generic_error()}.
 save_space_id(ModelName, Key) ->
-    case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?GLOBAL_ONLY_LEVEL)),
-        get, [ModelName:model_init(), Key]) of
+    MInit = ModelName:model_init(),
+    % Use data store driver explicit (otherwise hooks loop will appear)
+    GetAns = case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?GLOBAL_ONLY_LEVEL)),
+        get, [MInit, Key]) of
+        {error, {not_found, _}} ->
+            erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
+                get, [MInit, Key]);
+        Ans ->
+            Ans
+    end,
+
+    case GetAns of
         {ok, Doc} ->
             case dbsync_worker:get_space_id(Doc) of
                 {ok, SID} ->
