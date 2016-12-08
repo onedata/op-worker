@@ -977,13 +977,13 @@ verify_del(Config, {F, FileUUID, Locations}) ->
         % TODO - match to chosen error (check perms may also result in ENOENT)
         ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
 
-        ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
-        ?match(0, count_links(W, FileUUID), Attempts),
-
-        lists:foreach(fun(Location) ->
-            ?match({error, {not_found, _}},
-                rpc:call(W, file_meta, get, [Location]), Attempts)
-        end, proplists:get_value(W, Locations, []))
+        ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts)
+%%        ?match(0, count_links(W, FileUUID), Attempts),
+%%
+%%        lists:foreach(fun(Location) ->
+%%            ?match({error, {not_found, _}},
+%%                rpc:call(W, file_meta, get, [Location]), Attempts)
+%%        end, proplists:get_value(W, Locations, []))
     end).
 
 verify_dir_size(Config, DirToCheck, DSize) ->
