@@ -14,7 +14,7 @@
 -behaviour(cowboy_http_handler).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/lfm_internal.hrl").
+-include("modules/logical_file_manager/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 

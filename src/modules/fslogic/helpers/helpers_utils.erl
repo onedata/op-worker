@@ -12,7 +12,7 @@
 -module(helpers_utils).
 -author("Krzysztof Trzepla").
 
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 

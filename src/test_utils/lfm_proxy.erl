@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("common_test/include/ct.hrl").
--include("modules/fslogic/lfm_internal.hrl").
+-include("modules/logical_file_manager/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API

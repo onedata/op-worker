@@ -16,7 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/lfm_internal.hrl").
+-include("modules/logical_file_manager/lfm_internal.hrl").
 
 -type file_attributes() :: #file_attr{}.
 

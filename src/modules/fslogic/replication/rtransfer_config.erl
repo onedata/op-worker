@@ -12,7 +12,7 @@
 -module(rtransfer_config).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/lfm_internal.hrl").
+-include("modules/logical_file_manager/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").

@@ -14,7 +14,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("modules/fslogic/lfm_internal.hrl").
+-include("modules/logical_file_manager/lfm_internal.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

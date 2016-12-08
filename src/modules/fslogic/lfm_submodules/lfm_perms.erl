@@ -11,7 +11,7 @@
 -module(lfm_perms).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/lfm_internal.hrl").
+-include("modules/logical_file_manager/lfm_internal.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
