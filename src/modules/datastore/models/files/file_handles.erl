@@ -242,7 +242,7 @@ register_release(FileUUID, SessId, Count) ->
     case update(FileUUID, Diff) of
         {ok, _} -> maybe_delete(FileUUID);
         {error, phantom_file} ->
-            worker_proxy:cast(file_deletion_worker, {open_file_deletion_request, FileUUID}),
+            worker_proxy:cast(fslogic_deletion_worker, {open_file_deletion_request, FileUUID}),
             delete(FileUUID);
         {error, {not_found, _}} -> ok;
         {error, Reason} -> {error, Reason}

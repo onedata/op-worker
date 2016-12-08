@@ -9,7 +9,7 @@
 %%% This module handles file deletion.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_deletion_worker).
+-module(fslogic_deletion_worker).
 -behaviour(worker_plugin_behaviour).
 
 -author("Michal Wrona").

@@ -70,8 +70,8 @@ init(_Args) ->
             {error, already_exists} -> ok
         end
     end, [
-        event_subscriptions:read_subscription(fun handle_read_events/2),
-        event_subscriptions:write_subscription(fun handle_write_events/2)
+        fslogic_event_subscriptions:read_subscription(fun handle_read_events/2),
+        fslogic_event_subscriptions:write_subscription(fun handle_write_events/2)
     ]),
 
     case session_manager:create_root_session() of

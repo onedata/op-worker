@@ -728,7 +728,7 @@ delete_impl(CTX, File, Silent) ->
         end,
     case length(FileChildren) of
         0 ->
-            ok = worker_proxy:call(file_deletion_worker,
+            ok = worker_proxy:call(fslogic_deletion_worker,
                 {fslogic_deletion_request, CTX, FileUUID, Silent}),
             #fuse_response{status = #status{code = ?OK}};
         _ ->

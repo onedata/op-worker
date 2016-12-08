@@ -87,7 +87,7 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     {fslogic_worker, []},
     {singleton, dbsync_worker, []},
     {monitoring_worker, []},
-    {file_deletion_worker, []},
+    {fslogic_deletion_worker, []},
     {space_sync_worker, []}
 ].
 
