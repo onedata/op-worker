@@ -23,7 +23,7 @@
     list/0, model_init/0, 'after'/5, before/4]).
 -export([record_struct/1]).
 %% export API
--export([save_change/6, mark_change_propagated/1, verify_propagation/2]).
+-export([save_change/6, mark_change_propagated/1, verify_propagation/3]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -200,7 +200,7 @@ save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
 mark_change_propagated(#document{key = ControllerKey, value = #change_propagation_controller{space_id = SpaceId,
     change_revision = Rev, verify_module = VM, verify_function = VF}} = Doc) ->
     MyId = oneprovider:get_provider_id(),
-    case verify_propagation(ControllerKey, SpaceId) of
+    case verify_propagation(ControllerKey, SpaceId, true) of
         {ok, true} ->
             ?info("aaaaa ~p", [{ControllerKey, SpaceId}]),
             ok;
@@ -217,17 +217,18 @@ mark_change_propagated(#document{key = ControllerKey, value = #change_propagatio
 %% Verifies if change was propagated to all providers.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: space_info:id()) -> {ok, boolean()} | no_return().
-verify_propagation(ControllerKey, SpaceId) ->
+-spec verify_propagation(ControllerKey :: datastore:ext_key(), SpaceId :: space_info:id(), AddLocal :: boolean()) ->
+    {ok, boolean()} | no_return().
+verify_propagation(ControllerKey, SpaceId, AddLocal) ->
     MyId = oneprovider:get_provider_id(),
     ListFun = fun(LinkName, _LinkTarget, Acc) ->
         [LinkName | Acc]
     end,
 
     {ok, Links} = datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, []),
-    ?info("aaaaa ~p", [{ControllerKey, SpaceId, Links}]),
-    LocalLister = lists:member(MyId, Links),
-    Correction = case LocalLister of
+    ?info("aaaaa ~p", [{ControllerKey, SpaceId, Links, process_info(self(), current_stacktrace)}]),
+    LocalListed = lists:member(MyId, Links),
+    Correction = case (LocalListed and AddLocal) of
                      true ->
                          0;
                      _ ->
@@ -239,7 +240,7 @@ verify_propagation(ControllerKey, SpaceId) ->
     case ToDel of
         true ->
             ok = datastore:delete_links(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, Links),
-            ?info("aaaaa ~p", [{ControllerKey, SpaceId, datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, []), g}]),
+            ?info("aaaaa ~p", [{ControllerKey, SpaceId, datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, [])}]),
             ok = delete(ControllerKey);
         _ ->
             ?info(" ~p", [{ControllerKey, SpaceId, Links}]),
