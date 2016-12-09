@@ -23,8 +23,7 @@
 -include_lib("proto/oneclient/server_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -123,18 +122,16 @@ route_message_should_forward_messages_to_different_streams(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    initializer:clear_models(Worker, [subscription]),
-    NewConfig.
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
+    Posthook = fun(NewConfig) ->
+        [Worker | _] = ?config(op_worker_nodes, NewConfig),
+        initializer:clear_models(Worker, [subscription]),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= send_message_should_forward_message;
     Case =:= send_message_should_inject_stream_id_into_message ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_communicator(Worker),
     {ok, SessId} = session_setup(Worker),
@@ -148,7 +145,6 @@ init_per_testcase(Case, Config) when
     Case =:= route_message_should_forward_message;
     Case =:= route_message_should_forward_messages_to_the_same_stream;
     Case =:= route_message_should_forward_messages_to_different_streams ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_router(Worker),
     mock_communicator(Worker, fun(_, _, _) -> ok end),
@@ -158,7 +154,6 @@ init_per_testcase(Case, Config) when
 end_per_testcase(Case, Config) when
     Case =:= send_message_should_forward_message;
     Case =:= send_message_should_inject_stream_id_into_message ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     close_stream(Worker, SessId, ?config(stream_id, Config)),
@@ -172,7 +167,6 @@ end_per_testcase(Case, Config) when
     Case =:= route_message_should_forward_message;
     Case =:= route_message_should_forward_messages_to_the_same_stream;
     Case =:= route_message_should_forward_messages_to_different_streams ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),

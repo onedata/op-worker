@@ -21,8 +21,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -113,10 +112,8 @@ event_manager_should_terminate_event_stream_on_subscription_cancellation(Config)
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
 
 init_per_testcase(event_manager_should_start_event_stream_on_subscription = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -128,7 +125,6 @@ init_per_testcase(Case, Config) when
     Case =:= event_manager_should_unregister_event_stream;
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
@@ -138,8 +134,7 @@ init_per_testcase(Case, Config) when
     {ok, EvtMan} = start_event_manager(Worker, SessId),
     [{event_manager, EvtMan}, {session_id, SessId} | Config];
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
@@ -162,8 +157,7 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_event_manager(?config(event_manager, Config)),
     test_utils:mock_validate_and_unload(Worker, [event_manager_sup, subscription]),

@@ -590,7 +590,7 @@ lfm_write_test(Config) ->
     WriteAndTest(W, Handle11, 6, <<"qwerty">>),
     WriteAndTest(W, Handle12, 6, <<"qwerty">>),
 
-    WriteAndTest(W, Handle11, 10, crypto:rand_bytes(40)).
+    WriteAndTest(W, Handle11, 10, crypto:strong_rand_bytes(40)).
 
 lfm_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -866,12 +866,11 @@ share_permission_denied_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
 init_per_testcase(ShareTest, Config) when
     ShareTest =:= create_share_dir_test orelse
@@ -883,13 +882,11 @@ init_per_testcase(ShareTest, Config) when
     ShareTest =:= share_child_list_test orelse
     ShareTest =:= share_child_read_test orelse
     ShareTest =:= share_permission_denied_test ->
-    ?CASE_START(ShareTest),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, oz_shares),
     test_utils:mock_expect(Workers, oz_shares, create, fun(_Auth, ShareId, _SpaceId, _Parameters) -> {ok, ShareId} end),
     init_per_testcase(default, Config);
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
@@ -908,8 +905,7 @@ end_per_testcase(ShareTest, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, oz_shares),
     end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

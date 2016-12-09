@@ -958,15 +958,14 @@ empty_metadata_invalid_json_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
-init_per_testcase(metric_get = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(metric_get, Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
@@ -974,8 +973,7 @@ init_per_testcase(metric_get = Case, Config) ->
     end),
     init_per_testcase(all, Config);
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
@@ -987,8 +985,7 @@ end_per_testcase(metric_get = Case, Config) ->
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),

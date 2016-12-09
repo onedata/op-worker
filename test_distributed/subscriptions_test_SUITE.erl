@@ -899,15 +899,14 @@ pushing_space_group_write_priv_locks_space_for_user_even_if_owner(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     Self = self(),
 
@@ -943,8 +942,7 @@ clear_sessions(Nodes) ->
         ok = rpc:call(hd(Nodes), session, delete, [Key])
     end, FilteredDocs).
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, subscription_wss),
 

@@ -26,14 +26,13 @@
 -define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2, exec_and_check_time/3]).
+-export([all/0]).
 %% tests
 -export([basic_operations_test/1, rename_test/1]).
 %% test_bases
 -export([basic_operations_test_base/1]).
 %% auxiliary function
--export([basic_operations_test_core/2]).
+-export([basic_operations_test_core/2, exec_and_check_time/3]).
 
 all() ->
     ?ALL([basic_operations_test, rename_test], [basic_operations_test]).
@@ -358,23 +357,6 @@ basic_operations_test_core(Config, LastLevel) ->
         #parameter{name = delete_ok_path_level20, value = DeleteOkPathLevel20, unit = "us",
             description = "Time of delete by path opertion at level 20 (20 dirs above file) when file exists"}
     ].
-
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    Config.
-
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions
