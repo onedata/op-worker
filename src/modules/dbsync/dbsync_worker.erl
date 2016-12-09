@@ -450,7 +450,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{since = Since, until = Until, 
 -spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
 do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?info("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
+    ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil + 1 < Since of
         true ->
@@ -772,6 +772,7 @@ get_space_id(#document{key = Key, value = V} = Doc) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
