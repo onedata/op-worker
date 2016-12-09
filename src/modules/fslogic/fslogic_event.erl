@@ -13,18 +13,19 @@
 
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_file_location_update/3,
     emit_permission_changed/1, emit_file_removed/2, emit_file_renamed/3,
-    emit_quota_exeeded/0, emit_file_renamed/4]).
+    emit_quota_exeeded/0, emit_file_renamed/4, flush_event_queue/3,
+    maybe_emit_write/4, maybe_emit_read/4, emit_truncate/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -163,6 +164,69 @@ emit_file_renamed(FileUUID, SpaceId, NewName, SessionId) ->
         new_parent_uuid = ParentGUID,
         new_name = NewName
     }}, SessionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends write event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_emit_write(DoEmit :: boolean(),fslogic_worker:file_guid(),
+    fslogic_blocks:blocks(), session:id()) ->
+    ok | {error, Reason :: term()}.
+maybe_emit_write(false, _FileGuid, _WrittenBlocks, _SessionId) ->
+    ok;
+maybe_emit_write(true, FileGuid, WrittenBlocks, SessionId) ->
+    event:emit(#write_event{
+        file_uuid = FileGuid, blocks = WrittenBlocks
+    }, SessionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends read event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_emit_read(DoEmit :: boolean(),fslogic_worker:file_guid(),
+    fslogic_blocks:blocks(), session:id()) ->
+    ok | {error, Reason :: term()}.
+maybe_emit_read(false, _FileGuid, _ReadBlocks, _SessionId) ->
+    ok;
+maybe_emit_read(true, FileGuid, ReadBlocks, SessionId) ->
+    event:emit(#read_event{
+        file_uuid = FileGuid, blocks = ReadBlocks
+    }, SessionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends truncate event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_truncate(fslogic_worker:file_guid(), non_neg_integer(), session:id()) ->
+    ok | {error, Reason :: term()}.
+emit_truncate(FileGuid, Size, SessionId) ->
+    event:emit(#write_event{file_uuid = FileGuid, blocks = [],
+        file_size = Size}, SessionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes event streams associated with the fslogic subscription for given
+%% session, uuid and provider_id.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_event_queue(od_provider:id(), file_meta:uuid(), session:id()) ->
+    ok | {error, term()}.
+flush_event_queue(SessionId, ProviderId, FileUuid) ->
+    case session:is_special(SessionId) of
+        true ->
+            ok;
+        false ->
+            RecvRef = event:flush(ProviderId, FileUuid, ?FSLOGIC_SUB_ID, self(), SessionId),
+            receive
+                {RecvRef, Response} ->
+                    Response
+            after ?DEFAULT_REQUEST_TIMEOUT ->
+                {error, timeout}
+            end
+    end.
 
 %%%===================================================================
 %%% Internal functions

@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include_lib("common_test/include/ct.hrl").
--include("modules/logical_file_manager/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
@@ -169,14 +168,14 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
     ?EXEC(Worker,
         begin
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            #lfm_handle{file_guid = GUID,
-                fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
+            Guid = lfm_context:get_guid(Handle),
+            SessId = lfm_context:get_session_id(Handle),
             case logical_file_manager:write(Handle, Offset, Bytes) of
                 {ok, NewHandle, Res}  ->
                     ets:insert(lfm_handles, {TestHandle, NewHandle}),
                     case logical_file_manager:fsync(NewHandle) of
                         ok ->
-                            {ok, Res, logical_file_manager:stat(SessId, {guid, GUID})};
+                            {ok, Res, logical_file_manager:stat(SessId, {guid, Guid})};
                         Other2 ->
                             Other2
                     end;

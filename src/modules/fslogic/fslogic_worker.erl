@@ -158,7 +158,7 @@ cleanup() ->
     #fuse_response{} | #provider_response{} | #proxyio_response{}.
 run_and_catch_exceptions(Function, Context, Request, RequestType) ->
     Response = try
-        UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)),
+        UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)), %todo TL store it in request context
         {NextCTX, Providers, UpdatedRequest} =
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->

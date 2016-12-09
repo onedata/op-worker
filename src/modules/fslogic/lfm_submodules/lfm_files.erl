@@ -5,31 +5,22 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%% @doc This module performs file-related operations of lfm_submodules.
+%%% @doc This module performs file-related operations of lfm_submodules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files).
 
--include_lib("ctool/include/posix/errors.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include("modules/logical_file_manager/lfm_internal.hrl").
--include("proto/oneclient/event_messages.hrl").
--include("proto/oneprovider/provider_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("global_definitions.hrl").
--include("modules/events/definitions.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include("timeouts.hrl").
 
 %% API
 %% Functions operating on directories or files
 -export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, silent_read/3,
-    truncate/2, truncate/3, unlink/2, unlink/3, release/1,
+    read/3, read_without_events/3, silent_read/3, truncate/3, unlink/3, release/1,
     get_file_distribution/2, replicate_file/3]).
 
 -compile({no_auto_import, [unlink/1]}).
@@ -48,7 +39,6 @@
 exists(_FileKey) ->
     {ok, false}.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Moves a file or directory to a new location.
@@ -58,16 +48,14 @@ exists(_FileKey) ->
     TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mv(SessId, FileKey, TargetPath) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
-    {guid, TargetDirGuid} = fslogic_uuid:ensure_guid(CTX, {path, TargetDir}),
+    {guid, TargetDirGuid} = fslogic_uuid:ensure_guid(SessId, {path, TargetDir}),
     lfm_utils:call_fslogic(SessId, file_request, GUID,
         #rename{target_parent_uuid = TargetDirGuid, target_name = TargetName},
         fun(#file_renamed{new_uuid = NewGuid}) ->
             {ok, NewGuid}
         end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,14 +65,12 @@ mv(SessId, FileKey, TargetPath) ->
 -spec cp(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, GUID,
         #copy{target_path = TargetPath},
         fun(#file_copied{new_uuid = NewGuid}) ->
             {ok, NewGuid}
         end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -94,14 +80,12 @@ cp(SessId, FileKey, TargetPath) ->
 -spec get_parent(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 get_parent(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
         #get_parent{},
         fun(#dir{uuid = ParentGUID}) ->
             {ok, ParentGUID}
         end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,26 +101,18 @@ get_file_path(SessId, FileGUID) ->
             {ok, Path}
         end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file or an empty directory.
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(logical_file_manager:handle(), boolean()) ->
-    ok | logical_file_manager:error_reply().
-unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_guid = GUID}, Silent) ->
-    unlink(SessId, {guid, GUID}, Silent).
-
 -spec unlink(session:id(), fslogic_worker:ext_file(), boolean()) ->
     ok | logical_file_manager:error_reply().
 unlink(SessId, FileEntry, Silent) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileEntry),
+    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileEntry),
     lfm_utils:call_fslogic(SessId, file_request, GUID, #delete_file{silent = Silent},
         fun(_) -> ok end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -148,7 +124,6 @@ unlink(SessId, FileEntry, Silent) ->
 create(SessId, Path) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     create(SessId, Path, DefaultMode).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -169,7 +144,6 @@ create(SessId, Path, Mode) ->
             )
         end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Opens a file in selected mode and returns a file handle used to read or write.
@@ -179,10 +153,9 @@ create(SessId, Path, Mode) ->
     Flag :: fslogic_worker:open_flag()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(SessId, FileKey, Flag) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    CTX2 = #fslogic_ctx{share_id = ShareId} =
-        fslogic_context:set_space_and_share_id(CTX, {guid, FileGUID}),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    ShareId = fslogic_uuid:guid_to_share_id(FileGUID),
+
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
         #get_file_location{},
         fun(#file_location{provider_id = ProviderId, file_id = FileId,
@@ -197,21 +170,21 @@ open(SessId, FileKey, Flag) ->
 
                     case storage_file_manager:open(SFMHandle0, Flag) of
                         {ok, Handle} ->
-                            {ok, #lfm_handle{
-                                handle_id = HandleId,
-                                file_location = normalize_file_location(Location),
-                                provider_id = ProviderId,
-                                sfm_handles = #{default => {{StorageId, FileId}, Handle}},
-                                fslogic_ctx = CTX2,
-                                file_guid = FileGUID,
-                                open_flag = Flag}};
+                            {ok, lfm_context:new(
+                                HandleId,
+                                normalize_file_location(Location),
+                                ProviderId,
+                                #{default => {{StorageId, FileId}, Handle}},
+                                SessId,
+                                FileGUID,
+                                Flag
+                            )};
                         {error, Reason} ->
                             {error, Reason}
                     end
                 end)
         end
     ).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -220,12 +193,17 @@ open(SessId, FileKey, Flag) ->
 %%--------------------------------------------------------------------
 -spec release(logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
-release(#lfm_handle{handle_id = undefined}) ->
-    ok;
-release(#lfm_handle{handle_id = FSLogicHandle, file_guid = FileGUID, fslogic_ctx = CTX}) ->
-    lfm_utils:call_fslogic(fslogic_context:get_session_id(CTX), file_request,
-        FileGUID, #release{handle_id = FSLogicHandle},
-        fun(_) -> ok end).
+release(Handle) ->
+    case lfm_context:get_handle_id(Handle) of
+        undefined ->
+            ok;
+        HandleId ->
+            SessionId = lfm_context:get_session_id(Handle),
+            FileGuid = lfm_context:get_guid(Handle),
+            lfm_utils:call_fslogic(SessionId, file_request,
+                FileGuid, #release{handle_id = HandleId},
+                fun(_) -> ok end)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -234,22 +212,16 @@ release(#lfm_handle{handle_id = FSLogicHandle, file_guid = FileGUID, fslogic_ctx
 %%--------------------------------------------------------------------
 -spec fsync(FileHandle :: logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
-fsync(#lfm_handle{sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SpecialSession}})
-    when SpecialSession =:= ?ROOT_SESS_ID orelse SpecialSession =:= ?GUEST_SESS_ID ->
-    lists:foreach(fun({_, SFMHandle}) ->
-        ok = storage_file_manager:fsync(SFMHandle)
-    end, maps:values(SFMHandles));
-fsync(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID, sfm_handles = SFMHandles, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+fsync(Handle) ->
+    SFMHandles = lfm_context:get_sfm_handles(Handle),
+    SessionId = lfm_context:get_session_id(Handle),
+    FileGuid = lfm_context:get_guid(Handle),
+    ProviderId = lfm_context:get_provider_id(Handle),
+
     lists:foreach(fun({_, SFMHandle}) ->
         ok = storage_file_manager:fsync(SFMHandle)
     end, maps:values(SFMHandles)),
-    RecvRef = event:flush(ProviderId, fslogic_uuid:guid_to_uuid(FileGUID), ?FSLOGIC_SUB_ID, self(), SessId),
-    receive
-        {RecvRef, Response} ->
-            Response
-    after ?DEFAULT_REQUEST_TIMEOUT ->
-        {error, timeout}
-    end.
+    fslogic_event:flush_event_queue(SessionId, ProviderId, fslogic_uuid:guid_to_uuid(FileGuid)).
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)
@@ -291,28 +263,20 @@ read_without_events(FileHandle, Offset, MaxSize) ->
 silent_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, false).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates a file.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(FileHandle :: logical_file_manager:handle(), Size :: non_neg_integer()) ->
-    ok | logical_file_manager:error_reply().
-truncate(#lfm_handle{file_guid = FileGUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Size) ->
-    truncate(SessId, {guid, FileGUID}, Size).
-
 -spec truncate(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Size :: non_neg_integer()) ->
     ok | logical_file_manager:error_reply().
 truncate(SessId, FileKey, Size) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
         #truncate{size = Size},
         fun(_) ->
-            event:emit(#write_event{file_uuid = FileGUID, blocks = [],
-                file_size = Size}, SessId)
+            ok = fslogic_event:emit_truncate(FileGUID, Size, SessId)
         end).
 
 %%--------------------------------------------------------------------
@@ -323,8 +287,7 @@ truncate(SessId, FileKey, Size) ->
 -spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, list()} | logical_file_manager:error_reply().
 get_file_distribution(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
@@ -347,8 +310,7 @@ get_file_distribution(SessId, FileKey) ->
 -spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
     ok | logical_file_manager:error_reply().
 replicate_file(SessId, FileKey, ProviderId) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
         #replicate_file{provider_id = ProviderId},
         fun(_) -> ok end).
@@ -365,24 +327,26 @@ replicate_file(SessId, FileKey, ProviderId) ->
 %% and default locations shall be used instead.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sfm_handle_key(OpType :: write | read, #lfm_handle{}, Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+-spec get_sfm_handle_key(OpType :: write | read, lfm_context:handle(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     {default | {storage:id(), helpers:file()}, non_neg_integer()}.
-get_sfm_handle_key(OpType, #lfm_handle{file_guid = GUID, file_location = #file_location{blocks = InitBlocks}}, Offset, Size) ->
+get_sfm_handle_key(OpType, Handle, Offset, Size) ->
+    Guid = lfm_context:get_guid(Handle),
+    #file_location{blocks = InitBlocks} = lfm_context:get_file_location(Handle),
+
     Blocks = try
-        [#document{value = LocalLocation}] = fslogic_utils:get_local_file_locations({guid, GUID}),
+        [#document{value = LocalLocation}] = fslogic_utils:get_local_file_locations({guid, Guid}), %todo TL cache location in handle
         #file_location{blocks = Blocks0} = LocalLocation,
         Blocks0
     catch
         _:_ ->
             InitBlocks
     end,
-    case get_sfm_handle_key_internal(GUID, Offset, Size, Blocks) of
+    case get_sfm_handle_key_internal(Guid, Offset, Size, Blocks) of
         {default, _} = SFMKey when OpType =:= read -> %% For read operation there has to be a explict block in file_location
             SFMKey;
         SFMKey ->
             SFMKey
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -406,20 +370,23 @@ get_sfm_handle_key_internal(_UUID, Offset, _Size, [#file_block{offset = O, size 
 get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
     {default, Size}.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Helper function for read/write handles caching. Returns given handle or creates new and updates master handle.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sfm_handle_n_update_handle(Handle :: logical_file_manager:handle(), Key :: term(), SFMHandles :: sfm_handles_map(),
+-spec get_sfm_handle_n_update_handle(Handle :: logical_file_manager:handle(), Key :: term(),
     OpenType :: helpers:open_flag()) ->
     {{StorageId :: storage:id(), FileId :: file_meta:uuid()},
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: logical_file_manager:handle()} |  no_return().
-get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_guid = FileGUID,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId, share_id = ShareId}} = Handle,
-    Key, SFMHandles, OpenType) ->
+get_sfm_handle_n_update_handle(Handle, Key, OpenType) ->
+    ProviderId = lfm_context:get_provider_id(Handle),
+    FileGUID = lfm_context:get_guid(Handle),
+    SessId = lfm_context:get_session_id(Handle),
+    ShareId = lfm_context:get_share_id(Handle),
+    SFMHandles = lfm_context:get_sfm_handles(Handle),
+
     {{StorageId, FileId}, SFMHandle} =
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
@@ -437,9 +404,8 @@ get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_guid =
             {{SID, FID}, CachedHandle} ->
                 {{SID, FID}, CachedHandle}
         end,
-    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, {{StorageId, FileId}, SFMHandle}, Handle#lfm_handle.sfm_handles)},
+    NewHandle = lfm_context:set_sfm_handles(Handle, maps:put(Key, {{StorageId, FileId}, SFMHandle}, SFMHandles)),
     {{StorageId, FileId}, SFMHandle, NewHandle}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -469,7 +435,6 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
             end
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Internal function for writing one portion of data in write/3
@@ -478,12 +443,16 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
 -spec write_internal(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
     Buffer :: binary(), GenerateEvents :: boolean()) ->
     {ok, logical_file_manager:handle(), non_neg_integer()} | logical_file_manager:error_reply().
-write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_flag = Flag,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer, GenerateEvents) ->
+write_internal(Handle, Offset, Buffer, GenerateEvents) ->
+    Guid = lfm_context:get_guid(Handle),
+    Flag = lfm_context:get_open_flag(Handle),
+    SessId = lfm_context:get_session_id(Handle),
+
     {Key, NewSize} = get_sfm_handle_key(write, Handle, Offset, byte_size(Buffer)),
 
-    {{StorageId, FileId}, SFMHandle, NewHandle = #lfm_handle{file_location = #file_location{blocks = CBlocks} = Location}}
-        = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, Flag),
+    {{StorageId, FileId}, SFMHandle, NewHandle}
+        = get_sfm_handle_n_update_handle(Handle, Key, Flag),
+    Location = #file_location{blocks = CBlocks} = lfm_context:get_file_location(NewHandle),
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
@@ -492,15 +461,9 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = UUID, open_flag
                 file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
             }],
             NewBlocks = fslogic_blocks:merge(WrittenBlocks, CBlocks),
-            case GenerateEvents of
-                true ->
-                    ok = event:emit(#write_event{
-                        file_uuid = UUID, blocks = WrittenBlocks
-                    }, SessId);
-                false ->
-                    ok
-            end,
-            {ok, NewHandle#lfm_handle{file_location = Location#file_location{blocks = NewBlocks}}, Written};
+            ok = fslogic_event:maybe_emit_write(GenerateEvents, Guid, WrittenBlocks, SessId),
+            NewLocationHandle = lfm_context:set_file_location(NewHandle, Location#file_location{blocks = NewBlocks}),
+            {ok, NewLocationHandle, Written};
         {error, Reason2} ->
             {error, Reason2}
     end.
@@ -541,36 +504,31 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
 -spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
-read_internal(#lfm_handle{sfm_handles = SFMHandles, file_guid = GUID, open_flag = Flag,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize,
-    GenerateEvents, PrefetchData) ->
+read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
+    Guid = lfm_context:get_guid(Handle),
+    Flag = lfm_context:get_open_flag(Handle),
+    SessId = lfm_context:get_session_id(Handle),
 
-    ok = lfm_utils:call_fslogic(SessId, file_request, GUID,
+    ok = lfm_utils:call_fslogic(SessId, file_request, Guid,
         #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
             prefetch = PrefetchData},
         fun(_) -> ok end),
 
     {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
-    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, Flag),
+    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, Flag),
 
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
-            case GenerateEvents of
-                true ->
-                    ok = event:emit(#read_event{
-                        file_uuid = GUID, blocks = [#file_block{
-                            file_id = FileId, storage_id = StorageId, offset = Offset,
-                            size = size(Data)
-                        }]
-                    }, SessId);
-                false ->
-                    ok
-            end,
+            ReadBlocks = [#file_block{
+                file_id = FileId, storage_id = StorageId, offset = Offset,
+                size = size(Data)
+            }],
+            ok = fslogic_event:maybe_emit_read(GenerateEvents, Guid, ReadBlocks, SessId),
+
             {ok, NewHandle, Data};
         {error, Reason2} ->
             {error, Reason2}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc

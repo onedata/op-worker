@@ -14,7 +14,6 @@
 -behaviour(cowboy_http_handler).
 
 -include("global_definitions.hrl").
--include("modules/logical_file_manager/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -130,7 +129,7 @@ handle_http_download(Req, FileId) ->
 %% by cowboy to send data (file content) to receiving socket.
 %% @end
 %%--------------------------------------------------------------------
--spec cowboy_file_stream_fun(FileHandle :: #lfm_handle{}, Size :: integer()) ->
+-spec cowboy_file_stream_fun(FileHandle :: lfm_context:handle(), Size :: integer()) ->
     fun((any(), module()) -> ok).
 cowboy_file_stream_fun(FileHandle, Size) ->
     fun(Socket, Transport) ->
@@ -141,7 +140,7 @@ cowboy_file_stream_fun(FileHandle, Size) ->
             % Any exceptions that occur during file streaming must be caught
             % here for cowboy to close the connection cleanly.
             ?error_stacktrace("Error while streaming file '~p' - ~p:~p",
-                [FileHandle#lfm_handle.file_guid, T, M]),
+                [lfm_context:get_guid(FileHandle), T, M]),
             ok
         end
     end.
@@ -155,7 +154,7 @@ cowboy_file_stream_fun(FileHandle, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_file(Socket :: term(), Transport :: atom(),
-    FileHandle :: #lfm_handle{}, Size :: integer(), BufSize :: integer()) -> ok.
+    FileHandle :: lfm_context:handle(), Size :: integer(), BufSize :: integer()) -> ok.
 stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
     stream_file(Socket, Transport, FileHandle, Size, 0, BufSize).
 
@@ -168,7 +167,7 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_file(Socket :: term(), Transport :: atom(),
-    FileHandle :: #lfm_handle{}, Size :: integer(),
+    FileHandle :: lfm_context:handle(), Size :: integer(),
     Sent :: integer(), BufSize :: integer()) -> ok.
 stream_file(_, _, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
     ok = logical_file_manager:release(FileHandle);

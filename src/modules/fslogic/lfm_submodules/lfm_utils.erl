@@ -11,16 +11,12 @@
 -module(lfm_utils).
 -author("Rafal Slota").
 
--include_lib("ctool/include/posix/errors.hrl").
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("global_definitions.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([call_fslogic/5, call_fslogic/4, rm/2, isdir/2]).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,7 +54,6 @@ call_fslogic(SessId, fuse_request, Request, OKHandle) ->
             {error, Code}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes an object with all its children.
@@ -67,19 +62,18 @@ call_fslogic(SessId, fuse_request, Request, OKHandle) ->
 -spec rm(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | logical_file_manager:error_reply().
 rm(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    case isdir(CTX, GUID) of
+    case isdir(SessId, Guid) of
         true ->
-            case rm_children(CTX, GUID, 0, Chunk, ok) of
+            case rm_children(SessId, Guid, 0, Chunk, ok) of
                 ok ->
-                    lfm_files:unlink(SessId, {guid, GUID}, false);
+                    lfm_files:unlink(SessId, {guid, Guid}, false);
                 Error ->
                     Error
             end;
         false ->
-            lfm_files:unlink(SessId, {guid, GUID}, false)
+            lfm_files:unlink(SessId, {guid, Guid}, false)
     end.
 
 %%--------------------------------------------------------------------
@@ -87,10 +81,10 @@ rm(SessId, FileKey) ->
 %% Checks if a file is directory.
 %% @end
 %%--------------------------------------------------------------------
--spec isdir(CTX :: #fslogic_ctx{}, GUID :: fslogic_worker:file_guid()) ->
+-spec isdir(session:id(), Guid :: fslogic_worker:file_guid()) ->
     true | false | logical_file_manager:error_reply().
-isdir(#fslogic_ctx{session_id = SessId}, GUID) ->
-    case lfm_attrs:stat(SessId, {guid, GUID}) of
+isdir(SessId, Guid) ->
+    case lfm_attrs:stat(SessId, {guid, Guid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
         {ok, _} -> false;
         Error -> Error
@@ -105,15 +99,15 @@ isdir(#fslogic_ctx{session_id = SessId}, GUID) ->
 %% Deletes all children of directory with given UUID.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_children(CTX :: #fslogic_ctx{}, GUID :: fslogic_worker:file_guid(),
+-spec rm_children(session:id(), Guid :: fslogic_worker:file_guid(),
     Offset :: non_neg_integer(), Chunk :: non_neg_integer(), ok | {error, term()}) ->
     ok | logical_file_manager:error_reply().
-rm_children(#fslogic_ctx{session_id = SessId} = CTX, GUID, Offset, Chunk, Answer) ->
-    case lfm_dirs:ls(SessId, {guid, GUID}, Offset, Chunk) of
+rm_children(SessId, Guid, Offset, Chunk, Answer) ->
+    case lfm_dirs:ls(SessId, {guid, Guid}, Offset, Chunk) of
         {ok, Children} ->
             Answers = lists:map(fun
-                ({ChildGUID, _ChildName}) ->
-                    rm(SessId, {guid, ChildGUID})
+                ({ChildGuid, _ChildName}) ->
+                    rm(SessId, {guid, ChildGuid})
             end, Children),
             {FirstError, ErrorCount} = lists:foldl(fun
                 (ok, {Ans, ErrorCount}) -> {Ans, ErrorCount};
@@ -123,7 +117,7 @@ rm_children(#fslogic_ctx{session_id = SessId} = CTX, GUID, Offset, Chunk, Answer
 
             case length(Children) of
                 Chunk ->
-                    rm_children(CTX, GUID, ErrorCount, Chunk, FirstError);
+                    rm_children(SessId, Guid, ErrorCount, Chunk, FirstError);
                 _ -> % no more children
                     FirstError
             end;

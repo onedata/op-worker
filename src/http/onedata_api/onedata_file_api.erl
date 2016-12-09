@@ -21,16 +21,16 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, unlink/1,
-    unlink/2, fsync/1, release/1, get_file_distribution/2, replicate_file/3]).
+-export([create/3, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
+    release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/3, get_xattr/4,
-    remove_xattr/2, remove_xattr/3, list_xattr/3, list_xattr/4]).
+-export([stat/2, set_xattr/3, get_xattr/4, remove_xattr/3, list_xattr/4]).
 %% Functions concerning cdmi attributes
--export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
-    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
+-export([get_transfer_encoding/2, set_transfer_encoding/3,
+    get_cdmi_completion_status/2, set_cdmi_completion_status/3,
+    get_mimetype/2, set_mimetype/3]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -43,6 +43,8 @@
 -type file_guid() :: binary().
 %%--------------------------------------------------------------------
 
+
+% todo TL do something with those types.
 %%--------------------------------------------------------------------
 %% Types connected with files
 -type file_path() :: binary().
@@ -155,9 +157,6 @@ get_file_path(Auth, Uuid) ->
 %%--------------------------------------------------------------------
 %% @doc Removes a file or an empty directory.
 %%--------------------------------------------------------------------
--spec unlink(file_handle()) -> ok | error_reply().
-unlink(Handle) ->
-    logical_file_manager:unlink(Handle, false).
 -spec unlink(onedata_auth_api:auth(), file_id_or_path()) -> ok | error_reply().
 unlink(Auth, FileEntry) ->
     logical_file_manager:unlink(Auth, FileEntry, false).
@@ -208,10 +207,6 @@ read(FileHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 %% @doc Truncates a file.
 %%--------------------------------------------------------------------
--spec truncate(FileHandle :: file_handle(), Size :: non_neg_integer()) ->
-    ok | error_reply().
-truncate(Handle, Size) ->
-    logical_file_manager:truncate(Handle, Size).
 -spec truncate(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) ->
     ok | error_reply().
 truncate(Auth, FileKey, Size) ->
@@ -285,9 +280,6 @@ remove_acl(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Returns file attributes.
 %%--------------------------------------------------------------------
--spec stat(file_handle()) -> {ok, file_attributes()} | error_reply().
-stat(Handle) ->
-    logical_file_manager:stat(Handle).
 -spec stat(onedata_auth_api:auth(), file_key()) -> {ok, file_attributes()} | error_reply().
 stat(Auth, FileKey) ->
     logical_file_manager:stat(Auth, FileKey).
@@ -295,10 +287,6 @@ stat(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Returns file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: file_handle(), XattrName :: xattr_name(), boolean()) ->
-    {ok, #xattr{}} | error_reply().
-get_xattr(Handle, XattrName, Inherited) ->
-    logical_file_manager:get_xattr(Handle, XattrName, Inherited).
 -spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(Auth, FileKey, XattrName, Inherited) ->
@@ -308,9 +296,6 @@ get_xattr(Auth, FileKey, XattrName, Inherited) ->
 %%--------------------------------------------------------------------
 %% @doc Updates file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec set_xattr(file_handle(), #xattr{}) -> ok | error_reply().
-set_xattr(Handle, Xattr) ->
-    logical_file_manager:set_xattr(Handle, Xattr).
 -spec set_xattr(onedata_auth_api:auth(), file_key(), #xattr{}) -> ok | error_reply().
 set_xattr(Auth, FileKey, Xattr) ->
     logical_file_manager:set_xattr(Auth, FileKey, Xattr).
@@ -318,10 +303,6 @@ set_xattr(Auth, FileKey, Xattr) ->
 %%--------------------------------------------------------------------
 %% @doc Removes file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec remove_xattr(file_handle(), xattr_name()) -> ok | error_reply().
-remove_xattr(Handle, XattrName) ->
-    logical_file_manager:remove_xattr(Handle, XattrName).
-
 -spec remove_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) ->
     ok | error_reply().
 remove_xattr(Auth, FileKey, XattrName) ->
@@ -330,9 +311,6 @@ remove_xattr(Auth, FileKey, XattrName) ->
 %%--------------------------------------------------------------------
 %% @doc Returns complete list of extended attribute names of a file.
 %%--------------------------------------------------------------------
--spec list_xattr(file_handle(), boolean(), boolean()) -> {ok, [xattr_name()]} | error_reply().
-list_xattr(Handle, Inherited, ShowInternal) ->
-    logical_file_manager:list_xattr(Handle, Inherited, ShowInternal).
 -spec list_xattr(onedata_auth_api:auth(), file_key(), boolean(), boolean()) -> {ok, [xattr_name()]} | error_reply().
 list_xattr(Auth, FileKey, Inherited, ShowInternal) ->
     logical_file_manager:list_xattr(Auth, FileKey, Inherited, ShowInternal).
