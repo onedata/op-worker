@@ -15,7 +15,6 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -217,8 +216,6 @@ verify_and_del_key(Key, ModelName, Checks) ->
 -spec save_space_id(ModelName :: model_behaviour:model_type(), Key :: datastore:ext_key()) ->
     ok | {prehook_error, datastore:generic_error()}.
 save_space_id(ModelName, Key) ->
-    ?info("aaaaa ~p", [{ModelName, Key}]),
-
     MInit = ModelName:model_init(),
     % Use data store driver explicit (otherwise hooks loop will appear)
     GetAns = case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?GLOBAL_ONLY_LEVEL)),
@@ -234,23 +231,18 @@ save_space_id(ModelName, Key) ->
         {ok, Doc} ->
             case dbsync_worker:get_space_id(Doc) of
                 {ok, SID} ->
-                    ?info("aaaaa ~p", [{ModelName, Key}]),
                     {ok, _} = save(#document{key = {sid, ModelName, Key},
                         value = #dbsync_state{entry = {ok, SID}}}),
                     ok;
                 {error, not_a_space} ->
-                    ?info("aaaaa ~p", [{ModelName, Key}]),
                     {ok, _} = save(#document{key = {sid, ModelName, Key},
                         value = #dbsync_state{entry = {error, not_a_space}}}),
                     ok;
                 Other ->
-                    ?info("aaaaa ~p", [{ModelName, Key}]),
                     {prehook_error, Other}
             end;
         {error, {not_found, _}} ->
-            ?info("aaaaa ~p", [{ModelName, Key}]),
             ok;
         Other2 ->
-            ?info("aaaaa ~p", [{ModelName, Key}]),
             {prehook_error, Other2}
     end.

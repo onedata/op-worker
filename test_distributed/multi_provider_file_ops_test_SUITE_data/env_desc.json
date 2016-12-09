@@ -44,12 +44,26 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 1
+                        "worker_num": 2
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie1"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "oz_domain": "oz"
+                    }
+                },
+                "worker2": {
                     "vm.args": {
                         "setcookie": "test_cookie1"
                     },
@@ -77,12 +91,26 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 1
+                        "worker_num": 2
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49162"
+                        ],
+                        "oz_domain": "oz"
+                    }
+                },
+                "worker2": {
                     "vm.args": {
                         "setcookie": "test_cookie2"
                     },

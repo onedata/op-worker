@@ -16,7 +16,6 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, create_or_update/2,
@@ -186,7 +185,6 @@ save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
                 value = #change_propagation_controller{change_revision = Rev, space_id = SpaceId,
                     verify_module = VefifyModule, verify_function = VerifyFun}},
             {ok, _Uuid} = save(Doc),
-            ?info("aaaaa ~p", [{get_key(Model, Key), SpaceId, {MyId, Doc}}]),
             ok = datastore:add_links(?LINK_STORE_LEVEL, Doc, {MyId, Doc}),
             ok
     end.
@@ -202,10 +200,8 @@ mark_change_propagated(#document{key = ControllerKey, value = #change_propagatio
     MyId = oneprovider:get_provider_id(),
     case verify_propagation(ControllerKey, SpaceId, true) of
         {ok, true} ->
-            ?info("aaaaa ~p", [{ControllerKey, SpaceId}]),
             ok;
         {ok, _} ->
-            ?info("aaaaa ~p", [{ControllerKey, SpaceId, {MyId, Doc}}]),
             ok = datastore:add_links(?LINK_STORE_LEVEL, Doc, {MyId, Doc})
     end,
 
@@ -226,7 +222,6 @@ verify_propagation(ControllerKey, SpaceId, AddLocal) ->
     end,
 
     {ok, Links} = datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, []),
-    ?info("aaaaa ~p", [{ControllerKey, SpaceId, Links, process_info(self(), current_stacktrace)}]),
     LocalListed = lists:member(MyId, Links),
     Correction = case (LocalListed and AddLocal) of
                      true ->
@@ -240,10 +235,8 @@ verify_propagation(ControllerKey, SpaceId, AddLocal) ->
     case ToDel of
         true ->
             ok = datastore:delete_links(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, Links),
-            ?info("aaaaa ~p", [{ControllerKey, SpaceId, datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, [])}]),
             ok = delete(ControllerKey);
         _ ->
-            ?info(" ~p", [{ControllerKey, SpaceId, Links}]),
             ok
     end,
     {ok, ToDel}.
