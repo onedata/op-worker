@@ -333,8 +333,8 @@ get_sfm_handle_key(OpType, Handle, Offset, Size) ->
     Guid = lfm_context:get_guid(Handle),
     #file_location{blocks = InitBlocks} = lfm_context:get_file_location(Handle),
 
-    Blocks = try
-        [#document{value = LocalLocation}] = fslogic_utils:get_local_file_locations({guid, Guid}), %todo TL cache location in handle
+    Blocks = try %todo cache location in handle
+        #document{value = LocalLocation} = fslogic_utils:get_local_file_location({guid, Guid}), %todo VFS-2813 support multi location
         #file_location{blocks = Blocks0} = LocalLocation,
         Blocks0
     catch

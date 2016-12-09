@@ -509,7 +509,7 @@ tag_children(LinkName, Targets) ->
 %% Returns file's locations attached with attach_location/3.
 %% @end
 %%--------------------------------------------------------------------
--spec get_locations(entry()) -> {ok, [datastore:key()]} | datastore:get_error().
+-spec get_locations(entry()) -> {ok, [file_location:id()]} | datastore:get_error().
 get_locations(Entry) ->
     ?run(begin
         case get(Entry) of

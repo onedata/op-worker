@@ -158,7 +158,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
 -spec delete_file_on_storage(file_meta:uuid(), session:id(), file_meta:uuid())
         -> ok.
 delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
-    case catch fslogic_utils:get_local_file_location({uuid, FileUUID}) of
+    case catch fslogic_utils:get_local_file_location({uuid, FileUUID}) of %todo VFS-2813 support multi location
         #document{value = #file_location{} = Location} ->
             ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
             Results =

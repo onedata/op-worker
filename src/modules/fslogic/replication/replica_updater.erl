@@ -39,9 +39,9 @@
 update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
     file_location:critical_section(FileUUID,
         fun() ->
-            [Location = #document{value = #file_location{size = OldSize,
-                version_vector = Version}} | _] =
-                fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, instead of operating on first one
+            Location = #document{value = #file_location{size = OldSize,
+                version_vector = Version}} =
+                fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
             FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
             warning_if_different_version(BaseVersion, Version, FileUUID),
@@ -59,7 +59,7 @@ update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
                     file_location:save(TruncatedLocation),
                     {ok, size_changed}
             end
-            % todo reconcile other local replicas according to this one
+            % todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).
 
 
@@ -74,8 +74,8 @@ update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
 rename(FileUUID, TargetFileId, TargetSpaceId) ->
     file_location:critical_section(FileUUID,
         fun() ->
-            [#document{value = #file_location{blocks = Blocks} = Location} = LocationDoc | _] =
-                fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, instead of operating on first one
+            #document{value = #file_location{blocks = Blocks} = Location} = LocationDoc =
+                fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
 
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
 
@@ -93,6 +93,7 @@ rename(FileUUID, TargetFileId, TargetSpaceId) ->
                     }}
                 ), TargetFileId, TargetSpaceId
             )
+        %todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).
 
 

@@ -104,7 +104,7 @@ get_file_location(#fslogic_ctx{space_id = SpaceId}, File) ->
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
     #document{value = #file_location{
         blocks = Blocks, file_id = FileId
-    }} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
+    }} = fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location
 
     #fuse_response{
         status = #status{code = ?OK},
@@ -328,7 +328,7 @@ synchronize_block_and_compute_checksum(#fslogic_ctx{session_id = SessId}, {uuid,
     #provider_response{}.
 get_file_distribution(_CTX, {uuid, UUID}) ->
     {ok, Locations} = file_meta:get_locations({uuid, UUID}),
-    ProviderDistributions = lists:map(
+    ProviderDistributions = lists:map( %todo VFS-2813 support multi location
         fun(LocationId) ->
             {ok, #document{value = #file_location{
                 provider_id = ProviderId,
@@ -387,7 +387,7 @@ open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = 
     {ok, StorageDoc} = fslogic_storage:select_storage(SpaceId),
     #document{value = #file_location{
         file_id = FileId}
-    } = fslogic_utils:get_local_file_location({uuid, FileUUID}),
+    } = fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(
         FileDoc, fslogic_context:get_user_id(CTX)
     ),
@@ -411,9 +411,8 @@ open_file_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId, share_id = 
     {ok, binary()}.
 save_handle(SessId, Handle) ->
     HandleId = base64:encode(crypto:rand_bytes(20)),
-    case SessId of
-    	?ROOT_SESS_ID -> ok;
-    	?GUEST_SESS_ID -> ok;
+    case session:is_special(SessId) of
+    	true -> ok;
     	_ -> session:add_handle(SessId, HandleId, Handle)
     end,
     {ok, HandleId}.
