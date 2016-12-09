@@ -74,6 +74,10 @@
     <<"error_description">> => <<"The key parameter is invalid, it must be a valid json.">>}}).
 -define(ERROR_INVALID_KEYS, {?BAD_REQUEST, #{<<"error">> => <<"invalid_keys">>,
     <<"error_description">> => <<"The keys parameter is invalid, it must be a valid json list.">>}}).
+-define(ERROR_INVALID_SPATIAL_FLAG, {?BAD_REQUEST, #{<<"error">> => <<"invalid_spatial_flag">>,
+    <<"error_description">> => <<"Given spatial flag is not a valid boolean.">>}}).
+-define(ERROR_INVALID_BBOX, {?BAD_REQUEST, #{<<"error">> => <<"error_invalid_bbox">>,
+    <<"error_description">> => <<"Bounding box is invalid, it needs to be bbox=W,S,E,N where each direction is a number.">>}}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED, {?NOT_AUTHORIZED, #{<<"error">> => <<"unauthorized">>,
