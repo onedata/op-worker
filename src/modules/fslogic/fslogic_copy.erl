@@ -33,42 +33,44 @@
 %%--------------------------------------------------------------------
 %% @doc Checks file type and executes type specific copy function.
 %%--------------------------------------------------------------------
--spec copy(CTX :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
+-spec copy(Ctx :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
-copy(CTX, SourceEntry, LogicalTargetPath) ->
+copy(Ctx, SourceEntry, LogicalTargetPath) ->
 
     case file_meta:get(SourceEntry) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = SourceDoc} ->
-            copy_dir(CTX, SourceDoc, LogicalTargetPath);
+            copy_dir(Ctx, SourceDoc, LogicalTargetPath);
         {ok, #document{value = #file_meta{type = _}} = SourceDoc} ->
-            copy_file(CTX, SourceDoc, LogicalTargetPath)
+            copy_file(Ctx, SourceDoc, LogicalTargetPath)
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions and copies directory.
 %%--------------------------------------------------------------------
--spec copy_dir(CTX :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
+-spec copy_dir(Ctx :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?traverse_container, 2},
     {?list_container, 2}, {?read_metadata, 2}, {?read_attributes, 2}, {?read_acl, 2}]).
-copy_dir(CTX = #fslogic_ctx{session_id = SessId}, #document{key = SourceUuid, value = #file_meta{mode = Mode}}, LogicalTargetPath) ->
+copy_dir(Ctx, #document{key = SourceUuid, value = #file_meta{mode = Mode}}, LogicalTargetPath) ->
+    SessId = fslogic_context:get_session_id(Ctx),
     SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
     {ok, TargetGuid} = logical_file_manager:mkdir(SessId, LogicalTargetPath),
-    ok = copy_children(CTX, SourceGuid, LogicalTargetPath, 0),
+    ok = copy_children(Ctx, SourceGuid, LogicalTargetPath, 0),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
     #provider_response{status = #status{code = ?OK}, provider_response = #file_copied{new_uuid = TargetGuid}}.
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions and copies file.
 %%--------------------------------------------------------------------
--spec copy_file(CTX :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
+-spec copy_file(Ctx :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2},
     {?read_metadata, 2}, {?read_attributes, 2}, {?read_acl, 2}]).
-copy_file(#fslogic_ctx{session_id = SessId}, #document{key = SourceUuid, value = #file_meta{mode = Mode}}, LogicalTargetPath) ->
+copy_file(Ctx, #document{key = SourceUuid, value = #file_meta{mode = Mode}}, LogicalTargetPath) ->
+    SessId = fslogic_context:get_session_id(Ctx),
     SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
     {ok, TargetGuid} = logical_file_manager:create(SessId, LogicalTargetPath),
     {ok, SourceHandle} = logical_file_manager:open(SessId, {guid, SourceGuid}, read),
@@ -110,13 +112,14 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
 %%--------------------------------------------------------------------
 -spec copy_children(fslogic_worker:ctx(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
     ok | {error, term()}.
-copy_children(CTX = #fslogic_ctx{session_id = SessId}, ParentGuid, TargetPath, Offset) ->
+copy_children(Ctx, ParentGuid, TargetPath, Offset) ->
+    SessId = fslogic_context:get_session_id(Ctx),
     case logical_file_manager:ls(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
         {ok, []} ->
             ok;
         {ok, Children} ->
             lists:foreach(fun({ChildGuid, ChildName}) ->
-                #provider_response{status = #status{code = ?OK}} = copy(CTX,
+                #provider_response{status = #status{code = ?OK}} = copy(Ctx,
                     {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, filename:join(TargetPath, ChildName))
             end, Children);
         Error ->

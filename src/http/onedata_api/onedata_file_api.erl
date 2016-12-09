@@ -31,8 +31,6 @@
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3,
     get_mimetype/2, set_mimetype/3]).
-%% Functions concerning symbolic links
--export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
@@ -368,29 +366,6 @@ get_mimetype(Auth, FileKey) ->
     ok | error_reply().
 set_mimetype(Auth, FileKey, Mimetype) ->
     logical_file_manager:set_mimetype(Auth, FileKey, Mimetype).
-
-%%--------------------------------------------------------------------
-%% @doc Creates a symbolic link.
-%%--------------------------------------------------------------------
--spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) ->
-    {ok, file_guid()} | error_reply().
-create_symlink(Path, TargetFileKey) ->
-    logical_file_manager:create_symlink(Path, TargetFileKey).
-
-%%--------------------------------------------------------------------
-%% @doc Returns the symbolic link's target file.
-%%--------------------------------------------------------------------
--spec read_symlink(FileKey :: file_key()) ->
-    {ok, {file_guid(), file_name()}} | error_reply().
-read_symlink(FileKey) ->
-    logical_file_manager:read_symlink(FileKey).
-
-%%--------------------------------------------------------------------
-%% @doc Removes a symbolic link.
-%%--------------------------------------------------------------------
--spec remove_symlink(FileKey :: file_key()) -> ok | error_reply().
-remove_symlink(FileKey) ->
-    logical_file_manager:remove_symlink(FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc

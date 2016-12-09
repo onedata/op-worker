@@ -80,8 +80,8 @@ gen_file_uuid() ->
     {guid, fslogic_worker:file_guid()}.
 ensure_guid(_, {guid, FileGUID}) ->
     {guid, FileGUID};
-ensure_guid(#fslogic_ctx{session_id = SessionId}, {path, Path}) ->
-    ensure_guid(SessionId, {path, Path});
+ensure_guid(Ctx, {path, Path}) when is_tuple(Ctx) -> %todo TL use only sessionId
+    ensure_guid(fslogic_context:get_session_id(Ctx), {path, Path});
 ensure_guid(SessionId, {path, Path}) ->
     lfm_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
@@ -95,9 +95,9 @@ ensure_guid(SessionId, {path, Path}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec path_to_uuid(fslogic_worker:ctx(), file_meta:path()) -> file_meta:uuid().
-path_to_uuid(CTX, Path) ->
+path_to_uuid(Ctx, Path) when is_tuple(Ctx) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    Entry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     {ok, #document{key = UUID}} = file_meta:get(Entry),
     UUID.
 
@@ -107,13 +107,14 @@ path_to_uuid(CTX, Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec uuid_to_path(fslogic_worker:ctx() | session:id(), file_meta:uuid()) -> file_meta:path().
-uuid_to_path(#fslogic_ctx{session_id = SessionId, session = #session{
-    identity = #user_identity{user_id = UserId}}}, FileUuid) ->
+uuid_to_path(Ctx, FileUuid) when is_tuple(Ctx) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    SessId = fslogic_context:get_session_id(Ctx),
     UserRoot = user_root_dir_uuid(UserId),
     case FileUuid of
         UserRoot -> <<"/">>;
         _ ->
-            {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessionId),
+            {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
     end;
 uuid_to_path(SessionId, FileUuid) ->
@@ -294,6 +295,7 @@ is_share_guid(Id) ->
 guid_to_share_id(Guid) ->
     {_, _, ShareId} = unpack_share_guid(Guid),
     ShareId.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================

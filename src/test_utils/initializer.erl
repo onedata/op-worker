@@ -296,7 +296,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     Auth = #token_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
-    {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
+    Ctx = rpc:call(Worker, fslogic_context, new, [SessId]),
     {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
@@ -307,7 +307,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
-        {{fslogic_ctx, UserId}, #fslogic_ctx{session = Session}}
+        {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
 

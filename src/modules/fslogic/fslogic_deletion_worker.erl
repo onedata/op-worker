@@ -41,16 +41,16 @@ init(_Args) ->
                 Handle#file_handles.is_removed
             end, Docs),
 
-            lists:foreach(fun(#document{key = FileUUID}) ->
+            lists:foreach(fun(#document{key = FileUuid}) ->
                 try
-                    remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false)
+                    remove_file_and_file_meta(FileUuid, ?ROOT_SESS_ID, false)
                 catch
                     T:M -> ?error_stacktrace("Cannot remove file - ~p:~p", [T, M])
                 end
             end, RemovedFiles),
 
-            lists:foreach(fun(#document{key = FileUUID}) ->
-                ok = file_handles:delete(FileUUID)
+            lists:foreach(fun(#document{key = FileUuid}) ->
+                ok = file_handles:delete(FileUuid)
             end, Docs);
         {error, Reason} ->
             ?error_stacktrace("Cannot clean open files descriptors - ~p", [Reason])
@@ -72,27 +72,30 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle({fslogic_deletion_request, #fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, FileUUID, Silent}) ->
-    {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(FileUUID),
+handle({fslogic_deletion_request, Ctx, FileUuid, Silent}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    SpaceId = fslogic_context:get_space_id(Ctx),
+
+    {ok, #document{key = FileUuid} = FileDoc} = file_meta:get(FileUuid),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
 
-    case file_handles:exists(FileUUID) of
+    case file_handles:exists(FileUuid) of
         true ->
             {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId),
 
-            NewName = <<?HIDDEN_FILE_PREFIX, FileUUID/binary>>,
+            NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
             Path = <<ParentPath/binary, ?DIRECTORY_SEPARATOR, NewName/binary>>,
             #fuse_response{status = #status{code = ?OK}} = fslogic_rename:rename(
-                CTX, {uuid, FileUUID}, Path),
+                Ctx, {uuid, FileUuid}, Path),
 
-            ok = file_handles:mark_to_remove(FileUUID),
-            fslogic_event:emit_file_renamed(FileUUID, SpaceId, NewName, SessId);
+            ok = file_handles:mark_to_remove(FileUuid),
+            fslogic_event:emit_file_renamed(FileUuid, SpaceId, NewName, SessId);
         false ->
-            remove_file_and_file_meta(FileUUID, SessId, Silent)
+            remove_file_and_file_meta(FileUuid, SessId, Silent)
     end,
     ok;
-handle({open_file_deletion_request, FileUUID}) ->
-    remove_file_and_file_meta(FileUUID, ?ROOT_SESS_ID, false);
+handle({open_file_deletion_request, FileUuid}) ->
+    remove_file_and_file_meta(FileUuid, ?ROOT_SESS_ID, false);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -121,9 +124,9 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file_and_file_meta(file_meta:uuid(), session:id(), boolean()) -> ok.
-remove_file_and_file_meta(FileUUID, SessId, Silent) ->
+remove_file_and_file_meta(FileUuid, SessId, Silent) ->
     {ok, #document{value = #file_meta{type = Type, shares = Shares}} = FileDoc} =
-        file_meta:get(FileUUID),
+        file_meta:get(FileUuid),
     {ok, UID} = session:get_user_id(SessId),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, UID),
     {ok, ParentDoc} = file_meta:get_parent(FileDoc),
@@ -134,7 +137,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
 
     case Type of
         ?REGULAR_FILE_TYPE ->
-            delete_file_on_storage(FileUUID, SessId, SpaceUUID);
+            delete_file_on_storage(FileUuid, SessId, SpaceUUID);
         _ -> ok
     end,
     ok = file_meta:delete(FileDoc),
@@ -145,7 +148,7 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
         true -> ok;
         false ->
             fslogic_event:emit_file_removed(
-                fslogic_uuid:uuid_to_guid(FileUUID, SpaceId), [SessId])
+                fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), [SessId])
     end,
     ok.
 
@@ -157,8 +160,8 @@ remove_file_and_file_meta(FileUUID, SessId, Silent) ->
 %%--------------------------------------------------------------------
 -spec delete_file_on_storage(file_meta:uuid(), session:id(), file_meta:uuid())
         -> ok.
-delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
-    case catch fslogic_utils:get_local_file_location({uuid, FileUUID}) of %todo VFS-2813 support multi location
+delete_file_on_storage(FileUuid, SessId, SpaceUUID) ->
+    case catch fslogic_utils:get_local_file_location({uuid, FileUuid}) of %todo VFS-2813 support multi location
         #document{value = #file_location{} = Location} ->
             ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
             Results =
@@ -167,7 +170,7 @@ delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
                         case storage:get(StorageId) of
                             {ok, Storage} ->
                                 SFMHandle = storage_file_manager:new_handle(
-                                    SessId, SpaceUUID, FileUUID, Storage, FileId),
+                                    SessId, SpaceUUID, FileUuid, Storage, FileId),
                                 case storage_file_manager:unlink(SFMHandle) of
                                     ok -> ok;
                                     {error, Reason1} ->
@@ -188,7 +191,7 @@ delete_file_on_storage(FileUUID, SessId, SpaceUUID) ->
             end;
         Reason3 ->
             ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p",
-                [FileUUID, Reason3])
+                [FileUuid, Reason3])
     end,
     ok.
 
