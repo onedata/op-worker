@@ -15,9 +15,10 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_index/4, get_index/2, query_view/2, get_all_indexes/1, change_index_function/3]).
+-export([add_index/5, get_index/2, query_view/2, get_all_indexes/1, change_index_function/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -27,9 +28,13 @@
 -type view_name() :: binary().
 -type index_id() :: binary().
 -type view_function() :: binary().
--type index() :: #{name => indexes:view_name(), space_id => od_space:id(), function => indexes:view_function()}.
+% when set to true, view is of spatial type. It should emit geospatial json keys,
+% and can be queried with use of bbox, start_range, end_range params. More info
+% here: http://developer.couchbase.com/documentation/server/current/indexes/writing-spatial-views.html
+-type spatial() :: boolean().
+-type index() :: #{name => indexes:view_name(), space_id => od_space:id(), function => indexes:view_function(), spatial => indexes:spatial()}.
 
--export_type([view_name/0, index_id/0, view_function/0]).
+-export_type([view_name/0, index_id/0, view_function/0, spatial/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -39,7 +44,7 @@
 -spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
 record_struct(1) ->
     {record, [
-        {value, #{string => #{atom => string}}}
+        {value, #{string => {custom_type, index, index_encoder}}}
     ]}.
 
 %%%===================================================================
@@ -47,21 +52,21 @@ record_struct(1) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
+%% @equiv add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, datastore_utils:gen_uuid()).
 %%--------------------------------------------------------------------
--spec add_index(od_user:id(), view_name(), view_function(), od_space:id()) ->
+-spec add_index(od_user:id(), view_name(), view_function(), od_space:id(), spatial()) ->
     {ok, index_id()} | {error, any()}.
-add_index(UserId, ViewName, ViewFunction, SpaceId) ->
-    add_index(UserId, ViewName, ViewFunction, SpaceId, datastore_utils:gen_uuid()).
+add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial) ->
+    add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, datastore_utils:gen_uuid()).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add view defined by given function.
+%% Add or update view defined by given function.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_index(od_user:id(), view_name() | undefined, view_function(),
-    od_space:id() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
-add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
+    od_space:id() | undefined, spatial() | undefined, index_id()) -> {ok, index_id()} | {error, any()}.
+add_index(UserId, ViewName, ViewFunction, SpaceId, Spatial, IndexId) ->
     EscapedViewFunction = escape_js_function(ViewFunction),
     critical_section:run([?MODEL_NAME, UserId], fun() ->
         case indexes:get(UserId) of
@@ -69,14 +74,14 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
                 NewMap =
                     case maps:get(IndexId, Indexes, undefined) of
                         undefined ->
-                            add_db_view(IndexId, SpaceId, EscapedViewFunction),
-                            maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction}, Indexes);
-                        OldMap = #{space_id := SId} when SpaceId =:= undefined ->
-                            add_db_view(IndexId, SId, EscapedViewFunction),
-                            maps:put(IndexId, OldMap#{function => EscapedViewFunction, space_id => SId}, Indexes);
-                        OldMap ->
-                            add_db_view(IndexId, SpaceId, EscapedViewFunction),
-                            maps:put(IndexId, OldMap#{function => EscapedViewFunction}, Indexes)
+                            add_db_view(IndexId, SpaceId, EscapedViewFunction, Spatial),
+                            maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction, spatial => Spatial}, Indexes);
+                        OldMap = #{space_id := SId, spatial := DefinedSpatial} when SpaceId =:= undefined ->
+                            add_db_view(IndexId, SId, EscapedViewFunction, DefinedSpatial),
+                            maps:put(IndexId, OldMap#{function => EscapedViewFunction}, Indexes);
+                        OldMap = #{spatial := DefinedSpatial} ->
+                            add_db_view(IndexId, SpaceId, EscapedViewFunction, DefinedSpatial),
+                            maps:put(IndexId, OldMap#{function => EscapedViewFunction, space_id => SpaceId}, Indexes)
                     end,
                 case save(Doc#document{value = IndexesDoc#indexes{value = NewMap}}) of
                     {ok, _} ->
@@ -85,8 +90,8 @@ add_index(UserId, ViewName, ViewFunction, SpaceId, IndexId) ->
                         Error
                 end;
             {error, {not_found, indexes}} ->
-                add_db_view(IndexId, SpaceId, EscapedViewFunction),
-                Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction}, #{}),
+                add_db_view(IndexId, SpaceId, EscapedViewFunction, Spatial),
+                Map = maps:put(IndexId, #{name => ViewName, space_id => SpaceId, function => EscapedViewFunction, spatial => Spatial}, #{}),
                 case create(#document{key = UserId, value = #indexes{value = Map}}) of
                     {ok, _} ->
                         {ok, IndexId};
@@ -126,7 +131,7 @@ get_index(UserId, IndexId) ->
 %%--------------------------------------------------------------------
 -spec change_index_function(od_user:id(), index_id(), view_function()) -> {ok, index_id()} | {error, any()}.
 change_index_function(UserId, IndexId, Function) ->
-    add_index(UserId, undefined, Function, undefined, IndexId).
+    add_index(UserId, undefined, Function, undefined, undefined, IndexId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -152,7 +157,15 @@ get_all_indexes(UserId) ->
 -spec query_view(index_id(), list()) -> {ok, [file_meta:uuid()]}.
 query_view(Id, Options) ->
     {ok, FileUuids} = couchdb_datastore_driver:query_view(custom_metadata, Id, Options),
-    {ok, lists:map(fun(Uuid) -> fslogic_uuid:uuid_to_guid(Uuid) end, FileUuids)}.
+    {ok, lists:filtermap(fun(Uuid) ->
+        try
+            {true, fslogic_uuid:uuid_to_guid(Uuid)}
+        catch
+            _:Error  ->
+                ?error("Cannot resolve uuid of file ~p in index ~p, error ~p",[Uuid, Id, Error]),
+                false
+        end
+    end, FileUuids)}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -269,14 +282,14 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% with one argument function.
 %% @end
 %%--------------------------------------------------------------------
--spec add_db_view(index_id(), od_space:id(), view_function()) -> ok.
-add_db_view(IndexId, SpaceId, Function) ->
+-spec add_db_view(index_id(), od_space:id(), view_function(), spatial()) -> ok.
+add_db_view(IndexId, SpaceId, Function, Spatial) ->
     RecordName = custom_metadata,
     RecordNameBin = atom_to_binary(RecordName, utf8),
     DbViewFunction = <<"function (doc, meta) { 'use strict'; if(doc['<record_type>'] == '", RecordNameBin/binary, "' && doc['space_id'] == '", SpaceId/binary , "') { "
         "var key = eval.call(null, '(", Function/binary, ")'); ",
         "var key_to_emit = key(doc['value']); if(key_to_emit) { emit(key_to_emit, null); } } }">>,
-    ok = couchdb_datastore_driver:add_view(RecordName, IndexId, DbViewFunction).
+    ok = couchdb_datastore_driver:add_view(RecordName, IndexId, DbViewFunction, Spatial).
 
 %%--------------------------------------------------------------------
 %% @doc escapes characters: \ " ' \n \t \v \0 \f \r

@@ -83,17 +83,20 @@ query_index(Req, State) ->
     {StateWithSkip, ReqWithSkip} = validator:parse_skip(ReqWithLimit, StateWithLimit),
     {StateWithStale, ReqWithStale} = validator:parse_stale(ReqWithSkip, StateWithSkip),
     {StateWithStartkey, ReqWithStartkey} = validator:parse_startkey(ReqWithStale, StateWithStale),
+    {StateWithStartRange, ReqWithStartRange} = validator:parse_start_range(ReqWithStartkey, StateWithStartkey),
+    {StateWithEndRange, ReqWithEndRange} = validator:parse_end_range(ReqWithStartRange, StateWithStartRange),
+    {StateWithSpatial, ReqWithSpatial} = validator:parse_spatial(ReqWithEndRange, StateWithEndRange),
 
-    #{auth := _Auth, id := Id} = StateWithStartkey,
+    #{auth := _Auth, id := Id} = StateWithSpatial,
 
-    Options = prepare_options(StateWithStartkey),
+    Options = prepare_options(StateWithSpatial),
     {ok, Guids} = indexes:query_view(Id, Options),
     ObjectIds = lists:map(fun(Guid) ->
         {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
         ObjectId
     end, Guids),
 
-    {json_utils:encode_map(ObjectIds), ReqWithStartkey, StateWithStartkey}.
+    {json_utils:encode_map(ObjectIds), ReqWithSpatial, StateWithSpatial}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -109,8 +112,11 @@ prepare_options([{id, _} | Rest]) ->
     prepare_options(Rest);
 prepare_options([{auth, _} | Rest]) ->
     prepare_options(Rest);
-prepare_options([{bbox, _} | Rest]) ->
+
+prepare_options([{bbox, undefined} | Rest]) ->
     prepare_options(Rest);
+prepare_options([{bbox, Bbox} | Rest]) ->
+    [{bbox, Bbox} | prepare_options(Rest)];
 
 prepare_options([{descending, true} | Rest]) ->
     [descending | prepare_options(Rest)];
@@ -197,4 +203,28 @@ prepare_options([{stale, <<"update_after">>} | Rest]) ->
 prepare_options([{stale, <<"false">>} | Rest]) ->
     [{stale, false} | prepare_options(Rest)];
 prepare_options([{stale, _} | _]) ->
-    throw(?ERROR_INVALID_STALE).
+    throw(?ERROR_INVALID_STALE);
+prepare_options([{spatial, true} | Rest]) ->
+    [spatial | prepare_options(Rest)];
+prepare_options([{spatial, false} | Rest]) ->
+    prepare_options(Rest);
+
+prepare_options([{start_range, undefined} | Rest]) ->
+    prepare_options(Rest);
+prepare_options([{start_range, Endkey} | Rest]) ->
+    try
+        [{start_range, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)]
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_ENDKEY)
+    end;
+
+prepare_options([{end_range, undefined} | Rest]) ->
+    prepare_options(Rest);
+prepare_options([{end_range, Endkey} | Rest]) ->
+    try
+        [{end_range, couchbeam_ejson:decode(Endkey)} | prepare_options(Rest)]
+    catch
+        _:_ ->
+            throw(?ERROR_INVALID_ENDKEY)
+    end.
