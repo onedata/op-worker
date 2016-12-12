@@ -128,7 +128,8 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                     case NewTargetsAdd of
                         [] -> ok;
                         _ ->
-                            ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, MC, [{K, {Version, NewTargetsAdd}}])
+                            MC1 = MC#model_config{link_replica_scope = ?DEFAULT_LINK_REPLICA_SCOPE},
+                            ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, MC1, [{K, {Version, NewTargetsAdd}}])
                     end,
 
                     %% Handle links marked as deleted
