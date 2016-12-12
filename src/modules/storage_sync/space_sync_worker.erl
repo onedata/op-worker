@@ -20,6 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
+-define(INFINITY, 9999999999999999999999).
 -define(SPACE_STRATEGIES_CHECK_INTERVAL, timer:seconds(10)).
 
 %%%===================================================================
@@ -103,7 +104,7 @@ handle({check_strategies, SpaceId, StorageId} = Request) ->
             space_id => SpaceId,
             storage_id => StorageId,
             storage_file_id => <<"/", SpaceId/binary>>,
-            max_depth => 9999999999999999999999
+            max_depth => ?INFINITY
         },
 
     %% Handle initial import

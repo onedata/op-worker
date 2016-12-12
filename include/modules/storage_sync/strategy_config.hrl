@@ -9,7 +9,6 @@
 %%% Space strategy configuration macros.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Rafal Slota").
 
 -record(space_strategy_argument, {
     name :: space_strategy:argument_name(),
@@ -26,7 +25,7 @@
 
 -record(space_strategy_job, {
     strategy_type = ?MODULE :: space_strategy:type(),
-    strategy_name           :: space_strategy:name(),
-    strategy_args           :: space_strategy:arguments(),
-    data                    :: space_strategy:job_data()
+    strategy_name :: space_strategy:name(),
+    strategy_args :: space_strategy:arguments(),
+    data :: space_strategy:job_data()
 }).

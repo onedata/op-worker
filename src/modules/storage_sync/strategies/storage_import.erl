@@ -42,9 +42,7 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% {@link space_strategy_behaviour} callback available_strategies/0.
-%% @end
+%% @doc {@link space_strategy_behaviour} callback available_strategies/0.
 %%--------------------------------------------------------------------
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
@@ -59,9 +57,7 @@ available_strategies() ->
     ].
 
 %%--------------------------------------------------------------------
-%% @doc
-%% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
-%% @end
+%% @doc {@link space_strategy_behaviour} callback strategy_init_jobs/3.
 %%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
@@ -75,9 +71,7 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     ?error("Invalid import strategy init: ~p", [{StrategyName, StartegyArgs, InitData}]).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% {@link space_strategy_behaviour} callback strategy_handle_job/1.
-%% @end
+%% @doc {@link space_strategy_behaviour} callback strategy_handle_job/1.
 %%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = bfs_scan} = Job) ->
@@ -86,9 +80,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% {@link space_strategy_behaviour} callback strategy_merge_result/2.
-%% @end
+%% @doc {@link space_strategy_behaviour} callback strategy_merge_result/2.
 %%--------------------------------------------------------------------
 -spec strategy_merge_result(ChildrenJobs :: [space_strategy:job()],
     ChildrenResults :: [space_strategy:job_result()]) ->
@@ -102,9 +94,7 @@ strategy_merge_result(_Jobs, Results) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% {@link space_strategy_behaviour} callback strategy_merge_result/3.
-%% @end
+%% @doc {@link space_strategy_behaviour} callback strategy_merge_result/3.
 %%--------------------------------------------------------------------
 -spec strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->
@@ -153,7 +143,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         OldMode ->
                             ok;
                         NewMode ->
-%%                            fslogic_req_generic:chmod(fslogic_context:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo why is that code commented?
+%%                            fslogic_req_generic:chmod(fslogic_context:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo deal with different posix mode for space dirs on storage vs db
                             ok
                     end,
 
@@ -288,7 +278,11 @@ import_children(SFMHandle, ?DIRECTORY_TYPE, Job = #space_strategy_job{data = Dat
 import_children(_SFMHandle, _, _Job = #space_strategy_job{data = _Data}, _LogicalPath, _Offset, _Count) ->
     [].
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Return type of file depending on its posix mode.
+%% @end
+%%--------------------------------------------------------------------
 -spec file_type(Mode :: non_neg_integer()) ->
     file_meta:type().
 file_type(Mode) ->

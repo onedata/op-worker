@@ -258,24 +258,16 @@ folly::Future<folly::fbvector<folly::fbstring>> DirectIOHelper::readdir(
             if(!dir)
                 return makeFuturePosixException<folly::fbvector<folly::fbstring>>(errno);
 
-            int tmpOffset = offset;
-            int tmpCount = count;
-            while ((dp=::readdir(dir)) != NULL) {
-                if ( !strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..") ) {
-                    continue;
+            int offset_ = offset, count_ = count;
+            while ((dp = ::readdir(dir)) != NULL && count_ > 0) {
+                if (strcmp(dp->d_name, ".") && strcmp(dp->d_name, "..")) {
+                    if (offset_ > 0) {
+                        --offset_;
+                    } else {
+                        ret.push_back(folly::fbstring(dp->d_name));
+                        --count_;
+                    }
                 }
-
-                if(tmpOffset > 0) {
-                    --tmpOffset;
-                    continue;
-                }
-
-                if(tmpCount == 0)
-                    break;
-
-                --tmpCount;
-
-                ret.push_back(folly::fbstring(dp->d_name));
             }
             closedir(dir);
 
