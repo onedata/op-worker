@@ -42,7 +42,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc {@link space_strategy_behaviour} callback available_strategies/0.
+%% @doc
+%% {@link space_strategy_behaviour} callback available_strategies/0.
+%% @end
 %%--------------------------------------------------------------------
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
@@ -57,7 +59,9 @@ available_strategies() ->
     ].
 
 %%--------------------------------------------------------------------
-%% @doc {@link space_strategy_behaviour} callback strategy_init_jobs/3.
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
+%% @end
 %%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
@@ -71,7 +75,9 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
     ?error("Invalid import strategy init: ~p", [{StrategyName, StartegyArgs, InitData}]).
 
 %%--------------------------------------------------------------------
-%% @doc {@link space_strategy_behaviour} callback strategy_handle_job/1.
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_handle_job/1.
+%% @end
 %%--------------------------------------------------------------------
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = bfs_scan} = Job) ->
@@ -80,7 +86,9 @@ strategy_handle_job(#space_strategy_job{strategy_name = no_import}) ->
     {ok, []}.
 
 %%--------------------------------------------------------------------
-%% @doc {@link space_strategy_behaviour} callback strategy_merge_result/2.
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/2.
+%% @end
 %%--------------------------------------------------------------------
 -spec strategy_merge_result(ChildrenJobs :: [space_strategy:job()],
     ChildrenResults :: [space_strategy:job_result()]) ->
@@ -94,7 +102,9 @@ strategy_merge_result(_Jobs, Results) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc {@link space_strategy_behaviour} callback strategy_merge_result/3.
+%% @doc
+%% {@link space_strategy_behaviour} callback strategy_merge_result/3.
+%% @end
 %%--------------------------------------------------------------------
 -spec strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
     ChildrenResult :: space_strategy:job_result()) ->

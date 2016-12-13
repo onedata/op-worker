@@ -27,7 +27,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
-
 -export([init/1, handle/1, cleanup/0, handle_fuse_request/2]).
 
 %%%===================================================================
