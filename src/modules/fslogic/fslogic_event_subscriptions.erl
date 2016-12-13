@@ -9,7 +9,7 @@
 %%% Subscription templates.
 %%% @end
 %%%--------------------------------------------------------------------
--module(event_subscriptions).
+-module(fslogic_event_subscriptions).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").

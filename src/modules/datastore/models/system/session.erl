@@ -32,7 +32,8 @@
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
-    get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2]).
+    get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2,
+    is_special/1]).
 
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
@@ -181,7 +182,6 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec all_with_user() ->
     {ok, [datastore:document()]} | {error, Reason :: term()}.
-
 all_with_user() ->
     Filter = fun
         ('$end_of_table', Acc) ->
@@ -536,6 +536,19 @@ get_handle(SessionId, HandleID) ->
     {ok, helpers:handle()} | datastore:generic_error().
 get_helper(SessionId, SpaceUuid, Storage) ->
     fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if session is of special type: root or guest
+%% @end
+%%--------------------------------------------------------------------
+-spec is_special(session:id()) -> boolean().
+is_special(?ROOT_SESS_ID) ->
+    true;
+is_special(?GUEST_SESS_ID) ->
+    true;
+is_special(_) ->
+    false.
 
 %%%===================================================================
 %%% Internal functions

@@ -116,7 +116,7 @@ ensure_blocks_not_empty(Loc) ->
     {helpers:file(), storage:id()}.
 validate_block_data(FileUUID, FileId, StorageId) ->
     #document{value = #file_location{file_id = LocalFileId, storage_id = LocalStorageId}} =
-        fslogic_utils:get_local_file_location({uuid, FileUUID}),
+        fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location
     %% file_location will probably contain lists instead of single values
     LocalFileIds = [LocalFileId],
     LocalStorageIds = [LocalStorageId],

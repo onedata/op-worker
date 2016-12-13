@@ -258,7 +258,7 @@ check_missing_components(FileUuid, SpaceId, [times | RestMissing], Found) ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [local_file_location | RestMissing], Found) ->
-    case catch fslogic_utils:get_local_file_location({uuid, FileUuid}) of
+    case catch fslogic_utils:get_local_file_location({uuid, FileUuid}) of %todo VFS-2813 support multi location
         #document{} ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [local_file_location | Found]);
         _ ->

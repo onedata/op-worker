@@ -11,9 +11,7 @@
 -module(lfm_dirs).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
@@ -48,7 +46,6 @@ mkdir(SessId, Path, Mode) ->
                 end)
         end).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Lists some contents of a directory.
@@ -60,14 +57,12 @@ mkdir(SessId, Path, Mode) ->
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{file_meta:uuid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
         #get_file_children{offset = Offset, size = Limit},
         fun({file_children, List}) ->
             {ok, [{UUID_, FileName} || {_, UUID_, FileName} <- List]}
         end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,8 +73,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 -spec get_children_count(session:id(), FileKey :: fslogic_worker:file_guid_or_path())
         -> {ok, integer()} | logical_file_manager:error_reply().
 get_children_count(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     case count_children(SessId, FileGUID, 0) of
         {error, Err} -> {error, Err};
         ChildrenNum -> {ok, ChildrenNum}
@@ -88,6 +82,7 @@ get_children_count(SessId, FileKey) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Counts all children of a directory, by listing them in chunks as long

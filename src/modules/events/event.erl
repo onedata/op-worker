@@ -322,7 +322,7 @@ get_event_managers_for_event(#event{} = Evt) ->
             get_event_managers(gb_sets:to_list(SessIds));
         {error, no_file_subscription} ->
             get_event_managers();
-        {error, {error, {not_found, _}}} ->
+        {error, {not_found, _}} ->
             [];
         {error, Reason} ->
             ?error("Cannot get event managers for the event ~p due to: ~p", [Evt, Reason]),

@@ -274,7 +274,7 @@ prepare_location_for_client(FileEntry, ReqRange) ->
             {ok, Location} = file_location:get(LocId),
             Location
         end, LocationIds),
-    [FileLocationDoc = #document{value = FileLocation = #file_location{blocks = Blocks, uuid = FileUuid, size = Size}}] =
+    [FileLocationDoc = #document{value = FileLocation = #file_location{blocks = Blocks, uuid = FileUuid, size = Size}}] = %todo VFS-2813 support multi location
         lists:filter(
             fun(#document{value = #file_location{provider_id = ProviderId}}) ->
                 ProviderId =:= oneprovider:get_provider_id()
