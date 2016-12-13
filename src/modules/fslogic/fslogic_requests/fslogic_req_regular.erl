@@ -35,7 +35,7 @@
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
+-spec truncate(fslogic_context:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 truncate(Ctx, Entry, Size) ->
@@ -77,7 +77,7 @@ truncate(Ctx, Entry, Size) ->
 %% @doc Gets helper params based on given storage ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_params(fslogic_worker:ctx(), StorageId :: storage:id(),
+-spec get_helper_params(fslogic_context:ctx(), StorageId :: storage:id(),
     ForceCL :: boolean()) -> FuseResponse :: #fuse_response{} | no_return().
 get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
     #fuse_response{status = #status{code = ?OK}, fuse_response = #helper_params{
@@ -98,7 +98,7 @@ get_helper_params(Ctx, StorageId, false = _ForceProxy) ->
 %% @doc Returns file location.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+-spec get_file_location(fslogic_context:ctx(), File :: fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_location(Ctx, File) ->
@@ -125,7 +125,7 @@ get_file_location(Ctx, File) ->
 %% @doc @equiv open_file(Ctx, File, CreateHandle) with permission check
 %% depending on the open flag
 %%--------------------------------------------------------------------
--spec open_file(fslogic_worker:ctx(), File :: fslogic_worker:file(),
+-spec open_file(fslogic_context:ctx(), File :: fslogic_worker:file(),
     OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file(Ctx, File, read) ->
     open_file_for_read(Ctx, File);
@@ -139,7 +139,7 @@ open_file(Ctx, File, rdwr) ->
 %% and location.
 %% @end
 %%--------------------------------------------------------------------
--spec create_file(fslogic_worker:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
+-spec create_file(fslogic_context:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
@@ -205,7 +205,7 @@ create_file(Ctx, {uuid, ParentUUID}, Name, Mode, _Flag) ->
 %% @doc Creates file. Returns its attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec make_file(fslogic_worker:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
+-spec make_file(fslogic_context:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
 make_file(Ctx, {uuid, ParentUUID}, Name, Mode) ->
@@ -242,7 +242,7 @@ make_file(Ctx, {uuid, ParentUUID}, Name, Mode) ->
 %% @doc Removes file handle saved in session.
 %% @end
 %%--------------------------------------------------------------------
--spec release(fslogic_worker:ctx(), FileUUID :: file_meta:uuid(), HandleId :: binary()) ->
+-spec release(fslogic_context:ctx(), FileUUID :: file_meta:uuid(), HandleId :: binary()) ->
     no_return() | #fuse_response{}.
 release(Ctx, FileUUID, HandleId) ->
     SessId = fslogic_context:get_session_id(Ctx),
@@ -255,7 +255,7 @@ release(Ctx, FileUUID, HandleId) ->
 %% @doc Gets parent of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+-spec get_parent(Ctx :: fslogic_context:ctx(), File :: fslogic_worker:file()) ->
     ProviderResponse :: #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_parent(Ctx, File) ->
@@ -302,7 +302,7 @@ get_parent(Ctx, File) ->
 %% Synchronizes given block with remote replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block(), boolean()) ->
+-spec synchronize_block(fslogic_context:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block(), boolean()) ->
     #fuse_response{}.
 synchronize_block(Ctx, {uuid, FileUUID}, undefined, Prefetch) ->
     Size = fslogic_blocks:get_file_size({uuid, FileUUID}),
@@ -318,7 +318,7 @@ synchronize_block(Ctx, {uuid, FileUUID}, Block, Prefetch) ->
 %% synchronized data.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block_and_compute_checksum(fslogic_worker:ctx(),
+-spec synchronize_block_and_compute_checksum(fslogic_context:ctx(),
     {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
 synchronize_block_and_compute_checksum(Ctx, {uuid, FileUUID},
     Range = #file_block{offset = Offset, size = Size}) ->
@@ -338,7 +338,7 @@ synchronize_block_and_compute_checksum(Ctx, {uuid, FileUUID},
 %% Get distribution of file over providers' storages.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+-spec get_file_distribution(fslogic_context:ctx(), {uuid, file_meta:uuid()}) ->
     #provider_response{}.
 get_file_distribution(_Ctx, {uuid, UUID}) ->
     {ok, Locations} = file_meta:get_locations({uuid, UUID}),
@@ -364,7 +364,7 @@ get_file_distribution(_Ctx, {uuid, UUID}) ->
 %%--------------------------------------------------------------------
 %% @equiv open_file_impl(Ctx, File, read, CreateHandle) with permission check
 %%--------------------------------------------------------------------
--spec open_file_for_read(fslogic_worker:ctx(), fslogic_worker:file()) ->
+-spec open_file_for_read(fslogic_context:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
 open_file_for_read(Ctx, File) ->
@@ -373,7 +373,7 @@ open_file_for_read(Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @equiv open_file_impl(Ctx, File, write, CreateHandle) with permission check
 %%--------------------------------------------------------------------
--spec open_file_for_write(fslogic_worker:ctx(), fslogic_worker:file()) ->
+-spec open_file_for_write(fslogic_context:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 open_file_for_write(Ctx, File) ->
@@ -382,7 +382,7 @@ open_file_for_write(Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @equiv open_file_impl(Ctx, File, rdwr, CreateHandle) with permission check
 %%--------------------------------------------------------------------
--spec open_file_for_rdwr(fslogic_worker:ctx(), fslogic_worker:file()) ->
+-spec open_file_for_rdwr(fslogic_context:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
 open_file_for_rdwr(Ctx, File) ->
@@ -393,7 +393,7 @@ open_file_for_rdwr(Ctx, File) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(),
+-spec open_file_impl(fslogic_context:ctx(), File :: fslogic_worker:file(),
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file_impl(Ctx, File, Flag) ->
     SessId = fslogic_context:get_session_id(Ctx),

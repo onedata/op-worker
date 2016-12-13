@@ -150,7 +150,7 @@ gen_storage_path(Entry) ->
 %% @doc Gets file's full name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry(fslogic_worker:ctx(), [file_meta:path()]) ->
+-spec get_canonical_file_entry(fslogic_context:ctx(), [file_meta:path()]) ->
     file_meta:entry() | no_return().
 get_canonical_file_entry(Ctx, Tokens) ->
     case session:is_special(fslogic_context:get_session_id(Ctx)) of
@@ -165,7 +165,7 @@ get_canonical_file_entry(Ctx, Tokens) ->
 %% Gets file's full name, checking user defined space names.
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry_for_user(fslogic_worker:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
+-spec get_canonical_file_entry_for_user(fslogic_context:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
 get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};

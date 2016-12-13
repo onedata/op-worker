@@ -49,7 +49,7 @@ get_space_id({guid, FileGUID}) ->
 %% Returns space ID for given file path.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id(CTX :: fslogic_worker:ctx(), FilePath :: file_meta:path()) ->
+-spec get_space_id(CTX :: fslogic_context:ctx(), FilePath :: file_meta:path()) ->
     SpaceId :: binary().
 get_space_id(CTX, Path) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),

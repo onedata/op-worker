@@ -29,7 +29,7 @@
 %% @doc Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(Ctx :: fslogic_worker:ctx(), ParentFile :: fslogic_worker:file(),
+-spec mkdir(Ctx :: fslogic_context:ctx(), ParentFile :: fslogic_worker:file(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
@@ -57,7 +57,7 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
 %% Fetches attributes of directory's child (if exists).
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_attr(Ctx :: fslogic_worker:ctx(),
+-spec get_child_attr(Ctx :: fslogic_context:ctx(),
     ParentFile :: fslogic_worker:file(), Name :: file_meta:name()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
@@ -91,7 +91,7 @@ get_child_attr(Ctx, ParentFile, Name) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file(),
+-spec read_dir(Ctx :: fslogic_context:ctx(), File :: fslogic_worker:file(),
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).

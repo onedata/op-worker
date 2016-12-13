@@ -38,7 +38,7 @@
 %% Reroute given request to given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec reroute(fslogic_worker:ctx(), oneprovider:id(), term()) ->
+-spec reroute(fslogic_context:ctx(), oneprovider:id(), term()) ->
     term().
 reroute(Ctx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
@@ -61,7 +61,7 @@ reroute(Ctx, ProviderId, Request) ->
 %%      or stop rerouting due to error.
 %% @end
 %%--------------------------------------------------------------------
--spec prerouting(fslogic_worker:ctx(), Request :: term(), [ProviderId :: binary()]) ->
+-spec prerouting(fslogic_context:ctx(), Request :: term(), [ProviderId :: binary()]) ->
     {ok, {response, Response :: term()}} | {ok, {reroute, ProviderId :: binary(), NewRequest :: term()}} | {error, Reason :: any()}.
 prerouting(_, _, []) ->
     {error, no_providers};
@@ -76,7 +76,7 @@ prerouting(_CTX, RequestBody, [RerouteTo | _Providers]) ->
 %%      'undefined' return value means, that response is invalid and the whole rerouting process shall fail.
 %% @end
 %%--------------------------------------------------------------------
--spec postrouting(fslogic_worker:ctx(), {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
+-spec postrouting(fslogic_context:ctx(), {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
 postrouting(_CTX, {ok, Response}, _Request) ->
     Response;
 postrouting(_CTX, UnkResult, Request) ->

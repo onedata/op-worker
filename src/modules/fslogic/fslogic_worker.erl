@@ -33,7 +33,6 @@
 %%% Types
 %%%===================================================================
 
--type ctx() :: fslogic_context:ctx().
 -type file() :: file_meta:entry(). %% Type alias for better code organization
 -type ext_file() :: file_meta:entry() | {guid, file_guid()}.
 -type open_flag() :: rdwr | write | read.
@@ -152,7 +151,7 @@ cleanup() ->
 %% fslogic_errors:translate_error/1 function.
 %% @end
 %%--------------------------------------------------------------------
--spec run_and_catch_exceptions(Function :: function(), ctx(), any(),
+-spec run_and_catch_exceptions(Function :: function(), fslogic_context:ctx(), any(),
     request_type()) ->
     #fuse_response{} | #provider_response{} | #proxyio_response{}.
 run_and_catch_exceptions(Function, Context, Request, RequestType) ->
@@ -284,9 +283,9 @@ process_response(_, _, Response) ->
 %% may be changed by redirection.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_provider_for_file(fslogic_worker:ctx(),
+-spec resolve_provider_for_file(fslogic_context:ctx(),
     file_meta:entry() | {guid, fslogic_worker:file_guid()}, any(),
-    file_meta:uuid()) -> {fslogic_worker:ctx(), [binary()], any()}.
+    file_meta:uuid()) -> {fslogic_context:ctx(), [binary()], any()}.
 resolve_provider_for_file(Context, Entry, Request, UserRootDir) ->
     case file_meta:to_uuid(Entry) of
         {ok, UserRootDir} ->
@@ -379,7 +378,7 @@ error_response(proxyio_request, Status) ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(Ctx :: fslogic_worker:ctx(), Request :: #fuse_request{} | #file_request{}) ->
+-spec handle_fuse_request(Ctx :: fslogic_context:ctx(), Request :: #fuse_request{} | #file_request{}) ->
     FuseResponse :: #fuse_response{}.
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
@@ -450,7 +449,7 @@ handle_fuse_request(_Ctx, Req) ->
 %% Processes provider request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_provider_request(Ctx :: fslogic_worker:ctx(), ProviderRequest :: #provider_request{}) ->
+-spec handle_provider_request(Ctx :: fslogic_context:ctx(), ProviderRequest :: #provider_request{}) ->
     ProviderResponse :: #provider_response{}.
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_parent{}}) ->
     fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
@@ -512,7 +511,7 @@ handle_provider_request(_Ctx, Req) ->
 %% Processes proxyio request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_proxyio_request(Ctx :: fslogic_worker:ctx(), ProxyIORequest :: #proxyio_request{}) ->
+-spec handle_proxyio_request(Ctx :: fslogic_context:ctx(), ProxyIORequest :: #proxyio_request{}) ->
     ProxyIOResponse :: #proxyio_response{}.
 handle_proxyio_request(Ctx, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
@@ -638,7 +637,7 @@ handle_read_event(Event, SessId) ->
 %% Map given request to file-scope, provider-scope or space-scope.
 %% @end
 %%--------------------------------------------------------------------
--spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{}
+-spec request_to_file_entry_or_provider(fslogic_context:ctx(), #fuse_request{}
 | #file_request{} | #provider_request{} | #proxyio_request{}) ->
     {file, file_meta:entry() | {guid, fslogic_worker:file_guid()}} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->

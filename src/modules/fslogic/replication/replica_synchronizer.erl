@@ -34,7 +34,7 @@
 %%--------------------------------------------------------------------
 %% @equiv synchronize(CTX, Uuid, Block, true).
 %%--------------------------------------------------------------------
--spec synchronize(fslogic_worker:ctx(), file_meta:uuid(), fslogic_blocks:block()) -> ok.
+-spec synchronize(fslogic_context:ctx(), file_meta:uuid(), fslogic_blocks:block()) -> ok.
 synchronize(CTX, Uuid, Block) ->
     synchronize(CTX, Uuid, Block, true).
 
@@ -43,7 +43,7 @@ synchronize(CTX, Uuid, Block) ->
 %% Sychronizes File on given range. Does prefetch data if requested.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize(fslogic_worker:ctx(), file_meta:uuid(), fslogic_blocks:block(),
+-spec synchronize(fslogic_context:ctx(), file_meta:uuid(), fslogic_blocks:block(),
     boolean()) -> ok.
 synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = RequestedSize}, Prefetch) ->
     EnlargedBlock =
@@ -92,7 +92,7 @@ synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = Requ
 %% Trigger prefetching if block includes trigger bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec trigger_prefetching(fslogic_worker:ctx(), file_meta:uuid(),
+-spec trigger_prefetching(fslogic_context:ctx(), file_meta:uuid(),
     fslogic_blocks:block(), boolean()) -> ok.
 trigger_prefetching(CTX, FileUuid, Block, true) ->
     case contains_trigger_byte(Block) of
@@ -110,7 +110,7 @@ trigger_prefetching(_, _, _, _) ->
 %% Returns function that prefetches data starting at given block.
 %% @end
 %%--------------------------------------------------------------------
--spec prefetch_data_fun(fslogic_worker:ctx(), file_meta:uuid(), fslogic_blocks:block()) -> function().
+-spec prefetch_data_fun(fslogic_context:ctx(), file_meta:uuid(), fslogic_blocks:block()) -> function().
 prefetch_data_fun(CTX, FileUuid, #file_block{offset = O, size = S}) ->
     fun() ->
         try

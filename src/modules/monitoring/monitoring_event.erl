@@ -125,7 +125,7 @@ emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
 %% Send event informing subscribed client about rtransfer statistics.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_rtransfer_statistics(fslogic_worker:ctx(), non_neg_integer()) ->
+-spec emit_rtransfer_statistics(fslogic_context:ctx(), non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 emit_rtransfer_statistics(Ctx, TransferIn) ->
     UserId = fslogic_context:get_user_id(Ctx),
