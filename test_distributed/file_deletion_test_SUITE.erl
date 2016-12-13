@@ -44,7 +44,7 @@ all() -> ?ALL(?TEST_CASES).
 -define(SESSION_ID_1, <<"session_id_1">>).
 -define(SESSION_ID_2, <<"session_id_2">>).
 
--define(req(W, P), rpc:call(W, worker_proxy, call, [file_deletion_worker, P])).
+-define(req(W, P), rpc:call(W, worker_proxy, call, [fslogic_deletion_worker, P])).
 
 
 %%%===================================================================
@@ -92,7 +92,7 @@ counting_file_open_and_release_test(Config) ->
         [?FILE_UUID, ?SESSION_ID_1, 1])),
 
 
-    test_utils:mock_assert_num_calls(Worker, file_deletion_worker, handle, 1, 1).
+    test_utils:mock_assert_num_calls(Worker, fslogic_deletion_worker, handle, 1, 1).
 
 invalidating_session_open_files_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -136,7 +136,7 @@ invalidating_session_open_files_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [?FILE_UUID])),
     ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
 
-    test_utils:mock_assert_num_calls(Worker, file_deletion_worker, handle, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, fslogic_deletion_worker, handle, 1, 1),
 
     %% Invalidating session when file or session entry not exists should not fail.
 
@@ -169,7 +169,7 @@ init_should_clear_open_files_test(Config) ->
 
     ?assertEqual(3, length(OpenFiles)),
 
-    ?assertMatch({ok, _}, rpc:call(Worker, file_deletion_worker, init, [args])),
+    ?assertMatch({ok, _}, rpc:call(Worker, fslogic_deletion_worker, init, [args])),
 
     {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list, []),
     ?assertEqual(0, length(ClearedOpenFiles)),
@@ -193,11 +193,12 @@ open_file_deletion_request_test(Config) ->
 deletion_of_not_open_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    SpaceId = <<"SpaceId">>,
+    Ctx = rpc:call(Worker, fslogic_context, new, [SessId, SpaceId]),
     FileUUID = create_test_file(Config, Worker, SessId),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUUID])),
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request,
-        #fslogic_ctx{session_id = SessId, space_id = <<"SpaceId">>}, FileUUID, false})),
+    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, FileUUID, false})),
 
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
@@ -207,14 +208,14 @@ deletion_of_open_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     FileUUID = create_test_file(Config, Worker, SessId),
+    SpaceId = <<"SpaceId">>,
+    Ctx = rpc:call(Worker, fslogic_context, new, [SessId, SpaceId]),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileUUID, SessId, 1])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUUID])),
 
-    {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, #fslogic_ctx{
-        session_id = SessId, space_id = <<"SpaceId">>, session = Session}, FileUUID, false})),
+    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, FileUUID, false})),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUUID])),
 
     %% File should be marked to remove and renamed.
@@ -249,8 +250,8 @@ init_per_testcase(Case, Config) when
     Case =:= invalidating_session_open_files_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(Worker, file_deletion_worker, [passthrough]),
-    test_utils:mock_expect(Worker, file_deletion_worker, handle,
+    test_utils:mock_new(Worker, fslogic_deletion_worker, [passthrough]),
+    test_utils:mock_expect(Worker, fslogic_deletion_worker, handle,
         fun({open_file_deletion_request, ?FILE_UUID}) -> ok end),
     Config;
 
@@ -275,7 +276,7 @@ end_per_testcase(Case, Config) when
     Case =:= invalidating_session_open_files_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_validate_and_unload(Worker, file_deletion_worker),
+    test_utils:mock_validate_and_unload(Worker, fslogic_deletion_worker),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_2])),
 

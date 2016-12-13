@@ -13,8 +13,9 @@ PKG_BUILD        = 1
 BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
 REBAR           ?= $(BASE_DIR)/rebar3
-LIB_DIR          = _build/default/lib
-REL_DIR          = _build/default/rel
+BUILD_DIR        = _build
+LIB_DIR          = $(BUILD_DIR)/default/lib
+REL_DIR          = $(BUILD_DIR)/default/rel
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?= --overlay_vars=rel/vars.config
 TEMPLATE_SCRIPT := ./rel/overlay.escript
@@ -52,6 +53,12 @@ generate: compile deps template
 
 clean: relclean pkgclean
 	$(REBAR) clean
+
+clean_all: clean distclean
+	rm -rf $(BUILD_DIR)
+	rm -rf test_distributed/logs/*
+	rm -rf priv/*
+	rm -rf rebar.lock
 
 distclean:
 	$(REBAR) clean --all

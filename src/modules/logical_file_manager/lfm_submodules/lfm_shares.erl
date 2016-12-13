@@ -10,10 +10,9 @@
 %%%-------------------------------------------------------------------
 -module(lfm_shares).
 
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/oz/oz_shares.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/oz/oz_shares.hrl").
 
 %% API
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
@@ -30,8 +29,7 @@
 -spec create_share(session:id(), logical_file_manager:file_key(), od_share:name()) ->
     {ok, {od_share:id(), od_share:share_guid()}} | logical_file_manager:error_reply().
 create_share(SessId, FileKey, Name) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, GUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     lfm_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
         fun(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->

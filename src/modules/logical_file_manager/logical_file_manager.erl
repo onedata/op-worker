@@ -7,32 +7,14 @@
 %%%-------------------------------------------------------------------
 %%% @doc This module offers a high level API for operating on logical filesystem.
 %%% When passing a file in arguments, one can use one of the following:
-%%% {uuid, FileUUIDBin} - preferred and fast. UUIDs are returned from 'ls' function.
-%%% {path, BinaryFilePath} - slower than by uuid (path has to be resolved). Discouraged, but there are cases when this is useful.
-%%% {handle, BinaryHandle} - fastest, but not possible in all functions. The handle can be obtained from open function.
+%%% {guid, FileUUIDBin} - preferred and fast. guids are returned from 'ls' function.
+%%% {path, BinaryFilePath} - slower than by guid (path has to be resolved). Discouraged, but there are cases when this is useful.
+%%% Some functions accepts also Handle obtained from open operation.
 %%%
 %%% This module is merely a convenient wrapper that calls functions from lfm_xxx modules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(logical_file_manager).
-
-
-% TODO Issues connected with logical_files_manager
-% 1) User context lib - a simple library is needed to set and retrieve the user context. If not context is set, it should crash
-% with an error. 'root' atom can be used to set root context.
-% 2) Structure of file handle - what should it contain:
-%   - file uuid
-%   - expiration time
-%   - connected session
-%   - session type
-%   - open mode
-%   - ??
-% 3) How to get rid of rubbish like not closed opens - check expired handles if a session connected with them has ended?
-% 4) All errors should be listed in one hrl -> ctool/include/posix/errors.hrl
-% 4) Common types should be listed in one hrl -> types.hrl
-% 5) chown is no longer featured in lfm as it is not needed by higher layers
-% 6) Blocks related functions should go to another module (synchronize, mark_as_truncated etc).
-
 
 -define(run(F),
     try
@@ -47,14 +29,11 @@
             {error, ___Reason}
     end).
 
-
--include("global_definitions.hrl").
--include("modules/fslogic/lfm_internal.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type handle() :: #lfm_handle{}.
+-type handle() :: lfm_context:handle().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
 -type error_reply() :: {error, term()}.
 
@@ -63,22 +42,18 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/2, unlink/3]).
+-export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3]).
 %% Functions operating on files
--export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
+-export([create/2, create/3, open/3, fsync/1, write/3, read/3,
     truncate/3, release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
--export([set_perms/3, check_perms/3, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
-    remove_acl/1, remove_acl/2]).
+-export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, get_xattr/3, get_xattr/4, set_xattr/2, set_xattr/3,
-    remove_xattr/2, remove_xattr/3, list_xattr/3, list_xattr/4, update_times/4,
+-export([stat/2,  get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
     update_times/5]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
-%% Functions concerning symbolic links
--export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
 -export([create_share/3, remove_share/2, remove_share_by_guid/2]).
 %% Functions concerning metadata
@@ -87,7 +62,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -192,10 +166,6 @@ get_file_path(SessId, FileGUID) ->
 %% Removes a file or an empty directory.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(handle(), boolean()) -> ok | error_reply().
-unlink(Handle, Silent) ->
-    ?run(fun() -> lfm_files:unlink(Handle, Silent) end).
-
 -spec unlink(session:id(), fslogic_worker:file_guid_or_path(), boolean()) ->
     ok | error_reply().
 unlink(SessId, FileEntry, Silent) ->
@@ -269,11 +239,6 @@ read(FileHandle, Offset, MaxSize) ->
 %% Truncates a file.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(Handle :: handle(), Size :: non_neg_integer()) ->
-    ok | error_reply().
-truncate(Handle, Size) ->
-    ?run(fun() -> lfm_files:truncate(Handle, Size) end).
-
 -spec truncate(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Size :: non_neg_integer()) ->
     ok | error_reply().
@@ -337,11 +302,6 @@ check_perms(SessId, FileKey, PermType) ->
 %% Returns file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec get_acl(Handle :: handle()) ->
-    {ok, [lfm_perms:access_control_entity()]} | error_reply().
-get_acl(Handle) ->
-    ?run(fun() -> lfm_perms:get_acl(Handle) end).
-
 -spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, [lfm_perms:access_control_entity()]} | error_reply().
 get_acl(SessId, FileKey) ->
@@ -352,11 +312,6 @@ get_acl(SessId, FileKey) ->
 %% Updates file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(Handle :: handle(), EntityList :: [lfm_perms:access_control_entity()]) ->
-    ok | error_reply().
-set_acl(Handle, EntityList) ->
-    ?run(fun() -> lfm_perms:set_acl(Handle, EntityList) end).
-
 -spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), EntityList :: [lfm_perms:access_control_entity()]) ->
     ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
@@ -367,10 +322,6 @@ set_acl(SessId, FileKey, EntityList) ->
 %% Remove file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_acl(Handle :: handle()) -> ok | error_reply().
-remove_acl(Handle) ->
-    ?run(fun() -> lfm_perms:remove_acl(Handle) end).
-
 -spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | error_reply().
 remove_acl(SessId, FileKey) ->
@@ -381,11 +332,6 @@ remove_acl(SessId, FileKey) ->
 %% Returns file attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec stat(Handle :: handle()) ->
-    {ok, lfm_attrs:file_attributes()} | error_reply().
-stat(Handle) ->
-    ?run(fun() -> lfm_attrs:stat(Handle) end).
-
 -spec stat(session:id(), file_key()) -> {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
@@ -395,12 +341,6 @@ stat(SessId, FileKey) ->
 %% Changes file timestamps.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(Handle :: handle(), ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
-    ok | error_reply().
-update_times(Handle, ATime, MTime, CTime) ->
-    ?run(fun() -> lfm_attrs:update_times(Handle, ATime, MTime, CTime) end).
-
 -spec update_times(session:id(), file_key(), ATime :: file_meta:time() | undefined,
     MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
     ok | error_reply().
@@ -412,11 +352,6 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: handle(), XattrName :: xattr:name(), boolean()) ->
-    {ok, #xattr{}} | error_reply().
-get_xattr(Handle, XattrName, Inherited) ->
-    ?run(fun() -> lfm_attrs:get_xattr(Handle, XattrName, Inherited) end).
-
 -spec get_xattr(session:id(), file_key(), xattr:name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
@@ -427,10 +362,6 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(Handle :: handle(), Xattr :: #xattr{}) -> ok | error_reply().
-set_xattr(Handle, Xattr) ->
-    ?run(fun() -> lfm_attrs:set_xattr(Handle, Xattr) end).
-
 -spec set_xattr(session:id(), file_key(), #xattr{}) -> ok | error_reply().
 set_xattr(SessId, FileKey, Xattr) ->
     ?run(fun() -> lfm_attrs:set_xattr(SessId, FileKey, Xattr) end).
@@ -440,10 +371,6 @@ set_xattr(SessId, FileKey, Xattr) ->
 %% Removes file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(handle(), xattr:name()) -> ok | error_reply().
-remove_xattr(Handle, XattrName) ->
-    ?run(fun() -> lfm_attrs:remove_xattr(Handle, XattrName) end).
-
 -spec remove_xattr(session:id(), file_key(), xattr:name()) -> ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     ?run(fun() -> lfm_attrs:remove_xattr(SessId, FileKey, XattrName) end).
@@ -453,11 +380,6 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %% Returns complete list of extended attributes of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(handle(), boolean(), boolean()) ->
-    {ok, [xattr:name()]} | error_reply().
-list_xattr(Handle, Inherited, ShowInternal) ->
-    ?run(fun() -> lfm_attrs:list_xattr(Handle, Inherited, ShowInternal) end).
-
 -spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
     {ok, [xattr:name()]} | error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
@@ -518,35 +440,6 @@ get_mimetype(SessId, FileKey) ->
     ok | error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     ?run(fun() -> lfm_attrs:set_mimetype(SessId, FileKey, Mimetype) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a symbolic link.
-%% @end
-%%--------------------------------------------------------------------
--spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) ->
-    {ok, file_meta:uuid()} | error_reply().
-create_symlink(Path, TargetFileKey) ->
-    ?run(fun() -> lfm_links:create_symlink(Path, TargetFileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the symbolic link's target file.
-%% @end
-%%--------------------------------------------------------------------
--spec read_symlink(FileKey :: file_key()) ->
-    {ok, {file_meta:uuid(), file_meta:name()}} | error_reply().
-read_symlink(FileKey) ->
-    ?run(fun() -> lfm_links:read_symlink(FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes a symbolic link.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_symlink(FileKey :: file_key()) -> ok | error_reply().
-remove_symlink(FileKey) ->
-    ?run(fun() -> lfm_links:remove_symlink(FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

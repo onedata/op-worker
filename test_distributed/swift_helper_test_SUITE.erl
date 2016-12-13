@@ -11,7 +11,7 @@
 -module(swift_helper_test_SUITE).
 -author("Michal Wrona").
 
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").

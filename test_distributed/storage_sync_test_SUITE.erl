@@ -37,7 +37,7 @@ all() -> ?ALL(?TEST_CASES).
 -define(SESSION_ID_1, <<"session_id_1">>).
 -define(SESSION_ID_2, <<"session_id_2">>).
 
--define(req(W, P), rpc:call(W, worker_proxy, call, [file_deletion_worker, P])).
+-define(req(W, P), rpc:call(W, worker_proxy, call, [fslogic_deletion_worker, P])).
 
 
 %%%===================================================================

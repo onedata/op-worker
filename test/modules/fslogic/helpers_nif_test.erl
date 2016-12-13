@@ -14,7 +14,7 @@
 -ifdef(TEST).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %%%===================================================================
