@@ -281,8 +281,8 @@ init_per_testcase(Case, Config) ->
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
-    initializer:enable_grpca_based_communication(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:enable_grpca_based_communication(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(Case, Config) ->
