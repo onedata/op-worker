@@ -22,7 +22,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1, many_files_creation_tree_test_base/1,
     single_dir_creation_test/1, single_dir_creation_test_base/1]).
 -export([create_single_call/3]).
@@ -255,25 +255,19 @@ many_files_creation_tree_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(stress_test = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(stress_test, Config) ->
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(stress_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(stress_test, Config) ->
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -281,8 +275,7 @@ end_per_testcase(stress_test = Case, Config) ->
     hackney:stop(),
     application:stop(etls);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Config.
 
 %%%===================================================================

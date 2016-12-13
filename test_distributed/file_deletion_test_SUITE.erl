@@ -238,17 +238,15 @@ deletion_of_open_file_test(Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= counting_file_open_and_release_test;
     Case =:= invalidating_session_open_files_test ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, file_deletion_worker, [passthrough]),
@@ -261,7 +259,6 @@ init_per_testcase(Case, Config) when
     Case =:= open_file_deletion_request_test;
     Case =:= deletion_of_not_open_file_test;
     Case =:= deletion_of_open_file_test ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, [storage_file_manager, fslogic_rename,
@@ -299,11 +296,10 @@ end_per_testcase(Case, Config) when
 
     test_utils:mock_validate_and_unload(Worker, [storage_file_manager,
         fslogic_rename]),
-    test_utils:mock_unload(worker_proxy),
+    test_utils:mock_unload(Worker, worker_proxy),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {ok, OpenFiles} = rpc:call(Worker, file_handles, list, []),

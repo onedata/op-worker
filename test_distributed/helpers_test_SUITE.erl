@@ -27,8 +27,7 @@
 -define(CALL_TIMEOUT_MILLIS, timer:minutes(3)).
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([ctx_server/1, ctx_server/2]).
 -export([
     getattr_test/1, access_test/1, mknod_test/1, mkdir_test/1, unlink_test/1, rmdir_test/1, symlink_test/1,
@@ -185,21 +184,13 @@ fsync_test(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     CTXServer = spawn(Node, fun() -> ctx_server(Config) end),
     lists:keystore(ctx_server, 1, Config,
         {ctx_server, CTXServer}).
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     CTXServer = ?config(ctx_server, Config),
     CTXServer ! exit,
 
@@ -212,7 +203,7 @@ end_per_testcase(Case, Config) ->
 %%%===================================================================
 
 gen_filename() ->
-    http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:rand_bytes(20)))/binary>>).
+    http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
 
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")},

@@ -369,15 +369,13 @@ gen_filename() ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Workers, [dbsync_proto, dbsync_utils]),
@@ -415,8 +413,7 @@ init_per_testcase(Case, Config) ->
 
     [{all, Config}, {p1, lfm_proxy:init(ConfigWithSessionInfoP1)}, {p2, lfm_proxy:init(ConfigWithSessionInfoP2)}].
 
-end_per_testcase(Case, MultiConfig) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, MultiConfig) ->
     timer:sleep(timer:seconds(10)),
     Workers = ?config(op_worker_nodes, ?config(all, MultiConfig)),
     lfm_proxy:teardown(?config(p1, MultiConfig)),

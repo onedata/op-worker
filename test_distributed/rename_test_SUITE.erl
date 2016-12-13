@@ -722,15 +722,14 @@ redirecting_event_to_renamed_file_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
 init_per_testcase(CaseName, Config) ->
-    ?CASE_START(CaseName),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:enable_grpca_based_communication(Config),
     NewConfig = lfm_proxy:init(ConfigWithSessionInfo),
@@ -760,7 +759,6 @@ init_per_testcase(CaseName, Config) ->
     [{test_dir, <<CaseNameBinary/binary, "_dir">>} | NewConfig].
 
 end_per_testcase(CaseName, Config) ->
-    ?CASE_STOP(CaseName),
     Workers = ?config(op_worker_nodes, Config),
     CaseNameString = atom_to_list(CaseName),
     initializer:unload_quota_mocks(Config),
