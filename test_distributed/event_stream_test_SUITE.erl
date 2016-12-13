@@ -20,8 +20,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0]).
 
 %% tests
 -export([
@@ -138,23 +137,6 @@ event_stream_should_reset_metadata_after_event_handler_execution(Config) ->
         ?assertReceivedMatch({event_handler, [#event{}]}, ?TIMEOUT)
     end, lists:seq(0, CtrThr - 1)),
     stop_event_stream(EvtStm).
-
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    Config.
-
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions

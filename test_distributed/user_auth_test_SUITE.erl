@@ -23,8 +23,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
 -export([token_authentication/1]).
 
@@ -67,20 +66,13 @@ token_authentication(Config) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     application:start(etls),
     mock_oz_spaces(Config),
     Config.
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     unmock_oz_spaces(Config),
     application:stop(etls).
 

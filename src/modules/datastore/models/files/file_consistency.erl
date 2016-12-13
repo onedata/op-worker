@@ -139,6 +139,12 @@ add_components_and_notify(FileUuid, FoundComponents) ->
                 {ok, Doc = #document{value = FC = #file_consistency{
                     components_present = ComponentsPresent}}} ->
                     UpdatedComponents = lists:usort(ComponentsPresent ++ FoundComponents),
+                    case [file_meta, parent_links, link_to_parent, custom_metadata, times] -- UpdatedComponents of
+                        [] ->
+                            file_force_proxy:delete(FileUuid);
+                        _ ->
+                            ok
+                    end,
 
                     NewDoc = notify_waiting(Doc#document{value = FC#file_consistency{components_present =
                             UpdatedComponents}}),

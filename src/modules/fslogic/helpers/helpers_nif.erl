@@ -30,7 +30,7 @@
 -export([new_helper_obj/2]).
 -export([username_to_uid/1, groupname_to_gid/1]).
 -export([getattr/2, access/3, mknod/5, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3, chown/4]).
--export([truncate/3, open/3, read/3, write/3, release/1, flush/1, fsync/2]).
+-export([truncate/3, open/3, read/3, write/3, release/1, flush/1, fsync/2, readdir/4]).
 
 %%%===================================================================
 %%% API
@@ -67,6 +67,18 @@ username_to_uid(_UName) ->
 %%--------------------------------------------------------------------
 -spec groupname_to_gid(GName :: string() | binary()) -> {ok, GID :: integer()} | {error, einval}.
 groupname_to_gid(_GName) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
+%% shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentation.
+%% @end
+%%--------------------------------------------------------------------
+-spec readdir(HelperInstance :: resource_handle(), File :: helpers:file(),
+    Offset :: non_neg_integer(), _Count :: non_neg_integer()) ->
+    {ok, request_id()} | {error, Reason :: helpers:error_code()}.
+readdir(_HelperInstance, _File, _Offset, _Count) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------

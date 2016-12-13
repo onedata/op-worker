@@ -50,12 +50,20 @@ stat(#lfm_handle{file_guid = FileGUID,
 -spec stat(SessId :: session:id(), FileKey :: logical_file_manager:file_key()) ->
     {ok, file_attributes()} | logical_file_manager:error_reply().
 stat(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, file_request, FileGUID, #get_file_attr{},
-        fun(#file_attr{} = Attrs) ->
-            {ok, Attrs}
-        end).
+    case FileKey of
+        {path, Path} ->
+            lfm_utils:call_fslogic(SessId, fuse_request,
+                #resolve_guid{path = Path},
+                fun(#file_attr{} = Attrs) ->
+                    {ok, Attrs}
+                end);
+        {guid, FileGUID} ->
+            lfm_utils:call_fslogic(SessId, file_request, FileGUID, #get_file_attr{},
+                fun(#file_attr{} = Attrs) ->
+                    {ok, Attrs}
+                end)
+    end.
+
 
 
 %%--------------------------------------------------------------------

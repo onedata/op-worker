@@ -17,7 +17,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0]).
 
 %% tests
 -export([write_test/1, multipart_write_test/1,
@@ -231,22 +231,6 @@ write_read_truncate_unlink_test_base(Config) ->
         delete_helper(Helper)
     end, ?config(threads_num, Config)).
 
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    Config.
-
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case).
 
 %%%===================================================================
 %%% Internal functions
@@ -325,7 +309,7 @@ run(Fun, ThreadsNum) ->
     ?assert(lists:all(fun(Result) -> Result =:= ok end, Results)).
 
 random_file_id() ->
-    http_utils:url_encode(base64:encode(crypto:rand_bytes(?FILE_ID_SIZE))).
+    http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(?FILE_ID_SIZE))).
 
 open(Helper, FileId, Flag) ->
     call(Helper, open, [FileId, Flag]).
@@ -342,7 +326,7 @@ write(FileHandle, Size) ->
     write(FileHandle, 0, Size).
 
 write(FileHandle, Offset, Size) ->
-    Content = crypto:rand_bytes(Size),
+    Content = crypto:strong_rand_bytes(Size),
     ActualSize = size(Content),
     ?assertEqual({ok, ActualSize}, call(FileHandle, write, [Offset, Content])),
     Content.

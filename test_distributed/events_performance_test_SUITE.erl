@@ -23,8 +23,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -509,16 +508,15 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    initializer:clear_models(Worker, [subscription]),
-    NewConfig.
+    Posthook = fun(NewConfig) ->
+        [Worker | _] = ?config(op_worker_nodes, NewConfig),
+        initializer:clear_models(Worker, [subscription]),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
 
-init_per_testcase(subscribe_should_work_for_multiple_sessions = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
@@ -542,8 +540,7 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions = Case, Config) ->
     end),
     NewConfig;
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
@@ -569,14 +566,12 @@ init_per_testcase(Case, Config) ->
     NewConfig.
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions = Case, Config) ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, od_space),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
