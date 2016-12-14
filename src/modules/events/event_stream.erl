@@ -137,7 +137,7 @@ init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
         key = Key,
         session_id = SessId,
         manager = Mgr,
-        ctx = erlang:apply(Stm#event_stream.init_handler, [SubId, SessId]),
+        ctx = exec(Stm#event_stream.init_handler, [SubId, SessId]),
         metadata = Stm#event_stream.metadata,
         stream = Stm,
         subscriptions = add_subscription(SessId, Sub, #{})
@@ -236,7 +236,7 @@ terminate(Reason, #state{manager = Mgr, key = Key, stream = Stm, ctx = Ctx} = St
     ?log_terminate(Reason, State),
     spawn_event_handler(false, State),
     remove_subscriptions(State),
-    erlang:apply(Stm#event_stream.terminate_handler, [Ctx]),
+    exec(Stm#event_stream.terminate_handler, [Ctx]),
     gen_server2:cast(Mgr, {unregister_stream, Key}).
 
 %%--------------------------------------------------------------------
@@ -336,14 +336,14 @@ process_event(Evt, #state{events = Evts, metadata = Meta, stream = Stm} = State)
     EvtKey = event_type:get_aggregation_key(Evt),
     NewEvts = case maps:find(EvtKey, Evts) of
         {ok, OldEvt} ->
-            NewEvt = erlang:apply(Stm#event_stream.aggregation_rule, [OldEvt, Evt]),
+            NewEvt = exec(Stm#event_stream.aggregation_rule, [OldEvt, Evt]),
             maps:put(EvtKey, NewEvt, Evts);
         error ->
             maps:put(EvtKey, Evt, Evts)
     end,
-    NewMeta = erlang:apply(Stm#event_stream.transition_rule, [Meta, Evt]),
+    NewMeta = exec(Stm#event_stream.transition_rule, [Meta, Evt]),
     NewState = State#state{events = NewEvts, metadata = NewMeta},
-    case erlang:apply(Stm#event_stream.emission_rule, [NewMeta]) of
+    case exec(Stm#event_stream.emission_rule, [NewMeta]) of
         true -> maybe_spawn_event_handler(false, NewState);
         false -> maybe_schedule_event_handler_execution(NewState)
     end.
@@ -364,3 +364,12 @@ maybe_schedule_event_handler_execution(#state{emission_ref = undefined,
 
 maybe_schedule_event_handler_execution(State) ->
     State.
+
+%%--------------------------------------------------------------------
+%% @private @doc
+%% Executes function with provided arguments.
+%% @end
+%%--------------------------------------------------------------------
+-spec exec(Fun :: fun(), Args :: [term()]) -> Result :: term().
+exec(Fun, Args) ->
+    erlang:apply(Fun, Args).

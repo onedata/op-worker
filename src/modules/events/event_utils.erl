@@ -18,10 +18,6 @@
 %% API
 -export([aggregate_file_read_events/2, aggregate_file_written_events/2]).
 
--export_type([key/0]).
-
--type key() :: binary().
-
 %%%===================================================================
 %%% API
 %%%===================================================================

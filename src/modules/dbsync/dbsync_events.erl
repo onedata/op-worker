@@ -80,7 +80,7 @@ change_replicated_internal(_SpaceId, #change{model = times, doc = #document{key 
 change_replicated_internal(SpaceId, #change{model = change_propagation_controller,
     doc = #document{deleted = false, value = #links{model = change_propagation_controller, doc_key = DocKey}}}) ->
     ?debug("change_replicated_internal: change_propagation_controller links ~p", [DocKey]),
-    {ok, _} = change_propagation_controller:verify_propagation(DocKey, SpaceId);
+    {ok, _} = change_propagation_controller:verify_propagation(DocKey, SpaceId, false);
 change_replicated_internal(_SpaceId, #change{model = change_propagation_controller,
     doc = #document{deleted = false, key = Key} = Doc}) ->
     ?debug("change_replicated_internal: change_propagation_controller ~p", [Key]),
@@ -128,7 +128,8 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                     case NewTargetsAdd of
                         [] -> ok;
                         _ ->
-                            ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, MC, [{K, {Version, NewTargetsAdd}}])
+                            MC1 = MC#model_config{link_replica_scope = ?DEFAULT_LINK_REPLICA_SCOPE},
+                            ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, MC1, [{K, {Version, NewTargetsAdd}}])
                     end,
 
                     %% Handle links marked as deleted

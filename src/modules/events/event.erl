@@ -62,9 +62,9 @@ emit(Evt) ->
 emit(Evt, {exclude, MgrRef}) ->
     case event_router:get_subscribers(Evt) of
         {ok, SessIds} ->
-            Excluded = gb_sets:from_list(get_event_managers(MgrRef)),
-            Subscribed = gb_sets:from_list(get_event_managers(SessIds)),
-            emit(Evt, gb_sets:to_list(gb_sets:subtract(Subscribed, Excluded)));
+            Excluded = get_event_managers(MgrRef),
+            Subscribed = get_event_managers(SessIds),
+            emit(Evt, subtract_unique(Subscribed, Excluded));
         {error, Reason} ->
             {error, Reason}
     end;
@@ -199,3 +199,15 @@ send_to_event_managers(Msg, Mgrs) ->
     lists:foreach(fun(Mgr) ->
         gen_server2:cast(Mgr, Msg)
     end, Mgrs).
+
+%%--------------------------------------------------------------------
+%% @private @doc
+%% Returns a list consisting of unique elements that occurs in the ListA
+%% but not in the ListB.
+%% @end
+%%--------------------------------------------------------------------
+-spec subtract_unique(ListA :: list(), ListB :: list()) -> Diff :: list().
+subtract_unique(ListA, ListB) ->
+    SetA = gb_sets:from_list(ListA),
+    SetB = gb_sets:from_list(ListB),
+    gb_sets:to_list(gb_sets:subtract(SetA, SetB)).

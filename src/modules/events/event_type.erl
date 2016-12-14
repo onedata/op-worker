@@ -20,7 +20,7 @@
 -export([get_context/1, update_context/2]).
 
 -type aggregation_key() :: term().
--type ctx() :: undefined | {file, file_meta:uuid()}.
+-type ctx() :: undefined | {file, fslogic_worker:file_guid()}.
 
 -export_type([aggregation_key/0, ctx/0]).
 

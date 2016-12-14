@@ -246,8 +246,8 @@ handle_file_read_events(Evts, #{session_id := SessId} = _Ctx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Flushes an event streams associated with the file written subscription
-%% for given a session, uuid and provider_id.
+%% Flushes event streams associated with the file written subscription
+%% for a given session, uuid and provider_id.
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_event_queue(od_provider:id(), file_meta:uuid(), session:id()) ->

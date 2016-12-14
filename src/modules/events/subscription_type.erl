@@ -18,7 +18,7 @@
 -export([get_routing_key/1, get_stream_key/1, get_stream/1, is_remote/1]).
 -export([get_context/1, update_context/2]).
 
--type ctx() :: undefined | {file, file_meta:uuid()}.
+-type ctx() :: undefined | {file, fslogic_worker:file_guid()}.
 
 -export_type([ctx/0]).
 
