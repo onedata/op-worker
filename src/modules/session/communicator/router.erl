@@ -39,9 +39,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec route_proxy_message(Msg :: #client_message{}, TargetSessionId :: session:id()) -> ok.
-route_proxy_message(#client_message{message_body = #events{events = Evts}} = Msg, TargetSessionId) ->
+route_proxy_message(#client_message{message_body = #event{} = Evt} = Msg, TargetSessionId) ->
     ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
-    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, TargetSessionId) end, Evts),
+    event:emit(Evt, TargetSessionId),
     ok.
 
 %%--------------------------------------------------------------------
@@ -113,8 +113,7 @@ route_message(Msg = #server_message{message_id = #message_id{issuer = client,
     recipient = Pid}}) when is_pid(Pid) ->
     Pid ! Msg,
     ok;
-route_message(Msg = #server_message{message_id = #message_id{issuer = client,
-    recipient = Pid}}) ->
+route_message(#server_message{message_id = #message_id{issuer = client}}) ->
     ok;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).
@@ -139,7 +138,7 @@ route_and_ignore_answer(#client_message{message_body = #subscription{} = Sub} = 
     case session_manager:is_provider_session_id(effective_session_id(Msg)) of
         true -> ok; %% Do not route subscriptions from other providers (route only subscriptions from users)
         false ->
-            event:subscribe(event_utils:inject_event_stream_definition(Sub), effective_session_id(Msg)),
+            event:subscribe(Sub, effective_session_id(Msg)),
             ok
     end;
 route_and_ignore_answer(#client_message{message_body = #subscription_cancellation{} = SubCan} = Msg) ->
@@ -153,7 +152,7 @@ route_and_ignore_answer(#client_message{message_body = #subscription_cancellatio
 % #'Token' client message).
 route_and_ignore_answer(#client_message{message_body = #token_auth{} = Auth} = Msg) ->
     % This function performs an async call to session manager worker.
-    {ok, SessId} = session:update(effective_session_id(Msg), #{auth => Auth}),
+    {ok, _} = session:update(effective_session_id(Msg), #{auth => Auth}),
     ok;
 route_and_ignore_answer(#client_message{message_body = #fuse_request{} = FuseRequest} = Msg) ->
     ok = worker_proxy:cast(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}).
@@ -246,5 +245,5 @@ route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId
     session:id().
 effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
     SessionId;
-effective_session_id(#client_message{session_id = _SessionId, proxy_session_id = ProxySessionId}) ->
+effective_session_id(#client_message{proxy_session_id = ProxySessionId}) ->
     ProxySessionId.

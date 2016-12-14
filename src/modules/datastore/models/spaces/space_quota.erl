@@ -13,6 +13,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -195,7 +196,8 @@ apply_size_change_and_maybe_emit(SpaceId, SizeDiff) ->
 available_size(SpaceId) ->
     try
         {ok, #document{value = #space_quota{current_size = CSize}}} = get(SpaceId),
-        {ok, #document{value = #od_space{providers_supports = ProvSupport}}} = od_space:get(SpaceId),
+        {ok, #document{value = #od_space{providers_supports = ProvSupport}}} =
+            od_space:get_or_fetch(provider, SpaceId, ?ROOT_USER_ID),
         SupSize = proplists:get_value(oneprovider:get_provider_id(), ProvSupport, 0),
         SupSize - CSize
     catch

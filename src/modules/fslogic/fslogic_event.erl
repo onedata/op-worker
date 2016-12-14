@@ -13,15 +13,17 @@
 
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
-    emit_file_location_update/2, emit_file_location_update/3,
-    emit_permission_changed/1, emit_file_removed/2, emit_file_renamed/3,
-    emit_quota_exeeded/0, emit_file_renamed/4, flush_event_queue/3,
-    maybe_emit_write/4, maybe_emit_read/4, emit_truncate/3]).
+-export([maybe_emit_file_written/4, maybe_emit_file_read/4, emit_file_truncated/3,
+    emit_file_attr_changed/2, emit_file_sizeless_attrs_update/1,
+    emit_file_location_changed/2, emit_file_location_changed/3,
+    emit_file_perm_changed/1, emit_file_removed/2, emit_file_renamed/3,
+    emit_file_renamed/4, emit_quota_exeeded/0, flush_event_queue/3]).
+-export([handle_file_read_events/2, handle_file_written_events/2]).
 
 %%%===================================================================
 %%% API
@@ -29,16 +31,45 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends list of currently disabled spaces due to exeeded quota.
+%% Sends a file written event if DoEmit flag is set to true
 %% @end
 %%--------------------------------------------------------------------
--spec emit_quota_exeeded() ->
+-spec maybe_emit_file_written(DoEmit :: boolean(),fslogic_worker:file_guid(),
+    fslogic_blocks:blocks(), session:id()) ->
     ok | {error, Reason :: term()}.
-emit_quota_exeeded() ->
-    BlockedSpaces = space_quota:get_disabled_spaces(),
-    ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
-    event:emit(#event{object = #quota_exeeded_event{spaces = BlockedSpaces}}).
+maybe_emit_file_written(false, _FileGuid, _WrittenBlocks, _SessionId) ->
+    ok;
+maybe_emit_file_written(true, FileGuid, WrittenBlocks, SessionId) ->
+    event:emit(#file_written_event{
+        file_uuid = FileGuid, blocks = WrittenBlocks
+    }, SessionId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a file read event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_emit_file_read(DoEmit :: boolean(),fslogic_worker:file_guid(),
+    fslogic_blocks:blocks(), session:id()) ->
+    ok | {error, Reason :: term()}.
+maybe_emit_file_read(false, _FileGuid, _ReadBlocks, _SessionId) ->
+    ok;
+maybe_emit_file_read(true, FileGuid, ReadBlocks, SessionId) ->
+    event:emit(#file_read_event{
+        file_uuid = FileGuid, blocks = ReadBlocks
+    }, SessionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a file truncated event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_truncated(fslogic_worker:file_guid(), non_neg_integer(), session:id()) ->
+    ok | {error, Reason :: term()}.
+emit_file_truncated(FileGuid, Size, SessionId) ->
+    event:emit(#file_written_event{
+        file_uuid = FileGuid, blocks = [], file_size = Size
+    }, SessionId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,16 +78,17 @@ emit_quota_exeeded() ->
 %% @end
 %%--------------------------------------------------------------------
 % TODO - SpaceID may be forwarded from dbsync instead getting from DB
--spec emit_file_attr_update(fslogic_worker:file(), [session:id()]) ->
+-spec emit_file_attr_changed(fslogic_worker:file(), [session:id()]) ->
     ok | {error, Reason :: term()}.
-emit_file_attr_update(FileEntry, ExcludedSessions) ->
+emit_file_attr_changed(FileEntry, ExcludedSessions) ->
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
     FileGUID = fslogic_uuid:uuid_to_guid(FileUUID),
     case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{size = Size} = FileAttr} ->
-            ?debug("Sending new attributes for file ~p to all sessions except ~p, size ~p",
-                [FileEntry, ExcludedSessions, Size]),
-            event:emit(#event{object = #update_event{object = FileAttr}}, {exclude, ExcludedSessions});
+            ?debug("Sending new attributes for file ~p to all sessions except ~p"
+            ", size ~p", [FileEntry, ExcludedSessions, Size]),
+            event:emit(#file_attr_changed_event{file_attr = FileAttr},
+                {exclude, ExcludedSessions});
         {error, Reason} ->
             ?error("Unable to get new attributes for file ~p due to: ~p", [FileEntry, Reason]),
             {error, Reason}
@@ -75,20 +107,23 @@ emit_file_sizeless_attrs_update(FileEntry) ->
     case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new times for file ~p to all subscribers", [FileEntry]),
-            SizelessFileAttr = FileAttr#file_attr{size = undefined},
-            event:emit(#event{object = #update_event{object = SizelessFileAttr}});
+            event:emit(#file_attr_changed_event{
+                file_attr = FileAttr#file_attr{size = undefined}
+            });
         {error, Reason} ->
             ?error("Unable to get new times for file ~p due to: ~p", [FileEntry, Reason]),
             {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
-%% @equiv emit_file_location_update(FileEntry, ExcludedSessions, undefined)
+%% @doc
+%% @equiv emit_file_location_changed(FileEntry, ExcludedSessions, undefined)
+%% @end
 %%--------------------------------------------------------------------
--spec emit_file_location_update(fslogic_worker:file(), [session:id()]) ->
+-spec emit_file_location_changed(fslogic_worker:file(), [session:id()]) ->
     ok | {error, Reason :: term()}.
-emit_file_location_update(FileEntry, ExcludedSessions) ->
-    emit_file_location_update(FileEntry, ExcludedSessions, undefined).
+emit_file_location_changed(FileEntry, ExcludedSessions) ->
+    emit_file_location_changed(FileEntry, ExcludedSessions, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -97,15 +132,13 @@ emit_file_location_update(FileEntry, ExcludedSessions) ->
 %% so we may fill the gaps within, id defaults to whole file.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_location_update(fslogic_worker:file(), [session:id()], fslogic_blocks:block() | undefined) ->
+-spec emit_file_location_changed(fslogic_worker:file(), [session:id()], fslogic_blocks:block() | undefined) ->
     ok | {error, Reason :: term()}.
-emit_file_location_update(FileEntry, ExcludedSessions, Range) ->
+emit_file_location_changed(FileEntry, ExcludedSessions, Range) ->
     try
-        LocationToSend =
-            fslogic_file_location:prepare_location_for_client(FileEntry, Range),
-        event:emit(#event{object = #update_event{
-            object = LocationToSend}},
-            {exclude, ExcludedSessions})
+        event:emit(#file_location_changed_event{
+            file_location = fslogic_file_location:prepare_location_for_client(FileEntry, Range)
+        }, {exclude, ExcludedSessions})
     catch
         _:Reason ->
             ?error_stacktrace("Unable to push new location for file ~p due to: ~p", [FileEntry, Reason]),
@@ -114,41 +147,43 @@ emit_file_location_update(FileEntry, ExcludedSessions, Range) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client that permissions of file has changed.
+%% Sends event informing subscribed client that permissions of file has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_permission_changed(FileUuid :: file_meta:uuid()) ->
+-spec emit_file_perm_changed(FileUuid :: file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
-emit_permission_changed(FileUuid) ->
-    event:emit(#event{object = #permission_changed_event{file_uuid = fslogic_uuid:uuid_to_guid(FileUuid)}}).
+emit_file_perm_changed(FileUuid) ->
+    event:emit(#file_perm_changed_event{
+        file_uuid = fslogic_uuid:uuid_to_guid(FileUuid)
+    }).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client about file removal.
+%% Sends event informing subscribed client about file removal.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_removed(FileGUID :: fslogic_worker:file_guid(),
     ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileGUID, ExcludedSessions) ->
-    event:emit(#event{object = #file_removed_event{file_uuid = FileGUID}},
-        {exclude, ExcludedSessions}).
+    event:emit(#file_removed_event{file_uuid = FileGUID}, {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client about file rename and guid change.
+%% Sends an event informing subscribed client about file rename and guid change.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed(TopEntry :: #file_renamed_entry{},
     ChildEntries :: [#file_renamed_entry{}], ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
-    event:emit(#event{object = #file_renamed_event{top_entry = TopEntry, child_entries = ChildEntries}},
-        {exclude, ExcludedSessions}).
+    event:emit(#file_renamed_event{
+        top_entry = TopEntry, child_entries = ChildEntries
+    }, {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing given client about file rename.
+%% Sends an event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed(file_meta:uuid(), od_space:id(), file_meta:name(),
@@ -167,49 +202,52 @@ emit_file_renamed(FileUUID, SpaceId, NewName, SessionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends write event if DoEmit flag is set to true
+%% Sends a list of currently disabled spaces due to exeeded quota.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_emit_write(DoEmit :: boolean(),fslogic_worker:file_guid(),
-    fslogic_blocks:blocks(), session:id()) ->
+-spec emit_quota_exeeded() ->
     ok | {error, Reason :: term()}.
-maybe_emit_write(false, _FileGuid, _WrittenBlocks, _SessionId) ->
-    ok;
-maybe_emit_write(true, FileGuid, WrittenBlocks, SessionId) ->
-    event:emit(#write_event{
-        file_uuid = FileGuid, blocks = WrittenBlocks
-    }, SessionId).
+emit_quota_exeeded() ->
+    BlockedSpaces = space_quota:get_disabled_spaces(),
+    ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
+    event:emit(#quota_exceeded_event{spaces = BlockedSpaces}).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends read event if DoEmit flag is set to true
+%% Processes file written events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_emit_read(DoEmit :: boolean(),fslogic_worker:file_guid(),
-    fslogic_blocks:blocks(), session:id()) ->
-    ok | {error, Reason :: term()}.
-maybe_emit_read(false, _FileGuid, _ReadBlocks, _SessionId) ->
-    ok;
-maybe_emit_read(true, FileGuid, ReadBlocks, SessionId) ->
-    event:emit(#read_event{
-        file_uuid = FileGuid, blocks = ReadBlocks
-    }, SessionId).
+-spec handle_file_written_events(Evts :: [event:event()], Ctx :: maps:map()) ->
+    [ok | {error, Reason :: term()}].
+handle_file_written_events(Evts, #{session_id := SessId} = Ctx) ->
+    Results = lists:map(fun(Ev) ->
+        try_handle_event(fun() -> handle_file_written_event(Ev, SessId) end)
+    end, Evts),
+
+    case Ctx of
+        #{notify := NotifyFun} ->
+            NotifyFun(#server_message{message_body = #status{code = ?OK}});
+        _ -> ok
+    end,
+
+    Results.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends truncate event if DoEmit flag is set to true
+%% Processes file read events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_truncate(fslogic_worker:file_guid(), non_neg_integer(), session:id()) ->
-    ok | {error, Reason :: term()}.
-emit_truncate(FileGuid, Size, SessionId) ->
-    event:emit(#write_event{file_uuid = FileGuid, blocks = [],
-        file_size = Size}, SessionId).
+-spec handle_file_read_events(Evts :: [event:event()], Ctx :: maps:map()) ->
+    [ok | {error, Reason :: term()}].
+handle_file_read_events(Evts, #{session_id := SessId} = _Ctx) ->
+    lists:map(fun(Ev) ->
+        try_handle_event(fun() -> handle_file_read_event(Ev, SessId) end)
+    end, Evts).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Flushes event streams associated with the fslogic subscription for given
-%% session, uuid and provider_id.
+%% Flushes event streams associated with the file written subscription
+%% for a given session, uuid and provider_id.
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_event_queue(od_provider:id(), file_meta:uuid(), session:id()) ->
@@ -219,7 +257,8 @@ flush_event_queue(SessionId, ProviderId, FileUuid) ->
         true ->
             ok;
         false ->
-            RecvRef = event:flush(ProviderId, FileUuid, ?FSLOGIC_SUB_ID, self(), SessionId),
+            RecvRef = event:flush(ProviderId, FileUuid, ?FILE_WRITTEN_SUB_ID,
+                self(), SessionId),
             receive
                 {RecvRef, Response} ->
                     Response
@@ -231,3 +270,74 @@ flush_event_queue(SessionId, ProviderId, FileUuid) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private @doc
+%% Processes a file written event and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_file_written_event(event:event(), session:id()) ->
+    ok | {error, Reason :: term()}.
+handle_file_written_event(Evt, SessId) ->
+    #file_written_event{counter = Counter, size = Size, blocks = Blocks,
+        file_uuid = FileGUID, file_size = FileSize} = Evt,
+
+    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
+    {ok, #document{value = #session{identity = #user_identity{
+        user_id = UserId}}}} = session:get(SessId),
+    monitoring_event:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
+
+    UpdatedBlocks = lists:map(fun(#file_block{file_id = FileId, storage_id = StorageId} = Block) ->
+        {ValidFileId, ValidStorageId} = file_location:validate_block_data(FileUUID, FileId, StorageId),
+        Block#file_block{file_id = ValidFileId, storage_id = ValidStorageId}
+    end, Blocks),
+
+    case replica_updater:update(FileUUID, UpdatedBlocks, FileSize, true, undefined) of
+        {ok, size_changed} ->
+            {ok, #document{value = #session{identity = #user_identity{
+                user_id = UserId}}}} = session:get(SessId),
+            fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
+            fslogic_event:emit_file_attr_changed({uuid, FileUUID}, [SessId]),
+            fslogic_event:emit_file_location_changed({uuid, FileUUID}, [SessId]);
+        {ok, size_not_changed} ->
+            {ok, #document{value = #session{identity = #user_identity{
+                user_id = UserId}}}} = session:get(SessId),
+            fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
+            fslogic_event:emit_file_location_changed({uuid, FileUUID}, [SessId]);
+        {error, Reason} ->
+            ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason]),
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private @doc
+%% Processes a file read event and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_file_read_event(event:event(), session:id()) ->
+    ok | {error, Reason :: term()}.
+handle_file_read_event(Evt, SessId) ->
+    #file_read_event{counter = Counter, file_uuid = FileGUID,
+        size = Size} = Evt,
+
+    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
+    {ok, #document{value = #session{identity = #user_identity{
+        user_id = UserId}}}} = session:get(SessId),
+    monitoring_event:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
+
+    {ok, #document{value = #session{identity = #user_identity{
+        user_id = UserId}}}} = session:get(SessId),
+    fslogic_times:update_atime({uuid, FileUUID}, UserId).
+
+%%--------------------------------------------------------------------
+%% @private @doc
+%% Provides an exception-safe environment for event handling.
+%% @end
+%%--------------------------------------------------------------------
+-spec try_handle_event(fun(() -> HandleResult)) -> HandleResult
+    when HandleResult :: ok | {error, Reason :: any()}.
+try_handle_event(HandleFun) ->
+    try HandleFun()
+    catch
+        Type:Reason -> {error, {Type, Reason}}
+    end.

@@ -14,19 +14,10 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
--include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
--include("proto/common/credentials.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
--include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_definitions.hrl").
-
 
 -export([init/1, handle/1, cleanup/0, handle_fuse_request/2]).
 
@@ -64,27 +55,19 @@ init(_Args) ->
         _ -> ok
     end,
 
-    lists:foreach(fun(Sub) ->
-        case event:subscribe(Sub) of
-            {ok, _SubId} -> ok;
+    lists:foreach(fun({Fun, Args}) ->
+        case apply(Fun, Args) of
+            {ok, _} -> ok;
             {error, already_exists} -> ok
         end
     end, [
-        fslogic_event_subscriptions:read_subscription(fun handle_read_events/2),
-        fslogic_event_subscriptions:write_subscription(fun handle_write_events/2)
+        {fun subscription:create/1, [fslogic_subscriptions:file_read_subscription()]},
+        {fun subscription:create/1, [fslogic_subscriptions:file_written_subscription()]},
+        {fun session_manager:create_root_session/0, []},
+        {fun session_manager:create_guest_session/0, []}
     ]),
 
-    case session_manager:create_root_session() of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    case session_manager:create_guest_session() of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok
-    end,
-
-    {ok, #{sub_id => ?FSLOGIC_SUB_ID}}.
+    {ok, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -535,104 +518,6 @@ handle_proxyio_request(_CTX, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes write events and returns a response.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_write_events(Evts :: [event:event()], Ctx :: maps:map()) ->
-    [ok | {error, Reason :: term()}].
-handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
-    Results = lists:map(fun(Ev) ->
-        try_handle_event(fun() -> handle_write_event(Ev, SessId) end)
-    end, Evts),
-
-    case Ctx of
-        #{notify := NotifyFun} ->
-            NotifyFun(#server_message{message_body = #status{code = ?OK}});
-        _ -> ok
-    end,
-
-    Results.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes a write event and returns a response.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_write_event(event:event(), session:id()) ->
-    ok | {error, Reason :: term()}.
-handle_write_event(Event, SessId) ->
-    #event{object = #write_event{size = Size, blocks = Blocks,
-        file_uuid = FileGUID, file_size = FileSize}, counter = Counter} = Event,
-
-    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
-    {ok, #document{value = #session{identity = #user_identity{
-        user_id = UserId}}}} = session:get(SessId),
-    monitoring_event:emit_write_statistics(SpaceId, UserId, Size, Counter),
-
-    UpdatedBlocks = lists:map(fun(#file_block{file_id = FileId, storage_id = StorageId} = Block) ->
-        {ValidFileId, ValidStorageId} = file_location:validate_block_data(FileUUID, FileId, StorageId),
-        Block#file_block{file_id = ValidFileId, storage_id = ValidStorageId}
-    end, Blocks),
-
-    case replica_updater:update(FileUUID, UpdatedBlocks, FileSize, true, undefined) of
-        {ok, size_changed} ->
-            {ok, #document{value = #session{identity = #user_identity{
-                user_id = UserId}}}} = session:get(SessId),
-            fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
-            fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
-            fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
-        {ok, size_not_changed} ->
-            {ok, #document{value = #session{identity = #user_identity{
-                user_id = UserId}}}} = session:get(SessId),
-            fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
-            fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
-        {error, Reason} ->
-            ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason]),
-            {error, Reason}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes read events and returns a response.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_read_events(Evts :: [event:event()], Ctx :: maps:map()) ->
-    [ok | {error, Reason :: term()}].
-handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
-    lists:map(fun(Ev) ->
-        try_handle_event(fun() -> handle_read_event(Ev, SessId) end)
-    end, Evts).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes a read event and returns a response.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_read_event(event:event(), session:id()) ->
-    ok | {error, Reason :: term()}.
-handle_read_event(Event, SessId) ->
-    #event{object = #read_event{file_uuid = FileGUID, size = Size},
-        counter = Counter} = Event,
-
-    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
-    {ok, #document{value = #session{identity = #user_identity{
-        user_id = UserId}}}} = session:get(SessId),
-    monitoring_event:emit_read_statistics(SpaceId, UserId, Size, Counter),
-
-    {ok, #document{value = #session{identity = #user_identity{
-        user_id = UserId}}}} = session:get(SessId),
-    fslogic_times:update_atime({uuid, FileUUID}, UserId).
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -693,12 +578,3 @@ request_to_file_entry_or_provider(_Ctx, #proxyio_request{parameters = #{?PROXYIO
 request_to_file_entry_or_provider(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
-
-
--spec try_handle_event(fun(() -> HandleResult)) -> HandleResult
-    when HandleResult :: ok | {error, Reason :: any()}.
-try_handle_event(HandleFun) ->
-    try HandleFun()
-    catch
-        Type:Reason -> {error, {Type, Reason}}
-    end.
