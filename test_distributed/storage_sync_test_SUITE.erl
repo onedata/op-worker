@@ -17,7 +17,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 %% tests
@@ -89,13 +89,9 @@ simple_file_export_test(Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
     ct:timetrap({minutes, 60}),
     application:start(etls),
     hackney:start(),
@@ -106,7 +102,6 @@ init_per_testcase(Case, Config) ->
     enable_storage_sync(ConfigWithProxy).
 
 end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
