@@ -184,7 +184,7 @@ save_change(Model, Key, Rev, SpaceId, VefifyModule, VerifyFun) ->
             Doc = #document{key = get_key(Model, Key),
                 value = #change_propagation_controller{change_revision = Rev, space_id = SpaceId,
                     verify_module = VefifyModule, verify_function = VerifyFun}},
-            {ok, Uuid} = save(Doc),
+            {ok, _Uuid} = save(Doc),
             ok = datastore:add_links(?LINK_STORE_LEVEL, Doc, {MyId, Doc}),
             ok
     end.

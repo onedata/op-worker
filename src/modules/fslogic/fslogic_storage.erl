@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -30,7 +30,6 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new user's storage context based on given helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_user_ctx(HelperInit :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->

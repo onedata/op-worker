@@ -26,8 +26,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -125,13 +124,12 @@ flush_should_notify_awaiting_process(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    initializer:clear_models(Worker, [subscription]),
-    NewConfig.
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
+    Posthook = fun(NewConfig) ->
+        [Worker | _] = ?config(op_worker_nodes, NewConfig),
+        initializer:clear_models(Worker, [subscription]),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
@@ -162,7 +160,6 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
-    ?CASE_START(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SubId} = create_subscription(Case, Worker),
@@ -182,8 +179,7 @@ init_per_testcase(Case, Config) when
     end),
     NewConfig;
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
@@ -219,7 +215,6 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
-    ?CASE_STOP(Case),
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
@@ -229,8 +224,7 @@ end_per_testcase(Case, Config) when
     initializer:clear_assume_all_files_in_space(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),

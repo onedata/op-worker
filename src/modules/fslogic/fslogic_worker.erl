@@ -25,7 +25,7 @@
 %%% Types
 %%%===================================================================
 
--type ctx() :: #fslogic_ctx{}.
+-type ctx() :: fslogic_context:ctx().
 -type file() :: file_meta:entry(). %% Type alias for better code organization
 -type ext_file() :: file_meta:entry() | {guid, file_guid()}.
 -type open_flag() :: rdwr | write | read.
@@ -140,14 +140,14 @@ cleanup() ->
     request_type()) ->
     #fuse_response{} | #provider_response{} | #proxyio_response{}.
 run_and_catch_exceptions(Function, Context, Request, RequestType) ->
-    try
-        UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)),
+    Response = try
+        UserRootDir = fslogic_uuid:user_root_dir_uuid(fslogic_context:get_user_id(Context)), %todo TL store it in request context
         {NextCTX, Providers, UpdatedRequest} =
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
-                    #fslogic_ctx{session_id = SessionId} = Context,
+                    SessId = fslogic_context:get_session_id(Context),
                     {ok, #document{value = #od_space{providers = ProviderIds}}} =
-                        od_space:get_or_fetch(SessionId, SpaceId),
+                        od_space:get_or_fetch(SessId, SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             {Context, [oneprovider:get_provider_id()], Request};
@@ -202,7 +202,64 @@ run_and_catch_exceptions(Function, Context, Request, RequestType) ->
         error:Reason ->
             %% Something went horribly wrong. This should not happen.
             report_error(Request, RequestType, Reason, error, erlang:get_stacktrace())
+    end,
+
+
+    try
+        process_response(Context, Request, Response)
+    catch
+        Reason1 ->
+            %% Manually thrown error, normal interrupt case.
+            report_error(Request, RequestType, Reason1, debug, erlang:get_stacktrace());
+        error:{badmatch, Reason1} ->
+            %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
+            report_error(Request, RequestType, Reason1, warning, erlang:get_stacktrace());
+        error:{case_clause, Reason1} ->
+            %% Case Clause assertion - something went seriously wrong and we should know about it.
+            report_error(Request, RequestType, Reason1, error, erlang:get_stacktrace());
+        error:Reason1 ->
+            %% Something went horribly wrong. This should not happen.
+            report_error(Request, RequestType, Reason1, error, erlang:get_stacktrace())
     end.
+
+process_response(Context, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGUID}} = Request,
+    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
+    SessId = fslogic_context:get_session_id(Context),
+    {ok, Path0} = fslogic_path:gen_path({uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, SessId),
+    {ok, Tokens0} = fslogic_path:verify_file_path(Path0),
+    Tokens = Tokens0 ++ [FileName],
+    Path = fslogic_path:join(Tokens),
+    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+        {path, P} ->
+            {ok, Tokens1} = fslogic_path:verify_file_path(P),
+            case Tokens1 of
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
+                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
+                    space_sync_worker:run(Init);
+                _ -> Response
+            end;
+        _ ->
+            Response
+    end;
+process_response(Context, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
+    #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+        {path, P} ->
+            {ok, Tokens1} = fslogic_path:verify_file_path(P),
+            case Tokens1 of
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
+                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
+                    space_sync_worker:run(Init);
+                _ -> Response
+            end;
+        _ ->
+            Response
+    end;
+process_response(_, _, Response) ->
+    Response.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -219,10 +276,11 @@ resolve_provider_for_file(Context, Entry, Request, UserRootDir) ->
         {ok, UserRootDir} ->
             {Context, [oneprovider:get_provider_id()], Request};
         _ ->
-            #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
-                fslogic_context:set_space_and_share_id(Context, Entry),
+            NewCtx = fslogic_context:set_space_id(Context, Entry),
+            SpaceId = fslogic_context:get_space_id(NewCtx),
+            SessId = fslogic_context:get_session_id(NewCtx),
 
-            {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(SessionId, SpaceId),
+            {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(SessId, SpaceId),
             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                 {_, true} ->
                     {ok, Uuid} = file_meta:to_uuid(Entry),
@@ -313,9 +371,11 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}
     fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(#fslogic_ctx{session_id = SessId}, #fuse_request{fuse_request = #create_storage_test_file{} = Req}) ->
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{} = Req}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
     fuse_config_manager:create_storage_test_file(SessId, Req);
-handle_fuse_request(#fslogic_ctx{session_id = SessId}, #fuse_request{fuse_request = #verify_storage_test_file{} = Req}) ->
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{} = Req}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
     fuse_config_manager:verify_storage_test_file(SessId, Req);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}) ->
     handle_fuse_request(Ctx, FileRequest);
@@ -332,7 +392,8 @@ handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_
     fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Offset, Size);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #change_mode{mode = Mode}}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Mode);
-handle_fuse_request(#fslogic_ctx{session_id = SessId} = Ctx, #file_request{context_guid = GUID, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
+handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
     %% Use lfm_files wrapper for fslogic as the target uuid may not be local
     {ok, TargetParentPath} = lfm_files:get_file_path(SessId, TargetParentGuid),
     TargetPath = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, TargetParentPath, TargetName]),
@@ -341,16 +402,16 @@ handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #upda
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #create_file{name = Name,
     flag = Flag, mode = Mode}}) ->
-    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, ParentGUID}),
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, ParentGUID}),
     fslogic_req_regular:create_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, Name, Mode, Flag);
 handle_fuse_request(Ctx, #file_request{context_guid = ParentGUID, file_request = #make_file{name = Name, mode = Mode}}) ->
-    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, ParentGUID}),
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, ParentGUID}),
     fslogic_req_regular:make_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGUID)}, Name, Mode);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #open_file{flag = Flag}}) ->
-    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, GUID}),
     fslogic_req_regular:open_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Flag);
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #get_file_location{}}) ->
-    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, GUID}),
     fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_fuse_request(Ctx, #file_request{context_guid = GUID, file_request = #truncate{size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Size);
@@ -408,7 +469,7 @@ handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_req
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_file_distribution{}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)});
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #replicate_file{block = Block}}) ->
-    NewCtx = fslogic_context:set_space_and_share_id(Ctx, {guid, GUID}),
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, GUID}),
     fslogic_req_generic:replicate_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Block);
 handle_provider_request(Ctx, #provider_request{context_guid = GUID, provider_request = #get_metadata{type = Type, names = Names, inherited = Inherited}}) ->
     fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(GUID)}, Type, Names, Inherited);
@@ -437,17 +498,21 @@ handle_provider_request(_Ctx, Req) ->
 %%--------------------------------------------------------------------
 -spec handle_proxyio_request(Ctx :: fslogic_worker:ctx(), ProxyIORequest :: #proxyio_request{}) ->
     ProxyIOResponse :: #proxyio_response{}.
-handle_proxyio_request(#fslogic_ctx{session_id = SessionId, share_id = ShareId}, #proxyio_request{
+handle_proxyio_request(Ctx, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    ShareId = file_info:get_share_id(Ctx),
     FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID,
+    fslogic_proxyio:write(SessId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID,
         ?PROXYIO_PARAMETER_SHARE_ID => ShareId}, SID, FID, ByteSequences);
-handle_proxyio_request(#fslogic_ctx{session_id = SessionId, share_id = ShareId}, #proxyio_request{
+handle_proxyio_request(Ctx, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    ShareId = file_info:get_share_id(Ctx),
     FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-    fslogic_proxyio:read(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID,
+    fslogic_proxyio:read(SessId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID,
         ?PROXYIO_PARAMETER_SHARE_ID => ShareId}, SID, FID, Offset, Size);
 handle_proxyio_request(_CTX, Req) ->
     ?log_bad_request(Req),
@@ -489,15 +554,25 @@ request_to_file_entry_or_provider(_Ctx, #file_request{context_guid = FileGUID, f
             %% Handle root space dir locally
             {provider, oneprovider:get_provider_id()};
         _ ->
-            {file, {guid, FileGUID}}
+            case file_force_proxy:get(FileGUID) of
+                {ok, #document{value = #file_force_proxy{provider_id = ProviderId}}} ->
+                    {provider, ProviderId};
+                _ ->
+                    {file, {guid, FileGUID}}
+            end
     end;
 request_to_file_entry_or_provider(_Ctx, #file_request{context_guid = ContextGuid}) ->
-    {file, {guid, ContextGuid}};
+    case file_force_proxy:get(ContextGuid) of
+        {ok, #document{value = #file_force_proxy{provider_id = ProviderId}}} ->
+            {provider, ProviderId};
+        _ ->
+            {file, {guid, ContextGuid}}
+    end;
 request_to_file_entry_or_provider(_Ctx, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
     {provider, ProviderId};
 request_to_file_entry_or_provider(_Ctx, #provider_request{context_guid = ContextGuid}) ->
     {file, {guid, ContextGuid}};
-request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}}) ->
+request_to_file_entry_or_provider(_Ctx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}}) ->
     {file, {guid, FileGUID}};
 
 request_to_file_entry_or_provider(_Ctx, Req) ->

@@ -23,8 +23,7 @@
 -include_lib("proto/oneclient/server_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -160,10 +159,7 @@ sequencer_manager_should_start_sequencer_in_stream_on_first_message(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_unregister_sequencer_in_stream;
@@ -173,9 +169,8 @@ init_per_testcase(Case, Config) when
     mock_sequencer_stream_sup(Worker),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case, Config) ->
+init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?CASE_START(Case),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
     mock_communicator(Worker),
@@ -191,8 +186,7 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, sequencer_stream_sup);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_manager(?config(sequencer_manager, Config)),
     test_utils:mock_validate_and_unload(Worker, [communicator, sequencer_manager_sup]),

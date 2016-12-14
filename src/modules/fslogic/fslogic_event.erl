@@ -14,18 +14,62 @@
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("timeouts.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_file_attr_changed/2, emit_file_sizeless_attrs_update/1,
+-export([maybe_emit_file_written/4, maybe_emit_file_read/4, emit_file_truncated/3,
+    emit_file_attr_changed/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_perm_changed/1, emit_file_removed/2, emit_file_renamed/3,
-    emit_file_renamed/4, emit_quota_exeeded/0]).
+    emit_file_renamed/4, emit_quota_exeeded/0, flush_event_queue/3]).
 -export([handle_file_read_events/2, handle_file_written_events/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a file written event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_emit_file_written(DoEmit :: boolean(),fslogic_worker:file_guid(),
+    fslogic_blocks:blocks(), session:id()) ->
+    ok | {error, Reason :: term()}.
+maybe_emit_file_written(false, _FileGuid, _WrittenBlocks, _SessionId) ->
+    ok;
+maybe_emit_file_written(true, FileGuid, WrittenBlocks, SessionId) ->
+    event:emit(#file_written_event{
+        file_uuid = FileGuid, blocks = WrittenBlocks
+    }, SessionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a file read event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_emit_file_read(DoEmit :: boolean(),fslogic_worker:file_guid(),
+    fslogic_blocks:blocks(), session:id()) ->
+    ok | {error, Reason :: term()}.
+maybe_emit_file_read(false, _FileGuid, _ReadBlocks, _SessionId) ->
+    ok;
+maybe_emit_file_read(true, FileGuid, ReadBlocks, SessionId) ->
+    event:emit(#file_read_event{
+        file_uuid = FileGuid, blocks = ReadBlocks
+    }, SessionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a file truncated event if DoEmit flag is set to true
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_truncated(fslogic_worker:file_guid(), non_neg_integer(), session:id()) ->
+    ok | {error, Reason :: term()}.
+emit_file_truncated(FileGuid, Size, SessionId) ->
+    event:emit(#file_written_event{
+        file_uuid = FileGuid, blocks = [], file_size = Size
+    }, SessionId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,7 +147,7 @@ emit_file_location_changed(FileEntry, ExcludedSessions, Range) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client that permissions of file has changed.
+%% Sends event informing subscribed client that permissions of file has changed.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_perm_changed(FileUuid :: file_meta:uuid()) ->
@@ -115,7 +159,7 @@ emit_file_perm_changed(FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client about file removal.
+%% Sends event informing subscribed client about file removal.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_removed(FileGUID :: fslogic_worker:file_guid(),
@@ -126,7 +170,7 @@ emit_file_removed(FileGUID, ExcludedSessions) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client about file rename and guid change.
+%% Sends an event informing subscribed client about file rename and guid change.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed(TopEntry :: #file_renamed_entry{},
@@ -139,7 +183,7 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing given client about file rename.
+%% Sends an event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed(file_meta:uuid(), od_space:id(), file_meta:name(),
@@ -158,7 +202,7 @@ emit_file_renamed(FileUUID, SpaceId, NewName, SessionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends list of currently disabled spaces due to exeeded quota.
+%% Sends a list of currently disabled spaces due to exeeded quota.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_quota_exeeded() ->
@@ -170,7 +214,7 @@ emit_quota_exeeded() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Processes write events and returns a response.
+%% Processes file written events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_file_written_events(Evts :: [event:event()], Ctx :: maps:map()) ->
@@ -190,7 +234,7 @@ handle_file_written_events(Evts, #{session_id := SessId} = Ctx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Processes read events and returns a response.
+%% Processes file read events and returns a response.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_file_read_events(Evts :: [event:event()], Ctx :: maps:map()) ->
@@ -199,6 +243,29 @@ handle_file_read_events(Evts, #{session_id := SessId} = _Ctx) ->
     lists:map(fun(Ev) ->
         try_handle_event(fun() -> handle_file_read_event(Ev, SessId) end)
     end, Evts).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes an event streams associated with the file written subscription
+%% for given a session, uuid and provider_id.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_event_queue(od_provider:id(), file_meta:uuid(), session:id()) ->
+    ok | {error, term()}.
+flush_event_queue(SessionId, ProviderId, FileUuid) ->
+    case session:is_special(SessionId) of
+        true ->
+            ok;
+        false ->
+            RecvRef = event:flush(ProviderId, FileUuid, ?FILE_WRITTEN_SUB_ID,
+                self(), SessionId),
+            receive
+                {RecvRef, Response} ->
+                    Response
+            after ?DEFAULT_REQUEST_TIMEOUT ->
+                {error, timeout}
+            end
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -244,7 +311,7 @@ handle_file_written_event(Evt, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @private @doc
-%% Processes a file ead event and returns a response.
+%% Processes a file read event and returns a response.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_file_read_event(event:event(), session:id()) ->
@@ -262,7 +329,11 @@ handle_file_read_event(Evt, SessId) ->
         user_id = UserId}}}} = session:get(SessId),
     fslogic_times:update_atime({uuid, FileUUID}, UserId).
 
-
+%%--------------------------------------------------------------------
+%% @private @doc
+%% Provides an exception-safe environment for event handling.
+%% @end
+%%--------------------------------------------------------------------
 -spec try_handle_event(fun(() -> HandleResult)) -> HandleResult
     when HandleResult :: ok | {error, Reason :: any()}.
 try_handle_event(HandleFun) ->

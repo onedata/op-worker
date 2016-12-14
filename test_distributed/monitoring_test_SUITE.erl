@@ -212,17 +212,17 @@ rrdtool_pool_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
+    Posthook = fun(NewConfig) ->
+        [Worker | _] = ?config(op_worker_nodes, NewConfig),
 
-    ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
-        key = ?SPACE_ID, value = #space_quota{current_size = 100}}])),
-
-    initializer:setup_storage(ConfigWithNodes).
+        ?assertMatch({ok, _}, rpc:call(Worker, space_quota, create, [#document{
+            key = ?SPACE_ID, value = #space_quota{current_size = 100}}])),
+        initializer:setup_storage(NewConfig)
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
 init_per_testcase(monitoring_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -243,8 +243,7 @@ init_per_testcase(rrdtool_pool_test = Case, Config) ->
     end, lists:seq(1, ?EXPECTED_SIZE)),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     clear_state(Worker),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
@@ -254,7 +253,7 @@ init_per_testcase(Case, Config) ->
 end_per_testcase(monitoring_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, space_quota),
-    end_per_testcase(?DEFAULT_CASE(Case), Worker);
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(rrdtool_pool_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -263,11 +262,8 @@ end_per_testcase(rrdtool_pool_test = Case, Config) ->
     end, lists:seq(1, ?EXPECTED_SIZE)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
-    lfm_proxy:teardown(Config),
-    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+end_per_testcase(_Case, Config) ->
+    initializer:clean_test_users_and_spaces(Config).
 
 clear_state(Worker) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),

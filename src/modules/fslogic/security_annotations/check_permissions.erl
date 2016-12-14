@@ -50,14 +50,7 @@
 %%--------------------------------------------------------------------
 -spec before_advice(#annotation{data :: [access_definition()]}, module(), atom(), [term()]) -> term().
 before_advice(#annotation{data = AccessDefinitions}, _M, _F,
-    Args = [#fslogic_ctx{session = #session{identity = #user_identity{user_id = UserId}}, share_id = ShareId} | _]) ->
-    ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
-    % TODO - better cache "or" in AccessType
-    % TODO - better cache EACCES (it will be always traversed to first EACCES)
-    lists:foreach(fun check_rule_and_cache_result/1, ExpandedAccessDefinitions),
-    lists:foreach(fun cache_ok_result/1, ExpandedAccessDefinitions),
-    Args;
-before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_uuid = FileUUID, share_id = ShareId} = Handle | RestOfArgs] = Args) ->
+    [#sfm_handle{session_id = SessionId, file_uuid = FileUUID, share_id = ShareId} = Handle | RestOfArgs] = Args) ->
     {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} = session:get(SessionId),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
@@ -66,7 +59,14 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{sessio
             [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
         _ ->
             Args
-    end.
+    end;
+before_advice(#annotation{data = AccessDefinitions}, _M, _F, Args = [Ctx | _]) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    ShareId = file_info:get_share_id(Ctx), %todo TL get shareid from file instead of ctx
+    ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
+    lists:foreach(fun check_rule_and_cache_result/1, ExpandedAccessDefinitions),
+    lists:foreach(fun cache_ok_result/1, ExpandedAccessDefinitions),
+    Args.
 
 %%--------------------------------------------------------------------
 %% @doc annotation's after_advice implementation.

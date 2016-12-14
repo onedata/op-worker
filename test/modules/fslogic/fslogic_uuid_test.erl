@@ -17,13 +17,16 @@
 -include_lib("eunit/include/eunit.hrl").
 
 parent_uuid_test_() ->
-    {foreach, fun setup/0, fun teardown/1, [
-        fun parent_uuid_should_return_parent_uuid/1,
-        fun parent_uuid_should_return_undefined_for_user_root_dir/1,
-        fun parent_uuid_should_return_undefined_for_root_dir/1,
-        fun parent_uuid_should_return_user_root_dir_for_user_toplevel_children/1,
-        fun parent_uuid_should_return_user_root_dir_for_toplevel_children/1
-    ]}.
+    {foreach,
+        fun start/0,
+        fun stop/1,
+        [
+            fun parent_uuid_should_return_parent_uuid/1,
+            fun parent_uuid_should_return_undefined_for_user_root_dir/1,
+            fun parent_uuid_should_return_undefined_for_root_dir/1,
+            fun parent_uuid_should_return_user_root_dir_for_user_toplevel_children/1,
+            fun parent_uuid_should_return_user_root_dir_for_toplevel_children/1
+        ]}.
 
 parent_uuid_should_return_parent_uuid(UserId) ->
     [?_assertEqual(<<"ParentDirUuid">>,
@@ -48,7 +51,7 @@ parent_uuid_should_return_user_root_dir_for_toplevel_children(UserId) ->
     [?_assertEqual(UserRootUuid,
         fslogic_uuid:parent_uuid({child_of, ?ROOT_DIR_UUID}, UserId))].
 
-setup() ->
+start() ->
     meck:new(file_meta),
 
     meck:expect(file_meta, get,
@@ -59,5 +62,5 @@ setup() ->
 
     <<"UserId">>.
 
-teardown(_) ->
+stop(_) ->
     meck:unload(file_meta).

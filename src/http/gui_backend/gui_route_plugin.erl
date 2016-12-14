@@ -85,7 +85,7 @@ data_backend(true, <<"file">>) -> file_data_backend;
 data_backend(true, <<"file-shared">>) -> file_data_backend;
 data_backend(_, <<"file-public">>) -> file_data_backend;
 
-data_backend(true, <<"file-acl">>) -> file_acl_data_backend;
+data_backend(true, <<"file-permission">>) -> file_permissions_data_backend;
 
 data_backend(true, <<"file-distribution">>) -> file_distribution_data_backend;
 
@@ -146,12 +146,14 @@ session_details() ->
         value = #od_user{
             name = UserName
         }}} = od_user:get(gui_session:get_user_id()),
+    ProviderId = oneprovider:get_provider_id(),
     {ok, #document{
         value = #od_provider{
             client_name = ProviderName
-        }}} = od_provider:get_or_fetch(oneprovider:get_provider_id()),
+        }}} = od_provider:get_or_fetch(ProviderId),
     Res = [
         {<<"userName">>, UserName},
+        {<<"providerId">>, ProviderId},
         {<<"providerName">>, ProviderName},
         {<<"manageProvidersURL">>,
             str_utils:to_binary(oneprovider:get_oz_providers_page())}

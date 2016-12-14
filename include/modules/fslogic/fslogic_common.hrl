@@ -15,7 +15,7 @@
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 
 %% helper macro for not implemented functions
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).
@@ -26,14 +26,6 @@
 
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
-
-%% Context definition
--record(fslogic_ctx, {
-    session :: #session{},
-    session_id :: undefined | session:id(),
-    space_id :: file_meta:uuid(),
-    share_id :: undefined | od_share:id()
-}).
 
 %% root user definitions
 -define(ROOT_DIR_UUID, <<"">>).

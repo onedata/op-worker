@@ -77,7 +77,7 @@ gen_storage_file_id(_Entry, Path, Version) when is_integer(Version) ->
 
 -spec get_local_file_location(fslogic_worker:ext_file()) ->
     datastore:document() | no_return().
-get_local_file_location(Entry) -> %todo get rid of single file location and use get_local_file_locations/1
+get_local_file_location(Entry) -> %%todo VFS-2813 support multi location, get rid of single file location and use get_local_file_locations/1
     [LocalLocation] = get_local_file_locations(Entry),
     LocalLocation.
 
@@ -103,5 +103,5 @@ get_local_storage_file_locations(#document{value = #file_location{} = Location})
 get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}) ->
     lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{storage_id = SID, file_id = FID} <- Blocks]]);
 get_local_storage_file_locations(Entry) ->
-    #document{} = Doc = get_local_file_location(Entry),
+    #document{} = Doc = get_local_file_location(Entry), %todo VFS-2813 support multi location
     get_local_storage_file_locations(Doc).

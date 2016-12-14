@@ -61,6 +61,10 @@ handle(healthcheck) ->
 handle({remove_session, SessId}) ->
     remove_session(SessId);
 
+handle({apply, Fun}) ->
+    Fun(),
+    ok;
+
 handle(_Request) ->
     ?log_bad_request(_Request).
 

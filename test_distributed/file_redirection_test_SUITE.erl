@@ -111,15 +111,13 @@ phantom_file_deletion_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
 init_per_testcase(CaseName, Config) ->
-    ?CASE_START(CaseName),
     initializer:enable_grpca_based_communication(Config),
 
     Workers = ?config(op_worker_nodes, Config),
@@ -142,8 +140,7 @@ init_per_testcase(CaseName, Config) ->
     CaseNameBinary = list_to_binary(atom_to_list(CaseName)),
     [{test_dir, <<CaseNameBinary/binary, "_dir">>} | NewConfig].
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     initializer:unload_quota_mocks(Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

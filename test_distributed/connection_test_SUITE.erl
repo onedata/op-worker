@@ -27,7 +27,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 %%tests
@@ -443,7 +443,7 @@ bandwidth_test_base(Config) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
-    Data = crypto:rand_bytes(PacketSize * 1024),
+    Data = crypto:strong_rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
@@ -498,7 +498,7 @@ python_client_test_base(Config) ->
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
 
-    Data = crypto:rand_bytes(PacketSize * 1024),
+    Data = crypto:strong_rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
@@ -574,13 +574,9 @@ proto_version_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(cert_connection_test = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(cert_connection_test, Config) ->
     initializer:remove_pending_messages(),
     Workers = ?config(op_worker_nodes, Config),
     application:ensure_started(etls),
@@ -594,7 +590,6 @@ init_per_testcase(Case, Config) when
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test;
     Case =:= python_client_test ->
-    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     application:ensure_started(etls),
@@ -602,16 +597,14 @@ init_per_testcase(Case, Config) when
     mock_identity(Workers),
     Config;
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     mock_identity(Workers),
     application:ensure_started(etls),
     Config.
 
-end_per_testcase(cert_connection_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [user_identity, serializator]);
 
@@ -620,19 +613,16 @@ end_per_testcase(Case, Config) when
     Case =:= multi_message_test;
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
-end_per_testcase(python_client_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
     test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, user_identity).
 
@@ -652,7 +642,7 @@ connect_via_token(Node) ->
     connect_via_token(Node, [{active, true}]).
 
 connect_via_token(Node, SocketOpts) ->
-    connect_via_token(Node, SocketOpts, crypto:rand_bytes(10)).
+    connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc
