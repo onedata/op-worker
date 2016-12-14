@@ -30,18 +30,24 @@
     proxy_basic_opts_test2/1, proxy_many_ops_test2/1, proxy_distributed_modification_test2/1,
     db_sync_many_ops_test_base/1, proxy_many_ops_test1_base/1, proxy_many_ops_test2_base/1,
     file_consistency_test/1, file_consistency_test_base/1, concurrent_create_test/1,
-    permission_cache_invalidate_test/1
-]).
+    permission_cache_invalidate_test/1,
+    mkdir_and_rmdir_loop_test/1, mkdir_and_rmdir_loop_test_base/1,
+    create_and_delete_file_loop_test/1, create_and_delete_file_loop_test_base/1,
+    echo_and_delete_file_loop_test/1, echo_and_delete_file_loop_test_base/1]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
     proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
     proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
-    file_consistency_test, concurrent_create_test, permission_cache_invalidate_test
+    file_consistency_test, concurrent_create_test, permission_cache_invalidate_test,
+    mkdir_and_rmdir_loop_test, create_and_delete_file_loop_test,
+    echo_and_delete_file_loop_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
-    db_sync_many_ops_test, proxy_many_ops_test1, proxy_many_ops_test2, file_consistency_test
+    db_sync_many_ops_test, proxy_many_ops_test1, proxy_many_ops_test2,
+    file_consistency_test, mkdir_and_rmdir_loop_test,
+    create_and_delete_file_loop_test, echo_and_delete_file_loop_test
 ]).
 
 all() ->
@@ -265,6 +271,67 @@ file_consistency_test_base(Config) ->
 
 permission_cache_invalidate_test(Config) ->
     multi_provider_file_ops_test_base:permission_cache_invalidate_test_base(Config, 30).
+
+mkdir_and_rmdir_loop_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 5},
+        {success_rate, 100},
+        {parameters, [
+            [{name, iterations}, {value, 100}, {description, "Number of times sequence mkdir, rmdir will be repeated"}]
+        ]},
+        {description, "Simulates loop of sequence mkdir and rmdir operations performed by clients"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, iterations}, {value, 10000}]
+            ]},
+            {description, "Basic performance configuration"}
+        ]}
+    ]).
+mkdir_and_rmdir_loop_test_base(Config) ->
+    IterationsNum = ?config(iterations, Config),
+    multi_provider_file_ops_test_base:mkdir_and_rmdir_loop_test_base(Config, IterationsNum, <<"user1">>).
+
+create_and_delete_file_loop_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 5},
+        {success_rate, 100},
+        {parameters, [
+            [{name, iterations}, {value, 100}, {description, "Number of times sequence create, remove file will be repeated"}]
+        ]},
+        {description, "Simulates loop of sequence create and remove file operations performed by clients"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, iterations}, {value, 10000}]
+            ]},
+            {description, "Basic performance configuration"}
+        ]}
+    ]).
+create_and_delete_file_loop_test_base(Config) ->
+    IterationsNum = ?config(iterations, Config),
+    multi_provider_file_ops_test_base:create_and_delete_file_loop_test_base(Config, IterationsNum, <<"user1">>).
+
+echo_and_delete_file_loop_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 5},
+        {success_rate, 100},
+        {parameters, [
+            [{name, iterations}, {value, 100}, {description, "Number of times sequence echo, remove file will be repeated"}]
+        ]},
+        {description, "Simulates loop of sequence echo and remove file operations performed by clients"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, iterations}, {value, 10000}]
+            ]},
+            {description, "Basic performance configuration"}
+        ]}
+    ]).
+echo_and_delete_file_loop_test_base(Config) ->
+    IterationsNum = ?config(iterations, Config),
+    multi_provider_file_ops_test_base:echo_and_delete_file_loop_test_base(Config, IterationsNum, <<"user1">>).
+
+
+
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

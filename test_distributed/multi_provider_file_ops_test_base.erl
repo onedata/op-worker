@@ -25,8 +25,9 @@
 %% export for tests
 -export([
     basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4,
-    file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1
-]).
+    file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1,
+    mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
+    create_and_delete_file_loop_test_base/3]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
@@ -728,6 +729,68 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     end, ConfigsNum),
 
     ok.
+
+mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
+    Config = extend_config(Config0, User, {0, 0, 0, 0}, 0),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+
+    Dir = generator:gen_name(),
+    DirPath = <<SpaceName/binary, "/",  Dir/binary>>,
+
+    lists:foreach(fun(_N) ->
+        ct:pal("~p", [_N]),
+        MkdirAns = lfm_proxy:mkdir(Worker1, SessId(Worker1), DirPath),
+        ?assertMatch({ok, _}, MkdirAns),
+        {ok, Handle} = MkdirAns,
+        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, Handle}))
+    end, lists:seq(1, IterationsNum)),
+    ok.
+
+
+create_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
+    Config = extend_config(Config0, User, {0, 0, 0, 0}, 0),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+
+    File = generator:gen_name(),
+    FilePath = <<SpaceName/binary, "/",  File/binary>>,
+    FileBeg = <<"1234567890abcd">>,
+
+    lists:foreach(fun(_N) ->
+        create_file(Config, FileBeg, {2, FilePath}),
+        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, FilePath}))
+    end, lists:seq(1, IterationsNum)),
+    ok.
+
+
+echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
+    Config = extend_config(Config0, User, {0, 0, 0, 0}, 0),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+
+    File = generator:gen_name(),
+    FilePath = <<SpaceName/binary, "/",  File/binary>>,
+    Text = <<"0123456789abcdef">>,
+    BufSize = size(Text),
+
+    lists:foreach(fun(_N) ->
+        ct:pal("~p", [_N]),
+        ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), FilePath, 8#755)),
+        OpenAns = lfm_proxy:open(Worker1, SessId(Worker1), {path, FilePath}, write),
+        ?assertMatch({ok, _}, OpenAns),
+        {ok, Handle} = OpenAns,
+        ?assertMatch({ok, BufSize}, lfm_proxy:write(Worker1, Handle, 0, Text)),
+        lfm_proxy:close(Worker1, Handle),
+        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, FilePath}))
+    end, lists:seq(1, IterationsNum)),
+    ok.
+
+
+
 
 %%%===================================================================
 %%% Internal functions
