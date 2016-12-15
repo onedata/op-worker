@@ -216,7 +216,7 @@ get_provider(Request, #state{providers = Providers} = State) ->
 %% a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_for_file(Entry :: {guid, FileUuid :: file_meta:uuid()},
+-spec get_provider_for_file(Entry :: {guid, FileUuid :: fslogic_worker:file_guid()},
     State :: #state{}) -> ProviderId :: oneprovider:id() | no_return().
 get_provider_for_file(Entry, #state{session_id = SessId}) ->
     {ok, UserId} = session:get_user_id(SessId),

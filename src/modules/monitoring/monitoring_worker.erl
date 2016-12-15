@@ -37,7 +37,9 @@
 init(_Args) ->
     event:subscribe(#subscription{
         id = ?MONITORING_SUB_ID,
-        type = #monitoring_subscription{time_threshold = ?STEP_IN_SECONDS}
+        type = #monitoring_subscription{
+            time_threshold = timer:seconds(?STEP_IN_SECONDS)
+        }
     }, ?ROOT_SESS_ID),
 
     {ok, #{}}.

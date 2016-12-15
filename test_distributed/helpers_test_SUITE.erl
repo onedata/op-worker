@@ -32,7 +32,7 @@
 -export([
     getattr_test/1, access_test/1, mknod_test/1, mkdir_test/1, unlink_test/1, rmdir_test/1, symlink_test/1,
     rename_test/1, chmod_test/1, chown_test/1, truncate_test/1, open_test/1, read_test/1, write_test/1,
-    release_test/1, flush_test/1, fsync_test/1
+    big_write_test/1, release_test/1, flush_test/1, fsync_test/1
 ]).
 
 all() ->
@@ -159,6 +159,23 @@ write_test(Config) ->
     {ok, Dev2} = call(Config, file, open, [?path(Config, File), [read, binary]]),
     {ok, <<"tetest">>} = call(Config, file, read, [Dev2, 6]).
 
+big_write_test(Config) ->
+    File = gen_filename(),
+    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
+    ChunkSize = 1024 * 1024,
+
+    lists:foldl(fun(N, Data) ->
+        Size = N * ChunkSize,
+        NewData = <<Data/binary, (crypto:strong_rand_bytes(ChunkSize))/binary>>,
+
+        {ok, Handle} = call(Config, open, [File, write]),
+        ?assertMatch({ok, Size}, call(Handle, write, [0, NewData])),
+        {ok, DataRead} = call(Config, file, read_file, [?path(Config, File)]),
+        ?assertMatch(DataRead, NewData),
+
+        NewData
+    end, <<>>, lists:seq(1, 10)).
+
 release_test(_Config) ->
     _File = gen_filename(),
     %todo
@@ -207,7 +224,7 @@ gen_filename() ->
 
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")},
-                             #posix_user_ctx{uid = 0, gid = 0}),
+        #posix_user_ctx{uid = 0, gid = 0}),
     ctx_server(Config, CTX).
 ctx_server(Config, CTX) ->
     receive
