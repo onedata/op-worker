@@ -13,20 +13,12 @@
 -ifndef(OP_WORKER_MODULES_EVENTS_TYPES_HRL).
 -define(OP_WORKER_MODULES_EVENTS_TYPES_HRL, 1).
 
--include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 
 %% definition of a top level event wrapper
-%% key        - arbitrary value that distinguish events, i.e. events with the same
-%%              key can be aggregated
-%% stream_key - if present defines a stream that should handle this event
-%% counter    - number of events aggregated in this event
-%% object     - wrapped event
+%% type - specific event
 -record(event, {
-    key :: event:key(),
-    stream_id :: event_stream:id(),
-    stream_key :: undefined | event_stream:key(),
-    counter = 1 :: event:counter(),
-    object :: undefined | event:object()
+    type :: event:type()
 }).
 
 %% definition of a events container
@@ -43,36 +35,46 @@
 }).
 
 %% definition of an event associated with a read operation in the file system
+%% counter   - number of events aggregated in this event
 %% file_uuid - UUID of a file associated with the read operation
 %% size      - number of bytes read
 %% blocks    - list of offset, size pairs that describes bytes segments read
--record(read_event, {
+-record(file_read_event, {
+    counter = 1 :: non_neg_integer(),
     file_uuid :: file_meta:uuid(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
 %% definition of an event associated with a write operation in the file system
+%% counter    - number of events aggregated in this event
 %% file_uuid - UUID of a file associated with the write operation
 %% file_size - size of a file after the write operation
 %% size      - number of bytes written
 %% blocks    - list of offset, size pairs that describes bytes segments written
--record(write_event, {
-    file_uuid :: fslogic_worker:file_guid(),
+-record(file_written_event, {
+    counter = 1 :: non_neg_integer(),
+    file_uuid :: file_meta:uuid(),
     file_size :: undefined | file_meta:size(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
-%% definition of an event associated with an update operation in the file system
-%% object - wrapped structure that has been modified
--record(update_event, {
-    object :: event:update_object()
+%% definition of an event triggered when file attributes are changed
+%% file_attr - updated file attributes
+-record(file_attr_changed_event, {
+    file_attr :: #file_attr{}
 }).
 
-%% definition of an event triggered when file permission gets changed
+%% definition of an event triggered when file location is changed
+%% file_location - updated file location
+-record(file_location_changed_event, {
+    file_location :: #file_location{}
+}).
+
+%% definition of an event triggered when file permission is changed
 %% file_uuid - UUID of a file
--record(permission_changed_event, {
+-record(file_perm_changed_event, {
     file_uuid :: file_meta:uuid()
 }).
 
@@ -82,58 +84,23 @@
     file_uuid :: file_meta:uuid()
 }).
 
-%% definition of an event triggered when any of spaces becomes (un)available
--record(quota_exeeded_event, {
-   spaces = [] :: [od_space:id()]
-}).
-
 %% definition of an event triggered when file is renamed
-%% old_uuid - old UUID of renamed file
-%% new_uuid - new UUID of renamed file
+%% top_entry     - file renamed entry
+%% child_entries - list of file renamed entries for children
 -record(file_renamed_event, {
     top_entry :: #file_renamed_entry{},
     child_entries = [] :: [#file_renamed_entry{}]
 }).
 
-%% definition of event triggered when storage usage is changed
-%% space_id        - ID of space
-%% user_id         - ID of user
-%% size_difference - size difference of storage usage in bytes since last update
--record(storage_used_updated, {
-    space_id :: datastore:id(),
-    user_id :: undefined | datastore:id(),
-    size_difference :: integer()
+%% definition of an event triggered when space exceeds the storage quota
+%% spaces - list of spaces for which storage quota is exceeded
+-record(quota_exceeded_event, {
+    spaces = [] :: [od_space:id()]
 }).
 
-%% definition of event triggered when space record has changed
--record(od_space_updated, {
-    space_id :: datastore:id()
-}).
-
-%% definition of event with read/write statistics
-%% space_id           - ID of space
-%% user_id            - ID of user
-%% data_access_read   - number of read bytes
-%% data_access_write  - number of write bytes
-%% block_access_write - number of read blocks
-%% block_access_read  - number of write blocks
--record(file_operations_statistics, {
-    space_id :: datastore:id(),
-    user_id :: undefined | datastore:id(),
-    data_access_read = 0 :: non_neg_integer() ,
-    data_access_write = 0 :: non_neg_integer(),
-    block_access_read = 0 :: non_neg_integer(),
-    block_access_write = 0 :: non_neg_integer()
-}).
-
-%% definition of event with rtransfer statistics
-%% space_id    - ID of space
-%% user_id     - ID of user
-%% transfer_in - data replicated to provider in bytes
--record(rtransfer_statistics, {
-    space_id :: datastore:id(),
-    user_id :: undefined | datastore:id(),
-    transfer_in = 0 :: non_neg_integer()
+%% definition of a monitoring event
+-record(monitoring_event, {
+    type :: monitoring_event:type()
 }).
 
 -endif.

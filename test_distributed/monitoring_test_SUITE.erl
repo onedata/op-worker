@@ -148,19 +148,24 @@ monitoring_test(Config) ->
     rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 950000]),
     rpc:call(Worker, monitoring_event, emit_storage_used_updated, [?SPACE_ID, ?USER_ID, 50000]),
 
-    rpc:call(Worker, monitoring_event, emit_read_statistics, [?SPACE_ID, ?USER_ID, 0, 300]),
-    rpc:call(Worker, monitoring_event, emit_read_statistics, [?SPACE_ID, ?USER_ID, 300, 0]),
+    rpc:call(Worker, monitoring_event, emit_file_read_statistics, [?SPACE_ID, ?USER_ID, 0, 300]),
+    rpc:call(Worker, monitoring_event, emit_file_read_statistics, [?SPACE_ID, ?USER_ID, 300, 0]),
 
-    rpc:call(Worker, monitoring_event, emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 299]),
-    rpc:call(Worker, monitoring_event, emit_write_statistics, [?SPACE_ID, ?USER_ID, 150, 1]),
+    rpc:call(Worker, monitoring_event, emit_file_written_statistics, [?SPACE_ID, ?USER_ID, 150, 299]),
+    rpc:call(Worker, monitoring_event, emit_file_written_statistics, [?SPACE_ID, ?USER_ID, 150, 1]),
 
     rpc:call(Worker, monitoring_event, emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 100]),
     rpc:call(Worker, monitoring_event, emit_rtransfer_statistics, [?SPACE_ID, ?USER_ID, 200]),
 
-    {ok, #document{value = #session{event_manager = Pid}}} =
-        rpc:call(Worker, session, get, [?ROOT_SESS_ID]),
-    ?assertEqual(ok, rpc:call(Worker, gen_server, cast, [Pid,
-        {flush_stream, ?MONITORING_SUB_ID, fun(_) -> ok end}])),
+    Self = self(),
+    Ref = make_ref(),
+    ProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    rpc:call(Worker, event, flush, [#flush_events{
+        provider_id = rpc:call(Worker, oneprovider, get_provider_id, []),
+        subscription_id = ?MONITORING_SUB_ID,
+        notify = fun(_) -> Self ! {Ref, ok} end
+    }, ?ROOT_SESS_ID]),
+    ?assertReceivedMatch({Ref, ok}, ?TIMEOUT),
 
     timer:sleep(timer:seconds(?STEP_IN_SECONDS)),
 

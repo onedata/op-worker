@@ -50,11 +50,11 @@ translate_file_block_from_protobuf_test() ->
     ?assertEqual(Internal2, translator:translate_from_protobuf(Protobuf2)).
 
 translate_events_from_protobuf_test() ->
-    {Internal, Protobuf} = get_events(5, 1),
+    {Internal, Protobuf} = get_events(5),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_event_from_protobuf_test() ->
-    {Internal, Protobuf} = get_event(1),
+    {Internal, Protobuf} = get_event(),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_read_event_from_protobuf_test() ->
@@ -131,19 +131,12 @@ translate_status_to_protobuf_test() ->
     ).
 
 translate_events_to_protobuf_test() ->
-    ?assertEqual({events, #'Events'{events = [#'Event'{counter = 1}]}},
-        translator:translate_to_protobuf(#events{events = [#event{counter = 1}]})
+    ?assertEqual({events, #'Events'{events = [#'Event'{}]}},
+        translator:translate_to_protobuf(#events{events = [#event{}]})
     ).
 
 translate_event_to_protobuf_test() ->
-    ?assertEqual(#'Event'{counter = 1},
-        translator:translate_to_protobuf(#event{counter = 1})
-    ).
-
-translate_update_event_to_protobuf_test() ->
-    ?assertEqual({update_event, #'UpdateEvent'{}},
-        translator:translate_to_protobuf(#update_event{})
-    ).
+    ?assertEqual(#'Event'{}, translator:translate_to_protobuf(#event{})).
 
 translate_subscription_cancellation_to_protobuf_test() ->
     ?assertEqual({subscription_cancellation, #'SubscriptionCancellation'{id = 42}},
@@ -156,25 +149,21 @@ translate_subscription_to_protobuf_test() ->
     ).
 
 translate_read_subscription_to_protobuf_test() ->
-    ?assertEqual({read_subscription, #'ReadSubscription'{
+    ?assertEqual({file_read, #'FileReadSubscription'{
         counter_threshold = 12,
-        time_threshold = 500,
-        size_threshold = 1024
-    }}, translator:translate_to_protobuf(#read_subscription{
+        time_threshold = 500
+    }}, translator:translate_to_protobuf(#file_read_subscription{
         counter_threshold = 12,
-        time_threshold = 500,
-        size_threshold = 1024
+        time_threshold = 500
     })).
 
 translate_write_subscription_to_protobuf_test() ->
-    ?assertEqual({write_subscription, #'WriteSubscription'{
+    ?assertEqual({file_written, #'FileWrittenSubscription'{
         counter_threshold = 12,
-        time_threshold = 500,
-        size_threshold = 1024
-    }}, translator:translate_to_protobuf(#write_subscription{
+        time_threshold = 500
+    }}, translator:translate_to_protobuf(#file_written_subscription{
         counter_threshold = 12,
-        time_threshold = 500,
-        size_threshold = 1024
+        time_threshold = 500
     })).
 
 translate_handshake_response_to_protobuf_test() ->
@@ -299,31 +288,32 @@ get_file_block(Off, S) ->
 get_file_block_list(Num, MaxS) ->
     lists:unzip([get_file_block(random:uniform(MaxS), random:uniform(MaxS)) || _ <- lists:seq(1, Num)]).
 
-get_events(N, Counter) ->
-    {InternalEvt, ProtobufEvt} = get_event(Counter),
+get_events(N) ->
+    {InternalEvt, ProtobufEvt} = get_event(),
     {
         #events{events = lists:duplicate(N, InternalEvt)},
         #'Events'{events = lists:duplicate(N, ProtobufEvt)}
     }.
 
-get_event(Counter) ->
-    {
-        #event{counter = Counter},
-        #'Event'{counter = Counter, object = {object, undefined}}
-    }.
+get_event() ->
+    {#event{}, #'Event'{type = {type, undefined}}}.
 
 get_read_event(FileUuid, Size, Num, MaxS) ->
     {InternalBlocks, ProtobufBlocks} = get_file_block_list(Num, MaxS),
     {
-        #read_event{file_uuid = FileUuid, size = Size, blocks = InternalBlocks},
-        #'ReadEvent'{file_uuid = FileUuid, size = Size, blocks = ProtobufBlocks}
+        #file_read_event{counter = 1, file_uuid = FileUuid, size = Size,
+            blocks = InternalBlocks},
+        #'FileReadEvent'{counter = 1, file_uuid = FileUuid, size = Size,
+            blocks = ProtobufBlocks}
     }.
 
 get_write_event(FileUuid, Size, FileSize, Num, MaxS) ->
     {InternalBlocks, ProtobufBlocks} = get_file_block_list(Num, MaxS),
     {
-        #write_event{file_uuid = FileUuid, size = Size, file_size = FileSize, blocks = InternalBlocks},
-        #'WriteEvent'{file_uuid = FileUuid, size = Size, file_size = FileSize, blocks = ProtobufBlocks}
+        #file_written_event{counter = 1, file_uuid = FileUuid, size = Size,
+            file_size = FileSize, blocks = InternalBlocks},
+        #'FileWrittenEvent'{counter = 1, file_uuid = FileUuid, size = Size,
+            file_size = FileSize, blocks = ProtobufBlocks}
     }.
 
 get_token(Val) ->

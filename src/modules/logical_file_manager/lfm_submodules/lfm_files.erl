@@ -276,7 +276,7 @@ truncate(SessId, FileKey, Size) ->
     lfm_utils:call_fslogic(SessId, file_request, FileGUID,
         #truncate{size = Size},
         fun(_) ->
-            ok = fslogic_event:emit_truncate(FileGUID, Size, SessId)
+            ok = fslogic_event:emit_file_truncated(FileGUID, Size, SessId)
         end).
 
 %%--------------------------------------------------------------------
@@ -461,7 +461,7 @@ write_internal(Handle, Offset, Buffer, GenerateEvents) ->
                 file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
             }],
             NewBlocks = fslogic_blocks:merge(WrittenBlocks, CBlocks),
-            ok = fslogic_event:maybe_emit_write(GenerateEvents, Guid, WrittenBlocks, SessId),
+            ok = fslogic_event:maybe_emit_file_written(GenerateEvents, Guid, WrittenBlocks, SessId),
             NewLocationHandle = lfm_context:set_file_location(NewHandle, Location#file_location{blocks = NewBlocks}),
             {ok, NewLocationHandle, Written};
         {error, Reason2} ->
@@ -523,7 +523,7 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
                 file_id = FileId, storage_id = StorageId, offset = Offset,
                 size = size(Data)
             }],
-            ok = fslogic_event:maybe_emit_read(GenerateEvents, Guid, ReadBlocks, SessId),
+            ok = fslogic_event:maybe_emit_file_read(GenerateEvents, Guid, ReadBlocks, SessId),
 
             {ok, NewHandle, Data};
         {error, Reason2} ->
