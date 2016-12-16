@@ -12,12 +12,13 @@
 -module(helpers_utils).
 -author("Krzysztof Trzepla").
 
+-include("global_definitions.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 
 %% API
--export([get_params/2]).
+-export([get_params/2, get_timeout/1]).
 -export([create_test_file/2, create_test_file/3,
     create_test_file/4, read_test_file/4, read_test_file/2, update_test_file/4,
     remove_test_file/4, remove_test_file/2]).
@@ -43,6 +44,22 @@ get_params(#helper_init{name = Name, args = Args}, UserCtx) ->
     end,
     HelperArgs = [#helper_arg{key = K, value = V} || {K, V} <- maps:to_list(HelperArgsMap)],
     #helper_params{helper_name = Name, helper_args = HelperArgs}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns timeout for storage helper async operations.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_timeout(HelperArgs :: helpers:args()) -> Timeout :: non_neg_integer().
+get_timeout(HelperArgs) ->
+    case maps:find(<<"timeout">>, HelperArgs) of
+        {ok, Value} ->
+            erlang:binary_to_integer(Value);
+        error ->
+            {ok, Value} = application:get_env(?APP_NAME,
+                helpers_async_operation_timeout_milliseconds),
+            Value
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

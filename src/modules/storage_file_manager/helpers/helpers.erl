@@ -24,14 +24,14 @@
 %% Internal context record.
 -record(helper_handle, {
     instance :: helpers_nif:resource_handle(),
-    timeout = timer:seconds(30) :: non_neg_integer(),
+    timeout :: timeout(),
     helper_name :: name()
 }).
 
 %% Internal context record.
 -record(helper_file_handle, {
     instance :: helpers_nif:resource_handle(),
-    timeout :: non_neg_integer()
+    timeout :: timeout()
 }).
 
 -define(extract(Record, What),
@@ -96,7 +96,11 @@ new_handle(HelperName, HelperArgs, UserCtx) ->
     ?debug("helpers:new_handle~p ~p ~p", [HelperName, HelperArgs, UserCtx]),
     CtxArgs = extract_args(UserCtx),
     {ok, HelperObj} = helpers_nif:new_helper_obj(HelperName, maps:merge(HelperArgs, CtxArgs)),
-    #helper_handle{instance = HelperObj, helper_name = HelperName}.
+    #helper_handle{
+        instance = HelperObj,
+        helper_name = HelperName,
+        timeout = helpers_utils:get_timeout(HelperArgs)
+    }.
 
 
 %%--------------------------------------------------------------------
