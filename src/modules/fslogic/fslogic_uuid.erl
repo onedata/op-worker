@@ -23,7 +23,8 @@
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1]).
 -export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
 -export([uuid_to_share_guid/3, unpack_share_guid/1]).
--export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1]).
+-export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
+    guid_to_share_id/1]).
 
 %%%===================================================================
 %%% API
@@ -75,12 +76,14 @@ gen_file_uuid() ->
 %% Converts given file entry to FileGUID.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:file_guid_or_path()) ->
+-spec ensure_guid(fslogic_worker:ctx() | session:id(), fslogic_worker:file_guid_or_path()) ->
     {guid, fslogic_worker:file_guid()}.
-ensure_guid(_CTX, {guid, FileGUID}) ->
+ensure_guid(_, {guid, FileGUID}) ->
     {guid, FileGUID};
-ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
-    lfm_utils:call_fslogic(SessId, fuse_request,
+ensure_guid(Ctx, {path, Path}) when is_tuple(Ctx) -> %todo TL use only sessionId
+    ensure_guid(fslogic_context:get_session_id(Ctx), {path, Path});
+ensure_guid(SessionId, {path, Path}) ->
+    lfm_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
         fun(#file_attr{uuid = GUID}) ->
             {guid, GUID}
@@ -92,9 +95,9 @@ ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec path_to_uuid(fslogic_worker:ctx(), file_meta:path()) -> file_meta:uuid().
-path_to_uuid(CTX, Path) ->
+path_to_uuid(Ctx, Path) when is_tuple(Ctx) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    Entry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     {ok, #document{key = UUID}} = file_meta:get(Entry),
     UUID.
 
@@ -103,14 +106,24 @@ path_to_uuid(CTX, Path) ->
 %% Gets full file path.
 %% @end
 %%--------------------------------------------------------------------
--spec uuid_to_path(fslogic_worker:ctx(), file_meta:uuid()) -> file_meta:path().
-uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
-    identity = #user_identity{user_id = UserId}}}, FileUuid) ->
+-spec uuid_to_path(fslogic_worker:ctx() | session:id(), file_meta:uuid()) -> file_meta:path().
+uuid_to_path(Ctx, FileUuid) when is_tuple(Ctx) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    SessId = fslogic_context:get_session_id(Ctx),
     UserRoot = user_root_dir_uuid(UserId),
     case FileUuid of
         UserRoot -> <<"/">>;
         _ ->
             {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
+            Path
+    end;
+uuid_to_path(SessionId, FileUuid) ->
+    UserId = session:get_user_id(SessionId),
+    UserRoot = user_root_dir_uuid(UserId),
+    case FileUuid of
+        UserRoot -> <<"/">>;
+        _ ->
+            {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessionId),
             Path
     end.
 
@@ -271,6 +284,17 @@ is_share_guid(Id) ->
         {_, _, undefined} -> false;
         _ -> true
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get share id connected with given guid (returns undefined if guid is
+%% not of shared type).
+%% @end
+%%--------------------------------------------------------------------
+-spec guid_to_share_id(od_share:share_guid()) -> od_share:id() | undefined.
+guid_to_share_id(Guid) ->
+    {_, _, ShareId} = unpack_share_guid(Guid),
+    ShareId.
 
 %%%===================================================================
 %%% Internal functions

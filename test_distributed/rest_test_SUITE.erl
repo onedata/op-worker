@@ -21,8 +21,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
     token_auth/1,
@@ -142,26 +141,24 @@ custom_error_when_handler_throws_error(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    initializer:clear_models(Worker, [subscription]),
-    NewConfig.
+    Posthook = fun(NewConfig) ->
+        [Worker | _] = ?config(op_worker_nodes, NewConfig),
+        initializer:clear_models(Worker, [subscription]),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= internal_error_when_handler_crashes;
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
-    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     application:start(etls),
     hackney:start(),
     test_utils:mock_new(Workers, files),
     Config;
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     application:start(etls),
     hackney:start(),
     mock_oz_spaces(Config),
@@ -172,13 +169,11 @@ end_per_testcase(Case, Config) when
     Case =:= internal_error_when_handler_crashes;
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, files),
     hackney:stop(),
     application:stop(etls);
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     unmock_oz_spaces(Config),
     unmock_oz_certificates(Config),
     hackney:stop(),

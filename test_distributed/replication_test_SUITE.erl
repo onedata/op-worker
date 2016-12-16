@@ -605,7 +605,7 @@ remote_change_of_size_should_notify_clients(Config) ->
 
     % mock events
     test_utils:mock_new(W1, [fslogic_event], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_event, emit_file_attr_update,
+    test_utils:mock_expect(W1, fslogic_event, emit_file_attr_changed,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
@@ -613,7 +613,7 @@ remote_change_of_size_should_notify_clients(Config) ->
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-    ?assert(?rpc(meck, called, [fslogic_event, emit_file_attr_update, [{uuid, FileUuid}, []]])),
+    ?assert(?rpc(meck, called, [fslogic_event, emit_file_attr_changed, [{uuid, FileUuid}, []]])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
 remote_change_of_blocks_should_notify_clients(Config) ->
@@ -651,7 +651,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
 
     % mock events
     test_utils:mock_new(W1, [fslogic_event], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_event, emit_file_location_update,
+    test_utils:mock_expect(W1, fslogic_event, emit_file_location_changed,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
@@ -659,7 +659,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-    ?assert(?rpc(meck, called, [fslogic_event, emit_file_location_update, [{uuid, FileUuid}, []]])),
+    ?assert(?rpc(meck, called, [fslogic_event, emit_file_location_changed, [{uuid, FileUuid}, []]])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
 remote_irrelevant_change_should_not_notify_clients(Config) ->
@@ -702,7 +702,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
 
     % mock events
     test_utils:mock_new(W1, [fslogic_event], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_event, emit_file_location_update,
+    test_utils:mock_expect(W1, fslogic_event, emit_file_location_changed,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
@@ -710,8 +710,8 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-%%    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_location_update, ['_', '_']])), %todo VFS-2132
-    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_attr_update, ['_', '_']])),
+%%    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_location_changed, ['_', '_']])), %todo VFS-2132
+    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_attr_changed, ['_', '_']])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
 
@@ -1079,23 +1079,20 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer, ?MODULE]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

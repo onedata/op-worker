@@ -147,21 +147,31 @@ gen_storage_path(Entry) ->
     end).
 
 %%--------------------------------------------------------------------
-%% @doc Gets file's full name (user's root is added to name, but only when
-%% asking about non-group dir).
+%% @doc Gets file's full name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry(Ctx :: fslogic_worker:ctx(), Tokens :: [file_meta:path()]) ->
-    FileEntry :: file_meta:entry() | no_return().
-get_canonical_file_entry(#fslogic_ctx{session_id = ?ROOT_SESS_ID}, Tokens) ->
-    Path = fslogic_path:join(Tokens),
-    {path, Path};
-get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
+-spec get_canonical_file_entry(fslogic_worker:ctx(), [file_meta:path()]) ->
+    file_meta:entry() | no_return().
+get_canonical_file_entry(Ctx, Tokens) ->
+    case session:is_special(fslogic_context:get_session_id(Ctx)) of
+        true ->
+            {path, fslogic_path:join(Tokens)};
+        false ->
+            get_canonical_file_entry_for_user(Ctx, Tokens)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file's full name, checking user defined space names.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_canonical_file_entry_for_user(fslogic_worker:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
+get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
-get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
+get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
+    {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId), %todo TL cache it in fslogic_context
 
     MatchedSpaces = lists:filter(fun({_, Name}) ->
         Name =:= SpaceName
@@ -174,7 +184,7 @@ get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_
             {path, fslogic_path:join(
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | Tokens])}
     end;
-get_canonical_file_entry(Ctx, Tokens) ->
+get_canonical_file_entry_for_user(_Ctx, Tokens) ->
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens]),
     {path, Path}.
 

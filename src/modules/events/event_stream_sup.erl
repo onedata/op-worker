@@ -16,10 +16,10 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/0]).
 
 %% Supervisor callbacks
--export([init/1, start_event_stream/4]).
+-export([init/1, start_stream/4]).
 
 %%%===================================================================
 %%% API functions
@@ -30,21 +30,20 @@
 %% Starts the event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessType :: session:type()) ->
-    {ok, EvtStmSup :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessType) ->
-    supervisor:start_link(?MODULE, [SessType]).
+-spec start_link() ->
+    {ok, StmsSup :: pid()} | ignore | {error, Reason :: term()}.
+start_link() ->
+    supervisor:start_link(?MODULE, []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the event stream supervised by event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_stream(EvtStmSup :: pid(), EvtMan :: pid(),
-    Sub :: event:subscription(), SessId :: session:id()) ->
-    supervisor:startchild_ret().
-start_event_stream(EvtStmSup, EvtMan, Sub, SessId) ->
-    supervisor:start_child(EvtStmSup, [EvtMan, Sub, SessId]).
+-spec start_stream(StmsSup :: pid(), Mgr :: pid(), Sub :: event:subscription(),
+    SessId :: session:id()) -> supervisor:startchild_ret().
+start_stream(StmsSup, Mgr, Sub, SessId) ->
+    supervisor:start_child(StmsSup, [Mgr, Sub, SessId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -61,9 +60,9 @@ start_event_stream(EvtStmSup, EvtMan, Sub, SessId) ->
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
-init([SessType]) ->
+init([]) ->
     {ok, {#{strategy => simple_one_for_one, intensity => 3, period => 1}, [
-        event_stream_spec(SessType)
+        stream_spec()
     ]}}.
 
 %%%===================================================================
@@ -76,11 +75,11 @@ init([SessType]) ->
 %% Returns a supervisor child_spec for a event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec event_stream_spec(SessType :: session:type()) -> supervisor:child_spec().
-event_stream_spec(SessType) ->
+-spec stream_spec() -> supervisor:child_spec().
+stream_spec() ->
     #{
         id => event_stream,
-        start => {event_stream, start_link, [SessType]},
+        start => {event_stream, start_link, []},
         restart => transient,
         shutdown => timer:seconds(10),
         type => worker,

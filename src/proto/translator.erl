@@ -73,103 +73,104 @@ translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #file_block{offset = Off, size = S, file_id = FID, storage_id = SID};
-translate_from_protobuf(#'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName}) ->
-    #file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName};
+translate_from_protobuf(#'FileRenamedEntry'{} = Record) ->
+    #file_renamed_entry{
+        old_uuid = Record#'FileRenamedEntry'.old_uuid,
+        new_uuid = Record#'FileRenamedEntry'.new_uuid,
+        new_parent_uuid = Record#'FileRenamedEntry'.new_parent_uuid,
+        new_name = Record#'FileRenamedEntry'.new_name
+    };
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
     #dir{uuid = UUID};
 
 
 %% EVENT
-translate_from_protobuf(#'Event'{counter = Counter, object = {_, Record}}) ->
-    #event{counter = Counter, object = translate_from_protobuf(Record)};
+translate_from_protobuf(#'Event'{type = {_, Record}}) ->
+    #event{type = translate_from_protobuf(Record)};
 translate_from_protobuf(#'Events'{events = Evts}) ->
     #events{events = [translate_from_protobuf(Evt) || Evt <- Evts]};
-translate_from_protobuf(#'FlushEvents'{provider_id = ProviderId, subscription_id = SubId, context = Context}) ->
-    #flush_events{provider_id = ProviderId, subscription_id = SubId, context = binary_to_term(Context)};
-translate_from_protobuf(#'ReadEvent'{} = Record) ->
-    #read_event{
-        file_uuid = Record#'ReadEvent'.file_uuid,
-        size = Record#'ReadEvent'.size,
-        blocks = [translate_from_protobuf(B) || B <- Record#'ReadEvent'.blocks]
+translate_from_protobuf(#'FlushEvents'{} = Record) ->
+    #flush_events{
+        provider_id = Record#'FlushEvents'.provider_id,
+        subscription_id = Record#'FlushEvents'.subscription_id,
+        context = binary_to_term(Record#'FlushEvents'.context)
     };
-translate_from_protobuf(#'WriteEvent'{} = Record) ->
-    #write_event{
-        file_uuid = Record#'WriteEvent'.file_uuid,
-        size = Record#'WriteEvent'.size,
-        file_size = Record#'WriteEvent'.file_size,
-        blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]
+translate_from_protobuf(#'FileReadEvent'{} = Record) ->
+    #file_read_event{
+        counter = Record#'FileReadEvent'.counter,
+        file_uuid = Record#'FileReadEvent'.file_uuid,
+        size = Record#'FileReadEvent'.size,
+        blocks = [translate_from_protobuf(B) || B <- Record#'FileReadEvent'.blocks]
     };
-translate_from_protobuf(#'UpdateEvent'{object = {_, Obj}}) ->
-    #update_event{
-        object = translate_from_protobuf(Obj)
+translate_from_protobuf(#'FileWrittenEvent'{} = Record) ->
+    #file_written_event{
+        counter = Record#'FileWrittenEvent'.counter,
+        file_uuid = Record#'FileWrittenEvent'.file_uuid,
+        size = Record#'FileWrittenEvent'.size,
+        file_size = Record#'FileWrittenEvent'.file_size,
+        blocks = [translate_from_protobuf(B) || B <- Record#'FileWrittenEvent'.blocks]
     };
-translate_from_protobuf(#'PermissionChangedEvent'{file_uuid = FileUuid}) ->
-    #permission_changed_event{file_uuid = FileUuid};
-translate_from_protobuf(#'FileRemovalEvent'{} = Record) ->
-    #file_removal_event{
-        file_uuid = Record#'FileRemovalEvent'.file_uuid
+translate_from_protobuf(#'FileAttrChangedEvent'{file_attr = FileAttr}) ->
+    #file_attr_changed_event{
+        file_attr = translate_from_protobuf(FileAttr)
     };
-translate_from_protobuf(#'QuotaExeededEvent'{spaces = Spaces}) ->
-    #quota_exeeded_event{
-        spaces = Spaces
+translate_from_protobuf(#'FileLocationChangedEvent'{file_location = FileLocation}) ->
+    #file_location_changed_event{
+        file_location = translate_from_protobuf(FileLocation)
     };
-translate_from_protobuf(#'FileAccessedEvent'{} = Record) ->
-    #file_accessed_event{
-        file_uuid = Record#'FileAccessedEvent'.file_uuid,
-        open_count = Record#'FileAccessedEvent'.open_count,
-        release_count = Record#'FileAccessedEvent'.release_count
+translate_from_protobuf(#'FilePermChangedEvent'{file_uuid = FileUuid}) ->
+    #file_perm_changed_event{file_uuid = FileUuid};
+translate_from_protobuf(#'FileRemovedEvent'{file_uuid = FileUuid}) ->
+    #file_removed_event{file_uuid = FileUuid};
+translate_from_protobuf(#'FileRenamedEvent'{} = Record) ->
+    #file_renamed_event{
+        top_entry = translate_from_protobuf(Record#'FileRenamedEvent'.top_entry),
+        child_entries = [translate_from_protobuf(Entry) ||
+            Entry <- Record#'FileRenamedEvent'.child_entries]
     };
-
+translate_from_protobuf(#'QuotaExceededEvent'{spaces = Spaces}) ->
+    #quota_exceeded_event{spaces = Spaces};
 
 %% SUBSCRIPTION
-translate_from_protobuf(#'Subscription'{id = Id, object = {_, Record}}) ->
+translate_from_protobuf(#'Subscription'{id = Id, type = {_, Record}}) ->
     #subscription{
         id = Id,
-        object = translate_from_protobuf(Record)
+        type = translate_from_protobuf(Record)
     };
-translate_from_protobuf(#'ReadSubscription'{} = Record) ->
-    #read_subscription{
-        counter_threshold = Record#'ReadSubscription'.counter_threshold,
-        size_threshold = Record#'ReadSubscription'.size_threshold,
-        time_threshold = Record#'ReadSubscription'.time_threshold
+translate_from_protobuf(#'FileReadSubscription'{} = Record) ->
+    #file_read_subscription{
+        counter_threshold = Record#'FileReadSubscription'.counter_threshold,
+        time_threshold = Record#'FileReadSubscription'.time_threshold
     };
-translate_from_protobuf(#'WriteSubscription'{} = Record) ->
-    #write_subscription{
-        counter_threshold = Record#'WriteSubscription'.counter_threshold,
-        size_threshold = Record#'WriteSubscription'.size_threshold,
-        time_threshold = Record#'WriteSubscription'.time_threshold
+translate_from_protobuf(#'FileWrittenSubscription'{} = Record) ->
+    #file_written_subscription{
+        counter_threshold = Record#'FileWrittenSubscription'.counter_threshold,
+        time_threshold = Record#'FileWrittenSubscription'.time_threshold
     };
-translate_from_protobuf(#'FileAttrSubscription'{} = Record) ->
-    #file_attr_subscription{
-        file_uuid = Record#'FileAttrSubscription'.file_uuid,
-        counter_threshold = Record#'FileAttrSubscription'.counter_threshold,
-        time_threshold = Record#'FileAttrSubscription'.time_threshold
+translate_from_protobuf(#'FileAttrChangedSubscription'{} = Record) ->
+    #file_attr_changed_subscription{
+        file_uuid = Record#'FileAttrChangedSubscription'.file_uuid,
+        time_threshold = Record#'FileAttrChangedSubscription'.time_threshold
     };
-translate_from_protobuf(#'FileLocationSubscription'{} = Record) ->
-    #file_location_subscription{
-        file_uuid = Record#'FileLocationSubscription'.file_uuid,
-        counter_threshold = Record#'FileLocationSubscription'.counter_threshold,
-        time_threshold = Record#'FileLocationSubscription'.time_threshold
+translate_from_protobuf(#'FileLocationChangedSubscription'{} = Record) ->
+    #file_location_changed_subscription{
+        file_uuid = Record#'FileLocationChangedSubscription'.file_uuid,
+        time_threshold = Record#'FileLocationChangedSubscription'.time_threshold
     };
-translate_from_protobuf(#'PermissionChangedSubscription'{} = Record) ->
-    #permission_changed_subscription{
-        file_uuid = Record#'PermissionChangedSubscription'.file_uuid
+translate_from_protobuf(#'FilePermChangedSubscription'{} = Record) ->
+    #file_perm_changed_subscription{
+        file_uuid = Record#'FilePermChangedSubscription'.file_uuid
     };
-translate_from_protobuf(#'FileRemovalSubscription'{} = Record) ->
-    #file_removal_subscription{
-        file_uuid = Record#'FileRemovalSubscription'.file_uuid
+translate_from_protobuf(#'FileRemovedSubscription'{} = Record) ->
+    #file_removed_subscription{
+        file_uuid = Record#'FileRemovedSubscription'.file_uuid
     };
-translate_from_protobuf(#'QuotaSubscription'{}) ->
-    #quota_subscription{};
 translate_from_protobuf(#'FileRenamedSubscription'{} = Record) ->
     #file_renamed_subscription{
         file_uuid = Record#'FileRenamedSubscription'.file_uuid
     };
-translate_from_protobuf(#'FileAccessedSubscription'{} = Record) ->
-    #file_accessed_subscription{
-        counter_threshold = Record#'FileAccessedSubscription'.counter_threshold,
-        time_threshold = Record#'FileAccessedSubscription'.time_threshold
-    };
+translate_from_protobuf(#'QuotaExceededSubscription'{}) ->
+    #quota_exceeded_subscription{};
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 
@@ -504,99 +505,96 @@ translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
-translate_to_protobuf(#file_renamed_entry{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName}) ->
-    #'FileRenamedEntry'{old_uuid = OldUuid, new_uuid = NewUuid, new_parent_uuid = NewParentUuid, new_name = NewName};
+translate_to_protobuf(#file_renamed_entry{} = Record) ->
+    #'FileRenamedEntry'{
+        old_uuid = Record#'file_renamed_entry'.old_uuid,
+        new_uuid = Record#'file_renamed_entry'.new_uuid,
+        new_parent_uuid = Record#'file_renamed_entry'.new_parent_uuid,
+        new_name = Record#'file_renamed_entry'.new_name
+    };
 translate_to_protobuf(#dir{uuid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 
 
 %% EVENT
-translate_to_protobuf(#event{counter = Counter, object = Type}) ->
-    #'Event'{counter = Counter, object = translate_to_protobuf(Type)};
+translate_to_protobuf(#event{type = Type}) ->
+    #'Event'{type = translate_to_protobuf(Type)};
 translate_to_protobuf(#events{events = Evts}) ->
     {events, #'Events'{events = [translate_to_protobuf(Evt) || Evt <- Evts]}};
 translate_to_protobuf(#flush_events{provider_id = ProviderId,
     subscription_id = SubId, context = Context}) ->
     {flush_events, #'FlushEvents'{provider_id = ProviderId,
         subscription_id = SubId, context = term_to_binary(Context)}};
-translate_to_protobuf(#read_event{} = Record) ->
-    {read_event, #'ReadEvent'{
-        file_uuid = Record#read_event.file_uuid,
-        size = Record#read_event.size,
-        blocks = [translate_to_protobuf(B) || B <- Record#read_event.blocks]
+translate_to_protobuf(#file_read_event{} = Record) ->
+    {file_read, #'FileReadEvent'{
+        counter = Record#file_read_event.counter,
+        file_uuid = Record#file_read_event.file_uuid,
+        size = Record#file_read_event.size,
+        blocks = [translate_to_protobuf(B) || B <- Record#file_read_event.blocks]
     }};
-translate_to_protobuf(#write_event{} = Record) ->
-    {write_event, #'WriteEvent'{
-        file_uuid = Record#write_event.file_uuid,
-        size = Record#write_event.size,
-        file_size = Record#write_event.file_size,
-        blocks = [translate_to_protobuf(B) || B <- Record#write_event.blocks]
+translate_to_protobuf(#file_written_event{} = Record) ->
+    {file_written, #'FileWrittenEvent'{
+        counter = Record#file_written_event.counter,
+        file_uuid = Record#file_written_event.file_uuid,
+        size = Record#file_written_event.size,
+        file_size = Record#file_written_event.file_size,
+        blocks = [translate_to_protobuf(B) || B <- Record#file_written_event.blocks]
     }};
-translate_to_protobuf(#update_event{object = Type}) ->
-    {update_event, #'UpdateEvent'{object = translate_to_protobuf(Type)}};
-translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
-    {permission_changed_event, #'PermissionChangedEvent'{file_uuid = FileUuid}};
-translate_to_protobuf(#file_removal_event{file_uuid = FileUuid}) ->
-    {file_removal_event, #'FileRemovalEvent'{file_uuid = FileUuid}};
-translate_to_protobuf(#quota_exeeded_event{spaces = Spaces}) ->
-    {quota_exeeded_event, #'QuotaExeededEvent'{spaces = Spaces}};
-translate_to_protobuf(#file_renamed_event{top_entry =  TopEntry, child_entries = ChildEntries}) ->
-    {file_renamed_event, #'FileRenamedEvent'{top_entry = translate_to_protobuf(TopEntry),
-        child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]}};
-translate_to_protobuf(#file_accessed_event{} = Record) ->
-    {file_accessed_event, #'FileAccessedEvent'{
-        file_uuid = Record#file_accessed_event.file_uuid,
-        open_count = Record#file_accessed_event.open_count,
-        release_count = Record#file_accessed_event.release_count
+translate_to_protobuf(#file_attr_changed_event{file_attr = FileAttr}) ->
+    {_, Record} = translate_to_protobuf(FileAttr),
+    {file_attr_changed, #'FileAttrChangedEvent'{file_attr = Record}};
+translate_to_protobuf(#file_location_changed_event{file_location = FileLocation}) ->
+    {_, Record} = translate_to_protobuf(FileLocation),
+    {file_location_changed, #'FileLocationChangedEvent'{file_location = Record}};
+translate_to_protobuf(#file_perm_changed_event{file_uuid = FileUuid}) ->
+    {file_perm_changed, #'FilePermChangedEvent'{file_uuid = FileUuid}};
+translate_to_protobuf(#file_removed_event{file_uuid = FileUuid}) ->
+    {file_removed, #'FileRemovedEvent'{file_uuid = FileUuid}};
+translate_to_protobuf(#file_renamed_event{top_entry = TopEntry, child_entries = ChildEntries}) ->
+    {file_renamed, #'FileRenamedEvent'{
+        top_entry = translate_to_protobuf(TopEntry),
+        child_entries = [translate_to_protobuf(Entry) || Entry <- ChildEntries]
     }};
-
+translate_to_protobuf(#quota_exceeded_event{spaces = Spaces}) ->
+    {quota_exceeded, #'QuotaExceededEvent'{spaces = Spaces}};
 
 %% SUBSCRIPTION
-translate_to_protobuf(#subscription{id = Id, object = Type}) ->
-    {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
-translate_to_protobuf(#read_subscription{} = Sub) ->
-    {read_subscription, #'ReadSubscription'{
-        counter_threshold = Sub#read_subscription.counter_threshold,
-        time_threshold = Sub#read_subscription.time_threshold,
-        size_threshold = Sub#read_subscription.size_threshold
+translate_to_protobuf(#subscription{id = Id, type = Type}) ->
+    {subscription, #'Subscription'{id = Id, type = translate_to_protobuf(Type)}};
+translate_to_protobuf(#file_read_subscription{} = Sub) ->
+    {file_read, #'FileReadSubscription'{
+        counter_threshold = Sub#file_read_subscription.counter_threshold,
+        time_threshold = Sub#file_read_subscription.time_threshold
     }};
-translate_to_protobuf(#write_subscription{} = Sub) ->
-    {write_subscription, #'WriteSubscription'{
-        counter_threshold = Sub#write_subscription.counter_threshold,
-        time_threshold = Sub#write_subscription.time_threshold,
-        size_threshold = Sub#write_subscription.size_threshold
+translate_to_protobuf(#file_written_subscription{} = Sub) ->
+    {file_written, #'FileWrittenSubscription'{
+        counter_threshold = Sub#file_written_subscription.counter_threshold,
+        time_threshold = Sub#file_written_subscription.time_threshold
     }};
-translate_to_protobuf(#file_attr_subscription{} = Record) ->
-    {file_attr_subscription, #'FileAttrSubscription'{
-        file_uuid = Record#file_attr_subscription.file_uuid,
-        counter_threshold = Record#file_attr_subscription.counter_threshold,
-        time_threshold = Record#file_attr_subscription.time_threshold
+translate_to_protobuf(#file_attr_changed_subscription{} = Record) ->
+    {file_attr_changed, #'FileAttrChangedSubscription'{
+        file_uuid = Record#file_attr_changed_subscription.file_uuid,
+        time_threshold = Record#file_attr_changed_subscription.time_threshold
     }};
-translate_to_protobuf(#file_location_subscription{} = Record) ->
-    {file_location_subscription, #'FileLocationSubscription'{
-        file_uuid = Record#file_location_subscription.file_uuid,
-        counter_threshold = Record#file_location_subscription.counter_threshold,
-        time_threshold = Record#file_location_subscription.time_threshold
+translate_to_protobuf(#file_location_changed_subscription{} = Record) ->
+    {file_location_changed, #'FileLocationChangedSubscription'{
+        file_uuid = Record#file_location_changed_subscription.file_uuid,
+        time_threshold = Record#file_location_changed_subscription.time_threshold
     }};
-translate_to_protobuf(#permission_changed_subscription{} = Record) ->
-    {permission_changed_subscription, #'PermissionChangedSubscription'{
-        file_uuid = Record#permission_changed_subscription.file_uuid
+translate_to_protobuf(#file_perm_changed_subscription{} = Record) ->
+    {file_perm_changed, #'FilePermChangedSubscription'{
+        file_uuid = Record#file_perm_changed_subscription.file_uuid
     }};
-translate_to_protobuf(#file_removal_subscription{} = Record) ->
-    {file_removal_subscription, #'FileRemovalSubscription'{
-        file_uuid = Record#file_removal_subscription.file_uuid
+translate_to_protobuf(#file_removed_subscription{} = Record) ->
+    {file_removed, #'FileRemovedSubscription'{
+        file_uuid = Record#file_removed_subscription.file_uuid
     }};
-translate_to_protobuf(#quota_subscription{}) ->
-    {quota_subscription, #'QuotaSubscription'{}};
 translate_to_protobuf(#file_renamed_subscription{} = Record) ->
-    {file_renamed_subscription, #'FileRenamedSubscription'{
+    {file_renamed, #'FileRenamedSubscription'{
         file_uuid = Record#file_renamed_subscription.file_uuid
     }};
-translate_to_protobuf(#file_accessed_subscription{} = Record) ->
-    {file_accessed_subscription, #'FileAccessedSubscription'{
-        counter_threshold = Record#file_accessed_subscription.counter_threshold,
-        time_threshold = Record#file_accessed_subscription.time_threshold
-    }};
+translate_to_protobuf(#quota_exceeded_subscription{}) ->
+    {quota_exceeded, #'QuotaExceededSubscription'{}};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
 
@@ -819,7 +817,7 @@ translate_to_protobuf(#set_transfer_encoding{value = Value}) ->
 translate_to_protobuf(#get_cdmi_completion_status{}) ->
     {get_cdmi_completion_status, #'GetCdmiCompletionStatus'{}};
 translate_to_protobuf(#set_cdmi_completion_status{value = Value}) ->
-    {set_cdmi_completion_status, #'SetCdmiCompletionStatus'{ value = Value}};
+    {set_cdmi_completion_status, #'SetCdmiCompletionStatus'{value = Value}};
 translate_to_protobuf(#get_mimetype{}) ->
     {get_mimetype, #'GetMimetype'{}};
 translate_to_protobuf(#set_mimetype{value = Value}) ->

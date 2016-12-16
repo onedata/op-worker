@@ -18,8 +18,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -108,7 +107,7 @@ session_save_should_update_session_access_time(Config) ->
 
 session_create_should_set_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = base64:encode(crypto:rand_bytes(20)),
+    SessId = base64:encode(crypto:strong_rand_bytes(20)),
     Accessed1 = erlang:system_time(seconds),
     ?call(Worker, create, [#document{key = SessId, value = #session{}}]),
     Accessed2 = get_session_access_time([{session_id, SessId} | Config]),
@@ -119,14 +118,7 @@ session_create_should_set_session_access_time(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
     initializer:remove_pending_messages(),
@@ -134,8 +126,7 @@ init_per_testcase(Case, Config) ->
     {ok, Pid} = start_session_watcher(Worker, SessId),
     [{session_watcher, Pid}, {session_id, SessId} | Config].
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Pid = ?config(session_watcher, Config),

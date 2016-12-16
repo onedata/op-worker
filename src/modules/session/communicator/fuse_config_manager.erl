@@ -49,14 +49,17 @@
 get_configuration(SessId) ->
     {ok, UserId} = session:get_user_id(SessId),
     {ok, Docs} = subscription:list(),
-    Subs = lists:filtermap(fun
-        (#document{value = #subscription{object = undefined}}) -> false;
-        (#document{value = #subscription{} = Sub}) -> {true, Sub}
+    Subs = lists:filtermap(fun(#document{value = #subscription{} = Sub}) ->
+        case subscription_type:is_remote(Sub) of
+            true -> {true, Sub};
+            false -> false
+        end
     end, Docs),
     #configuration{
         root_uuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
         subscriptions = Subs,
-        disabled_spaces = space_quota:get_disabled_spaces()}.
+        disabled_spaces = space_quota:get_disabled_spaces()
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,7 +78,7 @@ create_storage_test_file(SessId, #create_storage_test_file{storage_id = StorageI
     HelperName = helpers:name(HelperInit),
     HelperArgs = helpers:args(HelperInit),
     UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
-    Handle = helpers_utils:create_test_file_handle(HelperName, HelperArgs, UserCtx),
+    Handle = helpers:new_handle(HelperName, HelperArgs, UserCtx),
     HelperParams = helpers_utils:get_params(HelperInit, UserCtx),
     FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),
     Dirname = fslogic_path:dirname(FileId),
@@ -110,7 +113,7 @@ verify_storage_test_file(SessId, #verify_storage_test_file{storage_id = StorageI
     HelperName = helpers:name(HelperInit),
     HelperArgs = helpers:args(HelperInit),
     UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
-    Handle = helpers_utils:create_test_file_handle(HelperName, HelperArgs, UserCtx),
+    Handle = helpers:new_handle(HelperName, HelperArgs, UserCtx),
     verify_storage_test_file_loop(Handle, FileId, FileContent, ?ENOENT, ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
 %%--------------------------------------------------------------------

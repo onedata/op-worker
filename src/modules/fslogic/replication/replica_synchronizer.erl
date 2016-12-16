@@ -54,7 +54,7 @@ synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = Requ
                 Block
         end,
     trigger_prefetching(CTX, Uuid, EnlargedBlock, Prefetch),
-    {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
+    {ok, Locations} = file_meta:get_locations({uuid, Uuid}), %todo VFS-2813 support multi location
     LocationDocs = lists:map(
         fun(LocationId) ->
             {ok, Loc} = file_location:get(LocationId),
@@ -81,7 +81,7 @@ synchronize(CTX, Uuid, Block = #file_block{offset = RequestedOffset, size = Requ
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = fslogic_context:get_session_id(CTX),
-    fslogic_event:emit_file_location_update({uuid, Uuid}, [SessId], Block).
+    fslogic_event:emit_file_location_changed({uuid, Uuid}, [SessId], Block).
 
 %%%===================================================================
 %%% Internal functions

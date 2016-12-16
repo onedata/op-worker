@@ -12,7 +12,7 @@
 -ifndef(OP_WORKER_MODULES_EVENTS_DEFINITIONS_HRL).
 -define(OP_WORKER_MODULES_EVENTS_DEFINITIONS_HRL, 1).
 
--include("streams.hrl").
+-include("stream.hrl").
 -include("subscriptions.hrl").
 -include("types.hrl").
 

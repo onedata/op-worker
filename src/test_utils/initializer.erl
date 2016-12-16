@@ -202,7 +202,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, Workers),
-    test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
+    test_utils:mock_unload(Workers, [file_meta, od_user, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 clear_cache(W) ->
@@ -296,9 +296,10 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     Auth = #token_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
-    {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
+    Ctx = rpc:call(Worker, fslogic_context, new, [SessId]),
     {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
+    ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
         {{groups, UserId}, Groups},
@@ -306,7 +307,7 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
-        {{fslogic_ctx, UserId}, #fslogic_ctx{session = Session}}
+        {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
 
@@ -798,4 +799,10 @@ file_meta_mock_setup(Workers, Config) ->
         (ModelName, Method, Level, Context, ReturnValue) ->
             meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
             Self ! onedata_user_setup
+    end),
+    test_utils:mock_new(Workers, od_user),
+    test_utils:mock_expect(Workers, od_user, 'after', fun
+        (ModelName, Method, Level, Context, ReturnValue) ->
+            meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
+            Self ! onedata_user_after
     end).

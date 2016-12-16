@@ -15,7 +15,7 @@
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 
 %% helper macro for not implemented functions
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).
@@ -24,13 +24,8 @@
 -define(DIRECTORY_SEPARATOR, "/").
 -define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
 
-%% Context definition
--record(fslogic_ctx, {
-    session :: #session{},
-    session_id :: undefined | session:id(),
-    space_id :: file_meta:uuid(),
-    share_id :: undefined | od_share:id()
-}).
+%% Hidden file prefix
+-define(HIDDEN_FILE_PREFIX, ".__onedata__").
 
 %% root user definitions
 -define(ROOT_DIR_UUID, <<"">>).
@@ -42,11 +37,6 @@
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_SESS, #session{identity = #user_identity{user_id = ?GUEST_USER_ID}}).
 -define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
-
-%% fslogic subscription id
--define(FSLOGIC_SUB_ID, binary:decode_unsigned(crypto:hash(md5, <<"fslogic">>)) rem 16#FFFFFFFFFFFF).
-
-%% Deafult file modes
 
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).

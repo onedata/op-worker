@@ -50,6 +50,10 @@
 #include <cassert>
 #include <cstring>
 
+#include <folly/FBString.h>
+#include <folly/FBVector.h>
+#include <folly/io/IOBufQueue.h>
+
 namespace nifpp {
 
 struct TERM {
@@ -151,6 +155,33 @@ int binary::release_counter = 0;
 class badarg {
 };
 
+template <typename T = ERL_NIF_TERM, typename F>
+int list_for_each(ErlNifEnv *env, ERL_NIF_TERM term, F &&f);
+
+TERM make(ErlNifEnv *env, ErlNifBinary &var);
+
+namespace detail {
+
+template <typename Vector>
+int getVector(ErlNifEnv *env, ERL_NIF_TERM term, Vector &var);
+
+template <typename Vector>
+inline typename std::enable_if<
+    std::is_same<typename Vector::value_type, TERM>::value, TERM>::type
+makeVector(ErlNifEnv *env, const Vector &var);
+
+template <typename Vector>
+inline typename std::enable_if<
+    !std::is_same<typename Vector::value_type, TERM>::value, TERM>::type
+makeVector(ErlNifEnv *env, const Vector &var);
+
+template <typename Str>
+inline int getString(ErlNifEnv *env, ERL_NIF_TERM term, Str &var);
+
+template <typename Str> inline TERM makeString(ErlNifEnv *env, const Str &var);
+
+} // namespace detail
+
 //
 // get()/make() functions
 //
@@ -233,45 +264,64 @@ inline TERM make(ErlNifEnv *env, const str_atom &var)
     return TERM(enif_make_atom(env, var.c_str()));
 }
 
+// folly::fbstring
+inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::fbstring &var)
+{
+    return detail::getString(env, term, var);
+}
+inline TERM make(ErlNifEnv *env, const folly::fbstring &var)
+{
+    return detail::makeString(env, var);
+}
+
 // std::string
 inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::string &var)
 {
-    // The implementation below iterates through the list twice.  It may
-    // be faster to iterate through the list and append bytes one at a time.
-
-    unsigned len;
-    int ret = enif_get_list_length(env, term, &len); // full list iteration
-    if (!ret) {
-        // not a list, try as binary
-        ErlNifBinary bin;
-        ret = enif_inspect_binary(env, term, &bin);
-        if (!ret) {
-            // not a binary either, so fail.
-            return 0;
-        }
-        var = std::string((const char *)bin.data, bin.size);
-        return ret;
-    }
-    var.resize(len + 1); // +1 for terminating null
-    ret = enif_get_string(env, term, &*(var.begin()), var.size(),
-        ERL_NIF_LATIN1); // full list iteration
-    if (ret > 0) {
-        var.resize(ret - 1); // trim terminating null
-    }
-    else if (ret == 0) {
-        var.resize(0);
-    }
-    else {
-        // oops string somehow got truncated
-        // var is correct size so do nothing
-    }
-    return ret;
+    return detail::getString(env, term, var);
 }
 inline TERM make(ErlNifEnv *env, const std::string &var)
 {
-    nifpp::binary bin{var.size()};
-    std::memcpy(bin.data, var.data(), var.size());
-    return nifpp::make(env, bin);
+    return detail::makeString(env, var);
+}
+
+template <typename T>
+inline TERM make(ErlNifEnv *env, const std::vector<T> &var)
+{
+    return detail::makeVector(env, var);
+}
+template <typename T>
+inline TERM make(ErlNifEnv *env, const folly::fbvector<T> &var)
+{
+    return detail::makeVector(env, var);
+}
+
+// folly::IOBufQueue
+inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::IOBufQueue &var)
+{
+    var.clear();
+
+    ErlNifBinary bin;
+    if (!enif_inspect_binary(env, term, &bin))
+        return 0;
+
+    var.append(bin.data, bin.size);
+    return 1;
+}
+inline TERM make(ErlNifEnv *env, const folly::IOBufQueue &var)
+{
+    ErlNifBinary bin;
+    if (!enif_alloc_binary(var.chainLength(), &bin))
+        throw std::bad_alloc{};
+
+    if (!var.empty()) {
+        std::size_t offset = 0;
+        for (auto &block : *var.front()) {
+            std::copy_n(block.data(), block.size(), bin.data + offset);
+            offset += block.size();
+        }
+    }
+
+    return make(env, bin);
 }
 
 // bool
@@ -316,6 +366,17 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, int &var)
 inline TERM make(ErlNifEnv *env, const int var)
 {
     return TERM(enif_make_int(env, var));
+}
+
+inline int get(ErlNifEnv *env, ERL_NIF_TERM term, char &var)
+{
+    int v;
+    if (!get(env, term, v) || v > std::numeric_limits<char>::max() ||
+        v < std::numeric_limits<char>::min())
+        return 0;
+
+    var = static_cast<char>(v);
+    return 1;
 }
 
 inline int get(ErlNifEnv *env, ERL_NIF_TERM term, unsigned int &var)
@@ -805,8 +866,8 @@ int niftuple_for_each(ErlNifEnv *env, ERL_NIF_TERM term, const F &f)
 
 // list
 
-template <typename T = ERL_NIF_TERM, typename F>
-int list_for_each(ErlNifEnv *env, ERL_NIF_TERM term, const F &f)
+template <typename T, typename F>
+int list_for_each(ErlNifEnv *env, ERL_NIF_TERM term, F &&f)
 {
     if (!enif_is_list(env, term))
         return 0;
@@ -816,34 +877,20 @@ int list_for_each(ErlNifEnv *env, ERL_NIF_TERM term, const F &f)
         T var;
         if (!get(env, head, var))
             return 0; // conversion failure
-        f(std::move(var));
+        std::forward<F>(f)(std::move(var));
     }
     return 1;
 }
 
 template <typename T>
-int get(ErlNifEnv *env, ERL_NIF_TERM term, std::vector<T> &var)
+inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::vector<T> &var)
 {
-    unsigned len;
-    int ret = enif_get_list_length(env, term, &len);
-    if (!ret)
-        return 0;
-    var.clear();
-    return list_for_each<T>(env, term, [&var](T item) { var.push_back(item); });
+    return detail::getVector(env, term, var);
 }
-template <typename T> TERM make(ErlNifEnv *env, const std::vector<T> &var)
+template <typename T>
+inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::fbvector<T> &var)
 {
-    ERL_NIF_TERM tail;
-    tail = enif_make_list(env, 0);
-    for (auto i = var.rbegin(); i != var.rend(); i++) {
-        tail = enif_make_list_cell(env, make(env, *i), tail);
-    }
-    return TERM(tail);
-}
-inline TERM make(ErlNifEnv *env, const std::vector<TERM> &var)
-{
-    return TERM(
-        enif_make_list_from_array(env, (ERL_NIF_TERM *)&var[0], var.size()));
+    return detail::getVector(env, term, var);
 }
 
 template <typename T, size_t N>
@@ -1042,18 +1089,89 @@ int get(ErlNifEnv *env, ERL_NIF_TERM term, std::shared_ptr<T> &var)
 template <typename T> T get(ErlNifEnv *env, ERL_NIF_TERM term)
 {
     T temp;
-    if (get(env, term, temp)) {
-        return std::move(temp);
-    }
+    if (get(env, term, temp))
+        return temp;
+
+    throw badarg();
+}
+
+template <>
+inline folly::IOBufQueue get<folly::IOBufQueue>(
+    ErlNifEnv *env, ERL_NIF_TERM term)
+{
+    folly::IOBufQueue temp{folly::IOBufQueue::cacheChainLength()};
+    if (get(env, term, temp))
+        return temp;
+
     throw badarg();
 }
 
 template <typename T> void get_throws(ErlNifEnv *env, ERL_NIF_TERM term, T &t)
 {
-    if (!get(env, term, t)) {
+    if (!get(env, term, t))
         throw badarg();
-    }
 }
+
+namespace detail {
+
+template <typename Vector>
+int getVector(ErlNifEnv *env, ERL_NIF_TERM term, Vector &var)
+{
+    var.clear();
+    return list_for_each<typename Vector::value_type>(
+        env, term, [&var](typename Vector::value_type item) {
+            var.push_back(std::move(item));
+        });
+}
+template <typename Vector>
+inline typename std::enable_if<
+    std::is_same<typename Vector::value_type, TERM>::value, TERM>::type
+makeVector(ErlNifEnv *env, const Vector &var)
+{
+    if(var.empty())
+        return TERM(enif_make_list(env, 0));
+    return TERM(
+        enif_make_list_from_array(env, (ERL_NIF_TERM *)&var[0], var.size()));
+}
+template <typename Vector>
+inline typename std::enable_if<
+    !std::is_same<typename Vector::value_type, TERM>::value, TERM>::type
+makeVector(ErlNifEnv *env, const Vector &var)
+{
+    folly::fbvector<TERM> termVector;
+    termVector.reserve(var.size());
+
+    for (auto &val : var)
+        termVector.emplace_back(make(env, val));
+
+    return makeVector(env, termVector);
+}
+
+template <typename Str>
+inline int getString(ErlNifEnv *env, ERL_NIF_TERM term, Str &var)
+{
+    if (!getVector<Str>(env, term, var)) {
+        ErlNifBinary bin;
+        if (!enif_inspect_binary(env, term, &bin))
+            return 0;
+
+        var = Str(reinterpret_cast<char *>(bin.data), bin.size);
+    }
+
+    return 1;
+}
+
+template <typename Str> inline TERM makeString(ErlNifEnv *env, const Str &var)
+{
+    ErlNifBinary bin;
+    if (!enif_alloc_binary(var.size(), &bin))
+        throw std::bad_alloc{};
+
+    std::copy(var.begin(), var.end(), bin.data);
+    return nifpp::make(env, bin);
+}
+
+} // namespace detail
 
 } // namespace nifpp
 

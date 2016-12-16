@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the file-acl model used in Ember application.
+%%% the file-distribution model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_distribution_data_backend).
