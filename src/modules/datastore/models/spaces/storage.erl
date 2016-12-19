@@ -29,7 +29,7 @@
 -export_type([id/0, name/0]).
 
 %% API
--export([id/1, name/1, helpers/1, get_by_name/1]).
+-export([id/1, name/1, helpers/1, update_helper/2, get_by_name/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -212,6 +212,27 @@ helpers(#document{value = #storage{} = Storage}) ->
     helpers(Storage);
 helpers(#storage{helpers = Helpers}) ->
     Helpers.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates storage helper arguments.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_helper(StorageId :: storage:id(), HelperArgs :: helpers:args()) ->
+    {ok, datastore:key()} | datastore:update_error().
+update_helper(StorageId, HelperArgs) ->
+    update(StorageId, fun(#storage{helpers = Helpers} = Storage) ->
+        case fslogic_storage:select_helper(Storage) of
+            {ok, #helper_init{name = Name, args = Args} = Helper} ->
+                {ok, Storage#storage{helpers = lists:keyreplace(
+                    Name, 2, Helpers, Helper#helper_init{
+                        args = maps:merge(Args, HelperArgs)
+                    }
+                )}};
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
