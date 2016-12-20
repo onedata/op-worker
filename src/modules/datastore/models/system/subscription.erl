@@ -17,18 +17,22 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([generate_id/0]).
+-export([generate_id/0, generate_id/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--export_type([id/0, object/0, cancellation/0]).
+-export_type([id/0, base/0, type/0, cancellation/0]).
 
 -type id() :: integer().
--type object() :: #file_attr_subscription{} | #file_location_subscription{} |
-#read_subscription{} | #write_subscription{} | #permission_changed_subscription{} |
-#file_removed_subscription{} | #quota_subscription{} | #file_renamed_subscription{}.
+-type base() :: #subscription{}.
+-type type() :: #file_attr_changed_subscription{} |
+                #file_location_changed_subscription{} |
+                #file_read_subscription{} | #file_written_subscription{} |
+                #file_perm_changed_subscription{} |
+                #file_removed_subscription{} | #file_renamed_subscription{} |
+                #quota_exceeded_subscription{} | #monitoring_subscription{}.
 -type cancellation() :: #subscription_cancellation{}.
 
 %%%===================================================================
@@ -43,7 +47,16 @@
 %%--------------------------------------------------------------------
 -spec generate_id() -> SubId :: id().
 generate_id() ->
-    erlang:unique_integer([monotonic, positive]) .
+    erlang:unique_integer([monotonic, positive]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates subscription ID using binary seed.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_id(Seed :: binary()) -> SubId :: id().
+generate_id(Seed) ->
+    binary:decode_unsigned(crypto:hash(md5, Seed)) rem 16#FFFFFFFFFFFF.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -74,10 +87,14 @@ update(Key, Diff) ->
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
+-spec create(Sub :: datastore:document() | base() | type()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+create(#document{} = Document) ->
+    datastore:create(?STORE_LEVEL, Document);
+create(#subscription{id = undefined} = Sub) ->
+    create(Sub#subscription{id = generate_id()});
+create(#subscription{id = Id} = Sub) ->
+    create(#document{key = Id, value = Sub}).
 
 %%--------------------------------------------------------------------
 %% @doc

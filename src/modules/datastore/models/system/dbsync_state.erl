@@ -199,7 +199,7 @@ verify_and_del_key(Key, ModelName, Checks) ->
     case VerAns of
         ok ->
             spawn(fun() ->
-                timer:sleep(timer:minutes(1)),
+                timer:sleep(timer:minutes(5)),
                 delete({sid, ModelName, Key})
             end),
             ok;

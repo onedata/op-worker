@@ -45,7 +45,7 @@ model_init/0, 'after'/5, before/4]).
 record_struct(1) ->
     {record, [
         {components_present, [term]},
-        {waiting, [{[term], term, [term]}]}
+        {waiting, [{[term], term, term}]}
     ]}.
 
 %%%===================================================================

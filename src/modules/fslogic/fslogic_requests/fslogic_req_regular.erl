@@ -11,6 +11,7 @@
 -module(fslogic_req_regular).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -80,9 +81,16 @@ truncate(Ctx, Entry, Size) ->
 -spec get_helper_params(fslogic_context:ctx(), StorageId :: storage:id(),
     ForceCL :: boolean()) -> FuseResponse :: #fuse_response{} | no_return().
 get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
+    {ok, StorageDoc} = storage:get(StorageId),
+    {ok, #helper_init{args = Args}} = fslogic_storage:select_helper(StorageDoc),
+    Timeout = helpers_utils:get_timeout(Args),
+    {ok, Latency} = application:get_env(?APP_NAME, proxy_helper_latency_milliseconds),
     #fuse_response{status = #status{code = ?OK}, fuse_response = #helper_params{
         helper_name = <<"ProxyIO">>,
-        helper_args = [#helper_arg{key = <<"storage_id">>, value = StorageId}]
+        helper_args = [
+            #helper_arg{key = <<"storage_id">>, value = StorageId},
+            #helper_arg{key = <<"timeout">>, value = integer_to_binary(Timeout + Latency)}
+        ]
     }};
 get_helper_params(Ctx, StorageId, false = _ForceProxy) ->
     SessId = fslogic_context:get_session_id(Ctx),

@@ -34,10 +34,10 @@
     unsubscribe_should_remove_subscription/1,
     subscribe_should_notify_event_manager/1,
     subscribe_should_notify_all_event_managers/1,
-    emit_read_event_should_execute_handler/1,
-    emit_write_event_should_execute_handler/1,
-    emit_file_attr_update_event_should_execute_handler/1,
-    emit_file_location_update_event_should_execute_handler/1,
+    emit_file_read_event_should_execute_handler/1,
+    emit_file_written_event_should_execute_handler/1,
+    emit_file_attr_changed_event_should_execute_handler/1,
+    emit_file_location_changed_event_should_execute_handler/1,
     flush_should_notify_awaiting_process/1
 ]).
 
@@ -47,10 +47,10 @@ all() ->
         unsubscribe_should_remove_subscription,
         subscribe_should_notify_event_manager,
         subscribe_should_notify_all_event_managers,
-        emit_read_event_should_execute_handler,
-        emit_write_event_should_execute_handler,
-        emit_file_attr_update_event_should_execute_handler,
-        emit_file_location_update_event_should_execute_handler,
+        emit_file_read_event_should_execute_handler,
+        emit_file_written_event_should_execute_handler,
+        emit_file_attr_changed_event_should_execute_handler,
+        emit_file_location_changed_event_should_execute_handler,
         flush_should_notify_awaiting_process
     ]).
 
@@ -62,69 +62,58 @@ all() ->
 
 subscribe_should_create_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SubId} = subscribe(Worker),
+    {ok, SubId} = create_subscription(default, Worker),
     ?assertMatch({ok, [_]}, rpc:call(Worker, subscription, list, [])),
     unsubscribe(Worker, SubId).
 
 unsubscribe_should_remove_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SubId} = subscribe(Worker),
+    SessId = ?config(session_id, Config),
+    SubId = subscribe(Worker, SessId),
     unsubscribe(Worker, SubId),
     ?assertMatch({ok, []}, rpc:call(Worker, subscription, list, [])).
 
 subscribe_should_notify_event_manager(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Evt = read_event(1, [{0, 1}]),
+    Evt = file_read_event(1, [{0, 1}]),
     emit(Worker, ?config(session_id, Config), Evt),
-    ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, object = Evt
-    }]}, ?TIMEOUT).
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT).
 
 subscribe_should_notify_all_event_managers(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Evt = read_event(1, [{0, 1}]),
-    emit(Worker, Evt),
-    lists:foreach(fun(_) ->
-        ?assertReceivedMatch({event_handler, [#event{
-            key = <<"file_uuid">>, object = Evt
-        }]}, ?TIMEOUT)
+    Evt = file_read_event(1, [{0, 1}]),
+    lists:foreach(fun(SessId) ->
+        emit(Worker, SessId, Evt),
+        ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT)
     end, ?config(session_ids, Config)).
 
-emit_read_event_should_execute_handler(Config) ->
+emit_file_read_event_should_execute_handler(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Evt = read_event(1, [{0, 1}]),
+    Evt = file_read_event(1, [{0, 1}]),
     emit(Worker, ?config(session_id, Config), Evt),
-    ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, object = Evt
-    }]}, ?TIMEOUT).
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT).
 
-emit_write_event_should_execute_handler(Config) ->
+emit_file_written_event_should_execute_handler(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Evt = write_event(1, 1, [{0, 1}]),
+    Evt = file_written_event(1, 1, [{0, 1}]),
     emit(Worker, ?config(session_id, Config), Evt),
-    ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, object = Evt
-    }]}, ?TIMEOUT).
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT).
 
-emit_file_attr_update_event_should_execute_handler(Config) ->
+emit_file_attr_changed_event_should_execute_handler(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Evt = file_attr_update_event(),
+    Evt = file_attr_changed_event(),
     emit(Worker, ?config(session_id, Config), Evt),
-    ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, object = Evt
-    }]}, ?TIMEOUT).
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT).
 
-emit_file_location_update_event_should_execute_handler(Config) ->
+emit_file_location_changed_event_should_execute_handler(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Evt = file_location_update_event(),
+    Evt = file_location_changed_event(),
     emit(Worker, ?config(session_id, Config), Evt),
-    ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, object = Evt
-    }]}, ?TIMEOUT).
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT).
 
 flush_should_notify_awaiting_process(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Evt = read_event(1, [{0, 1}]),
+    Evt = file_read_event(1, [{0, 1}]),
     SessId = ?config(session_id, Config),
     emit(Worker, SessId, Evt),
     Ref = flush(Worker, ?config(subscription_id, Config), self(), SessId),
@@ -143,12 +132,12 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) when
-    Case =:= emit_read_event_should_execute_handler;
-    Case =:= emit_write_event_should_execute_handler;
-    Case =:= emit_file_attr_update_event_should_execute_handler;
-    Case =:= emit_file_location_update_event_should_execute_handler ->
+    Case =:= emit_file_read_event_should_execute_handler;
+    Case =:= emit_file_written_event_should_execute_handler;
+    Case =:= emit_file_attr_changed_event_should_execute_handler;
+    Case =:= emit_file_location_changed_event_should_execute_handler ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SubId} = create_dafault_subscription(Case, Worker),
+    {ok, SubId} = create_subscription(Case, Worker),
     init_per_testcase(?DEFAULT_CASE(Case), [{subscription_id, SubId} | Config]);
 
 init_per_testcase(Case, Config) when
@@ -156,7 +145,7 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
-    {ok, SubId} = subscribe(Worker, SessId, ?READ_EVENT_STREAM,
+    SubId = subscribe(Worker, SessId, #file_read_subscription{},
         notify_event_handler(), fun(_) -> false end, infinity),
     [{subscription_id, SubId} | NewConfig];
 
@@ -165,7 +154,7 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
-    {ok, SubId} = subscribe(Worker, SessId, ?READ_EVENT_STREAM,
+    SubId = subscribe(Worker, SessId, #file_read_subscription{},
         forward_events_event_handler(), fun(_) -> true end, infinity),
     [{subscription_id, SubId} | NewConfig];
 
@@ -173,16 +162,17 @@ init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
+    {ok, SubId} = create_subscription(Case, Worker),
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         session_setup(Worker, SessId),
         SessId
     end, lists:seq(0, 4)),
-    {ok, SubId} = create_dafault_subscription(Case, Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
     test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
         fun(_) -> <<"spaceid">> end),
-    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]),
+    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
+        [{session_ids, SessIds}, {subscription_id, SubId} | Config]),
     test_utils:mock_expect(Worker, file_meta, get, fun
         (<<"file_uuid">>) -> {ok, #document{}};
         (Entry) -> meck:passthrough([Entry])
@@ -208,10 +198,10 @@ init_per_testcase(_Case, Config) ->
     NewConfig.
 
 end_per_testcase(Case, Config) when
-    Case =:= emit_read_event_should_execute_handler;
-    Case =:= emit_write_event_should_execute_handler;
-    Case =:= emit_file_attr_update_event_should_execute_handler;
-    Case =:= emit_file_location_update_event_should_execute_handler ->
+    Case =:= emit_file_read_event_should_execute_handler;
+    Case =:= emit_file_written_event_should_execute_handler;
+    Case =:= emit_file_attr_changed_event_should_execute_handler;
+    Case =:= emit_file_location_changed_event_should_execute_handler ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -282,35 +272,20 @@ session_setup(Worker, SessId) ->
 session_teardown(Worker, SessId) ->
     rpc:call(Worker, session_manager, remove_session, [SessId]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates subscription for read events with event handler ignoring events.
-%% @end
-%%--------------------------------------------------------------------
--spec subscribe(Worker :: node()) -> {ok, SubId :: subscription:id()}.
-subscribe(Worker) ->
-    subscribe(Worker, ?READ_EVENT_STREAM, fun(_, _) -> ok end,
-        fun(_) -> true end, infinity).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates subscription with custom event stream definition.
-%% @end
-%%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), StmDef :: event_stream:definition(),
-    Handler :: event_stream:event_handler(), EmRule :: event_stream:emission_rule(),
-    EmTime :: event_stream:emission_time()) -> {ok, SubId :: subscription:id()}.
-subscribe(Worker, StmDef, Handler, EmRule, EmTime) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, event, subscribe, [#subscription{
-        object = test_subscription,
-        event_stream = StmDef#event_stream_definition{
+subscription(Sub, Handler, EmRule, EmTime) ->
+    Stm = subscription_type:get_stream(Sub),
+    #subscription{
+        type = Sub,
+        stream = Stm#event_stream{
             emission_rule = EmRule,
             emission_time = EmTime,
             event_handler = Handler
         }
-    }])).
+    }.
+
+subscribe(Worker, SessId) ->
+    subscribe(Worker, SessId, #file_read_subscription{},
+        forward_events_event_handler(), fun(_) -> true end, infinity).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -319,18 +294,12 @@ subscribe(Worker, StmDef, Handler, EmRule, EmTime) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec subscribe(Worker :: node(), SessId :: session:id(),
-    StmDef :: event_stream:definition(), Handler :: event_stream:event_handler(),
+    Sub :: subscription:type(), Handler :: event_stream:event_handler(),
     EmRule :: event_stream:emission_rule(), EmTime :: event_stream:emission_time()) ->
-    {ok, SubId :: subscription:id()}.
-subscribe(Worker, SessId, StmDef, Handler, EmRule, EmTime) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, event, subscribe, [#subscription{
-        object = test_subscription,
-        event_stream = StmDef#event_stream_definition{
-            emission_rule = EmRule,
-            emission_time = EmTime,
-            event_handler = Handler
-        }
-    }, SessId])).
+    SubId :: subscription:id().
+subscribe(Worker, SessId, Sub, Handler, EmRule, EmTime) ->
+    rpc:call(Worker, event, subscribe,
+        [subscription(Sub, Handler, EmRule, EmTime), SessId]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -338,16 +307,16 @@ subscribe(Worker, SessId, StmDef, Handler, EmRule, EmTime) ->
 %% Creates default subscription based on testcase name.
 %% @end
 %%--------------------------------------------------------------------
--spec create_dafault_subscription(Case :: atom(), Worker :: node()) ->
+-spec create_subscription(Case :: atom(), Worker :: node()) ->
     {ok, SubId :: subscription:id()}.
-create_dafault_subscription(Case, Worker) ->
-    subscribe(
-        Worker,
-        event_stream_type_for_testcase_name(Case),
+create_subscription(Case, Worker) ->
+    Sub = subscription_type_for_testcase_name(Case),
+    rpc:call(Worker, subscription, create, [subscription(
+        Sub,
         forward_events_event_handler(),
         fun(_) -> true end,
         infinity
-    ).
+    )]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -369,8 +338,12 @@ forward_events_event_handler() ->
 -spec notify_event_handler() -> Handler :: event_stream:event_handler().
 notify_event_handler() ->
     fun
-        (_, #{notify := NotifyFun}) -> NotifyFun(#server_message{message_body = #status{code = ?OK}});
-        (_, _) -> ok
+        (E, #{notify := NotifyFun}) ->
+            ct:pal("Handler1: ~p", [E]),
+            NotifyFun(#server_message{message_body = #status{code = ?OK}});
+        (E, _) ->
+            ct:pal("Handler2: ~p", [E]),
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -381,7 +354,7 @@ notify_event_handler() ->
 %%--------------------------------------------------------------------
 -spec unsubscribe(Worker :: node(), SubId :: subscription:id()) -> ok.
 unsubscribe(Worker, SubId) ->
-    ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])).
+    ?assertEqual(ok, rpc:call(Worker, subscription, delete, [SubId])).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -393,16 +366,6 @@ unsubscribe(Worker, SubId) ->
     SubId :: subscription:id()) -> ok.
 unsubscribe(Worker, SessId, SubId) ->
     ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId, SessId])).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Emits an event to all event managers.
-%% @end
-%%--------------------------------------------------------------------
--spec emit(Worker :: node(), Evt :: event:object()) -> ok.
-emit(Worker, Evt) ->
-    ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt])).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -429,13 +392,13 @@ flush(Worker, SubId, Notify, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv read_event(<<"file_uuid">>, Size, Blocks)
+%% @equiv file_read_event(<<"file_uuid">>, Size, Blocks)
 %% @end
 %%--------------------------------------------------------------------
--spec read_event(Size :: file_meta:size(), Blocks :: proplists:proplist()) ->
-    Evt :: #read_event{}.
-read_event(Size, Blocks) ->
-    read_event(<<"file_uuid">>, Size, Blocks).
+-spec file_read_event(Size :: file_meta:size(), Blocks :: proplists:proplist()) ->
+    Evt :: #file_read_event{}.
+file_read_event(Size, Blocks) ->
+    file_read_event(<<"file_uuid">>, Size, Blocks).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -443,10 +406,10 @@ read_event(Size, Blocks) ->
 %% Returns read event with custom file UUID, size and blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
-    Blocks :: proplists:proplist()) -> Evt :: #read_event{}.
-read_event(FileUuid, Size, Blocks) ->
-    #read_event{
+-spec file_read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
+    Blocks :: proplists:proplist()) -> Evt :: #file_read_event{}.
+file_read_event(FileUuid, Size, Blocks) ->
+    #file_read_event{
         file_uuid = FileUuid,
         size = Size,
         blocks = [#file_block{offset = O, size = S} || {O, S} <- Blocks]
@@ -455,13 +418,13 @@ read_event(FileUuid, Size, Blocks) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv write_event(<<"file_size">>, Size, FileSize, Blocks)
+%% @equiv file_written_event(<<"file_size">>, Size, FileSize, Blocks)
 %% @end
 %%--------------------------------------------------------------------
--spec write_event(Size :: file_meta:size(), FileSize :: file_meta:size(),
-    Blocks :: proplists:proplist()) -> Evt :: #write_event{}.
-write_event(Size, FileSize, Blocks) ->
-    write_event(<<"file_uuid">>, Size, FileSize, Blocks).
+-spec file_written_event(Size :: file_meta:size(), FileSize :: file_meta:size(),
+    Blocks :: proplists:proplist()) -> Evt :: #file_written_event{}.
+file_written_event(Size, FileSize, Blocks) ->
+    file_written_event(<<"file_uuid">>, Size, FileSize, Blocks).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -469,11 +432,11 @@ write_event(Size, FileSize, Blocks) ->
 %% Returns write event with custom file UUID, size, file size and blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec write_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
+-spec file_written_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
     FileSize :: file_meta:size(), Blocks :: proplists:proplist()) ->
-    Evt :: #write_event{}.
-write_event(FileUuid, Size, FileSize, Blocks) ->
-    #write_event{
+    Evt :: #file_written_event{}.
+file_written_event(FileUuid, Size, FileSize, Blocks) ->
+    #file_written_event{
         file_uuid = FileUuid,
         size = Size,
         file_size = FileSize,
@@ -486,9 +449,9 @@ write_event(FileUuid, Size, FileSize, Blocks) ->
 %% Returns update event for file attributes associated with default file.
 %% @end
 %%--------------------------------------------------------------------
--spec file_attr_update_event() -> #update_event{}.
-file_attr_update_event() ->
-    #update_event{object = #file_attr{uuid = <<"file_uuid">>}}.
+-spec file_attr_changed_event() -> #file_attr_changed_event{}.
+file_attr_changed_event() ->
+    #file_attr_changed_event{file_attr = #file_attr{uuid = <<"file_uuid">>}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -496,9 +459,9 @@ file_attr_update_event() ->
 %% Returns update event for file attributes associated with default file.
 %% @end
 %%--------------------------------------------------------------------
--spec file_location_update_event() -> #update_event{}.
-file_location_update_event() ->
-    #update_event{object = #file_location{uuid = <<"file_uuid">>}}.
+-spec file_location_changed_event() -> #file_location_changed_event{}.
+file_location_changed_event() ->
+    #file_location_changed_event{file_location = #file_location{uuid = <<"file_uuid">>}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -506,19 +469,19 @@ file_location_update_event() ->
 %% Returns default event stream definition based on testcase name.
 %% @end
 %%--------------------------------------------------------------------
--spec event_stream_type_for_testcase_name(Case :: atom()) ->
+-spec subscription_type_for_testcase_name(Case :: atom()) ->
     StmDef :: event_stream:definition().
-event_stream_type_for_testcase_name(emit_read_event_should_execute_handler) ->
-    ?READ_EVENT_STREAM;
+subscription_type_for_testcase_name(emit_file_read_event_should_execute_handler) ->
+    #file_read_subscription{};
 
-event_stream_type_for_testcase_name(emit_write_event_should_execute_handler) ->
-    ?WRITE_EVENT_STREAM;
+subscription_type_for_testcase_name(emit_file_written_event_should_execute_handler) ->
+    #file_written_subscription{};
 
-event_stream_type_for_testcase_name(emit_file_attr_update_event_should_execute_handler) ->
-    ?FILE_ATTR_EVENT_STREAM;
+subscription_type_for_testcase_name(emit_file_attr_changed_event_should_execute_handler) ->
+    #file_attr_changed_subscription{file_uuid = <<"file_uuid">>};
 
-event_stream_type_for_testcase_name(emit_file_location_update_event_should_execute_handler) ->
-    ?FILE_LOCATION_EVENT_STREAM;
+subscription_type_for_testcase_name(emit_file_location_changed_event_should_execute_handler) ->
+    #file_location_changed_subscription{file_uuid = <<"file_uuid">>};
 
-event_stream_type_for_testcase_name(_) ->
-    ?READ_EVENT_STREAM.
+subscription_type_for_testcase_name(_) ->
+    #file_read_subscription{}.

@@ -18,7 +18,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/2, get_event_stream_sup/1]).
+-export([start_link/1, get_event_stream_sup/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -32,23 +32,23 @@
 %% Starts the event manager supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), SessType :: session:type()) ->
-    {ok, EvtManPid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessId, SessType) ->
-    supervisor:start_link(?MODULE, [SessId, SessType]).
+-spec start_link(SessId :: session:id()) ->
+    {ok, Mgr :: pid()} | ignore | {error, Reason :: term()}.
+start_link(SessId) ->
+    supervisor:start_link(?MODULE, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns event stream supervisor associated with event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec get_event_stream_sup(ManSupPid :: pid()) ->
-    {ok, StmSup :: pid()} | {error, not_found}.
-get_event_stream_sup(EvtManSup) ->
+-spec get_event_stream_sup(MgrSup :: pid()) ->
+    {ok, StmsSup :: pid()} | {error, not_found}.
+get_event_stream_sup(MgrSup) ->
     Id = event_stream_sup,
-    Children = supervisor:which_children(EvtManSup),
+    Children = supervisor:which_children(MgrSup),
     case lists:keyfind(Id, 1, Children) of
-        {Id, StmSup, _, _} when is_pid(StmSup) -> {ok, StmSup};
+        {Id, StmsSup, _, _} when is_pid(StmsSup) -> {ok, StmsSup};
         _ -> {error, not_found}
     end.
 
@@ -67,9 +67,9 @@ get_event_stream_sup(EvtManSup) ->
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
-init([SessId, SessType]) ->
+init([SessId]) ->
     {ok, {#{strategy => one_for_all, intensity => 3, period => 1}, [
-        event_stream_sup_spec(SessType),
+        event_stream_sup_spec(),
         event_manager_spec(self(), SessId)
     ]}}.
 
@@ -83,11 +83,11 @@ init([SessId, SessType]) ->
 %% Returns a supervisor child_spec for an event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec event_stream_sup_spec(SessType :: session:type()) -> supervisor:child_spec().
-event_stream_sup_spec(SessType) ->
+-spec event_stream_sup_spec() -> supervisor:child_spec().
+event_stream_sup_spec() ->
     #{
         id => event_stream_sup,
-        start => {event_stream_sup, start_link, [SessType]},
+        start => {event_stream_sup, start_link, []},
         restart => permanent,
         shutdown => infinity,
         type => supervisor,
@@ -100,12 +100,12 @@ event_stream_sup_spec(SessType) ->
 %% Returns a worker child_spec for an event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec event_manager_spec(EvtManSup :: pid(), SessId :: session:id()) ->
+-spec event_manager_spec(MgrSup :: pid(), SessId :: session:id()) ->
     supervisor:child_spec().
-event_manager_spec(EvtManSup, SessId) ->
+event_manager_spec(MgrSup, SessId) ->
     #{
         id => event_manager,
-        start => {event_manager, start_link, [EvtManSup, SessId]},
+        start => {event_manager, start_link, [MgrSup, SessId]},
         restart => transient,
         shutdown => timer:seconds(10),
         type => worker,

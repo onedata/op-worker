@@ -20,31 +20,29 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/4, execute_event_handler/2]).
+-export([start_link/3, execute_event_handler/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--export_type([id/0, key/0, ctx/0, definition/0, metadata/0, init_handler/0,
-    terminate_handler/0, event_handler/0, aggregation_rule/0,
-    transition_rule/0, emission_rule/0, emission_time/0]).
+-export_type([key/0, ctx/0, metadata/0, init_handler/0, terminate_handler/0,
+    event_handler/0, aggregation_rule/0, transition_rule/0, emission_rule/0,
+    emission_time/0]).
 
--type id() :: atom().
--type key() :: binary().
+-type key() :: atom().
 -type ctx() :: maps:map().
--type definition() :: #event_stream_definition{}.
 -type metadata() :: term().
--type init_handler() :: fun((#subscription{}, session:id(), session:type()) -> ctx()).
+-type init_handler() :: fun((subscription:id(), session:id()) -> ctx()).
 -type terminate_handler() :: fun((ctx()) -> term()).
--type event_handler() :: fun(([event:event()], ctx()) -> ok).
--type aggregation_rule() :: fun((event:event(), event:event()) -> event:event()).
--type transition_rule() :: fun((metadata(), event:event()) -> metadata()).
+-type event_handler() :: fun((Evts :: [event:type()], ctx()) -> ok).
+-type aggregation_rule() :: fun((OldEvt :: event:type(), Evt :: event:type()) ->
+    NewEvt :: event:type()).
+-type transition_rule() :: fun((metadata(), Evt :: event:object()) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
--type subscriptions() :: #{subscription:id() => #subscription{}}.
-
--type events() :: #{event:key() => event:event()}.
+-type subscriptions() :: #{subscription:id() => event_router:key() | local}.
+-type events() :: #{event:key() => event:type()}.
 
 %% event stream state:
 %% subscription_id - ID of an event subscription
@@ -56,16 +54,15 @@
 %% events          - mapping form an event key to an aggregated event
 %% emission_ref    - reference associated with the last 'periodic_emission' message
 -record(state, {
-    stream_id :: id(),
+    key :: key(),
+    stream :: event:stream(),
     session_id :: session:id(),
-    session_type :: session:type(),
-    event_manager :: pid(),
-    definition :: definition(),
+    manager :: pid(),
     ctx :: term(),
     metadata :: metadata(),
     events = #{} :: events(),
-    emission_ref :: undefined | pending | reference(),
     subscriptions = #{} :: subscriptions(),
+    emission_ref :: undefined | pending | reference(),
     handler_ref :: undefined | {pid(), reference()}
 }).
 
@@ -78,10 +75,10 @@
 %% Starts the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessType :: session:type(), EvtMan :: pid(), Sub :: #subscription{},
-    SessId :: session:id()) -> {ok, Pid :: pid()} | ignore |{error, Reason :: term()}.
-start_link(SessType, EvtMan, Sub, SessId) ->
-    gen_server2:start_link(?MODULE, [SessType, EvtMan, Sub, SessId], []).
+-spec start_link(Mgr :: pid(), Sub :: #subscription{}, SessId :: session:id()) ->
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+start_link(Mgr, Sub, SessId) ->
+    gen_server2:start_link(?MODULE, [Mgr, Sub, SessId], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,8 +88,8 @@ start_link(SessType, EvtMan, Sub, SessId) ->
 %%--------------------------------------------------------------------
 -spec execute_event_handler(Force :: boolean(), State :: #state{}) -> ok.
 execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
-    ctx = Ctx, definition = #event_stream_definition{event_handler = Handler},
-    session_id = SessId, stream_id = StmId} = State) ->
+    ctx = Ctx, stream = #event_stream{event_handler = Handler},
+    session_id = SessId, key = StmKey} = State) ->
     try
         Start = erlang:monotonic_time(milli_seconds),
         EvtsList = maps:values(Evts),
@@ -103,12 +100,13 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
         end,
         Duration = erlang:monotonic_time(milli_seconds) - Start,
         ?debug("Execution of handler on events ~p in event stream ~p and session
-        ~p took ~p milliseconds", [EvtsList, StmId, SessId, Duration])
+        ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
         Error:Reason ->
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
                 [?MODULE, State, Error, Reason])
     end;
+
 execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
     MonitorRef = monitor(process, Pid),
     receive
@@ -122,33 +120,31 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Initializes the event stream.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessType, EvtMan, #subscription{event_stream = #event_stream_definition{
-    id = StmId} = StmDef} = Sub, SessId]) ->
-    ?debug("Initializing event stream ~p in session ~p", [StmId, SessId]),
+init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
+    Key = subscription_type:get_stream_key(Sub),
+    Stm = subscription_type:get_stream(Sub),
+    ?debug("Initializing event stream ~p in session ~p", [Key, SessId]),
     process_flag(trap_exit, true),
-    register_stream(EvtMan, StmId),
+    gen_server2:cast(Mgr, {register_stream, Key, self()}),
     {ok, #state{
-        stream_id = StmId,
+        key = Key,
         session_id = SessId,
-        session_type = SessType,
-        event_manager = EvtMan,
-        ctx = execute_init_handler(StmDef, Sub, SessId, SessType),
-        metadata = get_initial_metadata(StmDef),
-        definition = StmDef,
+        manager = Mgr,
+        ctx = exec(Stm#event_stream.init_handler, [SubId, SessId]),
+        metadata = Stm#event_stream.metadata,
+        stream = Stm,
         subscriptions = add_subscription(SessId, Sub, #{})
     }}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Handles call messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -160,8 +156,7 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Handles cast messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -169,17 +164,16 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(#event{} = Evt, #state{stream_id = StmId, session_id = SessId} = State) ->
-    ?debug("Handling event ~p in event stream ~p and session ~p",
-        [Evt, StmId, SessId]),
+handle_cast(#event{type = Evt}, #state{key = Key, session_id = SessId} = State) ->
+    ?debug("Handling event ~p in event stream ~p and session ~p", [Evt, Key, SessId]),
     {noreply, process_event(Evt, State)};
 
-handle_cast({add_subscription, Sub}, #state{session_id = SessId,
-    subscriptions = Subs} = State) ->
+handle_cast({add_subscription, Sub}, #state{} = State) ->
+    #state{session_id = SessId, subscriptions = Subs} = State,
     {noreply, State#state{subscriptions = add_subscription(SessId, Sub, Subs)}};
 
-handle_cast({remove_subscription, SubId}, #state{session_id = SessId,
-    subscriptions = Subs} = State) ->
+handle_cast({remove_subscription, SubId}, #state{} = State) ->
+    #state{session_id = SessId, subscriptions = Subs} = State,
     case remove_subscription(SessId, SubId, Subs) of
         {true, NewSubs} -> {stop, normal, State#state{subscriptions = NewSubs}};
         {false, NewSubs} -> {noreply, State#state{subscriptions = NewSubs}}
@@ -196,8 +190,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -230,8 +223,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_server terminates
@@ -240,16 +232,15 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{event_manager = EvtMan, stream_id = StmId,
-    definition = StmDef, ctx = Ctx} = State) ->
+terminate(Reason, #state{manager = Mgr, key = Key, stream = Stm, ctx = Ctx} = State) ->
     ?log_terminate(Reason, State),
     spawn_event_handler(false, State),
-    execute_terminate_handler(StmDef, Ctx),
-    unregister_stream(EvtMan, StmId).
+    remove_subscriptions(State),
+    exec(Stm#event_stream.terminate_handler, [Ctx]),
+    gen_server2:cast(Mgr, {unregister_stream, Key}).
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
@@ -263,40 +254,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Registers event stream in the event manager.
-%% @end
-%%--------------------------------------------------------------------
--spec register_stream(EvtMan :: pid(), StmId :: id()) -> ok.
-register_stream(EvtMan, StmId) ->
-    gen_server2:cast(EvtMan, {register_stream, StmId, self()}).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Unregisters event stream in the event manager.
-%% @end
-%%--------------------------------------------------------------------
--spec unregister_stream(EvtMan :: pid(), StmId :: id()) -> ok.
-unregister_stream(EvtMan, StmId) ->
-    gen_server2:cast(EvtMan, {unregister_stream, StmId}).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Adds subscription.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_subscription(SessId :: session:id(), Sub :: #subscription{},
     Subs :: subscriptions()) -> NewSubs :: subscriptions().
 add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
-    file_subscription:add(SessId, Sub),
-    maps:put(SubId, Sub, Subs).
+    case event_router:add_subscriber(Sub, SessId) of
+        {ok, Key} -> maps:put(SubId, Key, Subs);
+        {error, session_only} -> maps:put(SubId, session_only, Subs)
+    end.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Removes subscription.
 %% @end
 %%--------------------------------------------------------------------
@@ -304,8 +275,10 @@ add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
     Subs :: subscriptions()) -> {LastSub :: boolean(), NewSubs :: subscriptions()}.
 remove_subscription(SessId, SubId, Subs) ->
     NewSubs = case maps:find(SubId, Subs) of
-        {ok, Sub} ->
-            file_subscription:remove(SessId, Sub),
+        {ok, session_only} ->
+            maps:remove(SubId, Subs);
+        {ok, Key} ->
+            event_router:remove_subscriber(Key, SessId),
             maps:remove(SubId, Subs);
         error ->
             Subs
@@ -313,32 +286,19 @@ remove_subscription(SessId, SubId, Subs) ->
     {maps:size(NewSubs) == 0, NewSubs}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Executes init handler.
+%% @private @doc
+%% Removes subscriptions from the events routing table.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_init_handler(StmDef :: definition(), Sub :: #subscription{},
-    SessId :: session:id(), SessType :: session:type()) -> Ctx :: ctx().
-execute_init_handler(#event_stream_definition{init_handler = Handler}, Sub, SessId,
-    SessType) ->
-    Handler(Sub, SessId, SessType).
+-spec remove_subscriptions(State :: #state{}) -> ok.
+remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
+    maps:fold(fun
+        (session_only, _, _) -> ok;
+        (Key, _, _) -> event_router:remove_subscriber(Key, SessId)
+    end, ok, Subs).
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Executes terminate handler.
-%% @end
-%%--------------------------------------------------------------------
--spec execute_terminate_handler(StmDef :: definition(), Ctx :: ctx()) ->
-    term().
-execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
-    Ctx) ->
-    Handler(Ctx).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Spawns event handler execution if no other event handler is currently being
 %% executed.
 %% @end
@@ -347,55 +307,49 @@ execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
     NewState :: #state{}.
 maybe_spawn_event_handler(Force, #state{handler_ref = undefined} = State) ->
     spawn_event_handler(Force, State);
+
 maybe_spawn_event_handler(_Force, #state{} = State) ->
     State#state{emission_ref = pending}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Spawns event handler execution and resets stream metadata.
 %% @end
 %%--------------------------------------------------------------------
 -spec spawn_event_handler(Force :: boolean(), State :: #state{}) -> NewState :: #state{}.
-spawn_event_handler(Force, #state{definition = StmDef} = State) ->
+spawn_event_handler(Force, #state{stream = Stm} = State) ->
     HandlerRef = spawn_monitor(?MODULE, execute_event_handler, [Force, State]),
     State#state{
         events = #{},
-        metadata = get_initial_metadata(StmDef),
+        metadata = Stm#event_stream.metadata,
         emission_ref = undefined,
         handler_ref = HandlerRef
     }.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns initial stream metadata.
-%% @end
-%%--------------------------------------------------------------------
--spec get_initial_metadata(StmDef :: definition()) -> Meta :: metadata().
-get_initial_metadata(#event_stream_definition{metadata = Meta}) ->
-    Meta.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Processes event on the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec process_event(Evt :: event:event(), State :: #state{}) -> NewState :: #state{}.
-process_event(Evt, #state{events = Evts, metadata = Meta,
-    definition = StmDef} = State) ->
-    NewEvts = apply_aggregation_rule(Evt, Evts, StmDef),
-    NewMeta = apply_transition_rule(Evt, Meta, StmDef),
+-spec process_event(Evt :: event:object(), State :: #state{}) -> NewState :: #state{}.
+process_event(Evt, #state{events = Evts, metadata = Meta, stream = Stm} = State) ->
+    EvtKey = event_type:get_aggregation_key(Evt),
+    NewEvts = case maps:find(EvtKey, Evts) of
+        {ok, OldEvt} ->
+            NewEvt = exec(Stm#event_stream.aggregation_rule, [OldEvt, Evt]),
+            maps:put(EvtKey, NewEvt, Evts);
+        error ->
+            maps:put(EvtKey, Evt, Evts)
+    end,
+    NewMeta = exec(Stm#event_stream.transition_rule, [Meta, Evt]),
     NewState = State#state{events = NewEvts, metadata = NewMeta},
-    case apply_emission_rule(NewMeta, StmDef) of
+    case exec(Stm#event_stream.emission_rule, [NewMeta]) of
         true -> maybe_spawn_event_handler(false, NewState);
         false -> maybe_schedule_event_handler_execution(NewState)
     end.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
+%% @private @doc
 %% Schedules sending 'periodic_emission' message to itself. Message is
 %% marked with new reference stored in event stream state, so that event stream
 %% can ignore messages with reference different from the one saved in the state.
@@ -403,8 +357,7 @@ process_event(Evt, #state{events = Evts, metadata = Meta,
 %%--------------------------------------------------------------------
 -spec maybe_schedule_event_handler_execution(State :: #state{}) -> NewState :: #state{}.
 maybe_schedule_event_handler_execution(#state{emission_ref = undefined,
-    definition = #event_stream_definition{emission_time = Time}} = State)
-    when is_integer(Time) ->
+    stream = #event_stream{emission_time = Time}} = State) when is_integer(Time) ->
     Ref = make_ref(),
     erlang:send_after(Time, self(), {periodic_emission, Ref}),
     State#state{emission_ref = Ref};
@@ -413,39 +366,10 @@ maybe_schedule_event_handler_execution(State) ->
     State.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Applies emission rule.
+%% @private @doc
+%% Executes function with provided arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_emission_rule(Meta :: metadata(), StmDef :: definition()) -> true | false.
-apply_emission_rule(Meta, #event_stream_definition{emission_rule = Rule}) ->
-    Rule(Meta).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Applies aggregation rule on events with the same key. If there is no event with
-%% given key inserts new event into event map.
-%% @end
-%%--------------------------------------------------------------------
--spec apply_aggregation_rule(Evt :: event:event(), Evts :: events(), StmDef :: definition()) ->
-    NewEvts :: events().
-apply_aggregation_rule(#event{key = Key} = Evt, Evts, #event_stream_definition{
-    aggregation_rule = Rule}) ->
-    case maps:find(Key, Evts) of
-        {ok, AggEvt} -> maps:put(Key, Rule(AggEvt, Evt), Evts);
-        error -> maps:put(Key, Evt, Evts)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Applies transition rule on the event stream metadata and new event. Returns
-%% new metadata associated with the stream.
-%% @end
-%%--------------------------------------------------------------------
--spec apply_transition_rule(Evt :: event:event(), Meta :: metadata(), StmDef :: definition()) ->
-    NewMeta :: metadata().
-apply_transition_rule(Evt, Meta, #event_stream_definition{transition_rule = Rule}) ->
-    Rule(Meta, Evt).
+-spec exec(Fun :: fun(), Args :: [term()]) -> Result :: term().
+exec(Fun, Args) ->
+    erlang:apply(Fun, Args).
