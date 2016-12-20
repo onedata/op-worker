@@ -25,12 +25,12 @@
 -export([
     db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
     file_consistency_test/1, db_sync_many_ops_test_base/1, file_consistency_test_base/1,
-    permission_cache_invalidate_test/1
+    permission_cache_invalidate_test/1, multi_space_test/1
 ]).
 
 -define(TEST_CASES, [
     db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test, file_consistency_test,
-    permission_cache_invalidate_test
+    permission_cache_invalidate_test, multi_space_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -113,6 +113,27 @@ file_consistency_test_base(Config) ->
 
 permission_cache_invalidate_test(Config) ->
     multi_provider_file_ops_test_base:permission_cache_invalidate_test_base(Config, 120).
+
+multi_space_test(Config) ->
+    User = <<"user1">>,
+    Spaces = ?config({spaces, User}, Config),
+    Attempts = 120,
+
+    SpaceConfigs = lists:foldl(fun({_, SN}, Acc) ->
+        {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider} = case SN of
+            <<"space1">> ->
+                {4,2,0,1};
+            <<"space2">> ->
+                {2,4,0,1};
+            _ ->
+                {0,6,1,1}
+        end,
+        EC = multi_provider_file_ops_test_base:extend_config(Config, User,
+            {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+        [{SN, EC} | Acc]
+    end, [], Spaces),
+
+    multi_provider_file_ops_test_base:multi_space_test_base(Config, SpaceConfigs, User).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
