@@ -223,11 +223,11 @@ verify_propagation(ControllerKey, SpaceId, AddLocal) ->
 
     {ok, Links} = datastore:foreach_link(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, ListFun, []),
     LocalListed = lists:member(MyId, Links),
-    Correction = case (LocalListed and AddLocal) of
+    Correction = case ((not LocalListed) and AddLocal) of
         true ->
-            0;
+            1;
         _ ->
-            1
+            0
     end,
 
     Providers = dbsync_utils:get_providers_for_space(SpaceId),

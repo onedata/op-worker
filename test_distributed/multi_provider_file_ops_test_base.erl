@@ -24,15 +24,17 @@
 %% API
 %% export for tests
 -export([
-    basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4,
+    basic_opts_test_base/4, many_ops_test_base/6, distributed_modification_test_base/4, multi_space_test_base/3,
     file_consistency_test_skeleton/5, permission_cache_invalidate_test_base/2, get_links/1,
     mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
-    create_and_delete_file_loop_test_base/3]).
+    create_and_delete_file_loop_test_base/3
+]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
     add_dbsync_state/4]).
 
+-export([extend_config/4]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -729,6 +731,59 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     end, ConfigsNum),
 
     ok.
+
+multi_space_test_base(Config0, SpaceConfigs, User) ->
+    Workers = ?config(op_worker_nodes, Config0),
+    Spaces = ?config({spaces, User}, Config0),
+
+    CreateLog = lists:foldl(fun(W, Acc) ->
+        lists:foldl(fun({_, SN}, Acc2) ->
+            ct:print("Create dirs: node ~p, space ~p", [W, SN]),
+
+            Config = proplists:get_value(SN, SpaceConfigs),
+            SessId = ?config(session, Config),
+
+            Dir = <<SN/binary, "/",  (generator:gen_name())/binary>>,
+            Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+            Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Dir, 8#755)),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2Dir, 8#755)),
+
+            [{Dir, Level2Dir, Level2File, W, SN} | Acc2]
+        end, Acc, Spaces)
+    end, [], Workers),
+
+    lists:foreach(fun({Dir, Level2Dir, _Level2File, W, SN}) ->
+        ct:print("Verify dirs, node ~p, space ~p", [W, SN]),
+
+        Config = proplists:get_value(SN, SpaceConfigs),
+        verify_stats(Config, Dir, true),
+        verify_stats(Config, Level2Dir, true)
+    end, CreateLog),
+
+    FileCreateLog = lists:foldl(fun({_Dir, _Level2Dir, Level2File, W, SN}, Acc) ->
+        ct:print("Create files: node ~p, space ~p", [W, SN]),
+
+        FileBeg = <<"1234567890abcd",  (generator:gen_name())/binary>>,
+        Config = proplists:get_value(SN, SpaceConfigs),
+        create_file_on_worker(Config, FileBeg, 2, Level2File, W),
+        [{Level2File, FileBeg, W, SN} | Acc]
+    end, [], CreateLog),
+
+    lists:foreach(fun({Level2File, FileBeg, W, SN}) ->
+        ct:print("Verify file, node ~p, space ~p", [W, SN]),
+
+        Config = proplists:get_value(SN, SpaceConfigs),
+        verify_file(Config, FileBeg, {2, Level2File})
+    end, FileCreateLog),
+
+    verify(Config0, fun(W) ->
+        ?assertEqual(ok, lfm_proxy:close_all(W))
+    end),
+
+    ok.
+
 
 mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
     Config = extend_config(Config0, User, {0, 0, 0, 0}, 0),

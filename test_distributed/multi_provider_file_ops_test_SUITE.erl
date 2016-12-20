@@ -30,7 +30,7 @@
     proxy_basic_opts_test2/1, proxy_many_ops_test2/1, proxy_distributed_modification_test2/1,
     db_sync_many_ops_test_base/1, proxy_many_ops_test1_base/1, proxy_many_ops_test2_base/1,
     file_consistency_test/1, file_consistency_test_base/1, concurrent_create_test/1,
-    permission_cache_invalidate_test/1,
+    permission_cache_invalidate_test/1, multi_space_test/1,
     mkdir_and_rmdir_loop_test/1, mkdir_and_rmdir_loop_test_base/1,
     create_and_delete_file_loop_test/1, create_and_delete_file_loop_test_base/1,
     echo_and_delete_file_loop_test/1, echo_and_delete_file_loop_test_base/1]).
@@ -40,7 +40,7 @@
     proxy_basic_opts_test1, proxy_many_ops_test1, proxy_distributed_modification_test1,
     proxy_basic_opts_test2, proxy_many_ops_test2, proxy_distributed_modification_test2,
     file_consistency_test, concurrent_create_test, permission_cache_invalidate_test,
-    mkdir_and_rmdir_loop_test, create_and_delete_file_loop_test,
+    multi_space_test,  mkdir_and_rmdir_loop_test, create_and_delete_file_loop_test,
     echo_and_delete_file_loop_test
 ]).
 
@@ -271,6 +271,26 @@ file_consistency_test_base(Config) ->
 
 permission_cache_invalidate_test(Config) ->
     multi_provider_file_ops_test_base:permission_cache_invalidate_test_base(Config, 30).
+
+multi_space_test(Config) ->
+    User = <<"user1">>,
+    Spaces = ?config({spaces, User}, Config),
+    Attempts = 30,
+
+    SpaceConfigs = lists:foldl(fun({_, SN}, Acc) ->
+        {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider} = case SN of
+            <<"space1">> ->
+                {4,0,0,2};
+            _ ->
+                {0,4,1,2}
+        end,
+        EC = multi_provider_file_ops_test_base:extend_config(Config, User,
+            {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
+        [{SN, EC} | Acc]
+    end, [], Spaces),
+
+    multi_provider_file_ops_test_base:multi_space_test_base(Config, SpaceConfigs, User).
+
 
 mkdir_and_rmdir_loop_test(Config) ->
     ?PERFORMANCE(Config, [
