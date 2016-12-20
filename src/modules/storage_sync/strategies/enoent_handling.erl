@@ -117,7 +117,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
 
     MaybeAttrs = lists:map(
         fun(StorageId) ->
-            {ok, Tokens} = fslogic_path:verify_file_path(Path),
+            {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
             {path, LogicalPath} = fslogic_path:get_canonical_file_entry(CTX, Tokens),
             ConvertFilePath = space_sync_worker:init(filename_mapping, SpaceId, StorageId, #{logical_path => LogicalPath}),
             FileId = space_sync_worker:run(ConvertFilePath),

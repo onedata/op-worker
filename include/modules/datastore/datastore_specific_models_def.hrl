@@ -403,7 +403,7 @@
 %% Model for holding state of monitoring
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
-    rrd_path :: undefined | binary(),
+    rrd_guid :: undefined | binary(),
     state_buffer = #{} :: maps:map(),
     last_update_time :: undefined | non_neg_integer()
 }).

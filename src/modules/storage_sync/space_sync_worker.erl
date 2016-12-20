@@ -94,31 +94,31 @@ handle({check_strategies, SpaceId, StorageId} = Request) ->
         storage_strategies = StorageStrategies
     }}} = space_strategies:get(SpaceId),
 
-    #storage_strategies{
-        last_import_time = LastImportTime
-    } = maps:get(StorageId, StorageStrategies),
+    case maps:get(StorageId, StorageStrategies, undefined) of
+        #storage_strategies{last_import_time = LastImportTime} ->
+            InitialImportJobData =
+                #{
+                    last_import_time => LastImportTime,
+                    space_id => SpaceId,
+                    storage_id => StorageId,
+                    storage_file_id => <<"/", SpaceId/binary>>,
+                    max_depth => ?INFINITY
+                },
 
-    InitialImportJobData =
-        #{
-            last_import_time => LastImportTime,
-            space_id => SpaceId,
-            storage_id => StorageId,
-            storage_file_id => <<"/", SpaceId/binary>>,
-            max_depth => ?INFINITY
-        },
+            %% Handle initial import
+            Import = init(storage_import, SpaceId, StorageId, InitialImportJobData),
+            ImportRes = run(Import),
+            %% @todo: do smth with this result and save new last_import_time
+            ?debug("space_sync_worker ImportRes ~p", [ImportRes]),
 
-    %% Handle initial import
-    Import = init(storage_import, SpaceId, StorageId, InitialImportJobData),
-    ImportRes = run(Import),
-    %% @todo: do smth with this result and save new last_import_time
-    ?debug("space_sync_worker ImportRes ~p", [ImportRes]),
+            Update = init(storage_update, SpaceId, StorageId, InitialImportJobData),
+            UpdateRes = run(Update),
+            %% @todo: do smth with this result
+            ?debug("space_sync_worker UpdateRes ~p", [UpdateRes]);
+        undefined ->
+            ok
+    end;
 
-    Update = init(storage_update, SpaceId, StorageId, InitialImportJobData),
-    UpdateRes = run(Update),
-    %% @todo: do smth with this result
-    ?debug("space_sync_worker UpdateRes ~p", [UpdateRes]),
-
-    ok;
 handle({run_job, _, Job = #space_strategy_job{strategy_type = StrategyType}}) ->
     MergeType = merge_type(Job),
     {LocalResult, NextJobs} =

@@ -143,7 +143,11 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
             ConvertFilePath = space_sync_worker:init(filename_mapping, SpaceId, StorageId, #{storage_path => FileId}),
             LogicalPath = space_sync_worker:run(ConvertFilePath),
 
-            LogicalAttrsResponse = fslogic_req_generic:get_file_attr(fslogic_context:new(?ROOT_SESS_ID), {path, LogicalPath}),
+            [<<"/">>, _SpaceName | Rest] = fslogic_path:split(LogicalPath),
+            CanonicalPath = fslogic_path:join([<<"/">>, SpaceId | Rest]),
+            FileEntry = file_meta:to_uuid({path, CanonicalPath}),
+
+            LogicalAttrsResponse = fslogic_req_generic:get_file_attr(fslogic_context:new(?ROOT_SESS_ID), FileEntry), %todo TL do not create fslogic internal context
             IsImported = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse),
 
             LocalResult = case IsImported of

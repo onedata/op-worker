@@ -5,8 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module provides helper methods for processing requests that were
-%%%      rerouted to other provider.
+%%% @doc
+%%% This module provides helper methods for processing requests that were
+%%% rerouted to other provider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_remote).
@@ -27,7 +28,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([reroute/3, postrouting/3, prerouting/3]).
+-export([get_provider_to_reroute/1, reroute/3]).
 
 %%%===================================================================
 %%% API functions
@@ -35,11 +36,20 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Get provider from list to reroute msg.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_to_reroute([od_provider:id()]) -> od_provider:id().
+get_provider_to_reroute([ProviderId | _]) ->
+    ProviderId.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Reroute given request to given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec reroute(fslogic_context:ctx(), oneprovider:id(), term()) ->
-    term().
+-spec reroute(fslogic_context:ctx(), oneprovider:id(), fslogic_worker:request()) ->
+    {ok, term()}.
 reroute(Ctx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
     SessId = fslogic_context:get_session_id(Ctx),
@@ -51,34 +61,3 @@ reroute(Ctx, ProviderId, Request) ->
             proxy_session_auth = Auth
         }, session_manager:get_provider_session_id(outgoing, ProviderId)),
     MsgBody.
-
-
-
-
-%%--------------------------------------------------------------------
-%% @doc This function is called for each request that should be rerouted to remote provider and allows to choose
-%%      the provider ({ok, {reroute, ProviderId}}), stop rerouting while giving response to the request ({ok, {response, Response}})
-%%      or stop rerouting due to error.
-%% @end
-%%--------------------------------------------------------------------
--spec prerouting(fslogic_context:ctx(), Request :: term(), [ProviderId :: binary()]) ->
-    {ok, {response, Response :: term()}} | {ok, {reroute, ProviderId :: binary(), NewRequest :: term()}} | {error, Reason :: any()}.
-prerouting(_, _, []) ->
-    {error, no_providers};
-prerouting(_CTX, RequestBody, [RerouteTo | _Providers]) ->
-    {ok, {reroute, RerouteTo, RequestBody}}.
-
-
-
-%%--------------------------------------------------------------------
-%% @doc This function is called for each response from remote provider and allows altering this response
-%%      (i.e. show empty directory instead of error in some cases).
-%%      'undefined' return value means, that response is invalid and the whole rerouting process shall fail.
-%% @end
-%%--------------------------------------------------------------------
--spec postrouting(fslogic_context:ctx(), {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
-postrouting(_CTX, {ok, Response}, _Request) ->
-    Response;
-postrouting(_CTX, UnkResult, Request) ->
-    ?error("Unknown result ~p for request ~p", [UnkResult, Request]),
-    undefined.

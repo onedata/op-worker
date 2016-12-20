@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Files renaming functions
+%%% @doc
+%%% Files renaming functions
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_rename).
@@ -699,7 +700,7 @@ get_supporting_providers(SpaceId, Auth, UserId) ->
     LogicalPath :: file_meta:path()) -> file_meta:path().
 logical_path_to_canonical(Ctx, LogicalPath) ->
     SessId = fslogic_context:get_session_id(Ctx),
-    {ok, Tokens} = fslogic_path:verify_file_path(LogicalPath),
+    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(LogicalPath),
     CanonicalEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     {ok, CanonicalPath} = fslogic_path:gen_path(CanonicalEntry, SessId),
     CanonicalPath.

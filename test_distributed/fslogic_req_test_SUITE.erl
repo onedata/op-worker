@@ -582,7 +582,7 @@ get_guid_privileged(Worker, SessId, Path) ->
         <<"/">> ->
             SessId;
         _ ->
-            {ok, [_, SpaceName | _]} = fslogic_path:verify_file_path(Path),
+            {ok, [_, SpaceName | _]} = fslogic_path:tokenize_skipping_dots(Path),
             hd(get(SpaceName))
     end,
     get_guid(Worker, SessId1, Path).

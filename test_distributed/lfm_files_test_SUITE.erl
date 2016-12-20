@@ -50,7 +50,8 @@
     share_child_list_test/1,
     share_child_read_test/1,
     share_permission_denied_test/1,
-    echo_loop_test/1, echo_loop_test_base/1
+    echo_loop_test/1,
+    echo_loop_test_base/1
 ]).
 
 -define(TEST_CASES, [
@@ -591,6 +592,7 @@ lfm_write_test(Config) ->
     WriteAndTest(W, Handle12, 6, <<"qwerty">>),
 
     WriteAndTest(W, Handle11, 10, crypto:strong_rand_bytes(40)).
+
 
 lfm_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

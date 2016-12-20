@@ -18,7 +18,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% API

@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%% @doc This module exports utility functions for logical_file_manager module.
+%%% @doc
+%%% This module exports utility functions for logical_file_manager module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_utils).
@@ -26,7 +27,7 @@
 %% in fslogic's response.
 %% @end
 %%--------------------------------------------------------------------
--spec call_fslogic(SessId :: session:id(), RequestType :: file_request | provider_request,
+-spec call_fslogic(SessId :: session:id(), RequestType :: file_request_value | provider_request_value,
     ContextEntry :: fslogic_worker:file_guid() | undefined, Request :: term(),
     OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
@@ -42,7 +43,7 @@ call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
             {error, Code}
     end.
 
--spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request,
+-spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request_value,
     Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
 call_fslogic(SessId, fuse_request, Request, OKHandle) ->

@@ -25,7 +25,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Changes the permissions of a file.
+%% @doc
+%% Changes the permissions of a file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_perms(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
     NewPerms :: file_meta:posix_permissions()) ->
@@ -37,7 +39,9 @@ set_perms(SessId, FileKey, NewPerms) ->
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
-%% @doc Checks if current user has given permissions for given file.
+%% @doc
+%% Checks if current user has given permissions for given file.
+%% @end
 %%--------------------------------------------------------------------
 -spec check_perms(session:id(), logical_file_manager:file_key(), fslogic_worker:open_flag()) ->
     {ok, boolean()} | logical_file_manager:error_reply().
@@ -57,7 +61,9 @@ check_perms(SessId, FileKey, Flag) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns file's Access Control List.
+%% @doc
+%% Returns file's Access Control List.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, [access_control_entity()]} | logical_file_manager:error_reply().
@@ -69,7 +75,9 @@ get_acl(SessId, FileKey) ->
         end).
 
 %%--------------------------------------------------------------------
-%% @doc Updates file's Access Control List.
+%% @doc
+%% Updates file's Access Control List.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     EntityList :: [access_control_entity()]) ->
@@ -81,7 +89,9 @@ set_acl(SessId, FileKey, Acl) ->
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
-%% @doc Removes file's Access Control List.
+%% @doc
+%% Removes file's Access Control List.
+%% @end
 %%--------------------------------------------------------------------
 -spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | logical_file_manager:error_reply().
