@@ -740,7 +740,6 @@ mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
     DirPath = <<SpaceName/binary, "/",  Dir/binary>>,
 
     lists:foreach(fun(_N) ->
-        ct:pal("~p", [_N]),
         MkdirAns = lfm_proxy:mkdir(Worker1, SessId(Worker1), DirPath),
         ?assertMatch({ok, _}, MkdirAns),
         {ok, Handle} = MkdirAns,
@@ -757,10 +756,9 @@ create_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
 
     File = generator:gen_name(),
     FilePath = <<SpaceName/binary, "/",  File/binary>>,
-    FileBeg = <<"1234567890abcd">>,
 
     lists:foreach(fun(_N) ->
-        create_file(Config, FileBeg, {2, FilePath}),
+        ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessId(Worker1), FilePath, 8#755)),
         ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {path, FilePath}))
     end, lists:seq(1, IterationsNum)),
     ok.
@@ -778,7 +776,6 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     BufSize = size(Text),
 
     lists:foreach(fun(_N) ->
-        ct:pal("~p", [_N]),
         ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), FilePath, 8#755)),
         OpenAns = lfm_proxy:open(Worker1, SessId(Worker1), {path, FilePath}, write),
         ?assertMatch({ok, _}, OpenAns),
