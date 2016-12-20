@@ -200,7 +200,6 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     value = #file_meta{
         is_scope = IsScope, mode = Mode, type = Type, uid = Uid,
         version = Version, name = Name}}}, SpaceId) ->
-    Ctx = fslogic_context:new(?ROOT_SESS_ID),
     #times{atime = Atime, ctime = Ctime, mtime = Mtime} =
         try
             {ok, #document{value = TimesValue}} = times:get(Uuid),
@@ -221,7 +220,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Path =
         try
-            fslogic_uuid:uuid_to_path(Ctx, Uuid)
+            fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, Uuid)
         catch
             _:Error2 ->
                 ?error("Cannot fetch Path for changes, error: ~p", [Error2]),

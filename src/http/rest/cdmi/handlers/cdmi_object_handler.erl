@@ -230,7 +230,7 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                 undefined ->
                     {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGUID}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
-                    ok = onedata_file_api:truncate(FileHandle, 0),
+                    ok = onedata_file_api:truncate(Auth, {guid, FileGUID}, 0),
                     {ok, Req2} = cdmi_streamer:write_body_to_file(Req1, 0, FileHandle),
                     onedata_file_api:fsync(FileHandle),
                     onedata_file_api:release(FileHandle),
@@ -342,7 +342,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                 undefined when is_binary(Value) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {guid, Guid}, write),
                     cdmi_metadata:update_cdmi_completion_status(Auth, {guid, Guid}, <<"Processing">>),
-                    ok = onedata_file_api:truncate(FileHandler, 0),
+                    ok = onedata_file_api:truncate(Auth, {guid, Guid}, 0),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
                     onedata_file_api:fsync(FileHandler),
                     onedata_file_api:release(FileHandler),

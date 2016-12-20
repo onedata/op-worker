@@ -17,7 +17,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, init_per_testcase/2]).
 -export([
     provider_certs_are_published_on_registration/1,
     verify_fails_on_forged_certs/1,
@@ -141,25 +141,21 @@ certs_should_be_cached_after_successful_publishing(Config) ->
 %%%===================================================================
 
 init_per_suite(RunConfig) ->
-    Config = ?TEST_INIT(RunConfig, ?TEST_FILE(RunConfig, "env_desc.json"), []),
+    Posthook = fun(NewConfig) ->
+        %% ensure some provider certs present as ctool requires them
+        Workers = ?config(op_worker_nodes, NewConfig),
+        lists:foreach(fun(Worker) ->
+            {ok, Key} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_key_file]),
+            {ok, Cert} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_cert_file]),
+            Domain = rpc:call(Worker, oneprovider, get_provider_domain, []),
+            ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, Domain])
+        end, Workers),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook} | RunConfig].
 
-    %% ensure some provider certs present as ctool requires them
-    Workers = ?config(op_worker_nodes, Config),
-    lists:foreach(fun(Worker) ->
-        {ok, Key} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_key_file]),
-        {ok, Cert} = rpc:call(Worker, application, get_env, [?APP_NAME, oz_provider_cert_file]),
-        Domain = rpc:call(Worker, oneprovider, get_provider_domain, []),
-        ok = rpc:call(Worker, identity_utils, ensure_synced_cert_present, [Key, Cert, Domain])
-    end, Workers),
 
-    Config.
-
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     %% clear OZ state - this key is defined in appmock
@@ -176,9 +172,6 @@ init_per_testcase(Case, Config) ->
 
     Config.
 
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case),
-    ok.
 
 %%%===================================================================
 %%% Internal functions

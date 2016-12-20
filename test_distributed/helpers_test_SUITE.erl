@@ -12,7 +12,7 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("modules/fslogic/helpers.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -27,13 +27,12 @@
 -define(CALL_TIMEOUT_MILLIS, timer:minutes(3)).
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([ctx_server/1, ctx_server/2]).
 -export([
     getattr_test/1, access_test/1, mknod_test/1, mkdir_test/1, unlink_test/1, rmdir_test/1, symlink_test/1,
     rename_test/1, chmod_test/1, chown_test/1, truncate_test/1, open_test/1, read_test/1, write_test/1,
-    release_test/1, flush_test/1, fsync_test/1
+    big_write_test/1, release_test/1, flush_test/1, fsync_test/1
 ]).
 
 all() ->
@@ -160,6 +159,23 @@ write_test(Config) ->
     {ok, Dev2} = call(Config, file, open, [?path(Config, File), [read, binary]]),
     {ok, <<"tetest">>} = call(Config, file, read, [Dev2, 6]).
 
+big_write_test(Config) ->
+    File = gen_filename(),
+    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
+    ChunkSize = 1024 * 1024,
+
+    lists:foldl(fun(N, Data) ->
+        Size = N * ChunkSize,
+        NewData = <<Data/binary, (crypto:strong_rand_bytes(ChunkSize))/binary>>,
+
+        {ok, Handle} = call(Config, open, [File, write]),
+        ?assertMatch({ok, Size}, call(Handle, write, [0, NewData])),
+        {ok, DataRead} = call(Config, file, read_file, [?path(Config, File)]),
+        ?assertMatch(DataRead, NewData),
+
+        NewData
+    end, <<>>, lists:seq(1, 10)).
+
 release_test(_Config) ->
     _File = gen_filename(),
     %todo
@@ -185,21 +201,13 @@ fsync_test(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     CTXServer = spawn(Node, fun() -> ctx_server(Config) end),
     lists:keystore(ctx_server, 1, Config,
         {ctx_server, CTXServer}).
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     CTXServer = ?config(ctx_server, Config),
     CTXServer ! exit,
 
@@ -212,11 +220,11 @@ end_per_testcase(Case, Config) ->
 %%%===================================================================
 
 gen_filename() ->
-    http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:rand_bytes(20)))/binary>>).
+    http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
 
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")},
-                             #posix_user_ctx{uid = 0, gid = 0}),
+        #posix_user_ctx{uid = 0, gid = 0}),
     ctx_server(Config, CTX).
 ctx_server(Config, CTX) ->
     receive

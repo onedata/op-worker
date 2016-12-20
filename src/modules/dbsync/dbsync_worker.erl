@@ -572,8 +572,8 @@ apply_changes(SpaceId,
                 Key
         end,
         MyProvId = oneprovider:get_provider_id(),
-        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_link_key(ModelConfig, MainDocKey), fun() ->
-            case Value of
+%%        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_link_key(ModelConfig, MainDocKey), fun() ->
+            ChangedLinks = case Value of
                 #links{origin = MyProvId} ->
                     ?warning("Received private, local links change from other provider ~p", [Change]),
                     [];
@@ -591,8 +591,8 @@ apply_changes(SpaceId,
                 _ ->
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     []
-            end
-        end),
+            end,
+%%        end),
 
         case Value of
             #links{} ->
@@ -717,10 +717,6 @@ get_sync_context(#document{value = #file_meta{}} = Doc) ->
     Doc;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
-get_sync_context(#document{value = #links{doc_key = DocKey, model = file_location}}) ->
-    #model_config{store_level = StoreLevel} = file_location:model_init(),
-    {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
-    get_sync_context(Doc);
 get_sync_context(#document{key = Key, value = #custom_metadata{}}) ->
     Key;
 get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
@@ -740,57 +736,39 @@ get_space_id(#document{value = #monitoring_state{monitoring_id = MonitoringId}})
     {ok, SpaceId};
 get_space_id(#document{value = #change_propagation_controller{space_id = SpaceId}}) ->
     {ok, SpaceId};
-get_space_id(#document{key = Key} = Doc) ->
-    try state_get({sid, Key}) of
-        undefined ->
-            get_not_cached_space_id(Key, Doc);
-        SpaceId ->
-            {ok, SpaceId}
-    catch
-        _:Reason ->
-            ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Key, Reason]),
-            get_not_cached_space_id(Key, Doc)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given document returns SpaceId and puts this value to cache using given key.
-%% This cache may be used later on by get_space_id/1.
-%% @end
-%%--------------------------------------------------------------------
--spec get_not_cached_space_id(KeyToCache :: term(), datastore:document()) ->
-    {ok, SpaceId :: binary() | {space_doc, SpaceId :: binary()}} | {error, Reason :: term()}.
-get_not_cached_space_id(KeyToCache, #document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
+get_space_id(#document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
     #model_config{store_level = StoreLevel} = change_propagation_controller:model_init(),
     case datastore:get(StoreLevel, change_propagation_controller, DocKey) of
-    {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
-        state_put({sid, KeyToCache}, SpaceId),
-        {ok, SpaceId};
-    {error, Reason} ->
-        {error, Reason}
+        {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
+            {ok, SpaceId};
+        {error, {not_found, _}} ->
+            get_sid_from_state(change_propagation_controller, DocKey);
+        {error, Reason} ->
+            {error, Reason}
     end;
-get_not_cached_space_id(KeyToCache, #document{key = Key} = Doc) ->
+get_space_id(#document{key = Key, value = V} = Doc) ->
     Context = get_sync_context(Doc),
-    case file_meta:get_scope(Context) of
-        {ok, #document{key = <<"">> = Root}} ->
+    case file_meta:get_scope_id(Context) of
+        {ok, <<"">>} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Key),
-                state_put({sid, KeyToCache}, {space_doc, SpaceId}),
                 {ok, {space_doc, SpaceId}}
             catch
-                _:_ ->
-                    state_put({sid, KeyToCache}, Root),
-                    {ok, Root}
+                _:Reason ->
+                    ?debug_stacktrace("Cannot get spaceID from document ~p due to: ~p", [Doc, Reason]),
+                    {ok, <<"">>}
             end;
-        {ok, #document{key = ScopeUUID}} ->
+        {ok, ScopeUUID} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-                state_put({sid, KeyToCache}, SpaceId),
                 {ok, SpaceId}
             catch
-                _:_ -> {error, not_a_space}
+                _:Reason ->
+                    ?debug_stacktrace("Unable to get space_id for document ~p due to: ~p", [Doc, Reason]),
+                    {error, not_a_space}
             end;
+        {error, {not_found, _}} ->
+            get_sid_from_state(file_meta, Context);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -1126,4 +1104,21 @@ ensure_global_stream_active() ->
             Since = state_get(global_resume_seq),
             timer:send_after(0, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
             ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets space ID from state.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sid_from_state(ModelName :: model_behaviour:model_type(), datastore:ext_key() | datastore:document()) ->
+    {ok, SpaceId :: od_space:id()} | {error, not_a_space} | datastore:generic_error().
+get_sid_from_state(ModelName, #document{key = Key}) ->
+    get_sid_from_state(ModelName, Key);
+get_sid_from_state(ModelName, Key) ->
+    case dbsync_state:get({sid, ModelName, Key}) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            Value;
+        Other ->
+            Other
     end.

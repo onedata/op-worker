@@ -14,8 +14,6 @@
 
 -author("Michal Wrona").
 
--include("global_definitions.hrl").
--include("modules/events/streams.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -37,22 +35,12 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    Sub = #subscription{
+    event:subscribe(#subscription{
         id = ?MONITORING_SUB_ID,
-        object = undefined,
-        event_stream = #event_stream_definition{
-            id = monitoring_event_stream,
-            metadata = 0,
-            init_handler = fun(_, _, _) -> #{} end,
-            terminate_handler = fun(_) -> ok end,
-            event_handler = fun monitoring_event:handle_monitoring_events/2,
-            aggregation_rule = fun monitoring_event:aggregate_monitoring_events/2,
-            transition_rule = fun(Meta, _) -> Meta end,
-            emission_rule = fun(_) -> false end,
-            emission_time = timer:seconds(?STEP_IN_SECONDS)
+        type = #monitoring_subscription{
+            time_threshold = timer:seconds(?STEP_IN_SECONDS)
         }
-    },
-    {ok, _} = event:subscribe(Sub, ?ROOT_SESS_ID),
+    }, ?ROOT_SESS_ID),
 
     {ok, #{}}.
 

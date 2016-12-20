@@ -29,7 +29,8 @@
 ]).
 
 % for file consistency testing
--export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4]).
+-export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
+    add_dbsync_state/4]).
 
 
 -define(match(Expect, Expr, Attempts),
@@ -105,15 +106,15 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
 
     lists:foreach(fun(Worker) ->
         ?assertMatch({error,{not_found, _}}, ?rpc(Worker, change_propagation_controller, get,
-            [ControllerUUID]), Attempts * length(Workers))
+            [ControllerUUID]), Attempts * length(Workers)),
         % TODO - uncomment after VFS-2678
-%%        ListFun = fun(LinkName, _LinkTarget, Acc) ->
-%%            [LinkName | Acc]
-%%                  end,
-%%        MC = change_propagation_controller:model_init(),
-%%        LSL = MC#model_config.link_store_level,
-%%        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
-%%            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
+        ListFun = fun(LinkName, _LinkTarget, Acc) ->
+            [LinkName | Acc]
+        end,
+        MC = change_propagation_controller:model_init(),
+        LSL = MC#model_config.link_store_level,
+        ?assertEqual({ok, []}, ?rpc(Worker, datastore, foreach_link,
+            [LSL, ControllerUUID, change_propagation_controller, ListFun, []]), Attempts)
     end, Workers),
 
     ok.
@@ -389,6 +390,14 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     SpaceKey = SpaceDoc#document.key,
 %%    ct:print("Space key ~p", [SpaceKey]),
 
+    Workers = ?config(op_worker_nodes, Config),
+    P1Workers = lists:foldl(fun(W, Acc) ->
+        case string:str(atom_to_list(W), "p1") of
+            0 -> Acc;
+            _ -> [W | Acc]
+        end
+    end, [], Workers),
+
     DoTest = fun(TaskList) ->
 %%        ct:print("Do test"),
 
@@ -442,6 +451,10 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         lists:foreach(fun(
             {sleep, Sek}) ->
             timer:sleep(timer:seconds(Sek));
+            ({add_dbsync_state = Fun, DocNum}) ->
+                lists:foreach(fun(W) ->
+                    ?assertEqual(ok, ?rpcTest(W, Fun, proplists:get_value(DocNum, DocsList)))
+                end, P1Workers);
             ({Fun, DocNum}) ->
                 ?assertEqual(ok, ?rpcTest(Worker1, Fun, proplists:get_value(DocNum, DocsList)));
             ({Fun, DocNum, W}) ->
@@ -537,6 +550,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {sleep, SleepTime},
@@ -553,6 +567,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {create_location, 3},
@@ -569,6 +584,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {set_link_to_location, 3},
@@ -585,6 +601,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_parent_link, 3},
             {set_link_to_parent, 3},
             {create_location, 3},
@@ -645,6 +662,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {create_doc, 2},
             {set_parent_link, 2},
             {set_link_to_parent, 2},
+            {add_dbsync_state, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_location, 3},
@@ -657,6 +675,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         ],
 
         _T13 = [
+            {add_dbsync_state, 3},
             {set_link_to_location, 3},
             {sleep, SleepTime},
             {create_location, 3},
@@ -667,12 +686,14 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
             {sleep, SleepTime},
             {create_doc, 3},
             {sleep, SleepTime},
+            {add_dbsync_state, 2},
             {set_parent_link, 2},
             {sleep, SleepTime},
             {set_link_to_parent, 2},
             {sleep, SleepTime},
             {create_doc, 2},
             {sleep, SleepTime},
+            {add_dbsync_state, 1},
             {set_parent_link, 1},
             {sleep, SleepTime},
             {set_link_to_parent, 1},
@@ -805,12 +826,17 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     storage_file_manager:fsync(SFMHandle2),
     ok.
 
-set_link_to_location(Doc, ParentDoc, LocId, _Path) ->
+set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
     FileUuid = Doc#document.key,
     MC = file_meta:model_init(),
     LSL = MC#model_config.link_store_level,
     ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
     ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).
+
+add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
+    {ok, SID} = dbsync_worker:get_space_id(Doc),
+    {ok, _} = dbsync_state:save(#document{key = {sid, file_meta, Doc#document.key}, value = #dbsync_state{entry = {ok, SID}}}),
+    ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
     ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
@@ -941,7 +967,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     end),
     {File, FileUUID, LocToAns}.
 
-verify_del(Config, {F,  _FileUUID, _Locations}) ->
+verify_del(Config, {F, FileUUID, Locations}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
 
@@ -949,17 +975,15 @@ verify_del(Config, {F,  _FileUUID, _Locations}) ->
 %%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
 %%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
         % TODO - match to chosen error (check perms may also result in ENOENT)
-        ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
-    %,
-%%            ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts),
-%%            lists:foreach(fun(ProvID) ->
-%%                ?match(#{},
-%%                    get_links(W, FileUUID, ProvID), Attempts)
-%%            end, ProvIDs),
-%%            lists:foreach(fun(Location) ->
-%%                ?match({error, {not_found, _}},
-%%                    rpc:call(W, file_meta, get, [Location]), Attempts)
-%%            end, proplists:get_value(W, Locations, []))
+        ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
+
+        ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts)
+%%        ?match(0, count_links(W, FileUUID), Attempts),
+%%
+%%        lists:foreach(fun(Location) ->
+%%            ?match({error, {not_found, _}},
+%%                rpc:call(W, file_meta, get, [Location]), Attempts)
+%%        end, proplists:get_value(W, Locations, []))
     end).
 
 verify_dir_size(Config, DirToCheck, DSize) ->
@@ -987,7 +1011,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
         VerAns = lists:map(fun({W, Uuid}) ->
             count_links(W, Uuid)
         end, VerAns0),
-%%            ct:print("Links ~p", [{DSize, Deleted, VerAns}]),
+%%        ct:print("Links ~lp", [{DSize, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
         SList = lists:filter(fun(S) -> S == 2*DSize + 1 end, VerAns),

@@ -20,8 +20,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0]).
 
 -export([
     providers_with_common_support_retrieval_test/1
@@ -72,31 +71,11 @@ providers_with_common_support_retrieval_test(Config) ->
 
     ok.
 
-
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-set_own_provider_id(Worker, ID) ->
-    rpc:call(Worker, application, set_env, [?APP_NAME, provider_id, ID]).
-
-init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), []),
-    NewConfig.
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    Config.
-
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+set_own_provider_id(Worker, ID) ->
+    rpc:call(Worker, application, set_env, [?APP_NAME, provider_id, ID]).
 
 save(Node, ID, Value) ->
     ?assertMatch({ok, ID}, rpc:call(Node, element(1, Value), save,

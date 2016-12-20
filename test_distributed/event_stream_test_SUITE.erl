@@ -20,8 +20,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([all/0]).
 
 %% tests
 -export([
@@ -59,102 +58,86 @@ all() ->
 
 event_stream_should_register_with_event_manager_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker),
+    {ok, Stm} = start_event_stream(Worker),
     ?assertReceivedMatch({'$gen_cast',
-        {register_stream, read_event_stream, EvtStm}
+        {register_stream, file_read, Stm}
     }, ?TIMEOUT),
-    stop_event_stream(EvtStm).
+    stop_event_stream(Stm).
 
 event_stream_should_unregister_from_event_manager_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker),
-    stop_event_stream(EvtStm),
+    {ok, Stm} = start_event_stream(Worker),
+    stop_event_stream(Stm),
     ?assertReceivedMatch({'$gen_cast',
-        {unregister_stream, read_event_stream}
+        {unregister_stream, file_read}
     }, ?TIMEOUT).
 
 event_stream_should_execute_init_handler_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker),
-    ?assertReceivedMatch({init_handler, #subscription{}, <<_/binary>>}, ?TIMEOUT),
-    stop_event_stream(EvtStm).
+    {ok, Stm} = start_event_stream(Worker),
+    ?assertReceivedMatch({init_handler, 1, <<_/binary>>}, ?TIMEOUT),
+    stop_event_stream(Stm).
 
 event_stream_should_execute_terminate_handler_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker),
-    stop_event_stream(EvtStm),
+    {ok, Stm} = start_event_stream(Worker),
+    stop_event_stream(Stm),
     ?assertReceivedMatch({terminate_handler, _}, ?TIMEOUT).
 
 event_stream_should_execute_event_handler_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker),
-    emit(Worker, EvtStm, read_event(1, [{0, 1}])),
-    stop_event_stream(EvtStm),
+    {ok, Stm} = start_event_stream(Worker),
+    emit(Worker, Stm, file_read_event(1, [{0, 1}])),
+    stop_event_stream(Stm),
     ?assertReceivedMatch({event_handler, [_]}, ?TIMEOUT).
 
 event_stream_should_execute_event_handler_when_emission_rule_satisfied(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker, fun(_) -> true end, infinity),
-    Evt = read_event(1, [{0, 1}]),
-    emit(Worker, EvtStm, Evt),
+    {ok, Stm} = start_event_stream(Worker, fun(_) -> true end, infinity),
+    Evt = file_read_event(1, [{0, 1}]),
+    emit(Worker, Stm, Evt),
     ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT),
-    stop_event_stream(EvtStm).
+    stop_event_stream(Stm).
 
 event_stream_should_execute_event_handler_when_emission_time_satisfied(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker, fun(_) -> false end, 500),
-    Evt = read_event(1, [{0, 1}]),
-    emit(Worker, EvtStm, Evt),
+    {ok, Stm} = start_event_stream(Worker, fun(_) -> false end, 500),
+    Evt = file_read_event(1, [{0, 1}]),
+    emit(Worker, Stm, Evt),
     ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT),
-    stop_event_stream(EvtStm).
+    stop_event_stream(Stm).
 
 event_stream_should_aggregate_events_with_the_same_key(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     CtrThr = 5,
-    {ok, EvtStm} = start_event_stream(Worker,
+    {ok, Stm} = start_event_stream(Worker,
         fun(Ctr) -> Ctr >= CtrThr end, infinity),
     lists:foreach(fun(N) ->
-        emit(Worker, EvtStm, read_event(1, [{N, 1}]))
+        emit(Worker, Stm, file_read_event(1, [{N, 1}]))
     end, lists:seq(0, CtrThr - 1)),
-    ?assertReceivedMatch({event_handler, [#event{counter = CtrThr}]}, ?TIMEOUT),
-    stop_event_stream(EvtStm).
+    ?assertReceivedMatch({event_handler, [#file_read_event{counter = CtrThr}]},
+        ?TIMEOUT),
+    stop_event_stream(Stm).
 
 event_stream_should_not_aggregate_events_with_different_keys(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, EvtStm} = start_event_stream(Worker,
+    {ok, Stm} = start_event_stream(Worker,
         fun(Ctr) -> Ctr >= 2 end, infinity),
-    emit(Worker, EvtStm, read_event(<<"file_uuid_1">>, 1, [{0, 1}])),
-    emit(Worker, EvtStm, read_event(<<"file_uuid_2">>, 1, [{0, 1}])),
+    emit(Worker, Stm, file_read_event(<<"file_uuid_1">>, 1, [{0, 1}])),
+    emit(Worker, Stm, file_read_event(<<"file_uuid_2">>, 1, [{0, 1}])),
     ?assertReceivedMatch({event_handler, [_ | _]}, ?TIMEOUT),
-    stop_event_stream(EvtStm).
+    stop_event_stream(Stm).
 
 event_stream_should_reset_metadata_after_event_handler_execution(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     CtrThr = 5,
-    {ok, EvtStm} = start_event_stream(Worker,
+    {ok, Stm} = start_event_stream(Worker,
         fun(Ctr) -> Ctr >= 1 end, infinity),
     lists:foreach(fun(N) ->
-        emit(Worker, EvtStm, read_event(1, [{N, 1}])),
-        ?assertReceivedMatch({event_handler, [#event{}]}, ?TIMEOUT)
+        emit(Worker, Stm, file_read_event(1, [{N, 1}])),
+        ?assertReceivedMatch({event_handler, [#file_read_event{}]}, ?TIMEOUT)
     end, lists:seq(0, CtrThr - 1)),
-    stop_event_stream(EvtStm).
-
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
-    Config.
-
-end_per_testcase(Case, _Config) ->
-    ?CASE_STOP(Case).
+    stop_event_stream(Stm).
 
 %%%===================================================================
 %%% Internal functions
@@ -167,7 +150,7 @@ end_per_testcase(Case, _Config) ->
 %% emission time.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_stream(Worker :: node()) -> {ok, EvtStm :: pid()}.
+-spec start_event_stream(Worker :: node()) -> {ok, Stm :: pid()}.
 start_event_stream(Worker) ->
     start_event_stream(Worker, fun(_) -> false end, infinity).
 
@@ -178,29 +161,31 @@ start_event_stream(Worker) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start_event_stream(Worker :: node(), EmRule :: event_stream:emission_rule(),
-    EmTime :: event_stream:emission_time()) -> {ok, EvtStm :: pid()}.
+    EmTime :: event_stream:emission_time()) -> {ok, Stm :: pid()}.
 start_event_stream(Worker, EmRule, EmTime) ->
-    EvtMan = self(),
+    Mgr = self(),
+    SessId = <<"session_id">>,
+    Stm = event_stream_factory:create(#file_read_subscription{}),
     Sub = #subscription{
         id = 1,
-        object = #read_subscription{},
-        event_stream = ?READ_EVENT_STREAM#event_stream_definition{
-            init_handler = fun(Sub, SessId, _) ->
-                EvtMan ! {init_handler, Sub, SessId}
+        type = #file_read_subscription{},
+        stream = Stm#event_stream{
+            init_handler = fun(_SubId, _SessId) ->
+                Mgr ! {init_handler, _SubId, _SessId}
             end,
             terminate_handler = fun(InitResult) ->
-                EvtMan ! {terminate_handler, InitResult}
+                Mgr ! {terminate_handler, InitResult}
             end,
             event_handler = fun(Evts, _) ->
-                EvtMan ! {event_handler, Evts}
+                Mgr ! {event_handler, Evts}
             end,
             emission_rule = EmRule,
-            emission_time = EmTime
+            emission_time = EmTime,
+            transition_rule = fun(Ctr, _) -> Ctr + 1 end
         }
     },
-    SessId = <<"session_id">>,
     ?assertMatch({ok, _}, rpc:call(Worker, gen_server, start, [
-        event_stream, [fuse, EvtMan, Sub, SessId], []
+        event_stream, [Mgr, Sub, SessId], []
     ])).
 
 %%--------------------------------------------------------------------
@@ -209,9 +194,9 @@ start_event_stream(Worker, EmRule, EmTime) ->
 %% Stops event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_event_stream(EvtStm :: pid()) -> true.
-stop_event_stream(EvtStm) ->
-    exit(EvtStm, shutdown).
+-spec stop_event_stream(Stm :: pid()) -> true.
+stop_event_stream(Stm) ->
+    exit(Stm, shutdown).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -219,20 +204,20 @@ stop_event_stream(EvtStm) ->
 %% Emits an event to the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), EvtStm :: pid(), Evt :: #event{}) -> ok.
-emit(Worker, EvtStm, Evt) ->
-    rpc:call(Worker, event, emit, [Evt, EvtStm]).
+-spec emit(Worker :: node(), Stm :: pid(), Evt :: #event{}) -> ok.
+emit(Worker, Stm, Evt) ->
+    rpc:call(Worker, event, emit, [Evt, Stm]).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv read_event(<<"file_uuid">>, Size, Blocks)
+%% @equiv file_read_event(<<"file_uuid">>, Size, Blocks)
 %% @end
 %%--------------------------------------------------------------------
--spec read_event(Size :: file_meta:size(), Blocks :: proplists:proplist()) ->
+-spec file_read_event(Size :: file_meta:size(), Blocks :: proplists:proplist()) ->
     Evt :: #event{}.
-read_event(Size, Blocks) ->
-    read_event(<<"file_uuid">>, Size, Blocks).
+file_read_event(Size, Blocks) ->
+    file_read_event(<<"file_uuid">>, Size, Blocks).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -240,11 +225,11 @@ read_event(Size, Blocks) ->
 %% Returns read event.
 %% @end
 %%--------------------------------------------------------------------
--spec read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
+-spec file_read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
     Blocks :: proplists:proplist()) -> Evt :: #event{}.
-read_event(FileUuid, Size, Blocks) ->
-    #event{key = FileUuid, stream_id = read_event_stream, object = #read_event{
+file_read_event(FileUuid, Size, Blocks) ->
+    #file_read_event{
         file_uuid = FileUuid, size = Size, blocks = [
             #file_block{offset = O, size = S} || {O, S} <- Blocks
         ]
-    }}.
+    }.

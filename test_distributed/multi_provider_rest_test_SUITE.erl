@@ -57,6 +57,8 @@
     set_get_rdf_metadata/1,
     set_get_rdf_metadata_id/1,
     create_list_index/1,
+    create_geospatial_index/1,
+    query_geospatial_index/1,
     set_get_json_metadata_inherited/1,
     set_get_xattr_inherited/1,
     set_get_json_metadata_using_filter/1,
@@ -85,7 +87,7 @@ all() ->
         changes_stream_json_metadata_test,
         changes_stream_times_test,
         changes_stream_file_location_test,
-        changes_stream_on_multi_provider_test,
+        changes_stream_on_multi_provider_test, %todo fix VFS-2864
         list_spaces,
         get_space,
         set_get_json_metadata,
@@ -93,6 +95,8 @@ all() ->
         set_get_rdf_metadata,
         set_get_rdf_metadata_id,
         create_list_index,
+        create_geospatial_index,
+        query_geospatial_index,
         set_get_json_metadata_inherited,
         set_get_xattr_inherited,
         set_get_json_metadata_using_filter,
@@ -645,10 +649,10 @@ changes_stream_on_multi_provider_test(Config) ->
         end, AllChanges),
 
     ?assert(lists:any(fun(Change) ->
-        <<"file4">> == maps:get(<<"name">>, Change),
-        3 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)),
-        0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)),
-        0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)),
+        <<"file4">> == maps:get(<<"name">>, Change) andalso
+        3 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
+        0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
+        0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"mtime">>, maps:get(<<"changes">>, Change))
     end, DecodedChanges)).
 
@@ -801,7 +805,7 @@ create_list_index(Config) ->
     % then
     {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
     IndexList = json_utils:decode_map(ListBody),
-    ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id}], IndexList),
+    ?assertMatch([#{<<"spaceId">> := <<"space1">>, <<"name">> := <<"name">>, <<"indexId">> := Id, <<"spatial">> := false}], IndexList),
     ?assertMatch({ok, 200, _, _},
         do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"application/javascript">>}], [])),
 
@@ -815,6 +819,68 @@ create_list_index(Config) ->
         [user_1_token_header(Config)], [])),
     IndexList2 = json_utils:decode_map(ListBody2),
     ?assertMatch([#{}, #{}], IndexList2).
+
+create_geospatial_index(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Function =
+        <<"function (meta) {
+              if(meta['onedata_json'] && meta['onedata_json']['loc']) {
+                  return meta['onedata_json']['loc'];
+              }
+              return null;
+        }">>,
+
+    % when
+    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
+        do_request(WorkerP1, <<"index?space_id=space1&name=name&spatial=true">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
+    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
+
+    % then
+    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
+    IndexList = json_utils:decode_map(ListBody),
+    ?assert(lists:member(#{<<"spaceId">> => <<"space1">>, <<"name">> => <<"name">>, <<"indexId">> => Id, <<"spatial">> => true}, IndexList)),
+    ?assertMatch({ok, 200, _, _},
+        do_request(WorkerP1, <<"index/", Id/binary>>, get, [user_1_token_header(Config), {<<"accept">>, <<"application/javascript">>}], [])).
+
+query_geospatial_index(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    Function =
+        <<"function (meta) {
+              if(meta['onedata_json'] && meta['onedata_json']['loc']) {
+                  return meta['onedata_json']['loc'];
+              }
+              return null;
+        }">>,
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Path1 =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
+    Path2 =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f2"])),
+    Path3 =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f3"])),
+    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
+    {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2, 8#777),
+    {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3, 8#777),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1,10.22]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid2}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0,0]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid3}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10,5]}, [<<"loc">>]),
+    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
+        do_request(WorkerP1, <<"index?space_id=space1&name=name&spatial=true">>, post,
+            [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
+    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
+    timer:sleep(timer:seconds(5)), % let the data be stored in db
+
+    % when
+    {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    Guids = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_uuid(X), ObjId end, json_utils:decode_map(Body)),
+    ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids)),
+
+    % when
+    {ok, 200, _, Body2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false&start_range=[0,0]&end_range=[5.5,10.5]">>, get, [user_1_token_header(Config)], [])),
+
+    % then
+    Guids2 = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_uuid(X), ObjId end, json_utils:decode_map(Body2)),
+    ?assertEqual(lists:sort([Guid1, Guid2]), lists:sort(Guids2)).
 
 set_get_json_metadata_inherited(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -958,15 +1024,14 @@ empty_metadata_invalid_json_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
-    initializer:setup_storage(ConfigWithNodes).
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    ?TEST_STOP(Config).
+    initializer:teardown_storage(Config).
 
-init_per_testcase(metric_get = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(metric_get, Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
@@ -974,8 +1039,7 @@ init_per_testcase(metric_get = Case, Config) ->
     end),
     init_per_testcase(all, Config);
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
@@ -987,8 +1051,7 @@ end_per_testcase(metric_get = Case, Config) ->
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
      %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),

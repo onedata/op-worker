@@ -27,7 +27,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
+-export([all/0, init_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 %%tests
@@ -120,14 +120,14 @@ protobuf_msg_test(Config) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message, fun
         (#client_message{message_body = #events{events = [#event{
-            object = #read_event{}
+            type = #file_read_event{}
         }]}}, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
         message_body = {events, #'Events'{events = [#'Event'{
-            counter = 1, object = {read_event, #'ReadEvent'{
-                file_uuid = <<"id">>, size = 1, blocks = []
+            type = {file_read, #'FileReadEvent'{
+                counter = 1, file_uuid = <<"id">>, size = 1, blocks = []
             }}
         }]}}
     },
@@ -142,19 +142,18 @@ protobuf_msg_test(Config) ->
 
 multi_message_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 90},
+        {repeats, 5},
+        {success_rate, 90},
+        {parameters, [
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {config, [{name, ssl},
             {parameters, [
-                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-            ]},
-            {config, [{name, ssl},
-                {parameters, [
-                    [{name, msg_num}, {value, 100000}]
-                ]}
+                [{name, msg_num}, {value, 100000}]
             ]}
-        ]
-    ).
+        ]}
+    ]).
 multi_message_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -163,8 +162,8 @@ multi_message_test_base(Config) ->
     MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(fun(N) ->
         #'ClientMessage'{message_body = {events, #'Events'{events = [#'Event'{
-            counter = N,
-            object = {read_event, #'ReadEvent'{
+            type = {file_read, #'FileReadEvent'{
+                counter = N,
                 file_uuid = <<"id">>,
                 size = 1,
                 blocks = []
@@ -175,7 +174,7 @@ multi_message_test_base(Config) ->
     initializer:remove_pending_messages(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
-            counter = Counter, object = #read_event{}
+            type = #file_read_event{counter = Counter}
         }]}}) ->
             Self ! Counter,
             ok
@@ -277,22 +276,22 @@ client_communicate_async_test(Config) ->
 
 multi_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 90},
+        {repeats, 5},
+        {success_rate, 90},
+        {parameters, [
+            [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {description, "Opens 'connections_num' connections and for each connection, "
+        "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
+        "messages."},
+        {config, [{name, ssl},
             {parameters, [
-                [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
-                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-            ]},
-            {description, "Opens 'connections_num' connections and for each connection, "
-            "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
-            "messages."},
-            {config, [{name, ssl},
-                {parameters, [
-                    [{name, msg_num}, {value, 100000}]
-                ]}
+                [{name, msg_num}, {value, 100000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 multi_ping_pong_test_base(Config) ->
     % given
@@ -341,18 +340,18 @@ multi_ping_pong_test_base(Config) ->
 
 sequential_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 80},
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
+        ]},
+        {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
+        {config, [{name, sequential_ping_pong},
             {parameters, [
-                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
-            ]},
-            {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
-            {config, [{name, sequential_ping_pong},
-                {parameters, [
-                    [{name, msg_num}, {value, 100000}]
-                ]}
+                [{name, msg_num}, {value, 100000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 sequential_ping_pong_test_base(Config) ->
     % given
@@ -388,20 +387,20 @@ sequential_ping_pong_test_base(Config) ->
     #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
 multi_connection_test(Config) ->
-    ?PERFORMANCE(Config,[
-            {repeats, 10},
-            {success_rate, 90},
+    ?PERFORMANCE(Config, [
+        {repeats, 10},
+        {success_rate, 90},
+        {parameters, [
+            [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
+        ]},
+        {description, "Opens 'connections_num' connections to the server, checks "
+        "their state, and closes them."},
+        {config, [{name, multi_connection},
             {parameters, [
-                [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
-            ]},
-            {description, "Opens 'connections_num' connections to the server, checks "
-            "their state, and closes them."},
-            {config, [{name, multi_connection},
-                {parameters, [
-                    [{name, connections_num}, {value, 1000}]
-                ]}
+                [{name, connections_num}, {value, 1000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 multi_connection_test_base(Config) ->
     % given
@@ -425,26 +424,26 @@ multi_connection_test_base(Config) ->
 
 bandwidth_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 80},
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+            [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
+            [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+        ]},
+        {config, [{name, ssl},
             {parameters, [
-                [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
-                [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
-                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-            ]},
-            {config, [{name, ssl},
-                {parameters, [
-                    [{name, packet_num}, {value, 1000}]
-                ]}
+                [{name, packet_num}, {value, 1000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 bandwidth_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
-    Data = crypto:rand_bytes(PacketSize * 1024),
+    Data = crypto:strong_rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
@@ -479,19 +478,19 @@ bandwidth_test_base(Config) ->
 
 python_client_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, 5},
-            {success_rate, 80},
+        {repeats, 5},
+        {success_rate, 80},
+        {parameters, [
+            [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+            [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
+        ]},
+        {description, "Same as bandwidth_test, but with ssl client written in python."},
+        {config, [{name, python_client},
             {parameters, [
-                [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
-                [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
-            ]},
-            {description, "Same as bandwidth_test, but with ssl client written in python."},
-            {config, [{name, python_client},
-                {parameters, [
-                    [{name, packet_num}, {value, 1000}]
-                ]}
+                [{name, packet_num}, {value, 1000}]
             ]}
-        ]
+        ]}
+    ]
     ).
 python_client_test_base(Config) ->
     % given
@@ -499,7 +498,7 @@ python_client_test_base(Config) ->
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
 
-    Data = crypto:rand_bytes(PacketSize * 1024),
+    Data = crypto:strong_rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
@@ -575,13 +574,9 @@ proto_version_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
+    [{?LOAD_MODULES, [initializer]} | Config].
 
-end_per_suite(Config) ->
-    ?TEST_STOP(Config).
-
-init_per_testcase(cert_connection_test = Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(cert_connection_test, Config) ->
     initializer:remove_pending_messages(),
     Workers = ?config(op_worker_nodes, Config),
     application:ensure_started(etls),
@@ -595,7 +590,6 @@ init_per_testcase(Case, Config) when
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test;
     Case =:= python_client_test ->
-    ?CASE_START(Case),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     application:ensure_started(etls),
@@ -603,16 +597,14 @@ init_per_testcase(Case, Config) when
     mock_identity(Workers),
     Config;
 
-init_per_testcase(Case, Config) ->
-    ?CASE_START(Case),
+init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     mock_identity(Workers),
     application:ensure_started(etls),
     Config.
 
-end_per_testcase(cert_connection_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [user_identity, serializator]);
 
@@ -621,19 +613,16 @@ end_per_testcase(Case, Config) when
     Case =:= multi_message_test;
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test ->
-    ?CASE_STOP(Case),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
-end_per_testcase(python_client_test = Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
     test_utils:mock_validate_and_unload(Workers, [user_identity, router]);
 
-end_per_testcase(Case, Config) ->
-    ?CASE_STOP(Case),
+end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, user_identity).
 
@@ -653,7 +642,7 @@ connect_via_token(Node) ->
     connect_via_token(Node, [{active, true}]).
 
 connect_via_token(Node, SocketOpts) ->
-    connect_via_token(Node, SocketOpts, crypto:rand_bytes(10)).
+    connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc

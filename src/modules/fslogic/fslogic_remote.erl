@@ -40,13 +40,14 @@
 %%--------------------------------------------------------------------
 -spec reroute(fslogic_worker:ctx(), oneprovider:id(), term()) ->
     term().
-reroute(#fslogic_ctx{session_id = SessionId}, ProviderId, Request) ->
+reroute(Ctx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
+    SessId = fslogic_context:get_session_id(Ctx),
+    Auth = fslogic_context:get_auth(Ctx),
     {ok, #server_message{message_body = MsgBody}} =
         provider_communicator:communicate(#client_message{
             message_body = Request,
-            proxy_session_id = SessionId,
+            proxy_session_id = SessId,
             proxy_session_auth = Auth
         }, session_manager:get_provider_session_id(outgoing, ProviderId)),
     MsgBody.
@@ -75,7 +76,7 @@ prerouting(_CTX, RequestBody, [RerouteTo | _Providers]) ->
 %%      'undefined' return value means, that response is invalid and the whole rerouting process shall fail.
 %% @end
 %%--------------------------------------------------------------------
--spec postrouting(#fslogic_ctx{}, {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
+-spec postrouting(fslogic_worker:ctx(), {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
 postrouting(_CTX, {ok, Response}, _Request) ->
     Response;
 postrouting(_CTX, UnkResult, Request) ->
