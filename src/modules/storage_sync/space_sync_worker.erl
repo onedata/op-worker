@@ -93,9 +93,8 @@ handle({check_strategies, SpaceId, StorageId} = Request) ->
     {ok, #document{value = #space_strategies{
         storage_strategies = StorageStrategies
     }}} = space_strategies:get(SpaceId),
-
-    case maps:get(StorageId, StorageStrategies, undefined) of
-        #storage_strategies{last_import_time = LastImportTime} ->
+    case maps:find(StorageId, StorageStrategies) of
+        {ok, #storage_strategies{last_import_time = LastImportTime}} ->
             InitialImportJobData =
                 #{
                     last_import_time => LastImportTime,
@@ -115,7 +114,7 @@ handle({check_strategies, SpaceId, StorageId} = Request) ->
             UpdateRes = run(Update),
             %% @todo: do smth with this result
             ?debug("space_sync_worker UpdateRes ~p", [UpdateRes]);
-        undefined ->
+        error ->
             ok
     end;
 

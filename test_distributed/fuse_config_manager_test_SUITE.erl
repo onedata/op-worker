@@ -39,8 +39,8 @@ all() ->
 
 -define(TIMEOUT, timer:seconds(10)).
 
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call,
-    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
+-define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
 -define(fcm_req(W, Method, Args), rpc:call(W, fuse_config_manager, Method, Args, ?TIMEOUT)).
 

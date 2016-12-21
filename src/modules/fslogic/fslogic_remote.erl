@@ -49,7 +49,7 @@ get_provider_to_reroute([ProviderId | _]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reroute(fslogic_context:ctx(), oneprovider:id(), fslogic_worker:request()) ->
-    {ok, term()}.
+    fslogic_worker:response().
 reroute(Ctx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
     SessId = fslogic_context:get_session_id(Ctx),

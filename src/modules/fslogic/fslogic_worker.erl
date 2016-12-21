@@ -5,9 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module implements worker_plugin_behaviour callbacks.
-%%%      Also it decides whether request has to be handled locally or rerouted
-%%%      to other priovider.
+%%% @doc
+%%% This module implements worker_plugin_behaviour callbacks.
+%%% Also it decides whether request has to be handled locally or rerouted
+%%% to other priovider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_worker).
@@ -87,7 +88,7 @@ init(_Args) ->
     {fuse_request, session:id(), fuse_request()} |
     {provider_request, session:id(), provider_request()} |
     {proxyio_request, session:id(), proxyio_request()},
-    Result :: nagios_handler:healthcheck_response() | ok | response() |
+    Result :: nagios_handler:healthcheck_response() | ok | {ok, response()} |
     {error, Reason :: term()} | pong.
 handle(ping) ->
     pong;
@@ -97,17 +98,17 @@ handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
     ?debug("fuse_response: ~p", [Response]),
-    Response;
+    {ok, Response};
 handle({provider_request, SessId, ProviderRequest}) ->
     ?debug("provider_request(~p): ~p", [SessId, ProviderRequest]),
     Response = handle_request_and_process_response(SessId, ProviderRequest),
     ?debug("provider_response: ~p", [Response]),
-    Response;
+    {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
     ?debug("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
     ?debug("proxyio_response: ~p", [Response]),
-    Response;
+    {ok, Response};
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -139,15 +140,15 @@ handle_request_and_process_response(SessId, Request) ->
     catch
         Type:Error ->
             fslogic_errors:handle_error(Request, Type, Error)
+    end,
+
+    try %todo TL move this storage_sync logic out of here
+        Ctx = fslogic_context:new(SessId),
+        process_response(Ctx, Request, Response)
+    catch
+        Type2:Error2 ->
+            fslogic_errors:handle_error(Request, Type2, Error2)
     end.
-%%
-%%    try %todo TL move this storage_sync logic out of here
-%%        Ctx = fslogic_context:new(SessId),
-%%        process_response(Ctx, Request, Response)
-%%    catch
-%%        Type2:Error2 ->
-%%            fslogic_errors:handle_error(Request, Type2, Error2)
-%%    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -158,7 +159,7 @@ handle_request_and_process_response(SessId, Request) ->
 handle_request(SessId, Request) ->
     Ctx = fslogic_context:new(SessId),
     {File, Ctx2} = fslogic_request:get_file(Ctx, Request),
-    {File2, Request2} = fslogic_request:update_target_guid_if_file_is_pantom(File, Request),
+    {File2, Request2} = fslogic_request:update_target_guid_if_file_is_phantom(File, Request),
     {Providers, Ctx3} = fslogic_request:get_target_providers(Ctx2, File2, Request2),
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
@@ -198,8 +199,8 @@ handle_request_remotely(Ctx, Req, Providers)  ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(Ctx :: fslogic_context:ctx(), Request :: #fuse_request{} | #file_request{}) ->
-    FuseResponse :: #fuse_response{}.
+-spec handle_fuse_request(fslogic_context:ctx(), fuse_request()) ->
+    fuse_response().
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
@@ -213,10 +214,7 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{
     SessId = fslogic_context:get_session_id(Ctx),
     fuse_config_manager:verify_storage_test_file(SessId, Req);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}) ->
-    handle_file_request(Ctx, FileRequest);
-handle_fuse_request(_Ctx, Req) ->
-    ?log_bad_request(Req),
-    erlang:error({invalid_request, Req}).
+    handle_file_request(Ctx, FileRequest).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -224,8 +222,8 @@ handle_fuse_request(_Ctx, Req) ->
 %% Processes a file request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_request(Ctx :: fslogic_context:ctx(), Request :: #fuse_request{} | #file_request{}) ->
-    FuseResponse :: #fuse_response{}.
+-spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
+    fuse_response().
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_file_attr{}}) ->
     fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_child_attr{name = Name}}) ->
@@ -248,17 +246,13 @@ handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #upda
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, ATime, MTime, CTime);
 handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #create_file{name = Name,
     flag = Flag, mode = Mode}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, ParentGuid}),
-    fslogic_req_regular:create_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode, Flag);
+    fslogic_req_regular:create_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode, Flag);
 handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #make_file{name = Name, mode = Mode}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, ParentGuid}),
-    fslogic_req_regular:make_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode);
+    fslogic_req_regular:make_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #open_file{flag = Flag}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, Guid}),
-    fslogic_req_regular:open_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Flag);
+    fslogic_req_regular:open_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Flag);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_file_location{}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, Guid}),
-    fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
+    fslogic_req_regular:get_file_location(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #truncate{size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Size);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #release{handle_id = HandleId}}) ->
@@ -268,10 +262,7 @@ handle_file_request(Ctx, #file_request{context_guid = Guid,
     fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block, Prefetch);
 handle_file_request(Ctx, #file_request{context_guid = Guid,
     file_request = #synchronize_block_and_compute_checksum{block = Block}}) ->
-    fslogic_req_regular:synchronize_block_and_compute_checksum(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block);
-handle_file_request(_Ctx, Req) ->
-    ?log_bad_request(Req),
-    erlang:error({invalid_request, Req}).
+    fslogic_req_regular:synchronize_block_and_compute_checksum(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -279,8 +270,8 @@ handle_file_request(_Ctx, Req) ->
 %% Processes provider request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_provider_request(Ctx :: fslogic_context:ctx(), ProviderRequest :: #provider_request{}) ->
-    ProviderResponse :: #provider_response{}.
+-spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
+    provider_response().
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_parent{}}) ->
     fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_xattr{name = XattrName, inherited = Inherited}}) ->
@@ -314,8 +305,7 @@ handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_req
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_file_distribution{}}) ->
     fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #replicate_file{block = Block}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, Guid}),
-    fslogic_req_generic:replicate_file(NewCtx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block);
+    fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_metadata{type = Type, names = Names, inherited = Inherited}}) ->
     fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Type, Names, Inherited);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #set_metadata{metadata =
@@ -331,9 +321,8 @@ handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_req
     fslogic_req_generic:remove_share(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #copy{target_path = TargetPath}}) ->
     fslogic_copy:copy(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, TargetPath);
-handle_provider_request(_Ctx, Req) ->
-    ?log_bad_request(Req),
-    erlang:error({invalid_request, Req}).
+handle_provider_request(_Ctx, Req = #provider_request{context_guid = _Guid, provider_request = #fsync{}}) ->
+    erlang:error({invalid_request, Req}). %todo handle fsync
 
 %%--------------------------------------------------------------------
 %% @private
@@ -341,8 +330,8 @@ handle_provider_request(_Ctx, Req) ->
 %% Processes proxyio request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_proxyio_request(Ctx :: fslogic_context:ctx(), ProxyIORequest :: #proxyio_request{}) ->
-    ProxyIOResponse :: #proxyio_response{}.
+-spec handle_proxyio_request(fslogic_context:ctx(), proxyio_request()) ->
+    proxyio_response().
 handle_proxyio_request(Ctx, #proxyio_request{
     parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
@@ -363,6 +352,12 @@ handle_proxyio_request(_CTX, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Do posthook for request response
+%% @end
+%%--------------------------------------------------------------------
+-spec process_response(fslogic_context:ctx(), request(), response()) -> response().
 process_response(Context, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
     #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
     SessId = fslogic_context:get_session_id(Context),

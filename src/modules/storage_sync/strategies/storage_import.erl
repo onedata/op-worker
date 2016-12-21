@@ -145,10 +145,17 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
 
             [<<"/">>, _SpaceName | Rest] = fslogic_path:split(LogicalPath),
             CanonicalPath = fslogic_path:join([<<"/">>, SpaceId | Rest]),
-            FileEntry = file_meta:to_uuid({path, CanonicalPath}),
+            {IsImported, LogicalAttrsResponse} =
+                case file_meta:to_uuid({path, CanonicalPath}) of
+                    {error,{not_found,file_meta}} ->
+                        {false, undefined};
+                    {ok, Uuid} ->
+                        LogicalAttrsResponse_ = fslogic_req_generic:get_file_attr(
+                            fslogic_context:new(?ROOT_SESS_ID), {uuid, Uuid}), %todo TL do not create fslogic internal context
+                        IsImported_ = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse_),
+                        {IsImported_, LogicalAttrsResponse_}
+                end,
 
-            LogicalAttrsResponse = fslogic_req_generic:get_file_attr(fslogic_context:new(?ROOT_SESS_ID), FileEntry), %todo TL do not create fslogic internal context
-            IsImported = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse),
 
             LocalResult = case IsImported of
                 true ->

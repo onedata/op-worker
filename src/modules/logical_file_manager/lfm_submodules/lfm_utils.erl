@@ -27,7 +27,7 @@
 %% in fslogic's response.
 %% @end
 %%--------------------------------------------------------------------
--spec call_fslogic(SessId :: session:id(), RequestType :: file_request_value | provider_request_value,
+-spec call_fslogic(SessId :: session:id(), RequestType :: file_request | provider_request,
     ContextEntry :: fslogic_worker:file_guid() | undefined, Request :: term(),
     OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
@@ -37,21 +37,21 @@ call_fslogic(SessId, file_request, ContextGuid, Request, OKHandle) ->
 call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
     case worker_proxy:call(fslogic_worker, {provider_request, SessId,
         #provider_request{context_guid = ContextGuid, provider_request = Request}}) of
-        #provider_response{status = #status{code = ?OK}, provider_response = Response} ->
+        {ok, #provider_response{status = #status{code = ?OK}, provider_response = Response}} ->
             OKHandle(Response);
-        #provider_response{status = #status{code = Code}} ->
+        {ok, #provider_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
 
--spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request_value,
+-spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request,
     Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
 call_fslogic(SessId, fuse_request, Request, OKHandle) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
         #fuse_request{fuse_request = Request}}) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
+        {ok, #fuse_response{status = #status{code = ?OK}, fuse_response = Response}} ->
             OKHandle(Response);
-        #fuse_response{status = #status{code = Code}} ->
+        {ok, #fuse_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
 

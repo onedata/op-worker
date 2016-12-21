@@ -143,15 +143,21 @@ get_file_attr(Ctx, File) ->
                     FileMetaName
             end,
 
-            {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
-                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, UserId),
-                SId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+            {SpaceId, SpaceUUID} = try
+                {ok, #document{key = SpaceUUID_}} = fslogic_spaces:get_space(FileDoc, UserId),
+                {fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID_), SpaceUUID_}
+            catch
+                _:_ ->
+                    {undefined, undefined}
+            end,
+
+            #posix_user_ctx{gid = GID, uid = UID} = try
                 StorageId = luma_utils:get_storage_id(SpaceUUID),
                 StorageType = luma_utils:get_storage_type(StorageId),
-                {fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID), SId}
+                fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
             catch
                 % TODO (VFS-2024) - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
-                _:_ -> {?ROOT_POSIX_CTX, undefined}
+                _:_ -> ?ROOT_POSIX_CTX
             end,
 
             Size = fslogic_blocks:get_file_size(FileDoc),

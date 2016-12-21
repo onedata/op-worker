@@ -21,9 +21,9 @@
 %% Context definition
 -record(fslogic_context, {
     session :: session:doc(),
-    space_id :: file_meta:uuid(),
-    user_root_dir_uuid :: file_meta:uuid(),
-    user :: od_user:doc(),
+    space_id :: undefined | file_meta:uuid(),
+    user_root_dir_uuid :: undefined | file_meta:uuid(),
+    user_doc :: undefined | od_user:doc(),
     share_id :: undefined | od_share:id() %todo TL remove it from here
 }).
 
@@ -131,14 +131,13 @@ get_user_root_dir_uuid(Ctx) ->
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> {od_user:doc(), ctx()}.
 get_user(Ctx = #fslogic_context{
-    user = undefined,
+    user_doc = undefined,
     session = #document{value = #session{auth = Auth, identity = #user_identity{user_id = UserId}}}
 }) ->
     {ok, User} = od_user:get_or_fetch(Auth, UserId),
-    {User, Ctx#fslogic_context{user = User}};
+    {User, Ctx#fslogic_context{user_doc = User}};
 get_user(Ctx) ->
-    {Ctx#fslogic_context.user, Ctx}.
-
+    {Ctx#fslogic_context.user_doc, Ctx}.
 
 %%--------------------------------------------------------------------
 %% @doc Retrieves user ID from fslogic context.
@@ -179,4 +178,3 @@ get_space_id(#fslogic_context{space_id = SpaceId}) ->
 -spec get_share_id(ctx()) -> undeined | od_share:id(). %todo TL remove it from here and use file_info instead
 get_share_id(#fslogic_context{share_id = ShareId}) ->
     ShareId.
-

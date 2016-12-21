@@ -196,8 +196,7 @@ ensure_connected(SessId) ->
                 _ ->
                     session_manager:session_id_to_provider_id(SessId)
             end,
-            %% @todo: use OZ subscription based solution when available
-            URLs = dbsync_utils:get_provider_urls(ProviderId),
+            {ok, #document{value = #od_provider{urls = URLs}}} = od_provider:get_or_fetch(ProviderId),
             lists:foreach(
                 fun(URL) ->
                     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),

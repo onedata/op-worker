@@ -206,7 +206,7 @@ create(SessId, Path, Mode) ->
     ?run(fun() -> lfm_files:create(SessId, Path, Mode) end).
 
 -spec create(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
-    Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
+    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, ParentGuid, Name, Mode) ->
     ?run(fun() -> lfm_files:create(SessId, ParentGuid, Name, Mode) end).

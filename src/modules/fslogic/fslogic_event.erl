@@ -250,7 +250,7 @@ handle_file_read_events(Evts, #{session_id := SessId} = _Ctx) ->
 %% for a given session, uuid and provider_id.
 %% @end
 %%--------------------------------------------------------------------
--spec flush_event_queue(od_provider:id(), file_meta:uuid(), session:id()) ->
+-spec flush_event_queue(session:id(), od_provider:id(), file_meta:uuid()) ->
     ok | {error, term()}.
 flush_event_queue(SessionId, ProviderId, FileUuid) ->
     case session:is_special(SessionId) of

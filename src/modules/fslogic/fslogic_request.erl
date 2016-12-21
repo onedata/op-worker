@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file/2, get_target_providers/3, update_target_guid_if_file_is_pantom/2,
+-export([get_file/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2,
     update_share_info_in_context/2]).
 
 %%%===================================================================
@@ -37,13 +37,11 @@
 get_file(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
     {Ctx2, FileInfo} = file_info:new_by_path(Ctx, Path),
     {FileInfo, Ctx2};
-get_file(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}) ->
-    get_file(Ctx, FileRequest);
-get_file(Ctx, #fuse_request{}) ->
-    {undefined, Ctx};
-get_file(Ctx, #file_request{context_guid = FileGuid}) ->
+get_file(Ctx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     FileInfo = file_info:new_by_guid(FileGuid),
     {FileInfo, Ctx};
+get_file(Ctx, #fuse_request{}) ->
+    {undefined, Ctx};
 get_file(Ctx, #provider_request{context_guid = FileGuid}) ->
     FileInfo = file_info:new_by_guid(FileGuid),
     {FileInfo, Ctx};
@@ -65,7 +63,7 @@ get_target_providers(Ctx, undefined, _) ->
     {[oneprovider:get_provider_id()], Ctx};
 get_target_providers(Ctx, File, #fuse_request{fuse_request = #resolve_guid{}}) ->
     get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(Ctx, File, #file_request{file_request = #get_file_attr{}}) ->
+get_target_providers(Ctx, File, #fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) ->
     get_target_providers_for_attr_req(Ctx, File);
 get_target_providers(Ctx, _File, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
     {[ProviderId], Ctx};
@@ -79,11 +77,11 @@ get_target_providers(Ctx, File, _Req) ->
 %% by the phantom target.
 %% @end
 %%--------------------------------------------------------------------
--spec update_target_guid_if_file_is_pantom(file_info:file_info(), fslogic_worker:request()) ->
+-spec update_target_guid_if_file_is_phantom(file_info:file_info(), fslogic_worker:request()) ->
     {NewFile :: file_info:file_info(), NewRequest :: fslogic_worker:request()}.
-update_target_guid_if_file_is_pantom(undefined, Request) ->
+update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
-update_target_guid_if_file_is_pantom(File, Request) ->
+update_target_guid_if_file_is_phantom(File, Request) ->
     try file_info:get_file_doc(File) of
         {{error, {not_found, file_meta}}, File2} ->
             try
@@ -129,7 +127,7 @@ update_share_info_in_context(Ctx, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_target_providers_for_attr_req(fslogic_context:ctx(), file_info:file_info()) ->
-    [oneprovider:id()].
+    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
 get_target_providers_for_attr_req(Ctx, File) ->
     %todo TL handle guids stored in file_force_proxy
     case file_info:is_space_dir(File) of
@@ -145,7 +143,7 @@ get_target_providers_for_attr_req(Ctx, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_target_providers_for_file(fslogic_context:ctx(), file_info:file_info()) ->
-    [oneprovider:id()].
+    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
 get_target_providers_for_file(Ctx, File) ->
     {IsUserRootDir, NewCtx} = file_info:is_user_root_dir(File, Ctx),
 

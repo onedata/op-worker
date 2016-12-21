@@ -194,7 +194,7 @@ concurrent_create_test(Config) ->
     lists:foreach(
         fun(WId) ->
             Check = fun() ->
-                {ok, CL} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, SpaceName}, 0, 1000),
+                {ok, CL} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", SpaceName>>}, 0, 1000),
                 ExpectedChildCount = ProvIdCount * FileCount,
                 {FetchedIds, FetchedNames} = lists:unzip(CL),
 
@@ -205,7 +205,7 @@ concurrent_create_test(Config) ->
             end,
             ?assertMatch({ExpectedChildCount, ExpectedChildCount, ExpectedIds}, Check(), 15),
 
-            {ok, ChildList} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, SpaceName}, 0, 1000),
+            {ok, ChildList} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", SpaceName>>}, 0, 1000),
             lists:foreach(
                 fun(FileNo) ->
                     LocalIdsPerWorker = proplists:get_value(FileNo, AllFiles),

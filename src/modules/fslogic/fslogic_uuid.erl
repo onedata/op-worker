@@ -317,8 +317,19 @@ guid_to_share_id(Guid) ->
 %%--------------------------------------------------------------------
 -spec guid_to_space_id(fslogic_worker:guid()) -> od_space:id() | undefined.
 guid_to_space_id(Guid) ->
-    {_, SpaceId} = unpack_guid(Guid),
-    SpaceId.
+    try binary_to_term(http_utils:base64url_decode(Guid)) of
+        {share_guid, _FileUuid, SpaceId, _ShareId} ->
+            SpaceId;
+        {guid, _FileUuid, SpaceId} ->
+            SpaceId;
+        {space, SpaceId} ->
+            SpaceId;
+        _ ->
+            {Guid, undefined, undefined}
+    catch
+        _:_ ->
+            {Guid, undefined, undefined}
+    end.
 
 %%%===================================================================
 %%% Internal functions

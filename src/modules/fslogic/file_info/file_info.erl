@@ -19,8 +19,8 @@
 -record(file_info, {
     path :: undefined | path(),
     guid :: undefined | guid(),
-    space_dir_doc :: file_meta:doc(),
-    file_doc :: file_meta:doc()
+    space_dir_doc :: undefined | file_meta:doc(),
+    file_doc :: undefined | file_meta:doc() | {error, term()}
 }).
 
 -type path() :: file_meta:path().
@@ -80,7 +80,7 @@ new_by_guid(Guid) ->
 %% Get file's share_id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_share_id(file_info()) -> od_share:id() | undefined.
+-spec get_share_id(fslogic_context:ctx()) -> od_share:id() | undefined.
 get_share_id(Ctx) -> %todo TL return share_id cached in file_info
     fslogic_context:get_share_id(Ctx).
 
@@ -130,7 +130,7 @@ get_guid(FileInfo = #file_info{guid = Guid}) ->
 %% Get file's file_meta document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_doc(file_info()) -> {file_meta:doc(), file_info()}.
+-spec get_file_doc(file_info()) -> {file_meta:doc() | {error, term()}, file_info()}.
 get_file_doc(FileInfo = #file_info{file_doc = undefined}) ->
     {Guid, NewFileInfo} = get_guid(FileInfo),
     FileDoc = file_meta:get({uuid, fslogic_uuid:guid_to_uuid(Guid)}),
