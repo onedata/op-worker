@@ -13,7 +13,8 @@
 -author("Tomasz Lichon").
 
 -include_lib("common_test/include/ct.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2, close_all/1,
@@ -23,7 +24,7 @@
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
-    remove_share/3, remove_share_by_guid/3]).
+    remove_share/3, remove_share_by_guid/3, resolve_guid/3]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -335,6 +336,14 @@ remove_share(Worker, SessId, FileKey) ->
     ok | {error, term()}.
 remove_share_by_guid(Worker, SessId, ShareGuid) ->
     ?EXEC(Worker, logical_file_manager:remove_share_by_guid(SessId, ShareGuid)).
+
+-spec resolve_guid(node(), session:id(), file_info:path()) ->
+    {ok, fslogic_worker:file_guid()} | {error, term()}.
+resolve_guid(Worker, SessId, Path) ->
+    ?EXEC(Worker, lfm_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = Path},
+        fun(#file_attr{uuid = Guid}) ->
+            {ok, Guid}
+        end)).
 
 %%%===================================================================
 %%% Internal functions

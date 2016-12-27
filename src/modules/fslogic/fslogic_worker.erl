@@ -164,8 +164,8 @@ handle_request(SessId, Request) ->
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            {Ctx4, _File3} = fslogic_request:update_share_info_in_context(Ctx3, File2),
-            handle_request_locally(Ctx4, Request2); %todo pass file to this function
+            {Ctx4, File3} = fslogic_request:update_share_info_in_context(Ctx3, File2),
+            handle_request_locally(Ctx4, Request2, File3); %todo pass file to this function
         false ->
             handle_request_remotely(Ctx3, Request2, Providers)
     end.
@@ -175,13 +175,13 @@ handle_request(SessId, Request) ->
 %% Handle request locally, as it operates on locally supported entity.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request_locally(fslogic_context:ctx(), request()) -> response().
-handle_request_locally(Ctx, Req = #fuse_request{})  ->
-    handle_fuse_request(Ctx, Req);
-handle_request_locally(Ctx, Req = #provider_request{})  ->
-    handle_provider_request(Ctx, Req);
-handle_request_locally(Ctx, Req = #proxyio_request{})  ->
-    handle_proxyio_request(Ctx, Req).
+-spec handle_request_locally(fslogic_context:ctx(), request(), file_info:file_info()) -> response().
+handle_request_locally(Ctx, Req = #fuse_request{}, File)  ->
+    handle_fuse_request(Ctx, Req, File);
+handle_request_locally(Ctx, Req = #provider_request{}, File)  ->
+    handle_provider_request(Ctx, Req, File);
+handle_request_locally(Ctx, Req = #proxyio_request{}, File)  ->
+    handle_proxyio_request(Ctx, Req, File).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -199,6 +199,11 @@ handle_request_remotely(Ctx, Req, Providers)  ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_fuse_request(fslogic_context:ctx(), fuse_request(), file_info:file_info()) ->
+    fuse_response().
+handle_fuse_request(Ctx, Req, _File) ->
+    handle_fuse_request(Ctx, Req).
+
 -spec handle_fuse_request(fslogic_context:ctx(), fuse_request()) ->
     fuse_response().
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
@@ -222,6 +227,11 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequ
 %% Processes a file request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_file_request(fslogic_context:ctx(), #file_request{}, file_info:file_info()) ->
+    fuse_response().
+handle_file_request(Ctx, Req, _File) ->
+    handle_file_request(Ctx, Req).
+
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
     fuse_response().
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_file_attr{}}) ->
@@ -270,6 +280,11 @@ handle_file_request(Ctx, #file_request{context_guid = Guid,
 %% Processes provider request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_provider_request(fslogic_context:ctx(), provider_request(), file_info:file_info()) ->
+    provider_response().
+handle_provider_request(Ctx, Req, _File) ->
+    handle_provider_request(Ctx, Req).
+
 -spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
     provider_response().
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_parent{}}) ->
@@ -330,6 +345,11 @@ handle_provider_request(_Ctx, Req = #provider_request{context_guid = _Guid, prov
 %% Processes proxyio request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_proxyio_request(fslogic_context:ctx(), proxyio_request(), file_info:file_info()) ->
+    proxyio_response().
+handle_proxyio_request(Ctx, Req, _File) ->
+    handle_proxyio_request(Ctx, Req).
+
 -spec handle_proxyio_request(fslogic_context:ctx(), proxyio_request()) ->
     proxyio_response().
 handle_proxyio_request(Ctx, #proxyio_request{
