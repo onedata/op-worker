@@ -20,7 +20,9 @@
     path :: undefined | path(),
     guid :: undefined | guid(),
     space_dir_doc :: undefined | file_meta:doc(),
-    file_doc :: undefined | file_meta:doc() | {error, term()}
+    file_doc :: undefined | file_meta:doc() | {error, term()},
+    parent :: undefined | file_info(),
+    storage_file_id :: undefined | helpers:file()
 }).
 
 -type path() :: file_meta:path().
@@ -29,8 +31,9 @@
 
 %% API
 -export([new_by_path/2, new_by_guid/1]).
--export([get_share_id/1, get_path/1, get_space_id/1, get_guid/1, get_file_doc/1]).
--export([is_space_dir/1, is_user_root_dir/2]).
+-export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
+    get_guid/1, get_file_doc/1, get_parent/1, get_storage_file_id/1]).
+-export([is_file_info/1, is_space_dir/1, is_user_root_dir/2]).
 
 %%%===================================================================
 %%% API
@@ -77,6 +80,16 @@ new_by_guid(Guid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Create new file_info using file's guid
+%% @end
+%%--------------------------------------------------------------------
+-spec new_by_doc(file_meta:doc(), od_space:id()) -> file_info().
+new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId) ->
+    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
+    #file_info{file_doc = Doc, guid = Guid}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Get file's share_id.
 %% @end
 %%--------------------------------------------------------------------
@@ -113,10 +126,21 @@ get_space_id(#file_info{guid = Guid}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Get file's SpaceDir uuid
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_dir_uuid(file_info()) -> od_space:id().
+get_space_dir_uuid(#file_info{space_dir_doc = #document{key = SpaceUuid}}) ->
+    SpaceUuid;
+get_space_dir_uuid(FileInfo) ->
+    fslogic_uuid:spaceid_to_space_dir_uuid(get_space_id(FileInfo)).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Get file's guid
 %% @end
 %%--------------------------------------------------------------------
--spec get_guid(file_info()) -> {fslogic_worker:file_guid() | undefined, file_info()}.
+-spec get_guid(file_info()) -> {fslogic_worker:file_guid(), file_info()}.
 get_guid(FileInfo = #file_info{guid = undefined, path = Path}) ->
     {ok, Uuid} = file_meta:to_uuid({path, Path}),
     SpaceId = get_space_id(FileInfo),
@@ -133,11 +157,52 @@ get_guid(FileInfo = #file_info{guid = Guid}) ->
 -spec get_file_doc(file_info()) -> {file_meta:doc() | {error, term()}, file_info()}.
 get_file_doc(FileInfo = #file_info{file_doc = undefined}) ->
     {Guid, NewFileInfo} = get_guid(FileInfo),
-    FileDoc = file_meta:get({uuid, fslogic_uuid:guid_to_uuid(Guid)}),
-    {FileDoc, NewFileInfo#file_info{file_doc = FileDoc}};
+    case file_meta:get({uuid, fslogic_uuid:guid_to_uuid(Guid)}) of
+        {ok, FileDoc} ->
+            {FileDoc, NewFileInfo#file_info{file_doc = FileDoc}};
+        Error ->
+            {Error, NewFileInfo#file_info{file_doc = Error}}
+    end;
 get_file_doc(FileInfo = #file_info{file_doc = FileDoc}) ->
     {FileDoc, FileInfo}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Get parent's file_info.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(file_info()) -> {ParentFileInfo :: file_info(), NewFileInfo :: file_info()}.
+get_parent(FileInfo = #file_info{parent = undefined}) ->
+    {Doc, NewFileInfo} = file_info:get_file_doc(FileInfo),
+    SpaceId = file_info:get_space_id(NewFileInfo),
+    {ok, ParentDoc} = file_meta:get_parent(Doc),
+
+    Parent = file_info:new_by_doc(ParentDoc, SpaceId),
+    {Parent, NewFileInfo#file_info{parent = Parent}};
+get_parent(FileInfo = #file_info{parent = Parent}) ->
+    {Parent, FileInfo}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get storage file id (the id of file on storage. In case of posix it is its path on storage)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_file_id(file_info()) -> {StorageFileId :: helpers:file(), file_info()}.
+get_storage_file_id(FileInfo) ->
+    {Guid, NewFileInfo} = get_guid(FileInfo),
+    FileId = fslogic_utils:gen_storage_file_id({uuid, fslogic_uuid:guid_to_uuid(Guid)}), %todo TL do not use this util function, as it it overcomplicated
+    {FileId, NewFileInfo#file_info{storage_file_id = FileId}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given argument contains file_info record
+%% @end
+%%--------------------------------------------------------------------
+-spec is_file_info(file_info()) -> boolean().
+is_file_info(#file_info{}) ->
+    true;
+is_file_info(_) ->
+    false.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -162,8 +227,10 @@ is_space_dir(#file_info{path = Path}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_user_root_dir(file_info(), fslogic_context:ctx()) -> {boolean(), NewCtx :: fslogic_context:ctx()}.
-is_user_root_dir(#file_info{guid = undefined, path = <<"/">>}, _Ctx) ->
-    true;
+is_user_root_dir(#file_info{guid = undefined, path = <<"/">>}, Ctx) ->
+    {true, Ctx};
+is_user_root_dir(#file_info{guid = undefined}, Ctx) ->
+    {false, Ctx};
 is_user_root_dir(#file_info{guid = Guid}, Ctx) ->
     {UserRootDirUuid, NewCtx} = fslogic_context:get_user_root_dir_uuid(Ctx),
     {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx}.

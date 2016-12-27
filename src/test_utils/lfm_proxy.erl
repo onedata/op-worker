@@ -341,7 +341,7 @@ remove_share_by_guid(Worker, SessId, ShareGuid) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 resolve_guid(Worker, SessId, Path) ->
     ?EXEC(Worker, lfm_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = Path},
-        fun(#file_attr{uuid = Guid}) ->
+        fun(#uuid{uuid = Guid}) ->
             {ok, Guid}
         end)).
 

@@ -133,8 +133,14 @@ get_validation_subject(UserId, #sfm_handle{file_uuid = FileGUID}) ->
 get_validation_subject(UserId, {guid, FileGUID}) ->
     get_validation_subject(UserId, {uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
 get_validation_subject(_UserId, FileEntry) ->
-    {ok, #document{value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
-    FileDoc.
+    case file_info:is_file_info(FileEntry) of
+        true ->
+            {FileDoc = #document{}, _NewFileInfo} = file_info:get_file_doc(FileEntry),
+            FileDoc;
+        false ->
+            {ok, #document{value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
+            FileDoc
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Extracts file() from argument list (Inputs) based on Item description.
@@ -145,7 +151,13 @@ resolve_file_entry(Item, Inputs) when is_integer(Item) ->
 resolve_file_entry({path, Item}, Inputs) when is_integer(Item) ->
     {path, resolve_file_entry(Item, Inputs)};
 resolve_file_entry({parent, Item}, Inputs) ->
-    fslogic_utils:get_parent(resolve_file_entry(Item, Inputs)).
+    case file_info:is_file_info(Item) of
+        true ->
+            {Parent, _NewFileInfo} = file_info:get_parent(Item),
+            Parent;
+        false ->
+            fslogic_utils:get_parent(resolve_file_entry(Item, Inputs))
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

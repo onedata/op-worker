@@ -176,10 +176,14 @@
     child_entries :: undefined | [#file_renamed_entry{}]
 }).
 
+-record(uuid, {
+    uuid :: fslogic_worker:file_guid()
+}).
+
 -type fuse_response_value() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
-    #file_opened{} | #file_renamed{} | undefined.
+    #file_opened{} | #file_renamed{} | #uuid{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},

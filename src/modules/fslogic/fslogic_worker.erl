@@ -165,7 +165,7 @@ handle_request(SessId, Request) ->
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
             {Ctx4, File3} = fslogic_request:update_share_info_in_context(Ctx3, File2),
-            handle_request_locally(Ctx4, Request2, File3); %todo pass file to this function
+            handle_request_locally(Ctx4, Request2, File3);
         false ->
             handle_request_remotely(Ctx3, Request2, Providers)
     end.
@@ -201,25 +201,19 @@ handle_request_remotely(Ctx, Req, Providers)  ->
 %%--------------------------------------------------------------------
 -spec handle_fuse_request(fslogic_context:ctx(), fuse_request(), file_info:file_info()) ->
     fuse_response().
-handle_fuse_request(Ctx, Req, _File) ->
-    handle_fuse_request(Ctx, Req).
-
--spec handle_fuse_request(fslogic_context:ctx(), fuse_request()) ->
-    fuse_response().
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
-    fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{} = Req}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    fuse_config_manager:create_storage_test_file(SessId, Req);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{} = Req}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    fuse_config_manager:verify_storage_test_file(SessId, Req);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}) ->
-    handle_file_request(Ctx, FileRequest).
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{}}, File) ->
+    guid_req:resolve_guid(Ctx, File);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID,
+    force_proxy_io = ForceProxy}}, undefined) ->
+    storage_req:get_helper_params(Ctx, SID, ForceProxy);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{file_uuid = Guid,
+    storage_id = StorageId}}, undefined) ->
+    storage_req:create_storage_test_file(Ctx, Guid, StorageId);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{space_uuid = SpaceDirUuid,
+    storage_id = StorageId, file_id = FileId, file_content = FileContent}}, undefined) ->
+    storage_req:verify_storage_test_file(Ctx, SpaceDirUuid, StorageId, FileId, FileContent);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}, File) ->
+    handle_file_request(Ctx, FileRequest, File).
 
 %%--------------------------------------------------------------------
 %% @private

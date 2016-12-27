@@ -92,7 +92,7 @@ ensure_guid(Ctx, {path, Path}) when is_tuple(Ctx) -> %todo TL use only sessionId
 ensure_guid(SessionId, {path, Path}) ->
     lfm_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
-        fun(#file_attr{uuid = Guid}) ->
+        fun(#uuid{uuid = Guid}) ->
             {guid, Guid}
         end).
 
