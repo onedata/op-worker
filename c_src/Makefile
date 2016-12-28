@@ -4,17 +4,16 @@ ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts
 
 LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L ../priv/helpers/lib \
 	-lhelpers $(shell pkg-config --libs botan-1.10 tbb fuse) -laws-cpp-sdk-s3 \
-	-laws-cpp-sdk-core -lcurl -lSwift -lPocoUtil -lPocoXML \
-	-lPocoNet -lPocoFoundation -lpthread -Wl,-Bstatic -lrados -Wl,-Bdynamic \
-	-Wl,-Bstatic -lfolly -Wl,-Bdynamic \
+	-laws-cpp-sdk-core -lcurl -lrados -lSwift -lPocoUtil -lPocoXML -lPocoNet \
+	-lPocoFoundation -lpthread -Wl,-Bstatic -lfolly -Wl,-Bdynamic \
 	-lglog -lnss3 -lnspr4 -lboost_filesystem -lboost_log -lboost_thread \
 	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams \
 	../helpers/release/etls/c_src/deps/boringssl/ssl/libssl.a \
 	../helpers/release/etls/c_src/deps/boringssl/crypto/libcrypto.a
 
-CXXFLAGS += -fPIC -std=c++14 -O3 -Wall $(shell pkg-config --cflags botan-1.10 tbb) \
--isystem ../priv/helpers/include -isystem $(ERTS_INCLUDE_DIR) \
--D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE $(shell pkg-config --cflags fuse)
+CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE \
+  $(shell pkg-config --cflags botan-1.10 tbb fuse) \
+	-isystem ../priv/helpers/include -isystem $(ERTS_INCLUDE_DIR)
 
 all: \
 		../priv/csr_creator_drv.so \
