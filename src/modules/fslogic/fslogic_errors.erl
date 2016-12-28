@@ -110,6 +110,7 @@ report_error(Request, Error, LogLevel, Stacktrace) ->
     error_response(Request, Status).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns response with given status, matching given request.
 %% @end
@@ -126,6 +127,7 @@ error_response(#proxyio_request{}, Status) ->
     #proxyio_response{status = Status}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates error ID to error description.
 %% @end

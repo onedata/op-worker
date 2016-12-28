@@ -129,6 +129,7 @@ cleanup() ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle request and do postprocessing of the response
 %% @end
@@ -151,6 +152,7 @@ handle_request_and_process_response(SessId, Request) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Analyze request data and handle it locally or remotely.
 %% @end
@@ -171,6 +173,7 @@ handle_request(SessId, Request) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle request locally, as it operates on locally supported entity.
 %% @end
@@ -184,6 +187,7 @@ handle_request_locally(Ctx, Req = #proxyio_request{})  ->
     handle_proxyio_request(Ctx, Req).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle request remotely
 %% @end
@@ -353,6 +357,7 @@ handle_proxyio_request(_CTX, Req) ->
     erlang:error({invalid_request, Req}).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Do posthook for request response
 %% @end

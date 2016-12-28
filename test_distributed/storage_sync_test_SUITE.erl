@@ -92,7 +92,6 @@ init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
 init_per_testcase(Case, Config) ->
-    ct:timetrap({minutes, 60}),
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
