@@ -245,9 +245,9 @@ init_per_testcase(rrdtool_pool_test = Case, Config) ->
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    clear_state(Worker),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
+    clear_state(Worker),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(monitoring_test = Case, Config) ->
@@ -267,8 +267,8 @@ end_per_testcase(_Case, Config) ->
 
 clear_state(Worker) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
-    lists:foreach(fun(#document{key = Id, value = #monitoring_state{rrd_path = Path}}) ->
-        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, Path),
+    lists:foreach(fun(#document{key = Id, value = #monitoring_state{rrd_guid = Guid}}) ->
+        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, {guid, Guid}),
         ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [Id]))
     end, Docs).
 

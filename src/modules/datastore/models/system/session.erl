@@ -35,6 +35,7 @@
     get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2,
     is_special/1]).
 
+-type doc() :: datastore:document().
 -type id() :: binary().
 -type ttl() :: non_neg_integer().
 -type auth() :: #token_auth{} | #basic_auth{}.
@@ -42,7 +43,7 @@
 -type status() :: active | inactive.
 -type identity() :: #user_identity{}.
 
--export_type([id/0, ttl/0, auth/0, type/0, status/0, identity/0]).
+-export_type([doc/0, id/0, ttl/0, auth/0, type/0, status/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks

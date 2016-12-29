@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Common defines for fslogic.
+%%% @doc
+%%% Common defines for fslogic.
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").
@@ -43,7 +44,7 @@
 
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
--define(PROXYIO_PARAMETER_FILE_UUID, <<"file_uuid">>).
+-define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).
 -define(PROXYIO_PARAMETER_SHARE_ID, <<"share_id">>).
 
 -endif.

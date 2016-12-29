@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%% @doc This module performs attributes-related operations of lfm_submodules.
+%%% @doc
+%%% This module performs attributes-related operations of lfm_submodules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_attrs).
@@ -68,7 +69,6 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's extended attribute by key.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
@@ -85,7 +85,6 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates file's extended attribute by key.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(SessId :: session:id(),
@@ -100,7 +99,6 @@ set_xattr(SessId, FileKey, Xattr) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes file's extended attribute by key.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
@@ -115,7 +113,6 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns complete list of extended attributes of a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(session:id(), FileUuid :: logical_file_manager:file_key(),
@@ -130,7 +127,9 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
         end).
 
 %%--------------------------------------------------------------------
-%% @doc Returns encoding suitable for rest transfer.
+%% @doc
+%% Returns encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(session:id(), logical_file_manager:file_key()) ->
     {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
@@ -141,7 +140,9 @@ get_transfer_encoding(SessId, FileKey) ->
         fun(#transfer_encoding{value = Val}) -> {ok, Val} end).
 
 %%--------------------------------------------------------------------
-%% @doc Sets encoding suitable for rest transfer.
+%% @doc
+%% Sets encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(session:id(), logical_file_manager:file_key(),
     xattr:transfer_encoding()) ->
@@ -182,7 +183,9 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
-%% @doc Returns mimetype of file.
+%% @doc
+%% Returns mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), logical_file_manager:file_key()) ->
     {ok, xattr:mimetype()} | logical_file_manager:error_reply().
@@ -193,7 +196,9 @@ get_mimetype(SessId, FileKey) ->
         fun(#mimetype{value = Val}) -> {ok, Val} end).
 
 %%--------------------------------------------------------------------
-%% @doc Sets mimetype of file.
+%% @doc
+%% Sets mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_mimetype(session:id(), logical_file_manager:file_key(), xattr:mimetype()) ->
     ok | logical_file_manager:error_reply().

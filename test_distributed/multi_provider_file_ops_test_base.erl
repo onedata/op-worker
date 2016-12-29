@@ -135,7 +135,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
-    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
@@ -191,7 +191,7 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     Workers = ?config(op_worker_nodes, Config),
     FileBeg = <<"1234567890abcd">>,
 
-    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
     Level3Dirs = lists:map(fun(_) ->
@@ -285,7 +285,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
-    Dir = <<SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
@@ -427,7 +427,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         {Doc4, Name4} = GenerateDoc(?REGULAR_FILE_TYPE),
         Loc4ID = datastore_utils:gen_uuid(),
 
-        D1Path = <<SpaceName/binary, "/",  Name1/binary>>,
+        D1Path = <<"/", SpaceName/binary, "/",  Name1/binary>>,
         D2Path = <<D1Path/binary, "/",  Name2/binary>>,
         D3Path = <<D2Path/binary, "/",  Name3/binary>>,
         D4Path = <<D2Path/binary, "/",  Name4/binary>>,
@@ -743,7 +743,7 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
             Config = proplists:get_value(SN, SpaceConfigs),
             SessId = ?config(session, Config),
 
-            Dir = <<SN/binary, "/",  (generator:gen_name())/binary>>,
+            Dir = <<"/", SN/binary, "/",  (generator:gen_name())/binary>>,
             Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
             Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
 

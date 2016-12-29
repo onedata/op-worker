@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%% @doc This module performs shares-related operations of lfm_submodules.
+%%% @doc
+%%% This module performs shares-related operations of lfm_submodules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_shares).

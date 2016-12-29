@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc This module offers a high level API for operating on logical filesystem.
 %%% When passing a file in arguments, one can use one of the following:
-%%% {guid, FileUUIDBin} - preferred and fast. guids are returned from 'ls' function.
+%%% {guid, FileGuid} - preferred and fast. guids are returned from 'ls' function.
 %%% {path, BinaryFilePath} - slower than by guid (path has to be resolved). Discouraged, but there are cases when this is useful.
 %%% Some functions accepts also Handle obtained from open operation.
 %%%
@@ -40,11 +40,11 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2, get_parent/2]).
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3]).
 %% Functions operating on files
--export([create/2, create/3, open/3, fsync/1, write/3, read/3,
+-export([create/2, create/3, create/4, open/3, fsync/1, write/3, read/3,
     truncate/3, release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
@@ -69,15 +69,21 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path()) ->
-    {ok, DirUUID :: file_meta:uuid()} | error_reply().
+    {ok, DirGuid :: file_meta:uuid()} | error_reply().
 mkdir(SessId, Path) ->
     ?run(fun() -> lfm_dirs:mkdir(SessId, Path) end).
 
 -spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
-    Mode :: file_meta:posix_permissions()) ->
+    Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, DirGUID :: fslogic_worker:file_guid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     ?run(fun() -> lfm_dirs:mkdir(SessId, Path, Mode) end).
+
+-spec mkdir(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
+    Name :: file_meta:name(), Mode :: file_meta:posix_permissions() | undefined) ->
+    {ok, DirGuid :: fslogic_worker:file_guid()} | error_reply().
+mkdir(SessId, ParentGuid, Name, Mode) ->
+    ?run(fun() -> lfm_dirs:mkdir(SessId, ParentGuid, Name, Mode) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -99,6 +105,17 @@ rm_recursive(SessId, FileKey) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
     ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get attribute of a child with given name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
+    ChildName :: file_meta:name()) ->
+    {ok, #file_attr{}} | error_reply().
+get_child_attr(SessId, ParentGuid, ChildName)  ->
+    ?run(fun() -> lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -174,7 +191,7 @@ unlink(SessId, FileEntry, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a new file with default mode.
+%% Creates a new file
 %% @end
 %%--------------------------------------------------------------------
 -spec create(SessId :: session:id(), Path :: file_meta:path()) ->
@@ -182,17 +199,17 @@ unlink(SessId, FileEntry, Silent) ->
 create(SessId, Path) ->
     ?run(fun() -> lfm_files:create(SessId, Path) end).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a new file.
-%% @end
-%%--------------------------------------------------------------------
 -spec create(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path, Mode) ->
     ?run(fun() -> lfm_files:create(SessId, Path, Mode) end).
+
+-spec create(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
+    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
+create(SessId, ParentGuid, Name, Mode) ->
+    ?run(fun() -> lfm_files:create(SessId, ParentGuid, Name, Mode) end).
 
 %%--------------------------------------------------------------------
 %% @doc

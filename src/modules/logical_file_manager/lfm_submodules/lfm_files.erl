@@ -19,7 +19,7 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
--export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
+-export([create/2, create/3, create/4, open/3, fsync/1, write/3, write_without_events/3,
     read/3, read_without_events/3, silent_read/3, truncate/3, unlink/3, release/1,
     get_file_distribution/2, replicate_file/3]).
 
@@ -48,10 +48,10 @@ exists(_FileKey) ->
     TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mv(SessId, FileKey, TargetPath) ->
-    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
     {guid, TargetDirGuid} = fslogic_uuid:ensure_guid(SessId, {path, TargetDir}),
-    lfm_utils:call_fslogic(SessId, file_request, GUID,
+    lfm_utils:call_fslogic(SessId, file_request, Guid,
         #rename{target_parent_uuid = TargetDirGuid, target_name = TargetName},
         fun(#file_renamed{new_uuid = NewGuid}) ->
             {ok, NewGuid}
@@ -65,8 +65,8 @@ mv(SessId, FileKey, TargetPath) ->
 -spec cp(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
-    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, GUID,
+    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, Guid,
         #copy{target_path = TargetPath},
         fun(#file_copied{new_uuid = NewGuid}) ->
             {ok, NewGuid}
@@ -80,11 +80,11 @@ cp(SessId, FileKey, TargetPath) ->
 -spec get_parent(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 get_parent(SessId, FileKey) ->
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
+    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_parent{},
-        fun(#dir{uuid = ParentGUID}) ->
-            {ok, ParentGUID}
+        fun(#dir{uuid = ParentGuid}) ->
+            {ok, ParentGuid}
         end).
 
 %%--------------------------------------------------------------------
@@ -92,10 +92,10 @@ get_parent(SessId, FileKey) ->
 %% Returns full path of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid()) ->
+-spec get_file_path(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
-get_file_path(SessId, FileGUID) ->
-    lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
+get_file_path(SessId, FileGuid) ->
+    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_path{},
         fun(#file_path{value = Path}) ->
             {ok, Path}
@@ -110,39 +110,44 @@ get_file_path(SessId, FileGUID) ->
 -spec unlink(session:id(), fslogic_worker:ext_file(), boolean()) ->
     ok | logical_file_manager:error_reply().
 unlink(SessId, FileEntry, Silent) ->
-    {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileEntry),
-    lfm_utils:call_fslogic(SessId, file_request, GUID, #delete_file{silent = Silent},
+    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileEntry),
+    lfm_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
         fun(_) -> ok end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a new file with default mode.
-%% @end
-%%--------------------------------------------------------------------
--spec create(SessId :: session:id(), Path :: file_meta:path()) ->
-    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
-create(SessId, Path) ->
-    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-    create(SessId, Path, DefaultMode).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new file.
 %% @end
 %%--------------------------------------------------------------------
+-spec create(SessId :: session:id(), Path :: file_meta:path()) ->
+    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
+create(SessId, Path) ->
+    create(SessId, Path, undefined).
+
 -spec create(SessId :: session:id(), Path :: file_meta:path(),
-    Mode :: file_meta:posix_permissions()) ->
+    Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     lfm_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
-        fun(#file_attr{uuid = ParentGUID}) ->
-            lfm_utils:call_fslogic(SessId, file_request, ParentGUID,
-                #make_file{name = Name, mode = Mode},
-                fun(#file_attr{uuid = GUID}) -> {ok, GUID} end
-            )
+        fun(#file_attr{uuid = ParentGuid}) ->
+            lfm_files:create(SessId, ParentGuid, Name, Mode)
         end).
+
+-spec create(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
+    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
+    {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
+create(SessId, ParentGuid, Name, undefined) ->
+    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+    create(SessId, ParentGuid, Name, DefaultMode);
+create(SessId, ParentGuid, Name, Mode) ->
+    lfm_utils:call_fslogic(SessId, file_request, ParentGuid,
+        #make_file{name = Name, mode = Mode},
+        fun(#file_attr{uuid = Guid}) ->
+            {ok, Guid}  %todo consider returning file_attr
+        end
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -153,17 +158,17 @@ create(SessId, Path, Mode) ->
     Flag :: fslogic_worker:open_flag()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(SessId, FileKey, Flag) ->
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    ShareId = fslogic_uuid:guid_to_share_id(FileGUID),
+    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    ShareId = fslogic_uuid:guid_to_share_id(FileGuid),
 
-    lfm_utils:call_fslogic(SessId, file_request, FileGUID,
+    lfm_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_location{},
         fun(#file_location{provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId} = Location) ->
-            lfm_utils:call_fslogic(SessId, file_request, FileGUID,
+            lfm_utils:call_fslogic(SessId, file_request, FileGuid,
                 #open_file{flag = Flag},
                 fun(#file_opened{handle_id = HandleId}) ->
-                    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
+                    {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGuid),
                     SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                     SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID,
                         FileUUID, StorageId, FileId, ShareId, ProviderId),
@@ -176,7 +181,7 @@ open(SessId, FileKey, Flag) ->
                                 ProviderId,
                                 #{default => {{StorageId, FileId}, Handle}},
                                 SessId,
-                                FileGUID,
+                                FileGuid,
                                 Flag
                             )};
                         {error, Reason} ->
@@ -272,11 +277,11 @@ silent_read(FileHandle, Offset, MaxSize) ->
     Size :: non_neg_integer()) ->
     ok | logical_file_manager:error_reply().
 truncate(SessId, FileKey, Size) ->
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, file_request, FileGUID,
+    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    lfm_utils:call_fslogic(SessId, file_request, FileGuid,
         #truncate{size = Size},
         fun(_) ->
-            ok = fslogic_event:emit_file_truncated(FileGUID, Size, SessId)
+            ok = fslogic_event:emit_file_truncated(FileGuid, Size, SessId)
         end).
 
 %%--------------------------------------------------------------------
@@ -287,8 +292,8 @@ truncate(SessId, FileKey, Size) ->
 -spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, list()} | logical_file_manager:error_reply().
 get_file_distribution(SessId, FileKey) ->
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
+    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
             Distribution =
@@ -310,8 +315,8 @@ get_file_distribution(SessId, FileKey) ->
 -spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
     ok | logical_file_manager:error_reply().
 replicate_file(SessId, FileKey, ProviderId) ->
-    {guid, FileGUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, FileGUID,
+    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
         #replicate_file{provider_id = ProviderId},
         fun(_) -> ok end).
 
@@ -382,7 +387,7 @@ get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
         NewHandle :: logical_file_manager:handle()} |  no_return().
 get_sfm_handle_n_update_handle(Handle, Key, OpenType) ->
     ProviderId = lfm_context:get_provider_id(Handle),
-    FileGUID = lfm_context:get_guid(Handle),
+    FileGuid = lfm_context:get_guid(Handle),
     SessId = lfm_context:get_session_id(Handle),
     ShareId = lfm_context:get_share_id(Handle),
     SFMHandles = lfm_context:get_sfm_handles(Handle),
@@ -391,7 +396,7 @@ get_sfm_handle_n_update_handle(Handle, Key, OpenType) ->
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
                 {SID, FID} = Key,
-                {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGUID),
+                {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGuid),
                 SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ShareId, ProviderId),
 

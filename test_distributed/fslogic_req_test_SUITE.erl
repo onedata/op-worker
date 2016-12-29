@@ -58,8 +58,8 @@ all() ->
 
 -define(TIMEOUT, timer:seconds(5)).
 
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call,
-    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
+-define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
+    [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
 -define(file_req(W, SessId, ContextGuid, FileRequest), ?req(W, SessId,
     #file_request{context_guid = ContextGuid, file_request = FileRequest})).
@@ -582,7 +582,7 @@ get_guid_privileged(Worker, SessId, Path) ->
         <<"/">> ->
             SessId;
         _ ->
-            {ok, [_, SpaceName | _]} = fslogic_path:verify_file_path(Path),
+            {ok, [_, SpaceName | _]} = fslogic_path:tokenize_skipping_dots(Path),
             hd(get(SpaceName))
     end,
     get_guid(Worker, SessId1, Path).

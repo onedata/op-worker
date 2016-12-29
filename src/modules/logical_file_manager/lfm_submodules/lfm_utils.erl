@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%% @doc This module exports utility functions for logical_file_manager module.
+%%% @doc
+%%% This module exports utility functions for logical_file_manager module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_utils).
@@ -36,9 +37,9 @@ call_fslogic(SessId, file_request, ContextGuid, Request, OKHandle) ->
 call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
     case worker_proxy:call(fslogic_worker, {provider_request, SessId,
         #provider_request{context_guid = ContextGuid, provider_request = Request}}) of
-        #provider_response{status = #status{code = ?OK}, provider_response = Response} ->
+        {ok, #provider_response{status = #status{code = ?OK}, provider_response = Response}} ->
             OKHandle(Response);
-        #provider_response{status = #status{code = Code}} ->
+        {ok, #provider_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
 
@@ -48,9 +49,9 @@ call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
 call_fslogic(SessId, fuse_request, Request, OKHandle) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
         #fuse_request{fuse_request = Request}}) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
+        {ok, #fuse_response{status = #status{code = ?OK}, fuse_response = Response}} ->
             OKHandle(Response);
-        #fuse_response{status = #status{code = Code}} ->
+        {ok, #fuse_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
 

@@ -33,7 +33,7 @@
 %%--------------------------------------------------------------------
 %% @doc Checks file type and executes type specific copy function.
 %%--------------------------------------------------------------------
--spec copy(Ctx :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
+-spec copy(Ctx :: fslogic_context:ctx(), SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
 copy(Ctx, SourceEntry, LogicalTargetPath) ->
@@ -48,7 +48,7 @@ copy(Ctx, SourceEntry, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Checks permissions and copies directory.
 %%--------------------------------------------------------------------
--spec copy_dir(Ctx :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
+-spec copy_dir(Ctx :: fslogic_context:ctx(), SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?traverse_container, 2},
@@ -64,7 +64,7 @@ copy_dir(Ctx, #document{key = SourceUuid, value = #file_meta{mode = Mode}}, Logi
 %%--------------------------------------------------------------------
 %% @doc Checks permissions and copies file.
 %%--------------------------------------------------------------------
--spec copy_file(Ctx :: fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
+-spec copy_file(Ctx :: fslogic_context:ctx(), SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2},
@@ -110,7 +110,7 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
 %% Copy children of file
 %% @end
 %%--------------------------------------------------------------------
--spec copy_children(fslogic_worker:ctx(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
+-spec copy_children(fslogic_context:ctx(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
     ok | {error, term()}.
 copy_children(Ctx, ParentGuid, TargetPath, Offset) ->
     SessId = fslogic_context:get_session_id(Ctx),

@@ -5,27 +5,54 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module provides error translators for generic fslogic errors.
+%% @doc
+%% This module provides error translators for generic fslogic errors.
 %% @end
 %% ===================================================================
 -module(fslogic_errors).
 -author("Rafal Slota").
 
+-include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include("storage_file_manager_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([gen_status_message/1]).
+-export([handle_error/3, gen_status_message/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Translates operation error to status messages.
-%%      This function is intended to be extended when new translation is needed.
+%% @doc
+%% Handle error caught during processing of fslogic request.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_error(fslogic_worker:request(), Type :: atom(),  Reason :: term()) ->
+    fslogic_worker:response().
+handle_error(Request, throw, Reason) ->
+    %% Manually thrown error, normal interrupt case.
+    report_error(Request, Reason, debug, erlang:get_stacktrace());
+handle_error(Request, error, {badmatch, Reason}) ->
+    %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
+    report_error(Request, Reason, warning, erlang:get_stacktrace());
+handle_error(Request, error, {case_clause, Reason}) ->
+    %% Case Clause assertion - something went seriously wrong and we should know about it.
+    report_error(Request, Reason, error, erlang:get_stacktrace());
+handle_error(Request, error, Reason) ->
+    %% Something went horribly wrong. This should not happen.
+    report_error(Request, Reason, error, erlang:get_stacktrace()).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates operation error to status messages.
+%% This function is intended to be extended when new translation is needed.
+%% @end
 %%--------------------------------------------------------------------
 -spec gen_status_message(Error :: term()) -> #status{}.
 gen_status_message({error, Reason}) ->
@@ -58,7 +85,49 @@ gen_status_message(Reason) ->
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a FUSE response with translated error description.
+%% Logs an error with given log level.
+%% @end
+%%--------------------------------------------------------------------
+-spec report_error(Request :: fslogic_worker:request(), Error :: term(),
+    LogLevel :: debug | warning | error, Stacktrace :: term()) ->
+    fslogic_worker:response().
+report_error(Request, Error, LogLevel, Stacktrace) ->
+    Status = #status{code = Code, description = Description} =
+        fslogic_errors:gen_status_message(Error),
+    MsgFormat =
+        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace: ~p",
+    FormatArgs = [Request, Description, Code, Stacktrace],
+    case LogLevel of
+        debug -> ?debug_stacktrace(MsgFormat, FormatArgs);
+        warning -> ?warning_stacktrace(MsgFormat, FormatArgs);
+        error -> ?error_stacktrace(MsgFormat, FormatArgs)
+    end,
+    error_response(Request, Status).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns response with given status, matching given request.
+%% @end
+%%--------------------------------------------------------------------
+-spec error_response(fslogic_worker:request(), #status{}) ->
+    #fuse_response{} | #provider_response{} | #proxyio_response{}.
+error_response(#fuse_request{}, Status) ->
+    #fuse_response{status = Status};
+error_response(#file_request{}, Status) ->
+    #fuse_response{status = Status};
+error_response(#provider_request{}, Status) ->
+    #provider_response{status = Status};
+error_response(#proxyio_request{}, Status) ->
+    #proxyio_response{status = Status}.
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Translates error ID to error description.
 %% @end

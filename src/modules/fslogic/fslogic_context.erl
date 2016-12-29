@@ -5,8 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module provides and manages fslogic context information
-%%%      such user's credentials.
+%%% @doc
+%%% This module provides and manages fslogic context information
+%%% such user's credentials.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_context).
@@ -19,19 +20,21 @@
 
 %% Context definition
 -record(fslogic_context, {
-    session :: #session{},
-    session_id :: undefined | session:id(),
-    space_id :: file_meta:uuid(),
-%%    user_root_dir :: file_meta:path(),
+    session :: session:doc(),
+    space_id :: undefined | file_meta:uuid(),
+    user_root_dir_uuid :: undefined | file_meta:uuid(),
+    user_doc :: undefined | od_user:doc(),
     share_id :: undefined | od_share:id() %todo TL remove it from here
 }).
 
 -type ctx() :: #fslogic_context{}.
 
 %% API
--export([new/1, new/2, set_space_id/2, set_session_id/2, get_user_id/1, get_session_id/1,
-    get_auth/1, get_space_id/1, get_share_id/1]).
-
+-export([new/1, new/2]).
+-export([set_space_id/2, set_session_id/2]).
+-export([get_user_root_dir_uuid/1, get_user/1]).
+-export([get_user_id/1, get_session_id/1, get_auth/1, get_space_id/1,
+    get_share_id/1]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -45,23 +48,13 @@ new(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns newly created fslogic CTX for given session ID, and spaceId
+%% Returns newly created fslogic Ctx for given session ID, and spaceId
 %% @end
 %%--------------------------------------------------------------------
 -spec new(session:id(), od_space:id() | undefined) -> ctx() | no_return().
 new(SessId, SpaceId) ->
-    {ok, #document{value = Session}} = session:get(SessId),
-    #fslogic_context{session = Session, session_id = SessId, space_id = SpaceId}.
-
-%todo TL use it
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Set user_root_dir in request's context
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%-spec set_user_root_dir(ctx(), file_meta:path()) -> ctx().
-%%set_user_root_dir(Ctx, UserRootDir) ->
-%%    Ctx#fslogic_context{user_root_dir = UserRootDir}.
+    {ok, Session} = session:get(SessId),
+    #fslogic_context{session = Session, space_id = SpaceId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,8 +63,8 @@ new(SessId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec set_session_id(ctx(), file_meta:path()) -> ctx().
 set_session_id(Ctx, SessId) ->
-    {ok, #document{value = Session}} = session:get(SessId),
-    Ctx#fslogic_context{session_id = SessId, session = Session}.
+    {ok, Session} = session:get(SessId),
+    Ctx#fslogic_context{session = Session}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -80,19 +73,19 @@ set_session_id(Ctx, SessId) ->
 %%--------------------------------------------------------------------
 -spec set_space_id(#fslogic_context{},fslogic_worker:ext_file()) ->
     #fslogic_context{}.
-set_space_id(#fslogic_context{} = CTX, {guid, FileGUID}) ->
+set_space_id(#fslogic_context{} = Ctx, {guid, FileGUID}) ->
     case fslogic_uuid:unpack_share_guid(FileGUID) of
         {FileUUID, undefined, ShareId} ->
-            set_space_id(CTX#fslogic_context{share_id = ShareId}, {uuid, FileUUID});
+            set_space_id(Ctx#fslogic_context{share_id = ShareId}, {uuid, FileUUID});
         {_, SpaceId, ShareId} ->
-            CTX#fslogic_context{space_id = SpaceId, share_id = ShareId}
+            Ctx#fslogic_context{space_id = SpaceId, share_id = ShareId}
     end;
-set_space_id(#fslogic_context{} = CTX, Entry) ->
-    case catch fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)) of
+set_space_id(#fslogic_context{} = Ctx, Entry) ->
+    case catch fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(Ctx)) of
         {not_a_space, _} ->
-            CTX#fslogic_context{space_id = undefined};
+            Ctx#fslogic_context{space_id = undefined};
         {ok, #document{key = SpaceUUID}} ->
-            CTX#fslogic_context{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}
+            Ctx#fslogic_context{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}
     end.
 
 %todo TL use this instead of the previous one
@@ -102,26 +95,56 @@ set_space_id(#fslogic_context{} = CTX, Entry) ->
 %%%% @end
 %%%%--------------------------------------------------------------------
 %%-spec set_space_id(ctx(), file_meta:entry() | {guid, fslogic_worker:file_guid()}) -> ctx().
-%%set_space_id(#fslogic_context{} = CTX, {guid, FileGUID}) ->
+%%set_space_id(#fslogic_context{} = Ctx, {guid, FileGUID}) ->
 %%    case fslogic_uuid:unpack_guid(FileGUID) of
-%%        {FileUUID, undefined} -> set_space_id(CTX, {uuid, FileUUID});
+%%        {FileUUID, undefined} -> set_space_id(Ctx, {uuid, FileUUID});
 %%        {_, SpaceId} ->
-%%            CTX#fslogic_context{space_id = SpaceId}
+%%            Ctx#fslogic_context{space_id = SpaceId}
 %%    end;
-%%set_space_id(#fslogic_context{} = CTX, Entry) ->
-%%    case catch fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)) of
+%%set_space_id(#fslogic_context{} = Ctx, Entry) ->
+%%    case catch fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(Ctx)) of
 %%        {not_a_space, _} ->
-%%            CTX#fslogic_context{space_id = undefined};
+%%            Ctx#fslogic_context{space_id = undefined};
 %%        {ok, #document{key = SpaceUUID}} ->
-%%            CTX#fslogic_context{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}
+%%            Ctx#fslogic_context{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}
 %%    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get user_root_dir from request's context
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_root_dir_uuid(ctx()) -> {file_meta:uuid(), ctx()}.
+get_user_root_dir_uuid(Ctx = #fslogic_context{
+    user_root_dir_uuid = undefined,
+    session = #document{value = #session{identity = #user_identity{user_id = UserId}}}
+}) ->
+    UserRootDirUuid = fslogic_uuid:user_root_dir_uuid(UserId),
+    {UserRootDirUuid, Ctx#fslogic_context{user_root_dir_uuid = UserRootDirUuid}};
+get_user_root_dir_uuid(Ctx) ->
+    {Ctx#fslogic_context.user_root_dir_uuid, Ctx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get user from request's context
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user(ctx()) -> {od_user:doc(), ctx()}.
+get_user(Ctx = #fslogic_context{
+    user_doc = undefined,
+    session = #document{value = #session{auth = Auth, identity = #user_identity{user_id = UserId}}}
+}) ->
+    {ok, User} = od_user:get_or_fetch(Auth, UserId),
+    {User, Ctx#fslogic_context{user_doc = User}};
+get_user(Ctx) ->
+    {Ctx#fslogic_context.user_doc, Ctx}.
 
 %%--------------------------------------------------------------------
 %% @doc Retrieves user ID from fslogic context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(ctx()) -> od_user:id().
-get_user_id(#fslogic_context{session = #session{identity = #user_identity{user_id = UserId}}}) ->
+get_user_id(#fslogic_context{session = #document{value = #session{identity = #user_identity{user_id = UserId}}}}) ->
     UserId.
 
 %%--------------------------------------------------------------------
@@ -129,15 +152,15 @@ get_user_id(#fslogic_context{session = #session{identity = #user_identity{user_i
 %% @end
 %%--------------------------------------------------------------------
 -spec get_session_id(ctx()) -> session:id().
-get_session_id(#fslogic_context{session_id = SessionId}) ->
-    SessionId.
+get_session_id(#fslogic_context{session = #document{key = SessId}}) ->
+    SessId.
 
 %%--------------------------------------------------------------------
 %% @doc Retrieves session's auth from fslogic context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(ctx()) -> session:auth().
-get_auth(#fslogic_context{session = #session{auth = Auth}}) ->
+get_auth(#fslogic_context{session = #document{value = #session{auth = Auth}}}) ->
     Auth.
 
 %%--------------------------------------------------------------------
@@ -148,12 +171,10 @@ get_auth(#fslogic_context{session = #session{auth = Auth}}) ->
 get_space_id(#fslogic_context{space_id = SpaceId}) ->
     SpaceId.
 
-
 %%--------------------------------------------------------------------
 %% @doc Retrieves share_id from fslogic context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_share_id(ctx()) -> undeined | od_share:id(). %todo TL remove it from here
+-spec get_share_id(ctx()) -> undeined | od_share:id(). %todo TL remove it from here and use file_info instead
 get_share_id(#fslogic_context{share_id = ShareId}) ->
     ShareId.
-
