@@ -153,7 +153,7 @@ resolve_file_entry({path, Item}, Inputs) when is_integer(Item) ->
 resolve_file_entry({parent, Item}, Inputs) ->
     case file_info:is_file_info(Item) of
         true ->
-            {Parent, _NewFileInfo} = file_info:get_parent(Item),
+            {Parent, _NewFileInfo} = file_info:get_parent(Item, undefined),
             Parent;
         false ->
             fslogic_utils:get_parent(resolve_file_entry(Item, Inputs))

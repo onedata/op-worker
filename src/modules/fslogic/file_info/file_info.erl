@@ -13,7 +13,9 @@
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% Record definition
 -record(file_info, {
@@ -22,7 +24,10 @@
     space_dir_doc :: undefined | file_meta:doc(),
     file_doc :: undefined | file_meta:doc() | {error, term()},
     parent :: undefined | file_info(),
-    storage_file_id :: undefined | helpers:file()
+    storage_file_id :: undefined | helpers:file(),
+    space_name :: od_space:name() | od_space:alias(),
+    storage_posix_user_context :: undefined | #posix_user_ctx{},
+    times :: undefined | times:time()
 }).
 
 -type path() :: file_meta:path().
@@ -32,8 +37,9 @@
 %% API
 -export([new_by_path/2, new_by_guid/1]).
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
-    get_guid/1, get_file_doc/1, get_parent/1, get_storage_file_id/1]).
--export([is_file_info/1, is_space_dir/1, is_user_root_dir/2]).
+    get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
+    get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2]).
+-export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1]).
 
 %%%===================================================================
 %%% API
@@ -63,8 +69,8 @@ new_by_path(Ctx, Path) ->
                     case lists:keyfind(SpaceName, 2, Spaces) of
                         false ->
                             throw(?ENOENT);
-                        {SpaceId, _} ->
-                            {Ctx2, #file_info{path = filename:join([<<"/">>, SpaceId | Rest])}}
+                        {SpaceId, SpaceName} ->
+                            {Ctx2, #file_info{path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}}
                     end
             end
     end.
@@ -75,18 +81,8 @@ new_by_path(Ctx, Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_by_guid(guid()) -> file_info().
-new_by_guid(Guid) ->
+new_by_guid(Guid) when Guid =/= undefined ->
     #file_info{guid = Guid}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Create new file_info using file's guid
-%% @end
-%%--------------------------------------------------------------------
--spec new_by_doc(file_meta:doc(), od_space:id()) -> file_info().
-new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId) ->
-    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
-    #file_info{file_doc = Doc, guid = Guid}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -94,6 +90,15 @@ new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_share_id(fslogic_context:ctx()) -> od_share:id() | undefined.
+get_share_id(#file_info{guid = undefined}) ->
+    undefined;
+get_share_id(#file_info{guid = Guid}) ->
+    case fslogic_uuid:unpack_share_guid(Guid) of
+        {_FileUuid, undefined, ShareId} ->
+            ShareId;
+        {_, _SpaceId, ShareId} ->
+            ShareId
+    end;
 get_share_id(Ctx) -> %todo TL return share_id cached in file_info
     fslogic_context:get_share_id(Ctx).
 
@@ -129,7 +134,7 @@ get_space_id(#file_info{guid = Guid}) ->
 %% Get file's SpaceDir uuid
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_dir_uuid(file_info()) -> od_space:id().
+-spec get_space_dir_uuid(file_info()) -> file_meta:uuid().
 get_space_dir_uuid(#file_info{space_dir_doc = #document{key = SpaceUuid}}) ->
     SpaceUuid;
 get_space_dir_uuid(FileInfo) ->
@@ -171,16 +176,43 @@ get_file_doc(FileInfo = #file_info{file_doc = FileDoc}) ->
 %% Get parent's file_info.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(file_info()) -> {ParentFileInfo :: file_info(), NewFileInfo :: file_info()}.
-get_parent(FileInfo = #file_info{parent = undefined}) ->
+-spec get_parent(file_info(), undefined | od_user:id()) -> {ParentFileInfo :: file_info(), NewFileInfo :: file_info()}.
+get_parent(FileInfo = #file_info{parent = undefined}, UserId) ->
     {Doc, NewFileInfo} = file_info:get_file_doc(FileInfo),
     SpaceId = file_info:get_space_id(NewFileInfo),
-    {ok, ParentDoc} = file_meta:get_parent(Doc),
-
-    Parent = file_info:new_by_doc(ParentDoc, SpaceId),
+    {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
+    ParentGuid =
+        case fslogic_uuid:is_root_dir(ParentUuid) of
+            true ->
+                case ParentUuid =:= ?ROOT_DIR_UUID andalso UserId =/= undefined of
+                    true ->
+                        fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId));
+                    _ ->
+                        fslogic_uuid:uuid_to_guid(ParentUuid, undefined)
+                end;
+            false ->
+                fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId)
+        end,
+    Parent = file_info:new_by_guid(ParentGuid),
     {Parent, NewFileInfo#file_info{parent = Parent}};
-get_parent(FileInfo = #file_info{parent = Parent}) ->
+get_parent(FileInfo = #file_info{parent = Parent}, _UserId) ->
     {Parent, FileInfo}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get Guid of parent, returns undefined when the file is a root dir.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent_guid(file_info(), undefined | od_user:id()) -> {fslogic_worker:file_guid(), file_info()}.
+get_parent_guid(FileInfo, UserId) ->
+    case file_info:is_root_dir(FileInfo) of
+        true ->
+            {undefined, FileInfo};
+        false ->
+            {ParentFile, NewFile} = file_info:get_parent(FileInfo, UserId),
+            {ParentGuid, _} = file_info:get_guid(ParentFile),
+            {ParentGuid, NewFile}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -192,6 +224,85 @@ get_storage_file_id(FileInfo) ->
     {Guid, NewFileInfo} = get_guid(FileInfo),
     FileId = fslogic_utils:gen_storage_file_id({uuid, fslogic_uuid:guid_to_uuid(Guid)}), %todo TL do not use this util function, as it it overcomplicated
     {FileId, NewFileInfo#file_info{storage_file_id = FileId}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get name (or user alias) of the space where the file is located
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_name(file_info(), fslogic_context:ctx()) ->
+    {od_space:name() | od_space:alias(), fslogic_context:ctx(), file_info()}.
+get_space_name(FileInfo = #file_info{space_name = undefined}, Ctx) ->
+    SpaceId = get_space_id(FileInfo),
+    {#document{value = #od_user{space_aliases = Spaces}}, Ctx2} =
+        fslogic_context:get_user(Ctx),
+
+    case lists:keyfind(SpaceId, 1, Spaces) of
+        false ->
+            throw(?ENOENT);
+        {SpaceId, SpaceName} ->
+            {SpaceName, Ctx2, FileInfo#file_info{space_name = SpaceName}}
+    end;
+get_space_name(FileInfo = #file_info{space_name = SpaceName}, Ctx) ->
+    {SpaceName, Ctx, FileInfo}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get name of file (if the file represents space dir, returns user's space alias)
+%% @end
+%%--------------------------------------------------------------------
+-spec get_aliased_name(file_info(), fslogic_context:ctx()) ->
+    {file_meta:name(), fslogic_context:ctx(), file_info()}.
+get_aliased_name(FileInfo, Ctx) ->
+    SessionIsNotSpecial = (not session:is_special(fslogic_context:get_session_id(Ctx))),
+    case is_space_dir(FileInfo) andalso SessionIsNotSpecial of
+        false ->
+            case get_file_doc(FileInfo) of
+                {#document{value = #file_meta{name = Name}}, NewFileInfo} ->
+                    {Name, Ctx, NewFileInfo};
+                ErrorResponse ->
+                    ErrorResponse
+            end;
+        true ->
+            get_space_name(FileInfo, Ctx)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get posix storage user context, holding uid and gid of file on posix storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_user_context(file_info(), fslogic_context:ctx()) ->
+    {#posix_user_ctx{}, fslogic_context:ctx(), file_info()}.
+get_storage_user_context(FileInfo, Ctx) ->
+    IsSpaceDir = is_space_dir(FileInfo),
+    IsUserRootDir = is_root_dir(FileInfo),
+    case IsSpaceDir orelse IsUserRootDir of
+        true ->
+            {?ROOT_POSIX_CTX, FileInfo#file_info{storage_posix_user_context = ?ROOT_POSIX_CTX}};
+        false ->
+            SpaceDirUuid = get_space_dir_uuid(FileInfo),
+            StorageId = luma_utils:get_storage_id(SpaceDirUuid), %todo use SpaceId in luma instead of SpaceDirUuid
+            StorageType = luma_utils:get_storage_type(StorageId),
+            SessId = fslogic_context:get_session_id(Ctx),
+            StorageContext = fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceDirUuid),
+            {StorageContext, FileInfo#file_info{storage_posix_user_context = StorageContext}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file atime, ctime and mtime
+%% @end
+%%--------------------------------------------------------------------
+-spec get_times(file_info()) -> {times:time(), file_info()}.
+get_times(FileInfo) ->
+    {Guid, FileInfo2} = file_info:get_guid(FileInfo),
+    case times:get_or_default(fslogic_uuid:guid_to_uuid(Guid)) of
+        {ok, Times} ->
+            {Times, FileInfo2#file_info{times = Times}};
+        Error ->
+            {Error, FileInfo2}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -227,13 +338,27 @@ is_space_dir(#file_info{path = Path}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_user_root_dir(file_info(), fslogic_context:ctx()) -> {boolean(), NewCtx :: fslogic_context:ctx()}.
-is_user_root_dir(#file_info{guid = undefined, path = <<"/">>}, Ctx) ->
+is_user_root_dir(#file_info{path = <<"/">>}, Ctx) ->
     {true, Ctx};
-is_user_root_dir(#file_info{guid = undefined}, Ctx) ->
-    {false, Ctx};
-is_user_root_dir(#file_info{guid = Guid}, Ctx) ->
+is_user_root_dir(#file_info{guid = Guid, path = undefined}, Ctx) ->
     {UserRootDirUuid, NewCtx} = fslogic_context:get_user_root_dir_uuid(Ctx),
-    {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx}.
+    {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx};
+is_user_root_dir(#file_info{}, Ctx) ->
+    {false, Ctx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if file is a root dir (any user root).
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root_dir(file_info()) -> boolean().
+is_root_dir(#file_info{path = <<"/">>}) ->
+    true;
+is_root_dir(#file_info{guid = Guid, path = undefined}) ->
+    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    fslogic_uuid:is_root_dir(Uuid);
+is_root_dir(#file_info{}) ->
+    false.
 
 %%%===================================================================
 %%% Internal functions

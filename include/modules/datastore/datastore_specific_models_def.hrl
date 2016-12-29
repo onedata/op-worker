@@ -61,7 +61,7 @@
     connected_accounts = [] :: [od_user:connected_account()], % TODO currently always empty
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
+    space_aliases = [] :: [{od_space:id(), SpaceName :: od_space:alias()}],
 
     % Direct relations to other entities
     groups = [] :: [od_group:id()],

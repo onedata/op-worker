@@ -86,7 +86,7 @@ fslogic_get_file_attr_test(Config) ->
 
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
-                name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
+                uuid = Guid, name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
                 uid = UID, parent_uuid = ParentGuid
             }
         }, ?file_req(Worker, SessId, Guid, #get_file_attr{})),

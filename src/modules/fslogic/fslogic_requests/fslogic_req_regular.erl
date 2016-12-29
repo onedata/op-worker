@@ -149,8 +149,10 @@ create_file(Ctx, {uuid, ParentUUID}, Name, Mode, _Flag) ->
             {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
             {ok, HandleId} = save_handle(SessId, Handle),
 
+            Guid = fslogic_uuid:uuid_to_guid(FileUUID),
+            FileInfo = file_info:new_by_guid(Guid),
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-                fslogic_req_generic:get_file_attr(Ctx, {uuid, FileUUID}),
+                attr_req:get_file_attr(Ctx, FileInfo),
 
             FileLocation = #file_location{
                 uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
@@ -206,7 +208,9 @@ make_file(Ctx, {uuid, ParentUUID}, Name, Mode) ->
     try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         _ ->
             fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(Ctx)),
-            fslogic_req_generic:get_file_attr(Ctx, {uuid, FileUUID})
+            Guid = fslogic_uuid:uuid_to_guid(FileUUID),
+            FileInfo = file_info:new_by_guid(Guid),
+            attr_req:get_file_attr(Ctx, FileInfo)
     catch
         T:M ->
             {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),

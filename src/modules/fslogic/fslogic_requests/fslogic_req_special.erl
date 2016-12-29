@@ -83,7 +83,14 @@ get_child_attr(Ctx, ParentFile, Name) ->
 
     case File of
         false -> #fuse_response{status = #status{code = ?ENOENT}};
-        _ -> fslogic_req_generic:get_file_attr(Ctx, File)
+        {uuid, Uuid} ->
+            Guid = fslogic_uuid:uuid_to_guid(Uuid),
+            FileInfo = file_info:new_by_guid(Guid),
+            attr_req:get_file_attr(Ctx, FileInfo);
+        #document{key = Uuid} ->
+            Guid = fslogic_uuid:uuid_to_guid(Uuid),
+            FileInfo = file_info:new_by_guid(Guid),
+            attr_req:get_file_attr(Ctx, FileInfo)
     end.
 
 %%--------------------------------------------------------------------

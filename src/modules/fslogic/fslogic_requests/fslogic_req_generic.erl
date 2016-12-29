@@ -23,7 +23,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([chmod/3, get_file_attr/2, delete/3, update_times/5,
+-export([chmod/3, delete/3, update_times/5,
     get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -101,94 +101,6 @@ chmod(Ctx, File, Mode) ->
 -check_permissions([{?write_owner, 2}]).
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc Gets file's attributes.
-%% For best performance use following arg types: document -> uuid -> path
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_attr(fslogic_context:ctx(), File :: fslogic_worker:file()) ->
-    FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}]).
-get_file_attr(Ctx, File) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    ShareId = file_info:get_share_id(Ctx),
-    ?debug("Get attr for file entry: ~p", [File]),
-    case file_meta:get(File) of
-        {ok, #document{key = UUID, value = #file_meta{
-            type = Type, mode = Mode, provider_id = ProviderId, uid = UserID,
-            name = FileMetaName, shares = Shares, is_scope = IsScope}} = FileDoc} ->
-            UserId = fslogic_context:get_user_id(Ctx),
-            % If the file is a space dir and the request is in user context,
-            % set proper space name according to users aliases.
-            Name = case {SessId, fslogic_uuid:user_root_dir_uuid(UserId), IsScope} of
-                {?ROOT_SESS_ID, _, _} ->
-                    FileMetaName;
-                {_, UUID, _} ->
-                    FileMetaName;
-                {_, _, true} ->
-                    SpId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
-                    {ok, #document{
-                        value = #od_user{
-                            space_aliases = SpaceAliases
-                        }}} = od_user:get(UserId),
-                    case proplists:get_value(SpId, SpaceAliases) of
-                        undefined ->
-                            throw(space_alias_not_found);
-                        SpaceName ->
-                            SpaceName
-                    end;
-                {_, _, false} ->
-                    FileMetaName
-            end,
-
-            {SpaceId, SpaceUUID} = try
-                {ok, #document{key = SpaceUUID_}} = fslogic_spaces:get_space(FileDoc, UserId),
-                {fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID_), SpaceUUID_}
-            catch
-                _:_ ->
-                    {undefined, undefined}
-            end,
-
-            #posix_user_ctx{gid = GID, uid = UID} = try
-                StorageId = luma_utils:get_storage_id(SpaceUUID),
-                StorageType = luma_utils:get_storage_type(StorageId),
-                fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
-            catch
-                % TODO (VFS-2024) - repair decoding and change to throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
-                _:_ -> ?ROOT_POSIX_CTX
-            end,
-
-            Size = fslogic_blocks:get_file_size(FileDoc),
-
-            {ok, SessionUserId} = session:get_user_id(SessId),
-            RootUuid = fslogic_uuid:user_root_dir_uuid(SessionUserId),
-            ParentGuid = case fslogic_uuid:parent_uuid(FileDoc, SessionUserId) of
-                undefined -> undefined;
-                RootUuid -> fslogic_uuid:uuid_to_guid(RootUuid, undefined);
-                ParentUuid -> fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId)
-            end,
-
-            FinalUID = case session:get(SessId) of
-                {ok, #document{value = #session{identity = #user_identity{user_id = UserID}}}} ->
-                    UID;
-                _ ->
-                    luma_utils:gen_storage_uid(UserID)
-            end,
-
-            {ok, {ATime, CTime, MTime}} = times:get_or_default(UUID),
-
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
-                gid = GID, parent_uuid = ParentGuid,
-                uuid = fslogic_uuid:uuid_to_share_guid(UUID, SpaceId, ShareId),
-                type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                ctime = CTime, uid = FinalUID, size = Size, name = Name, provider_id = ProviderId,
-                shares = Shares, owner_id = UserID
-            }};
-        {error, {not_found, _}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
-    end.
 
 
 %%--------------------------------------------------------------------
