@@ -108,7 +108,7 @@ write_should_get_session_when_given_handle_id(_) ->
 
 write_should_get_session_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"SessionId">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>},
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>},
         <<"c">>, <<"d">>, ?BS(0, <<"f">>)),
 
     ?_assert(meck:called(session, get, [<<"SessionId">>])).
@@ -123,7 +123,7 @@ write_should_not_get_space_id_when_given_handle_id(_) ->
 
 write_should_get_space_id_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"FileUuid">>},
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"FileUuid">>},
         <<"c">>, <<"d">>, ?BS(0, <<"f">>)),
 
     ?_assert(meck:called(fslogic_spaces, get_space,
@@ -140,7 +140,7 @@ write_should_not_create_storage_file_manager_handle_when_given_handle_id(_) ->
 
 write_should_create_storage_file_manager_handle_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"SessionID">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"FileUuid">>},
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"FileUuid">>},
         <<"StorageId">>, <<"FileId">>, ?BS(12, <<"Data">>)),
 
     ?_assert(meck:called(storage_file_manager, new_handle,
@@ -157,7 +157,7 @@ write_should_not_open_file_when_given_handle_id(_) ->
 
 write_should_open_file_with_write_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
         <<"d">>, ?BS(0, <<"e">>)),
 
     ?_assert(meck:called(storage_file_manager, open, [sfm_handle_mock, write])).
@@ -174,7 +174,7 @@ write_should_write_data_when_given_handle_id(_) ->
 
 write_should_write_data_when_given_file_uuid(_) ->
     fslogic_proxyio:write(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
         <<"d">>, ?BS(42, <<"Data">>)),
 
     ?_assert(meck:called(storage_file_manager, write,
@@ -204,7 +204,7 @@ successful_write_should_return_success_when_given_file_uuid(_) ->
             proxyio_response = #remote_write_result{wrote = byte_size(Data)}
         },
         fslogic_proxyio:write(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
             <<"d">>, ?BS(42, Data))
     ).
 
@@ -212,14 +212,14 @@ successful_write_should_return_success_when_given_file_uuid(_) ->
 read_should_get_session_when_given_handle_id(_) ->
     fslogic_proxyio:read(<<"SessionId">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
         ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>, <<"d">>, 0, 5),
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>, <<"d">>, 0, 5),
 
     ?_assert(meck:called(session, get, [<<"SessionId">>])).
 
 
 read_should_get_session_when_given_file_uuid(_) ->
     fslogic_proxyio:read(<<"SessionId">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>},
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>},
         <<"c">>, <<"d">>, 0, 5),
 
     ?_assert(meck:called(session, get, [<<"SessionId">>])).
@@ -228,14 +228,14 @@ read_should_get_session_when_given_file_uuid(_) ->
 read_should_not_get_space_id_when_given_handle_id(_) ->
     fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
         ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>, <<"d">>, 0, 10),
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>, <<"d">>, 0, 10),
 
     ?_assertEqual(0, meck:num_calls(fslogic_spaces, get_space, 2)).
 
 
 read_should_get_space_id_when_given_file_uuid(_) ->
     fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"FileUuid">>}, <<"c">>,
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"FileUuid">>}, <<"c">>,
         <<"d">>, 0, 10),
 
     ?_assert(meck:called(fslogic_spaces, get_space,
@@ -245,14 +245,14 @@ read_should_get_space_id_when_given_file_uuid(_) ->
 read_should_not_create_storage_file_manager_handle_when_given_handle_id(_) ->
     fslogic_proxyio:read(<<"SessionID">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
         ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"StorageId">>, <<"FileId">>, 12, 33),
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"StorageId">>, <<"FileId">>, 12, 33),
 
     ?_assertEqual(0, meck:num_calls(storage_file_manager, new_handle, 6)).
 
 
 read_should_create_storage_file_manager_handle_when_given_file_uuid(_) ->
     fslogic_proxyio:read(<<"SessionID">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"FileUuid">>},
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"FileUuid">>},
         <<"StorageId">>, <<"FileId">>, 12, 33),
 
     ?_assert(meck:called(storage_file_manager, new_handle,
@@ -262,14 +262,14 @@ read_should_create_storage_file_manager_handle_when_given_file_uuid(_) ->
 read_should_not_open_file_when_given_handle_id(_) ->
     fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
         ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>, <<"d">>, 0, 132),
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>, <<"d">>, 0, 132),
 
     ?_assertEqual(0, meck:num_calls(storage_file_manager, open, 2)).
 
 
 read_should_open_file_with_read_when_given_file_uuid(_) ->
     fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
         <<"d">>, 0, 132),
 
     ?_assert(meck:called(storage_file_manager, open, [sfm_handle_mock, read])).
@@ -278,7 +278,7 @@ read_should_open_file_with_read_when_given_file_uuid(_) ->
 read_should_read_data_when_given_handle_id(_) ->
     fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
         ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>, <<"d">>, 42, 64),
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>, <<"d">>, 42, 64),
 
     ?_assert(meck:called(storage_file_manager, read,
         [file_handle_mock, 42, 64])).
@@ -286,7 +286,7 @@ read_should_read_data_when_given_handle_id(_) ->
 
 read_should_read_data_when_given_file_uuid(_) ->
     fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-        ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+        ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
         <<"d">>, 42, 64),
 
     ?_assert(meck:called(storage_file_manager, read,
@@ -301,7 +301,7 @@ successful_read_should_return_success_when_given_handle_id(_) ->
         },
         fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
             ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>, <<"d">>, 42, 12)
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>, <<"d">>, 42, 12)
     ).
 
 
@@ -312,7 +312,7 @@ successful_read_should_return_success_when_given_file_uuid(_) ->
             proxyio_response = #remote_data{data = <<0:(8 * 12)>>}
         },
         fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
             <<"d">>, 42, 12)
     ).
 
@@ -346,7 +346,7 @@ write_should_handle_partial_writes_when_given_file_uuid(_) ->
                 proxyio_response = #remote_write_result{wrote = 4}
             },
             fslogic_proxyio:write(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-                ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+                ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
                 <<"d">>, ?BS(4, <<"data">>))
         ),
         ?_assertEqual(4, meck:num_calls(storage_file_manager, write, 3))
@@ -364,7 +364,7 @@ read_should_accept_partial_read_when_given_handle_id(_) ->
         },
         fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
             ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>, <<"d">>, 42, 1000)
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>, <<"d">>, 42, 1000)
     ).
 
 
@@ -378,7 +378,7 @@ read_should_accept_partial_read_when_given_file_uuid(_) ->
             proxyio_response = #remote_data{data = <<"da">>}
         },
         fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
             <<"d">>, 42, 1000)
     ).
 
@@ -390,7 +390,7 @@ write_should_fail_on_failed_open_when_given_file_uuid(_) ->
     ?_assertEqual(
         #proxyio_response{status = #status{code = ?ENETDOWN}},
         fslogic_proxyio:write(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
             <<"d">>, ?BS(42, <<"hi">>))
     ).
 
@@ -414,7 +414,7 @@ write_should_fail_on_failed_write_when_given_file_uuid(_) ->
     ?_assertEqual(
         #proxyio_response{status = #status{code = ?EMFILE}},
         fslogic_proxyio:write(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
             <<"d">>, ?BS(42, <<"hi">>))
     ).
 
@@ -426,7 +426,7 @@ read_should_fail_on_failed_open_when_given_file_uuid(_) ->
     ?_assertEqual(
         #proxyio_response{status = #status{code = ?ENOTCONN}},
         fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
             <<"d">>, 42, 10)
     ).
 
@@ -439,7 +439,7 @@ read_should_fail_on_failed_read_when_given_handle_id(_) ->
         #proxyio_response{status = #status{code = ?ENOSPC}},
         fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
             ?PROXYIO_PARAMETER_HANDLE_ID => <<"HandleId">>,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>, <<"d">>, 42, 5)
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>, <<"d">>, 42, 5)
     ).
 
 
@@ -450,7 +450,7 @@ read_should_fail_on_failed_read_when_given_file_uuid(_) ->
     ?_assertEqual(
         #proxyio_response{status = #status{code = ?ENOSPC}},
         fslogic_proxyio:read(<<"a">>, #{?PROXYIO_PARAMETER_SHARE_ID => undefined,
-            ?PROXYIO_PARAMETER_FILE_UUID => <<"b">>}, <<"c">>,
+            ?PROXYIO_PARAMETER_FILE_GUID => <<"b">>}, <<"c">>,
             <<"d">>, 42, 5)
     ).
 

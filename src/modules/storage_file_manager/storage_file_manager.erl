@@ -312,12 +312,12 @@ write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, file_handle = FileHan
 write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Data) ->
     FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
     ProxyIORequest = #proxyio_request{
-        parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
+        parameters = #{?PROXYIO_PARAMETER_FILE_GUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_write{byte_sequence = [#byte_sequence{offset = Offset, data = Data}]}},
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
-        #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_write_result{wrote = Wrote}} ->
+        {ok, #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_write_result{wrote = Wrote}}} ->
             {ok, Wrote};
-        #proxyio_response{status = #status{code = Code}} ->
+        {ok, #proxyio_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
 
@@ -337,12 +337,12 @@ read(#sfm_handle{is_local = true, file_handle = FileHandle}, Offset, MaxSize) ->
 read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID, storage_id = SID, file = FID, space_uuid = SpaceUUID}, Offset, Size) ->
     FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)),
     ProxyIORequest = #proxyio_request{
-        parameters = #{?PROXYIO_PARAMETER_FILE_UUID => FileGUID}, storage_id = SID, file_id = FID,
+        parameters = #{?PROXYIO_PARAMETER_FILE_GUID => FileGUID}, storage_id = SID, file_id = FID,
         proxyio_request = #remote_read{offset = Offset, size = Size}},
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
-        #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}} ->
+        {ok, #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}}} ->
             {ok, Data};
-        #proxyio_response{status = #status{code = Code}} ->
+        {ok, #proxyio_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
 

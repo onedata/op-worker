@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module provides set of path processing methods.
+%% @doc
+%% This module provides set of path processing methods.
 %% @end
 %% ===================================================================
 -module(fslogic_path).
@@ -19,7 +20,7 @@
 
 %% API
 -export([gen_path/2, gen_storage_path/1, check_path/1]).
--export([verify_file_path/1, get_canonical_file_entry/2]).
+-export([tokenize_skipping_dots/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, basename_and_parent/1]).
 -export([dirname/1]).
 
@@ -150,7 +151,7 @@ gen_storage_path(Entry) ->
 %% @doc Gets file's full name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry(fslogic_worker:ctx(), [file_meta:path()]) ->
+-spec get_canonical_file_entry(fslogic_context:ctx(), [file_meta:path()]) ->
     file_meta:entry() | no_return().
 get_canonical_file_entry(Ctx, Tokens) ->
     case session:is_special(fslogic_context:get_session_id(Ctx)) of
@@ -165,7 +166,7 @@ get_canonical_file_entry(Ctx, Tokens) ->
 %% Gets file's full name, checking user defined space names.
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry_for_user(fslogic_worker:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
+-spec get_canonical_file_entry_for_user(fslogic_context:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
 get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
@@ -173,14 +174,10 @@ get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | To
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId), %todo TL cache it in fslogic_context
 
-    MatchedSpaces = lists:filter(fun({_, Name}) ->
-        Name =:= SpaceName
-    end, Spaces),
-
-    case MatchedSpaces of
-        [] ->
+    case lists:keyfind(SpaceName, 2, Spaces) of
+        false ->
             throw(?ENOENT);
-        [{SpaceId, _}] ->
+        {SpaceId, _} ->
             {path, fslogic_path:join(
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | Tokens])}
     end;
@@ -192,9 +189,9 @@ get_canonical_file_entry_for_user(_Ctx, Tokens) ->
 %% @doc Strips '.' from path. Also if '..' path element if present, path is considered invalid.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_file_path(FileName :: file_meta:path()) -> Result when
+-spec tokenize_skipping_dots(FileName :: file_meta:path()) -> Result when
     Result :: {ok, Tokens :: [binary()]} | {error, wrong_filename}.
-verify_file_path(FileName) ->
+tokenize_skipping_dots(FileName) ->
     Tokens = lists:filter(fun(X) -> X =/= <<".">> end, split(FileName)),
     case lists:any(fun(X) -> X =:= <<"..">> end, Tokens) of
         true -> {error, wrong_filename};

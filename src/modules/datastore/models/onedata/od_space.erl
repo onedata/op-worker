@@ -23,7 +23,9 @@
 -type doc() :: datastore:document().
 -type info() :: #od_space{}.
 -type id() :: binary().
--export_type([doc/0, info/0, id/0]).
+-type alias() :: binary().
+-type name() :: binary().
+-export_type([doc/0, info/0, id/0, alias/0, name/0]).
 
 %% API
 -export([create_or_update/2, get/2, get_or_fetch/3, get_or_fetch/2]).

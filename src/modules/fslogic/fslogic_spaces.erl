@@ -49,13 +49,13 @@ get_space_id({guid, FileGUID}) ->
 %% Returns space ID for given file path.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id(CTX :: fslogic_worker:ctx(), FilePath :: file_meta:path()) ->
+-spec get_space_id(CTX :: fslogic_context:ctx(), FilePath :: file_meta:path()) ->
     SpaceId :: binary().
 get_space_id(CTX, Path) ->
-    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     case fslogic_path:get_canonical_file_entry(CTX, Tokens) of
         {path, P} = FileEntry ->
-            {ok, Tokens1} = fslogic_path:verify_file_path(P),
+            {ok, Tokens1} = fslogic_path:tokenize_skipping_dots(P),
             case Tokens1 of
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
                     SpaceId;

@@ -61,7 +61,7 @@
     connected_accounts = [] :: [od_user:connected_account()], % TODO currently always empty
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
+    space_aliases = [] :: [{od_space:id(), SpaceName :: od_space:alias()}],
 
     % Direct relations to other entities
     groups = [] :: [od_group:id()],
@@ -403,7 +403,7 @@
 %% Model for holding state of monitoring
 -record(monitoring_state, {
     monitoring_id = #monitoring_id{} :: #monitoring_id{},
-    rrd_path :: undefined | binary(),
+    rrd_guid :: undefined | binary(),
     state_buffer = #{} :: maps:map(),
     last_update_time :: undefined | non_neg_integer()
 }).

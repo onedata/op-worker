@@ -182,7 +182,7 @@ route_and_send_answer(#client_message{message_id = Id,
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #get_configuration{}}) ->
     spawn(fun() ->
-        Configuration = fuse_config_manager:get_configuration(effective_session_id(Msg)),
+        Configuration = storage_req:get_configuration(effective_session_id(Msg)),
         communicator:send(#server_message{
             message_id = Id, message_body = Configuration
         }, OriginSessId)
@@ -192,7 +192,7 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = Origin
     message_body = #fuse_request{} = FuseRequest}) ->
     ?debug("Fuse request: ~p ~p", [FuseRequest, effective_session_id(Msg)]),
     spawn(fun() ->
-        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
+        {ok, FuseResponse} = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
         ?debug("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
@@ -203,7 +203,7 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = Origin
     message_body = #provider_request{} = ProviderRequest}) ->
     ?debug("Provider request ~p ~p", [ProviderRequest, effective_session_id(Msg)]),
     spawn(fun() ->
-        ProviderResponse = worker_proxy:call(fslogic_worker,
+        {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
             {provider_request, effective_session_id(Msg), ProviderRequest}),
         ?debug("Provider response ~p", [ProviderResponse]),
         communicator:send(#server_message{message_id = Id,
@@ -214,7 +214,7 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = Origin
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
     spawn(fun() ->
-        ProxyIOResponse = worker_proxy:call(fslogic_worker,
+        {ok, ProxyIOResponse} = worker_proxy:call(fslogic_worker,
             {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
 
         ?debug("ProxyIO response ~p", [ProxyIOResponse]),
@@ -227,7 +227,7 @@ route_and_send_answer(#client_message{message_id = Id, session_id = OriginSessId
     message_body = #dbsync_request{} = DBSyncRequest} = Msg) ->
     ?debug("DBSync request ~p", [DBSyncRequest]),
     spawn(fun() ->
-        DBSyncResponse = worker_proxy:call(dbsync_worker,
+        {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
             {dbsync_request, effective_session_id(Msg), DBSyncRequest}),
 
         ?debug("DBSync response ~p", [DBSyncResponse]),

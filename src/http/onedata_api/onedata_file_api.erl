@@ -17,11 +17,11 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
+-export([create/3, create/4, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
     release/1, get_file_distribution/2, replicate_file/3]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
@@ -40,7 +40,6 @@
 %% IDs of entities
 -type file_guid() :: binary().
 %%--------------------------------------------------------------------
-
 
 % todo TL do something with those types.
 %%--------------------------------------------------------------------
@@ -77,7 +76,6 @@
 %%% API
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc Creates a directory.
 %%--------------------------------------------------------------------
@@ -85,11 +83,18 @@
     {ok, file_guid()} | error_reply().
 mkdir(Auth, Path) ->
     logical_file_manager:mkdir(Auth, Path).
--spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+
+-spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(),
+    Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, file_guid()} | error_reply().
 mkdir(Auth, Path, Mode) ->
     logical_file_manager:mkdir(Auth, Path, Mode).
 
+-spec mkdir(SessId :: onedata_auth_api:auth(), ParentGuid :: file_guid(),
+    Name :: file_name(), Mode :: file_meta:posix_permissions() | undefined) ->
+    {ok, DirUUID :: file_meta:uuid()} | error_reply().
+mkdir(SessId, ParentGuid, Name, Mode) ->
+    logical_file_manager:mkdir(SessId, ParentGuid, Name, Mode).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,7 +107,6 @@ mkdir(Auth, Path, Mode) ->
 ls(Auth, FileKey, Offset, Limit) ->
     logical_file_manager:ls(Auth, FileKey, Offset, Limit).
 
-
 %%--------------------------------------------------------------------
 %% @doc Returns number of children of a directory.
 %%--------------------------------------------------------------------
@@ -111,7 +115,6 @@ ls(Auth, FileKey, Offset, Limit) ->
 get_children_count(Auth, FileKey) ->
     logical_file_manager:get_children_count(Auth, FileKey).
 
-
 %%--------------------------------------------------------------------
 %% @doc Deletes a file or directory recursively.
 %%--------------------------------------------------------------------
@@ -119,7 +122,6 @@ get_children_count(Auth, FileKey) ->
         -> ok | error_reply().
 rm_recursive(Auth, FileKey) ->
     logical_file_manager:rm_recursive(Auth, FileKey).
-
 
 %%--------------------------------------------------------------------
 %% @doc Checks if a file or directory exists.
@@ -174,6 +176,11 @@ fsync(Handle) ->
 create(Auth, Path, Mode) ->
     logical_file_manager:create(Auth, Path, Mode).
 
+-spec create(Auth :: onedata_auth_api:auth(), ParentGuid :: file_guid(),
+    Name :: file_name(), Mode :: file_meta:posix_permissions()) ->
+    {ok, file_guid()} | error_reply().
+create(Auth, ParentGuid, Name, Mode) ->
+    logical_file_manager:create(Auth, ParentGuid, Name, Mode).
 
 %%--------------------------------------------------------------------
 %% @doc Opens a file in selected mode and returns a file handle used to read or write.
@@ -183,7 +190,6 @@ create(Auth, Path, Mode) ->
 open(Auth, FileKey, OpenType) ->
     logical_file_manager:open(Auth, FileKey, OpenType).
 
-
 %%--------------------------------------------------------------------
 %% @doc Writes data to a file. Returns number of written bytes.
 %%--------------------------------------------------------------------
@@ -192,7 +198,6 @@ open(Auth, FileKey, OpenType) ->
 write(FileHandle, Offset, Buffer) ->
     logical_file_manager:write(FileHandle, Offset, Buffer).
 
-
 %%--------------------------------------------------------------------
 %% @doc Reads requested part of a file.
 %%--------------------------------------------------------------------
@@ -200,7 +205,6 @@ write(FileHandle, Offset, Buffer) ->
     {ok, NewHandle :: file_handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
     logical_file_manager:read(FileHandle, Offset, MaxSize).
-
 
 %%--------------------------------------------------------------------
 %% @doc Truncates a file.
@@ -218,7 +222,6 @@ truncate(Auth, FileKey, Size) ->
 release(FileHandle) ->
     logical_file_manager:release(FileHandle).
 
-
 %%--------------------------------------------------------------------
 %% @doc Returns block map for a file.
 %%--------------------------------------------------------------------
@@ -227,7 +230,6 @@ release(FileHandle) ->
 get_file_distribution(Auth, FileKey) ->
     logical_file_manager:get_file_distribution(Auth, FileKey).
 
-
 %%--------------------------------------------------------------------
 %% @doc Replicates file on given provider.
 %%--------------------------------------------------------------------
@@ -235,7 +237,6 @@ get_file_distribution(Auth, FileKey) ->
     ok | error_reply().
 replicate_file(Auth, FileKey, ProviderId) ->
     logical_file_manager:replicate_file(Auth, FileKey, ProviderId).
-
 
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.
@@ -289,7 +290,6 @@ stat(Auth, FileKey) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(Auth, FileKey, XattrName, Inherited) ->
     logical_file_manager:get_xattr(Auth, FileKey, XattrName, Inherited).
-
 
 %%--------------------------------------------------------------------
 %% @doc Updates file's extended attribute by key.

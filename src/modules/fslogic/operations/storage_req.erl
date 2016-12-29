@@ -1,29 +1,25 @@
-%%%-------------------------------------------------------------------
+%%%--------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%%%-------------------------------------------------------------------
+%%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains utility functions used during remote client
+%%% Requests related to storage
+%%% This module contains functions used during remote client
 %%% initialization.
 %%% @end
-%%%-------------------------------------------------------------------
--module(fuse_config_manager).
+%%%--------------------------------------------------------------------
+-module(storage_req).
 -author("Krzysztof Trzepla").
+-author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
-
-%% API
--export([get_configuration/1]).
--export([create_storage_test_file/2, remove_storage_test_file/3,
-    verify_storage_test_file/2]).
 
 -define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
     storage_test_file_name_size, 32)).
@@ -36,6 +32,10 @@
 -define(VERIFY_STORAGE_TEST_FILE_ATTEMPTS, application:get_env(?APP_NAME,
     remove_storage_test_file_attempts, 10)).
 
+%% API
+-export([get_configuration/1, get_helper_params/3, create_storage_test_file/3,
+    verify_storage_test_file/5]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -45,7 +45,7 @@
 %% Returns remote client configuration.
 %% @end
 %%--------------------------------------------------------------------
--spec get_configuration(SessId :: session:id()) -> Configuration :: #configuration{}.
+-spec get_configuration(session:id()) -> #configuration{}.
 get_configuration(SessId) ->
     {ok, UserId} = session:get_user_id(SessId),
     {ok, Docs} = subscription:list(),
@@ -63,37 +63,61 @@ get_configuration(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Gets helper params based on given storage ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_helper_params(fslogic_context:ctx(), storage:id(),
+    ForceCL :: boolean()) -> #fuse_response{}.
+get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
+    {ok, StorageDoc} = storage:get(StorageId),
+    {ok, #helper_init{args = Args}} = fslogic_storage:select_helper(StorageDoc),
+    Timeout = helpers_utils:get_timeout(Args),
+    {ok, Latency} = application:get_env(?APP_NAME, proxy_helper_latency_milliseconds),
+    #fuse_response{status = #status{code = ?OK}, fuse_response = #helper_params{
+        helper_name = <<"ProxyIO">>,
+        helper_args = [
+            #helper_arg{key = <<"storage_id">>, value = StorageId},
+            #helper_arg{key = <<"timeout">>, value = integer_to_binary(Timeout + Latency)}
+        ]
+    }};
+get_helper_params(_Ctx, _StorageId, false = _ForceProxy) ->
+    #fuse_response{status = #status{code = ?ENOTSUP}}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates test file on a given storage in the directory of a file referenced
 %% by UUID. File is created on behalf of the user associated with the session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_test_file(SessId :: session:id(), #create_storage_test_file{}) ->
+-spec create_storage_test_file(fslogic_context:ctx(), fslogic_worker:file_guid(), storage:id()) ->
     #fuse_response{}.
-create_storage_test_file(SessId, #create_storage_test_file{storage_id = StorageId, file_uuid = FileGUID}) ->
-    {ok, UserId} = session:get_user_id(SessId),
-    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}, UserId),
+create_storage_test_file(Ctx, Guid, StorageId) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    File = file_info:new_by_guid(Guid),
+    SpaceDirUuid = file_info:get_space_dir_uuid(File),
+
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, HelperInit} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helpers:name(HelperInit),
     HelperArgs = helpers:args(HelperInit),
-    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
+    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceDirUuid),
     Handle = helpers:new_handle(HelperName, HelperArgs, UserCtx),
     HelperParams = helpers_utils:get_params(HelperInit, UserCtx),
-    FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),
+
+    {FileId, _NewFile} = file_info:get_storage_file_id(File),
     Dirname = fslogic_path:dirname(FileId),
     TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
     TestFileId = fslogic_path:join([Dirname, TestFileName]),
 
     FileContent = helpers_utils:create_test_file(Handle, TestFileId),
 
-    spawn(?MODULE, remove_storage_test_file, [Handle, TestFileId,
+    spawn(storage_req, remove_storage_test_file, [Handle, TestFileId,
         ?REMOVE_STORAGE_TEST_FILE_DELAY]),
 
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #storage_test_file{
-            helper_params = HelperParams, space_uuid = SpaceUUID,
+            helper_params = HelperParams, space_uuid = SpaceDirUuid,
             file_id = TestFileId, file_content = FileContent
         }
     }.
@@ -104,17 +128,22 @@ create_storage_test_file(SessId, #create_storage_test_file{storage_id = StorageI
 %% its content ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS times.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_storage_test_file(SessId :: session:id(), #verify_storage_test_file{}) ->
+-spec verify_storage_test_file(fslogic_context:ctx(), SpaceDirUuid :: file_meta:uuid(),
+    storage:id(), helpers:file(), FileConent :: binary()) ->
     #fuse_response{}.
-verify_storage_test_file(SessId, #verify_storage_test_file{storage_id = StorageId,
-    space_uuid = SpaceUUID, file_id = FileId, file_content = FileContent}) ->
+verify_storage_test_file(Ctx, SpaceDirUuid, StorageId, FileId, FileContent) ->
+    SessId = fslogic_context:get_session_id(Ctx),
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, HelperInit} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helpers:name(HelperInit),
     HelperArgs = helpers:args(HelperInit),
-    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
+    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceDirUuid),
     Handle = helpers:new_handle(HelperName, HelperArgs, UserCtx),
     verify_storage_test_file_loop(Handle, FileId, FileContent, ?ENOENT, ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,10 +155,6 @@ verify_storage_test_file(SessId, #verify_storage_test_file{storage_id = StorageI
 remove_storage_test_file(Handle, FileId, Delay) ->
     timer:sleep(Delay),
     helpers_utils:remove_test_file(Handle, FileId).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private @doc

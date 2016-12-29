@@ -267,8 +267,8 @@ end_per_testcase(_Case, Config) ->
 
 clear_state(Worker) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
-    lists:foreach(fun(#document{key = Id, value = #monitoring_state{rrd_path = Path}}) ->
-        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, Path),
+    lists:foreach(fun(#document{key = Id, value = #monitoring_state{rrd_guid = Guid}}) ->
+        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, {guid, Guid}),
         ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [Id]))
     end, Docs).
 

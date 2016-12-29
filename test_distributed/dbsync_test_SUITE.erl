@@ -42,8 +42,6 @@ all() ->
     ]).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).
--define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
 %%% Test function

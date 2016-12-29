@@ -24,7 +24,7 @@
 
 %% API
 -export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate_permissions_cache/2,
-    remote_invalitation/4]).
+    remote_invalidation/4]).
 
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
@@ -107,13 +107,13 @@ exists(Key) ->
 -spec list() -> {ok, [datastore:ext_key()]} | datastore:generic_error() | no_return().
 list() ->
     Filter = fun
-                ('$end_of_table', Acc) ->
-                    {abort, Acc};
-                (#document{key = ?STATUS_UUID}, Acc) ->
-                     {next, Acc};
-                (#document{key = Uuid}, Acc) ->
-                    {next, [Uuid | Acc]}
-            end,
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (#document{key = ?STATUS_UUID}, Acc) ->
+            {next, Acc};
+        (#document{key = Uuid}, Acc) ->
+            {next, [Uuid | Acc]}
+    end,
     datastore:list(?STORE_LEVEL, ?MODULE, Filter, []).
 
 %%--------------------------------------------------------------------
@@ -175,11 +175,11 @@ check_permission(Rule) ->
     ok | {ok, datastore:ext_key()} | datastore:generic_error().
 cache_permission(Rule, Value) ->
     CurrentModel = case get(?STATUS_UUID) of
-                       {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
-                           Model;
-                       {error, {not_found, _}} ->
-                           ?MODULE
-                   end,
+        {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
+            Model;
+        {error, {not_found, _}} ->
+            ?MODULE
+    end,
 
     case CurrentModel of
         clearing ->
@@ -264,7 +264,7 @@ invalidate_permissions_cache(Model, Key) ->
     case dbsync_worker:has_sync_context(Document) of
         true ->
             {ok, SpaceId} = dbsync_worker:get_space_id(Document),
-            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalitation);
+            ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalidation);
         _ ->
             ok
     end.
@@ -274,11 +274,11 @@ invalidate_permissions_cache(Model, Key) ->
 %% Waits until cache invalidation by remote provider can be done and invalidates cache.
 %% @end
 %%--------------------------------------------------------------------
--spec remote_invalitation(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(),
+-spec remote_invalidation(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(),
     Rev :: non_neg_integer(), SpaceId :: binary()) -> ok.
-remote_invalitation(Model, Key, Rev, SpaceId) ->
+remote_invalidation(Model, Key, Rev, SpaceId) ->
     ok = file_consistency:wait(Key, SpaceId, [{rev, Model, Rev}],
-        {?MODULE, remote_invalitation, [Model, Key, Rev, SpaceId]}),
+        {?MODULE, remote_invalidation, [Model, Key, Rev, SpaceId]}),
     invalidate_permissions_cache().
 
 
@@ -323,21 +323,21 @@ get_rule(Model, Rule) ->
 start_clearing(CurrentModel) ->
     NewDoc = #document{key = ?STATUS_UUID, value = #permissions_cache{value = {permissions_cache_helper, clearing}}},
     UpdateFun = fun
-                    (#permissions_cache{value = {S1, clearing}}) ->
-                        case S1 of
-                            CurrentModel ->
-                                {ok, #permissions_cache{value = {clearing, clearing}}};
-                            _ ->
-                                {error, parallel_cleaning}
-                        end;
-                    (#permissions_cache{value = {S1, Helper}}) ->
-                        case S1 of
-                            CurrentModel ->
-                                {ok, #permissions_cache{value = {Helper, clearing}}};
-                            _ ->
-                                {error, parallel_cleaning}
-                        end
-                end,
+        (#permissions_cache{value = {S1, clearing}}) ->
+            case S1 of
+                CurrentModel ->
+                    {ok, #permissions_cache{value = {clearing, clearing}}};
+                _ ->
+                    {error, parallel_cleaning}
+            end;
+        (#permissions_cache{value = {S1, Helper}}) ->
+            case S1 of
+                CurrentModel ->
+                    {ok, #permissions_cache{value = {Helper, clearing}}};
+                _ ->
+                    {error, parallel_cleaning}
+            end
+    end,
 
     create_or_update(NewDoc, UpdateFun).
 
@@ -350,25 +350,25 @@ start_clearing(CurrentModel) ->
 -spec stop_clearing(CurrentModel :: atom()) -> ok | no_return().
 stop_clearing(CurrentModel) ->
     UpdateFun = fun
-                    (#permissions_cache{value = {clearing, clearing}}) ->
-                        {ok, #permissions_cache{value = {CurrentModel, clearing}}};
-                    (#permissions_cache{value = {S1, clearing}}) ->
-                        case S1 of
-                            CurrentModel ->
-                                {error, already_cleared};
-                            _ ->
-                                {ok, #permissions_cache{value = {S1, CurrentModel}}}
-                        end;
-                    (#permissions_cache{value = {clearing, S2}}) ->
-                        case S2 of
-                            CurrentModel ->
-                                {ok, #permissions_cache{value = {CurrentModel, clearing}}};
-                            _ ->
-                                {ok, #permissions_cache{value = {CurrentModel, S2}}}
-                        end;
-                    (_) ->
-                        {error, already_cleared}
-                end,
+        (#permissions_cache{value = {clearing, clearing}}) ->
+            {ok, #permissions_cache{value = {CurrentModel, clearing}}};
+        (#permissions_cache{value = {S1, clearing}}) ->
+            case S1 of
+                CurrentModel ->
+                    {error, already_cleared};
+                _ ->
+                    {ok, #permissions_cache{value = {S1, CurrentModel}}}
+            end;
+        (#permissions_cache{value = {clearing, S2}}) ->
+            case S2 of
+                CurrentModel ->
+                    {ok, #permissions_cache{value = {CurrentModel, clearing}}};
+                _ ->
+                    {ok, #permissions_cache{value = {CurrentModel, S2}}}
+            end;
+        (_) ->
+            {error, already_cleared}
+    end,
     case update(?STATUS_UUID, UpdateFun) of
         {ok, _} -> ok;
         {error, already_cleared} -> ok

@@ -94,7 +94,7 @@
     block :: #file_block{}
 }).
 
--type file_request() ::
+-type file_request_value() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
@@ -103,7 +103,7 @@
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
-    file_request :: file_request()
+    file_request :: file_request_value()
 }).
 
 -record(resolve_guid, {
@@ -127,12 +127,12 @@
     file_content :: binary()
 }).
 
--type fuse_request() ::
+-type fuse_request_value() ::
     #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{}.
 
 -record(fuse_request, {
-    fuse_request :: fuse_request()
+    fuse_request :: fuse_request_value()
 }).
 
 -record(file_children, {
@@ -176,14 +176,18 @@
     child_entries :: undefined | [#file_renamed_entry{}]
 }).
 
--type fuse_response() ::
+-record(uuid, {
+    uuid :: fslogic_worker:file_guid()
+}).
+
+-type fuse_response_value() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
-    #file_opened{} | #file_renamed{} | undefined.
+    #file_opened{} | #file_renamed{} | #uuid{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},
-    fuse_response :: fuse_response()
+    fuse_response :: fuse_response_value()
 }).
 
 -endif.

@@ -34,7 +34,6 @@
 -export([get_guid/1, get_session_id/1, get_share_id/1, get_provider_id/1,
     get_handle_id/1, get_sfm_handles/1, get_file_location/1, get_open_flag/1]).
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================

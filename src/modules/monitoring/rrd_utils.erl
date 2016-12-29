@@ -52,26 +52,26 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
             {ok, RRDFile} = read_rrd_from_file(TmpPath),
             RRDSize = byte_size(RRDFile),
 
-            {ok, #document{value = #file_meta{name = SpaceName}}} =
-                fslogic_spaces:get_space({id, SpaceId}),
+            SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+            RRDDirName = file_meta:hidden_file_name(?RRD_DIR),
+            RRDFileName = monitoring_state:encode_id(MonitoringId),
+            RRDDirGuid =
+                case logical_file_manager:mkdir(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName, undefined) of
+                    {ok, Guid_} -> Guid_;
+                    {error, ?EEXIST} ->
+                        {ok, #file_attr{uuid = Guid_}} = logical_file_manager:get_child_attr(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName),
+                        Guid_
+                end,
+            {ok, Guid} = logical_file_manager:create(?ROOT_SESS_ID, RRDDirGuid, RRDFileName, undefined),
 
-            RRDPathDir = filename:join([<<"/">>, SpaceName, file_meta:hidden_file_name(?RRD_DIR)]),
-            RRDPath = filename:join([RRDPathDir, monitoring_state:encode_id(MonitoringId)]),
-
-            case logical_file_manager:mkdir(?ROOT_SESS_ID, RRDPathDir) of
-                {ok, _} -> ok;
-                {error, ?EEXIST} -> ok
-            end,
-            {ok, _} = logical_file_manager:create(?ROOT_SESS_ID, RRDPath),
-
-            {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {path, RRDPath}, write),
+            {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, Guid}, write),
             {ok, Handle2, RRDSize} = logical_file_manager:write(Handle, 0, RRDFile),
             ok = logical_file_manager:release(Handle2),
 
             {ok, _} = monitoring_state:save(#document{key = MonitoringId,
                 value = #monitoring_state{
                     monitoring_id = MonitoringId,
-                    rrd_path = RRDPath,
+                    rrd_guid = Guid,
                     state_buffer = StateBuffer,
                     last_update_time = CreationTime
                 }}),
@@ -87,14 +87,14 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
 -spec update_rrd(#monitoring_id{}, #monitoring_state{}, non_neg_integer(), [term()]) -> ok.
 update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
     #rrd_definition{datastores = Datastores} = get_rrd_definition(MonitoringId),
-    #monitoring_state{rrd_path = RRDPath} = MonitoringState,
+    #monitoring_state{rrd_guid = RRDGuid} = MonitoringState,
 
     UpdatesList = lists:zip(
         lists:map(fun({DSName, _, _}) -> DSName end, Datastores),
         UpdateValues
     ),
 
-    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {path, RRDPath}, rdwr),
+    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, RRDGuid}, rdwr),
     {ok, Handle2, RRDFile} = lfm_files:read_without_events(Handle, 0, ?RRD_READ_SIZE),
 
     {ok, TmpPath} = write_rrd_to_file(RRDFile),
@@ -122,10 +122,10 @@ export_rrd(MonitoringId, Step, Format) ->
         get_rrd_definition(MonitoringId),
     StepInSeconds = proplists:get_value(step, Options),
 
-    {ok, #document{value = #monitoring_state{rrd_path = RRDPath, monitoring_id = #monitoring_id{provider_id = ProviderId}}}} =
+    {ok, #document{value = #monitoring_state{rrd_guid = RRDGuid, monitoring_id = #monitoring_id{provider_id = ProviderId}}}} =
         monitoring_state:get(MonitoringId),
 
-    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {path, RRDPath}, read),
+    {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, RRDGuid}, read),
     {ok, Handle2, RRDFile} = lfm_files:read_without_events(Handle, 0, ?RRD_READ_SIZE),
     ok = logical_file_manager:release(Handle2),
     {ok, TmpPath} = write_rrd_to_file(RRDFile),

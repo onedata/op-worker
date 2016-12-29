@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc FSLogic request handlers for ProxyIO helper.
+%%% @doc
+%%% FSLogic request handlers for ProxyIO helper.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_proxyio).
@@ -63,7 +64,7 @@ write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
     #proxyio_response{}.
 read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 
-    UUID = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
+    UUID = maps:get(?PROXYIO_PARAMETER_FILE_GUID, Parameters),
     lfm_utils:call_fslogic(SessionId, file_request, fslogic_uuid:uuid_to_guid(UUID),
         #synchronize_block{block = #file_block{offset = Offset, size = Size}},
         fun(_) -> ok end),
@@ -105,7 +106,7 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenFlag)->
         session:get(SessionId),
     case maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined) of
         undefined ->
-            FileUuid = maps:get(?PROXYIO_PARAMETER_FILE_UUID, Parameters),
+            FileUuid = maps:get(?PROXYIO_PARAMETER_FILE_GUID, Parameters),
             ShareId = maps:get(?PROXYIO_PARAMETER_SHARE_ID, Parameters),
             {ok, #document{key = SpaceUUID}} =
                 fslogic_spaces:get_space({uuid, FileUuid}, UserId),

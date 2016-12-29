@@ -38,20 +38,20 @@
     wrote :: non_neg_integer()
 }).
 
--type proxyio_request() :: #remote_read{} | #remote_write{}.
--type proxyio_response() :: #remote_data{} | #remote_write_result{} | undefined.
+-type proxyio_request_value() :: #remote_read{} | #remote_write{}.
+-type proxyio_response_value() :: #remote_data{} | #remote_write_result{} | undefined.
 -type proxyio_request_parameters() :: #{binary() => binary()}.
 
 -record(proxyio_request, {
     parameters = #{} :: proxyio_request_parameters(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
-    proxyio_request :: proxyio_request()
+    proxyio_request :: proxyio_request_value()
 }).
 
 -record(proxyio_response, {
     status :: undefined | #status{},
-    proxyio_response :: proxyio_response()
+    proxyio_response :: proxyio_response_value()
 }).
 
 -endif.

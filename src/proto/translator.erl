@@ -339,6 +339,10 @@ translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = Child
         new_uuid = NewUuid,
         child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
     };
+translate_from_protobuf(#'Uuid'{uuid = Uuid}) ->
+    #uuid{
+        uuid = Uuid
+    };
 
 
 %% PROXYIO
@@ -759,7 +763,10 @@ translate_to_protobuf(#file_renamed{new_uuid = NewUuid, child_entries = ChildEnt
         new_uuid = NewUuid,
         child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
     }};
-
+translate_to_protobuf(#uuid{uuid = Uuid}) ->
+    {uuid, #'Uuid'{
+        uuid = Uuid
+    }};
 
 %% PROXYIO
 translate_to_protobuf(#proxyio_request{parameters = Parameters,
