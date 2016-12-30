@@ -23,7 +23,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([chmod/3, delete/3, update_times/5,
+-export([chmod/3, update_times/5,
     get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -102,23 +102,6 @@ chmod(Ctx, File, Mode) ->
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
 
-
-%%--------------------------------------------------------------------
-%% @doc Deletes file.
-%% For best performance use following arg types: document -> uuid -> path
-%% If parameter Silent is true, file_removed_event will not be emitted.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(fslogic_context:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
-    FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}]).
-delete(Ctx, File, Silent) ->
-    case file_meta:get(File) of
-        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
-            delete_dir(Ctx, FileDoc, Silent);
-        {ok, FileDoc} ->
-            delete_file(Ctx, FileDoc, Silent)
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -607,51 +590,6 @@ check_perms_write(_Ctx, _Uuid) ->
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
 check_perms_rdwr(_Ctx, _Uuid) ->
     #provider_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% @equiv delete_impl(Ctx, File, Silent) with permission check
-%%--------------------------------------------------------------------
--spec delete_dir(fslogic_context:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
-    FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {?list_container, 2}]).
-delete_dir(Ctx, File, Silent) ->
-    delete_impl(Ctx, File, Silent).
-
-%%--------------------------------------------------------------------
-%% @equiv delete_impl(Ctx, File, Silent) with permission check
-%%--------------------------------------------------------------------
--spec delete_file(fslogic_context:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
-    FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}]).
-delete_file(Ctx, File, Silent) ->
-    delete_impl(Ctx, File, Silent).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes file or directory
-%% If parameter Silent is true, file_removed_event will not be emitted.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_impl(fslogic_context:ctx(), File :: fslogic_worker:file(), Silent :: boolean()) ->
-    FuseResponse :: #fuse_response{} | no_return().
-delete_impl(Ctx, File, Silent) ->
-    {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
-
-    {ok, FileChildren} =
-        case Type of
-            ?DIRECTORY_TYPE ->
-                file_meta:list_children(FileDoc, 0, 1);
-            _ ->
-                {ok, []}
-        end,
-    case length(FileChildren) of
-        0 ->
-            ok = worker_proxy:call(fslogic_deletion_worker,
-                {fslogic_deletion_request, Ctx, FileUUID, Silent}),
-            #fuse_response{status = #status{code = ?OK}};
-        _ ->
-            #fuse_response{status = #status{code = ?ENOTEMPTY}}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

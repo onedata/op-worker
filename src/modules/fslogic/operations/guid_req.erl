@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([resolve_guid/2]).

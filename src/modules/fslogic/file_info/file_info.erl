@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -38,8 +39,9 @@
 -export([new_by_path/2, new_by_guid/1]).
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
-    get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2, get_child/3]).
--export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1]).
+    get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2,
+    get_child/3, get_file_children/3]).
+-export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
 %%% API
@@ -190,7 +192,6 @@ get_file_doc(FileInfo = #file_info{file_doc = FileDoc}) ->
 -spec get_parent(file_info(), undefined | od_user:id()) -> {ParentFileInfo :: file_info(), NewFileInfo :: file_info()}.
 get_parent(FileInfo = #file_info{parent = undefined}, UserId) ->
     {Doc, NewFileInfo} = file_info:get_file_doc(FileInfo),
-    SpaceId = file_info:get_space_id(NewFileInfo),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
         case fslogic_uuid:is_root_dir(ParentUuid) of
@@ -202,6 +203,7 @@ get_parent(FileInfo = #file_info{parent = undefined}, UserId) ->
                         fslogic_uuid:uuid_to_guid(ParentUuid, undefined)
                 end;
             false ->
+                SpaceId = file_info:get_space_id(NewFileInfo),
                 fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId)
         end,
     Parent = file_info:new_by_guid(ParentGuid),
@@ -346,6 +348,27 @@ get_child(FileInfo, Name, UserId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Get list of file children.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_children(file_info(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+    {Children :: [file_info()], NewFileInfo :: file_info()}.
+get_file_children(FileInfo, Offset, Limit) ->
+    {FileDoc = #document{}, FileInfo2} = get_file_doc(FileInfo),
+    case file_meta:list_children(FileDoc, Offset, Limit) of
+        {ok, ChildrenLinks} ->
+            SpaceId = get_space_id(FileInfo),
+            Children =
+                lists:map(fun(#child_link{name = _Name, uuid = Uuid}) ->
+                    file_info:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId))
+                end, ChildrenLinks),
+            {Children, FileInfo2};
+        Error ->
+            {Error, FileInfo2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Check if given argument contains file_info record
 %% @end
 %%--------------------------------------------------------------------
@@ -385,6 +408,7 @@ is_user_root_dir(#file_info{guid = Guid, path = undefined}, Ctx) ->
     {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx};
 is_user_root_dir(#file_info{}, Ctx) ->
     {false, Ctx}.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Check if file is a root dir (any user root).
@@ -398,6 +422,16 @@ is_root_dir(#file_info{guid = Guid, path = undefined}) ->
     fslogic_uuid:is_root_dir(Uuid);
 is_root_dir(#file_info{}) ->
     false.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if file is a root dir (any user root).
+%% @end
+%%--------------------------------------------------------------------
+-spec is_dir(file_info()) -> boolean().
+is_dir(FileInfo) ->
+    {#document{value = #file_meta{type = Type}}, FileInfo2} = get_file_doc(FileInfo),
+    {Type =:= ?DIRECTORY_TYPE, FileInfo2}.
 
 %%%===================================================================
 %%% Internal functions
