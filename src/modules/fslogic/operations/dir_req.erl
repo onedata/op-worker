@@ -17,7 +17,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([mkdir/4]).
+-export([mkdir/4, read_dir/4]).
 
 %%%===================================================================
 %%% API
@@ -52,6 +52,32 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists directory. Start with ROffset entity and limit returned list to RCount size.
+%% For best performance use following arg types: document -> uuid -> path
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir(fslogic_context:ctx(), fslogic_worker:file(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+    fslogic_worker:fuse_response().
+-check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
+read_dir(Ctx, File, Offset, Limit) ->
+    {FileDoc, File2} = file_info:get_file_doc(File),
+    {Children, Ctx2, _File3} = file_info:get_file_children(File2, Ctx, Offset, Limit),
+    ChildrenLinks =
+        lists:map(fun(ChildFile) ->
+            {ChildGuid, ChildFile2} = file_info:get_guid(ChildFile),
+            {ChildName, _Ctx3, _ChildFile3} = file_info:get_aliased_name(ChildFile2, Ctx2),
+            #child_link{name = ChildName, uuid = ChildGuid}
+        end, Children),
+    fslogic_times:update_atime(FileDoc, fslogic_context:get_user_id(Ctx)), %todo pass file_info
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #file_children{
+            child_links = ChildrenLinks
+        }
+    }.
 
 %%%===================================================================
 %%% Internal functions

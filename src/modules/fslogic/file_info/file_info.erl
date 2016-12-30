@@ -28,7 +28,8 @@
     storage_file_id :: undefined | helpers:file(),
     space_name :: od_space:name() | od_space:alias(),
     storage_posix_user_context :: undefined | #posix_user_ctx{},
-    times :: undefined | times:time()
+    times :: undefined | times:time(),
+    file_name :: file_meta:name()
 }).
 
 -type path() :: file_meta:path().
@@ -40,7 +41,7 @@
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2,
-    get_child/3, get_file_children/3]).
+    get_child/3, get_file_children/4]).
 -export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
@@ -86,16 +87,6 @@ of special session. You may only operate on guids in this context.">>});
 -spec new_by_guid(guid()) -> file_info().
 new_by_guid(Guid) when Guid =/= undefined ->
     #file_info{guid = Guid}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Create new file_info using file's guid
-%% @end
-%%--------------------------------------------------------------------
--spec new_by_doc(file_meta:doc(), od_space:id()) -> file_info().
-new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId) ->
-    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
-    #file_info{file_doc = Doc, guid = Guid}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -266,19 +257,22 @@ get_space_name(FileInfo = #file_info{space_name = SpaceName}, Ctx) ->
 %%--------------------------------------------------------------------
 -spec get_aliased_name(file_info(), fslogic_context:ctx()) ->
     {file_meta:name(), fslogic_context:ctx(), file_info()}.
-get_aliased_name(FileInfo, Ctx) ->
+get_aliased_name(FileInfo = #file_info{file_name = undefined}, Ctx) ->
     SessionIsNotSpecial = (not session:is_special(fslogic_context:get_session_id(Ctx))),
     case is_space_dir(FileInfo) andalso SessionIsNotSpecial of
         false ->
             case get_file_doc(FileInfo) of
-                {#document{value = #file_meta{name = Name}}, NewFileInfo} ->
-                    {Name, Ctx, NewFileInfo};
+                {#document{value = #file_meta{name = Name}}, FileInfo2} ->
+                    {Name, Ctx, FileInfo2#file_info{file_name = Name}};
                 ErrorResponse ->
                     ErrorResponse
             end;
         true ->
-            get_space_name(FileInfo, Ctx)
-    end.
+            {Name, Ctx2, FileInfo2} = get_space_name(FileInfo, Ctx),
+            {Name, Ctx2, FileInfo2#file_info{file_name = Name}}
+    end;
+get_aliased_name(FileInfo = #file_info{file_name = FileName}, Ctx) ->
+    {FileName, Ctx, FileInfo}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -339,7 +333,8 @@ get_child(FileInfo, Name, UserId) ->
             {FileDoc, FileInfo2} = file_info:get_file_doc(FileInfo),
             case file_meta:resolve_path(FileDoc, <<"/", Name/binary>>) of
                 {ok, {ChildDoc, _}} ->
-                    Child = new_by_doc(ChildDoc, SpaceId),
+                    ShareId = get_share_id(FileInfo2),
+                    Child = new_child_by_doc(ChildDoc, SpaceId, ShareId),
                     {Child, FileInfo2};
                 {error, {not_found, _}} ->
                     throw(?ENOENT)
@@ -351,20 +346,40 @@ get_child(FileInfo, Name, UserId) ->
 %% Get list of file children.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_children(file_info(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+-spec get_file_children(file_info(), fslogic_context:ctx(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
     {Children :: [file_info()], NewFileInfo :: file_info()}.
-get_file_children(FileInfo, Offset, Limit) ->
-    {FileDoc = #document{}, FileInfo2} = get_file_doc(FileInfo),
-    case file_meta:list_children(FileDoc, Offset, Limit) of
-        {ok, ChildrenLinks} ->
-            SpaceId = get_space_id(FileInfo),
+get_file_children(FileInfo, Ctx, Offset, Limit) ->
+    case is_user_root_dir(FileInfo, Ctx) of
+        {true, Ctx2} ->
+            {#document{value = #od_user{space_aliases = Spaces}}, Ctx3} =
+                fslogic_context:get_user(Ctx2),
+
             Children =
-                lists:map(fun(#child_link{name = _Name, uuid = Uuid}) ->
-                    file_info:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId))
-                end, ChildrenLinks),
-            {Children, FileInfo2};
-        Error ->
-            {Error, FileInfo2}
+                case Offset < length(Spaces) of
+                    true ->
+                        SpacesChunk = lists:sublist(Spaces, Offset + 1, Limit),
+                        lists:map(fun({SpaceId, SpaceName}) ->
+                            SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                            new_child_by_uuid(SpaceDirUuid, SpaceName, SpaceId, undefined)
+                        end, SpacesChunk);
+                    false ->
+                        []
+                end,
+            {Children, Ctx3, FileInfo};
+        {false, Ctx2} ->
+            {FileDoc = #document{}, FileInfo2} = get_file_doc(FileInfo),
+            case file_meta:list_children(FileDoc, Offset, Limit) of
+                {ok, ChildrenLinks} ->
+                    SpaceId = get_space_id(FileInfo2),
+                    ShareId = get_share_id(FileInfo2),
+                    Children =
+                        lists:map(fun(#child_link{name = Name, uuid = Uuid}) ->
+                            new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+                        end, ChildrenLinks),
+                    {Children, Ctx2, FileInfo2};
+                Error ->
+                    {Error, Ctx2, FileInfo2}
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -436,3 +451,24 @@ is_dir(FileInfo) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Create new file_info using file's guid, and file name
+%% @end
+%%--------------------------------------------------------------------
+-spec new_child_by_uuid(file_meta:uuid(), file_meta:name(), od_space:id(), undefined | od_share:id()) -> file_info().
+new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
+    #file_info{guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Create new file_info using file's guid
+%% @end
+%%--------------------------------------------------------------------
+-spec new_child_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> file_info().
+new_child_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) ->
+    Guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+    #file_info{file_doc = Doc, guid = Guid}.
