@@ -14,9 +14,11 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2]).
+-export([get_file_attr/2, get_child_attr/3]).
 
 %%%===================================================================
 %%% API
@@ -53,6 +55,19 @@ get_file_attr(Ctx, File) ->
         ctime = CTime, uid = FinalUID, size = Size, name = FileName, provider_id = ProviderId,
         shares = Shares, owner_id = OwnerId
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetches attributes of directory's child (if exists).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_attr(fslogic_context:ctx(), ParentFile :: file_info:file_info(),
+    Name :: file_meta:name()) -> fslogic_worker:fuse_response().
+-check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
+get_child_attr(Ctx, ParentFile, Name) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    {ChildFile, _NewParentFile} = file_info:get_child(ParentFile, Name, UserId),
+    attr_req:get_file_attr(Ctx, ChildFile).
 
 %%%===================================================================
 %%% Internal functions
