@@ -90,8 +90,5 @@ check_if_empty_and_delete(Ctx, File, Silent)  ->
 -spec delete_impl(fslogic_context:ctx(), file_info:file_info(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 delete_impl(Ctx, File, Silent) ->
-    {Guid, _File2} = file_info:get_guid(File),
-    FileUuid = fslogic_uuid:guid_to_uuid(Guid),
-    ok = worker_proxy:call(fslogic_deletion_worker,
-        {fslogic_deletion_request, Ctx, FileUuid, Silent}), %todo pass file_info here
+    fslogic_deletion_worker:request_deletion(Ctx, File, Silent),
     #fuse_response{status = #status{code = ?OK}}.
