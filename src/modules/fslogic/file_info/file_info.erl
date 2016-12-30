@@ -55,7 +55,8 @@ new_by_path(Ctx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     case session:is_special(fslogic_context:get_session_id(Ctx)) of
         true ->
-            throw({invalid_request, <<"Path resolution requested in the context of root or guest session. You may only operate on guids in this context.">>});
+            throw({invalid_request, <<"Path resolution requested in the context
+of special session. You may only operate on guids in this context.">>});
         false ->
             case Tokens of
                 [<<"/">>] ->
@@ -360,16 +361,16 @@ is_file_info(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_space_dir(file_info()) -> boolean().
-is_space_dir(#file_info{guid = Guid}) when is_binary(Guid) ->
-    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(fslogic_uuid:guid_to_uuid(Guid))),
-    is_binary(SpaceId);
-is_space_dir(#file_info{path = Path}) ->
+is_space_dir(#file_info{guid = undefined, path = Path}) ->
     case fslogic_path:split(Path) of
         [<<"/">>, _SpaceId] ->
             true;
         _ ->
             false
-    end.
+    end;
+is_space_dir(#file_info{guid = Guid})->
+    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(fslogic_uuid:guid_to_uuid(Guid))),
+    is_binary(SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -384,7 +385,6 @@ is_user_root_dir(#file_info{guid = Guid, path = undefined}, Ctx) ->
     {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx};
 is_user_root_dir(#file_info{}, Ctx) ->
     {false, Ctx}.
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Check if file is a root dir (any user root).

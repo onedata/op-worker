@@ -122,6 +122,7 @@ update_share_info_in_context(Ctx, File) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Get providers capable of handling resolve_guid/get_attr request.
 %% @end
@@ -138,6 +139,7 @@ get_target_providers_for_attr_req(Ctx, File) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Get providers cappable of handling generic request.
 %% @end
@@ -165,6 +167,7 @@ get_target_providers_for_file(Ctx, File) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Changes target Guid of given request.
 %% @end
