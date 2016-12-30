@@ -7,6 +7,9 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Opaque type storing informations about file.
+%%% Once the record is created via new_* function and fslogic_worker has
+%%% determined that the request can be handled locally - all of the functions
+%%% in this module should work. If not - please report it.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_info).
@@ -26,10 +29,10 @@
     file_doc :: undefined | file_meta:doc() | {error, term()},
     parent :: undefined | file_info(),
     storage_file_id :: undefined | helpers:file(),
-    space_name :: od_space:name() | od_space:alias(),
+    space_name :: undefined | od_space:name() | od_space:alias(),
     storage_posix_user_context :: undefined | #posix_user_ctx{},
-    times :: undefined | times:time(),
-    file_name :: file_meta:name()
+    times :: undefined | times:times(),
+    file_name :: undefined | file_meta:name()
 }).
 
 -type path() :: file_meta:path().
@@ -97,12 +100,8 @@ new_by_guid(Guid) when Guid =/= undefined ->
 get_share_id(#file_info{guid = undefined}) ->
     undefined;
 get_share_id(#file_info{guid = Guid}) ->
-    case fslogic_uuid:unpack_share_guid(Guid) of
-        {_FileUuid, undefined, ShareId} ->
-            ShareId;
-        {_, _SpaceId, ShareId} ->
-            ShareId
-    end;
+    {_FileUuid, _SpaceId, ShareId} = fslogic_uuid:unpack_share_guid(Guid),
+    ShareId;
 get_share_id(Ctx) -> %todo TL return share_id cached in file_info
     fslogic_context:get_share_id(Ctx).
 
@@ -280,7 +279,7 @@ get_aliased_name(FileInfo = #file_info{file_name = FileName}, Ctx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_user_context(file_info(), fslogic_context:ctx()) ->
-    {#posix_user_ctx{}, fslogic_context:ctx(), file_info()}.
+    {#posix_user_ctx{}, file_info()}.
 get_storage_user_context(FileInfo, Ctx) ->
     IsSpaceDir = is_space_dir(FileInfo),
     IsUserRootDir = is_root_dir(FileInfo),
@@ -301,7 +300,7 @@ get_storage_user_context(FileInfo, Ctx) ->
 %% Get file atime, ctime and mtime
 %% @end
 %%--------------------------------------------------------------------
--spec get_times(file_info()) -> {times:time(), file_info()}.
+-spec get_times(file_info()) -> {times:times() | {error, term()}, file_info()}.
 get_times(FileInfo) ->
     {Guid, FileInfo2} = file_info:get_guid(FileInfo),
     case times:get_or_default(fslogic_uuid:guid_to_uuid(Guid)) of
@@ -347,7 +346,7 @@ get_child(FileInfo, Name, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(file_info(), fslogic_context:ctx(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
-    {Children :: [file_info()], NewFileInfo :: file_info()}.
+    {Children :: [file_info()] | {error, term()}, NewCtx :: fslogic_context:ctx(), NewFileInfo :: file_info()}.
 get_file_children(FileInfo, Ctx, Offset, Limit) ->
     case is_user_root_dir(FileInfo, Ctx) of
         {true, Ctx2} ->
@@ -387,7 +386,7 @@ get_file_children(FileInfo, Ctx, Offset, Limit) ->
 %% Check if given argument contains file_info record
 %% @end
 %%--------------------------------------------------------------------
--spec is_file_info(file_info()) -> boolean().
+-spec is_file_info(file_info() | term()) -> boolean().
 is_file_info(#file_info{}) ->
     true;
 is_file_info(_) ->
@@ -443,7 +442,7 @@ is_root_dir(#file_info{}) ->
 %% Check if file is a root dir (any user root).
 %% @end
 %%--------------------------------------------------------------------
--spec is_dir(file_info()) -> boolean().
+-spec is_dir(file_info()) -> {boolean(), file_info()}.
 is_dir(FileInfo) ->
     {#document{value = #file_meta{type = Type}}, FileInfo2} = get_file_doc(FileInfo),
     {Type =:= ?DIRECTORY_TYPE, FileInfo2}.

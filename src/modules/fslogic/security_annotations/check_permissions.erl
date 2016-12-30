@@ -24,7 +24,7 @@
 -export([before_advice/4, after_advice/5, get_validation_subject/2]).
 
 %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
--type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {uuid, file_meta:uuid()} | {parent, item_definition()}.
+-type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {uuid, file_meta:uuid()} | {parent, item_definition()} | file_info:file_info().
 -type check_type() :: owner % Check whether user owns the item
 | traverse_ancestors % validates ancestors' exec permission.
 | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
@@ -127,9 +127,10 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, ShareId,
 %% @doc Returns file that shall be the subject of permission validation instead given file.
 %%      E.g. for virtual "/" directory returns deafult space file.
 %%--------------------------------------------------------------------
--spec get_validation_subject(od_user:id(), fslogic_worker:ext_file()) -> fslogic_worker:file() | no_return().
-get_validation_subject(UserId, #sfm_handle{file_uuid = FileGUID}) ->
-    get_validation_subject(UserId, {guid, FileGUID});
+-spec get_validation_subject(od_user:id(), fslogic_worker:ext_file() | file_info:file_info()) ->
+    fslogic_worker:file() | no_return().
+get_validation_subject(UserId, #sfm_handle{file_uuid = FileUuid}) ->
+    get_validation_subject(UserId, {uuid, FileUuid});
 get_validation_subject(UserId, {guid, FileGUID}) ->
     get_validation_subject(UserId, {uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
 get_validation_subject(_UserId, FileEntry) ->
@@ -145,7 +146,7 @@ get_validation_subject(_UserId, FileEntry) ->
 %%--------------------------------------------------------------------
 %% @doc Extracts file() from argument list (Inputs) based on Item description.
 %%--------------------------------------------------------------------
--spec resolve_file_entry(item_definition(), [term()]) -> fslogic_worker:file().
+-spec resolve_file_entry(item_definition(), [term()]) -> fslogic_worker:file() | file_info:file_info().
 resolve_file_entry(Item, Inputs) when is_integer(Item) ->
     lists:nth(Item, Inputs);
 resolve_file_entry({path, Item}, Inputs) when is_integer(Item) ->

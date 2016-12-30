@@ -289,7 +289,7 @@ share_guid_to_guid(ShareGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec unpack_share_guid(od_share:share_guid()) ->
-    {file_meta:uuid(), od_space:id(), od_share:id() | undefined}.
+    {file_meta:uuid(), undefined | od_space:id(), od_share:id() | undefined}.
 unpack_share_guid(ShareGuid) ->
     try binary_to_term(http_utils:base64url_decode(ShareGuid)) of
         {share_guid, FileUuid, SpaceId, ShareId} ->

@@ -59,7 +59,7 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(fslogic_context:ctx(), fslogic_worker:file(),
+-spec read_dir(fslogic_context:ctx(), file_info:file_info(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).

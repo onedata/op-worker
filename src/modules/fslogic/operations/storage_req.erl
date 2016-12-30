@@ -35,7 +35,7 @@
 
 %% API
 -export([get_configuration/1, get_helper_params/3, create_storage_test_file/3,
-    verify_storage_test_file/5]).
+    verify_storage_test_file/5, remove_storage_test_file/3]).
 
 %%%===================================================================
 %%% API
