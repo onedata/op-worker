@@ -233,13 +233,13 @@ handle_file_request(Ctx, #file_request{file_request = #get_child_attr{name = Nam
     attr_req:get_child_attr(Ctx, ParentFile, Name);
 handle_file_request(Ctx, #file_request{file_request = #delete_file{silent = Silent}}, File) ->
     delete_req:delete(Ctx, File, Silent);
+handle_file_request(Ctx, #file_request{file_request = #create_dir{name = Name, mode = Mode}}, ParentFile) ->
+    dir_req:mkdir(Ctx, ParentFile, Name, Mode);
 handle_file_request(Ctx, Req, _File) ->
     handle_file_request(Ctx, Req).
 
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
     fuse_response().
-handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #create_dir{name = Name, mode = Mode}}) ->
-    fslogic_req_special:mkdir(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_file_children{offset = Offset, size = Size}}) ->
     fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Offset, Size);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #change_mode{mode = Mode}}) ->

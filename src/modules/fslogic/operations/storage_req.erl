@@ -147,6 +147,7 @@ verify_storage_test_file(Ctx, SpaceDirUuid, StorageId, FileId, FileContent) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Removes test file referenced by handle after specified delay.
 %% @end
@@ -158,7 +159,8 @@ remove_storage_test_file(Handle, FileId, Delay) ->
     helpers_utils:remove_test_file(Handle, FileId).
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Verifies storage test file by reading its content and checking it with the
 %% one sent by the client. Retires 'Attempts' times if file is not found or
 %% its content doesn't match expected one.

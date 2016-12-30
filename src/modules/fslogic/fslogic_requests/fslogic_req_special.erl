@@ -19,38 +19,11 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([mkdir/4, read_dir/4]).
+-export([read_dir/4]).
 
 %%--------------------------------------------------------------------
 %% API functions
 %%--------------------------------------------------------------------
-
-%%--------------------------------------------------------------------
-%% @doc Creates new directory.
-%% @end
-%%--------------------------------------------------------------------
--spec mkdir(Ctx :: fslogic_context:ctx(), ParentFile :: fslogic_worker:file(),
-    Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
-    FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
-mkdir(Ctx, ParentFile, Name, Mode) ->
-    CTime = erlang:system_time(seconds),
-    File = #document{value = #file_meta{
-        name = Name,
-        type = ?DIRECTORY_TYPE,
-        mode = Mode,
-        uid = fslogic_context:get_user_id(Ctx)
-    }},
-    case file_meta:create(ParentFile, File) of
-        {ok, DirUUID} ->
-            {ok, _} = times:create(#document{key = DirUUID, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
-            fslogic_times:update_mtime_ctime(ParentFile, fslogic_context:get_user_id(Ctx)),
-            #fuse_response{status = #status{code = ?OK}, fuse_response =
-                #dir{uuid = fslogic_uuid:uuid_to_guid(DirUUID)}
-            };
-        {error, already_exists} ->
-            #fuse_response{status = #status{code = ?EEXIST}}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc Lists directory. Start with ROffset entity and limit returned list to RCount size.
