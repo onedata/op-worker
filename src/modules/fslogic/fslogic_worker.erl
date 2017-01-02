@@ -231,6 +231,8 @@ handle_file_request(Ctx, #file_request{file_request = #get_file_attr{}}, File) -
     attr_req:get_file_attr(Ctx, File);
 handle_file_request(Ctx, #file_request{file_request = #get_child_attr{name = Name}}, ParentFile) ->
     attr_req:get_child_attr(Ctx, ParentFile, Name);
+handle_file_request(Ctx, #file_request{file_request = #change_mode{mode = Mode}}, File) ->
+    attr_req:chmod(Ctx, File, Mode);
 handle_file_request(Ctx, #file_request{file_request = #delete_file{silent = Silent}}, File) ->
     delete_req:delete(Ctx, File, Silent);
 handle_file_request(Ctx, #file_request{file_request = #create_dir{name = Name, mode = Mode}}, ParentFile) ->
@@ -242,8 +244,6 @@ handle_file_request(Ctx, Req, _File) ->
 
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
     fuse_response().
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #change_mode{mode = Mode}}) ->
-    fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Mode);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
     SessId = fslogic_context:get_session_id(Ctx),
     %% Use lfm_files wrapper for fslogic as the target uuid may not be local

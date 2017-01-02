@@ -512,7 +512,7 @@ rename_on_storage(Ctx, TargetSpaceId, SourceEntry) ->
         ok = replica_updater:rename(SourceUUID, TargetFileId, TargetSpaceId)
     end, fslogic_utils:get_local_file_locations(SourceEntry)),
 
-    ok = fslogic_req_generic:chmod_storage_files(
+    ok = sfm_utils:chmod_storage_files(
         fslogic_context:set_session_id(Ctx, ?ROOT_SESS_ID),
         SourceEntry,
         Mode

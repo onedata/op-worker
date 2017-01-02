@@ -23,12 +23,12 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([chmod/3, update_times/5,
+-export([update_times/5,
     get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
-    get_file_path/2, chmod_storage_files/3, replicate_file/3,
+    get_file_path/2, replicate_file/3,
     get_metadata/5, set_metadata/5, remove_metadata/3,
     check_perms/3, create_share/3, remove_share/2]).
 %%%===================================================================
@@ -69,29 +69,6 @@ update_times(Ctx, FileEntry, ATime, MTime, CTime) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Changes file permissions.
-%% For best performance use following arg types: document -> uuid -> path
-%% @end
-%%--------------------------------------------------------------------
--spec chmod(fslogic_context:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
-    #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
-chmod(Ctx, File, Mode) ->
-    chmod_storage_files(Ctx, File, Mode),
-
-    % remove acl
-    {ok, FileUuid} = file_meta:to_uuid(File),
-    xattr:delete_by_name(FileUuid, ?ACL_KEY),
-    {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid),
-
-    fslogic_times:update_ctime(File, fslogic_context:get_user_id(Ctx)),
-    fslogic_event:emit_file_perm_changed(FileUuid),
-
-    #fuse_response{status = #status{code = ?OK}}.
-
-
-%%--------------------------------------------------------------------
 %% @doc Changes file owner.
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
@@ -101,7 +78,6 @@ chmod(Ctx, File, Mode) ->
 -check_permissions([{?write_owner, 2}]).
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -253,7 +229,7 @@ set_acl(Ctx, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
     case xattr:save(FileUuid, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of
         {ok, _} ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid),
-            ok = chmod_storage_files(
+            ok = sfm_utils:chmod_storage_files(
                 fslogic_context:set_session_id(Ctx, ?ROOT_SESS_ID),
                 {uuid, FileUuid}, 8#000
             ),
@@ -274,7 +250,7 @@ remove_acl(Ctx, {uuid, FileUuid} = FileEntry) ->
         ok ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid),
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
-            ok = chmod_storage_files(
+            ok = sfm_utils:chmod_storage_files(
                 fslogic_context:set_session_id(Ctx, ?ROOT_SESS_ID),
                 {uuid, FileUuid}, Mode
             ),
@@ -397,7 +373,7 @@ replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_meta:get({uuid, Uuid}) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
-            case fslogic_req_special:read_dir(Ctx, {uuid, Uuid}, Offset, Chunk) of
+            case dir_req:read_dir(Ctx, file_info:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)), Offset, Chunk) of
                 #fuse_response{fuse_response = #file_children{child_links = ChildLinks}}
                     when length(ChildLinks) < Chunk ->
                     utils:pforeach(
@@ -590,33 +566,3 @@ check_perms_write(_Ctx, _Uuid) ->
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
 check_perms_rdwr(_Ctx, _Uuid) ->
     #provider_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Change mode of storage files related with given file_meta.
-%% @end
-%%--------------------------------------------------------------------
--spec chmod_storage_files(fslogic_context:ctx(), file_meta:entry(), file_meta:posix_permissions()) ->
-    ok | no_return().
-chmod_storage_files(Ctx, File, Mode) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    case file_meta:get(File) of
-        {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(Ctx)),
-            Results = lists:map(
-                fun({SID, FID} = Loc) ->
-                    {ok, Storage} = storage:get(SID),
-                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
-                    {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
-                end, fslogic_utils:get_local_storage_file_locations(File)),
-
-            case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
-                [] -> ok;
-                Errors ->
-                    [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p", [FID, SID, Mode, Reason])
-                        || {{SID, FID}, {error, Reason}} <- Errors],
-
-                    throw(?EAGAIN)
-            end;
-        _ -> ok
-    end.

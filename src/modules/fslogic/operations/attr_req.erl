@@ -14,11 +14,12 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/metadata.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2, get_child_attr/3]).
+-export([get_file_attr/2, get_child_attr/3, chmod/3]).
 
 %%%===================================================================
 %%% API
@@ -68,6 +69,29 @@ get_child_attr(Ctx, ParentFile, Name) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ChildFile, _NewParentFile} = file_info:get_child(ParentFile, Name, UserId),
     attr_req:get_file_attr(Ctx, ChildFile).
+
+%%--------------------------------------------------------------------
+%% @doc Changes file permissions.
+%% For best performance use following arg types: document -> uuid -> path
+%% @end
+%%--------------------------------------------------------------------
+-spec chmod(fslogic_context:ctx(), file_info:file_info(), Perms :: fslogic_worker:posix_permissions()) ->
+    fslogic_worker:fuse_response().
+-check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
+chmod(Ctx, File, Mode) ->
+    {Guid, _File2} = file_info:get_guid(File),
+    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    sfm_utils:chmod_storage_files(Ctx, {uuid, Uuid}, Mode), %todo pass file_info
+
+    % remove acl
+    xattr:delete_by_name(Uuid, ?ACL_KEY),
+    {ok, _} = file_meta:update({uuid, Uuid}, #{mode => Mode}),
+    ok = permissions_cache:invalidate_permissions_cache(file_meta, Uuid),
+
+    fslogic_times:update_ctime({uuid, Uuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_info
+    fslogic_event:emit_file_perm_changed(Uuid), %todo pass file_info
+
+    #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
 %%% Internal functions
