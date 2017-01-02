@@ -109,8 +109,20 @@ create_record(<<"user">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"user">>, _Id, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+update_record(<<"user">>, ?CURRENT_USER_ID, Data) ->
+    case Data of
+        [{<<"defaultSpace">>, DefaultSpace}] ->
+            UserAuth = op_gui_utils:get_user_auth(),
+            case user_logic:set_default_space(UserAuth, DefaultSpace) of
+                ok ->
+                    ok;
+                {error, _} ->
+                    gui_error:report_warning(
+                        <<"Cannot change default space due to unknown error.">>)
+            end;
+        _ ->
+            gui_error:report_error(<<"Not implemented">>)
+    end.
 
 
 %%--------------------------------------------------------------------
