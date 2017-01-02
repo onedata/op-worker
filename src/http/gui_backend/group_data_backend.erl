@@ -71,7 +71,7 @@ find(<<"group">>, GroupId) ->
 
 % PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
 find(PermissionsRecord, RecordId) ->
-    SpaceId = case PermissionsRecord of
+    GroupId = case PermissionsRecord of
         <<"group-user-list">> ->
             RecordId;
         <<"group-group-list">> ->
@@ -84,7 +84,7 @@ find(PermissionsRecord, RecordId) ->
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
     Authorized = group_logic:has_effective_privilege(
-        SpaceId, UserId, group_view_data
+        GroupId, UserId, group_view_data
     ),
     case Authorized of
         false ->
@@ -418,7 +418,7 @@ group_group_permission_record(AssocId) ->
         end, privileges:group_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"userList">>, ParentGroupId},
+        {<<"groupList">>, ParentGroupId},
         {<<"systemGroup">>, ChildGroupId}
     ].
 

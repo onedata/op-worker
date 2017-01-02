@@ -161,23 +161,6 @@ create_record(<<"space">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"space">>, SpaceId, [{<<"isDefault">>, Flag}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case Flag of
-        undefined ->
-            ok;
-        false ->
-            ok;
-        true ->
-            case user_logic:set_default_space(UserAuth, SpaceId) of
-                ok ->
-                    ok;
-                {error, _} ->
-                    gui_error:report_warning(
-                        <<"Cannot change default space due to unknown error.">>)
-            end
-    end;
-
 update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
     UserAuth = op_gui_utils:get_user_auth(),
     case Name of
@@ -450,7 +433,7 @@ space_group_permission_record(AssocId) ->
         end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"userList">>, SpaceId},
+        {<<"groupList">>, SpaceId},
         {<<"systemGroup">>, GroupId}
     ].
 
