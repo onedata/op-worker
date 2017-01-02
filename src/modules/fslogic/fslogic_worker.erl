@@ -233,6 +233,8 @@ handle_file_request(Ctx, #file_request{file_request = #get_child_attr{name = Nam
     attr_req:get_child_attr(Ctx, ParentFile, Name);
 handle_file_request(Ctx, #file_request{file_request = #change_mode{mode = Mode}}, File) ->
     attr_req:chmod(Ctx, File, Mode);
+handle_file_request(Ctx, #file_request{file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}, File) ->
+    attr_req:update_times(Ctx, File, ATime, MTime, CTime);
 handle_file_request(Ctx, #file_request{file_request = #delete_file{silent = Silent}}, File) ->
     delete_req:delete(Ctx, File, Silent);
 handle_file_request(Ctx, #file_request{file_request = #create_dir{name = Name, mode = Mode}}, ParentFile) ->
@@ -250,8 +252,6 @@ handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #rena
     {ok, TargetParentPath} = lfm_files:get_file_path(SessId, TargetParentGuid),
     TargetPath = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, TargetParentPath, TargetName]),
     fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, TargetPath);
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}) ->
-    fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, ATime, MTime, CTime);
 handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #create_file{name = Name,
     flag = Flag, mode = Mode}}) ->
     fslogic_req_regular:create_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode, Flag);

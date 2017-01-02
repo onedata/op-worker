@@ -19,15 +19,15 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2, get_child_attr/3, chmod/3]).
+-export([get_file_attr/2, get_child_attr/3, chmod/3, update_times/5]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Gets file's attributes.
-%% For best performance use following arg types: document -> uuid -> path
+%% @doc
+%% Gets file's attributes.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(fslogic_context:ctx(), file_info:file_info()) ->
@@ -71,8 +71,8 @@ get_child_attr(Ctx, ParentFile, Name) ->
     attr_req:get_file_attr(Ctx, ChildFile).
 
 %%--------------------------------------------------------------------
-%% @doc Changes file permissions.
-%% For best performance use following arg types: document -> uuid -> path
+%% @doc
+%% Changes file permissions.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_context:ctx(), file_info:file_info(), Perms :: fslogic_worker:posix_permissions()) ->
@@ -90,6 +90,27 @@ chmod(Ctx, File, Mode) ->
 
     fslogic_times:update_ctime({uuid, Uuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_info
     fslogic_event:emit_file_perm_changed(Uuid), %todo pass file_info
+
+    #fuse_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Changes file's access times.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_times(fslogic_context:ctx(), file_info:file_info(),
+    ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined,
+    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
+-check_permissions([{traverse_ancestors, 2}, {{owner, 'or', ?write_attributes}, 2}]).
+update_times(Ctx, File, ATime, MTime, CTime) ->
+    UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
+    UpdateMap1 = maps:filter(fun(_Key, Value) ->
+        is_integer(Value) end, UpdateMap),
+
+    {Guid, _File2} = file_info:get_guid(File),
+    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    fslogic_times:update_times_and_emit({uuid, Uuid}, UpdateMap1, fslogic_context:get_user_id(Ctx)), %todo pass file_info
 
     #fuse_response{status = #status{code = ?OK}}.
 

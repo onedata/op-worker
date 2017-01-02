@@ -23,8 +23,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([update_times/5,
-    get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
+-export([get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3,
@@ -47,26 +46,6 @@ get_file_path(Ctx, {uuid, FileUUID}) ->
         status = #status{code = ?OK},
         provider_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
     }.
-
-
-%%--------------------------------------------------------------------
-%% @doc Changes file's access times.
-%% For best performance use following arg types: document -> uuid -> path
-%% @end
-%%--------------------------------------------------------------------
--spec update_times(fslogic_context:ctx(), File :: fslogic_worker:file(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined) -> #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {{owner, 'or', ?write_attributes}, 2}]).
-update_times(Ctx, FileEntry, ATime, MTime, CTime) ->
-    UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
-    UpdateMap1 = maps:filter(fun(_Key, Value) ->
-        is_integer(Value) end, UpdateMap),
-    fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, fslogic_context:get_user_id(Ctx)),
-
-    #fuse_response{status = #status{code = ?OK}}.
-
 
 %%--------------------------------------------------------------------
 %% @doc Changes file owner.
