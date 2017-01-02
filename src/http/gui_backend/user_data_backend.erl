@@ -139,8 +139,12 @@ delete_record(<<"user">>, _Id) ->
 user_record(Auth, UserId) ->
     {ok, #document{value = #od_user{
         name = Name,
-        default_space = DefaultSpace
+        default_space = DefaultSpaceValue
     }}} = od_user:get(UserId),
+    DefaultSpace = case DefaultSpaceValue of
+        undefined -> null;
+        _ -> DefaultSpaceValue
+    end,
     Groups = op_gui_utils:find_all_groups(Auth, UserId),
     Spaces = op_gui_utils:find_all_spaces(Auth, UserId),
     Shares = lists:foldl(
