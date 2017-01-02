@@ -1,6 +1,5 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @author Jakub Liput
 %%% @copyright (C) 2015-2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -14,7 +13,6 @@
 -module(user_data_backend).
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
--author("Jakub Liput").
 
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
