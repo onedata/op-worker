@@ -25,7 +25,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([user_record/1]).
+-export([user_record/2]).
 
 -define(CURRENT_USER_ID, <<"0">>).
 
@@ -165,7 +165,7 @@ user_record(Auth, UserId) ->
     [
         {<<"id">>, UserId},
         {<<"name">>, Name},
-        {<<"isDefault">>, DefaultSpace},
+        {<<"defaultSpace">>, DefaultSpace},
         {<<"groups">>, Groups},
         {<<"spaces">>, Spaces},
         {<<"shares">>, Shares},
