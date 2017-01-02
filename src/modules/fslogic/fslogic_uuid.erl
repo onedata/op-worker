@@ -341,10 +341,10 @@ guid_to_space_id(Guid) ->
         {space, SpaceId} ->
             SpaceId;
         _ ->
-            {Guid, undefined, undefined}
+            undefined
     catch
         _:_ ->
-            {Guid, undefined, undefined}
+            undefined
     end.
 
 %%%===================================================================
