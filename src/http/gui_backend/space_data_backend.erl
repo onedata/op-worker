@@ -70,9 +70,17 @@ find(<<"space">>, SpaceId) ->
             {ok, space_record(SpaceId)}
     end;
 
-% PermissionsRecord matches <<"space-(user|group)-permission">>
-find(PermissionsRecord, AssocId) ->
-    {_, SpaceId} = op_gui_utils:association_to_ids(AssocId),
+% PermissionsRecord matches <<"space-(user|group)-(list|permission)">>
+find(PermissionsRecord, RecordId) ->
+    SpaceId = case PermissionsRecord of
+        <<"space-user-list">> ->
+            RecordId;
+        <<"space-group-list">> ->
+            RecordId;
+        _ -> % covers <<"space-(user|group)-permission">>
+            {_, Id} = op_gui_utils:association_to_ids(RecordId),
+            Id
+    end,
     UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this space.
@@ -84,10 +92,14 @@ find(PermissionsRecord, AssocId) ->
             gui_error:unauthorized();
         true ->
             case PermissionsRecord of
+                <<"space-user-list">> ->
+                    {ok, space_user_list_record(RecordId)};
+                <<"space-group-list">> ->
+                    {ok, space_group_list_record(RecordId)};
                 <<"space-user-permission">> ->
-                    {ok, space_user_permission_record(AssocId)};
+                    {ok, space_user_permission_record(RecordId)};
                 <<"space-group-permission">> ->
-                    {ok, space_group_permission_record(AssocId)}
+                    {ok, space_group_permission_record(RecordId)}
             end
     end.
 
@@ -100,15 +112,7 @@ find(PermissionsRecord, AssocId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"space">>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    UserId = gui_session:get_user_id(),
-    SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
-    Res = lists:map(
-        fun(SpaceId) ->
-            {ok, SpaceData} = find(<<"space">>, SpaceId),
-            SpaceData
-        end, SpaceIds),
-    {ok, Res}.
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -259,7 +263,10 @@ update_record(<<"space-group-permission">>, AssocId, Data) ->
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot change group privileges due to unknown error.">>)
-    end.
+    end;
+
+update_record(_ResourceType, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -313,45 +320,80 @@ space_record(SpaceId) ->
 space_record(SpaceId, HasViewPrivileges) ->
     UserId = gui_session:get_user_id(),
     UserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{
-        value = #od_space{
-            name = Name,
-            users = UsersAndPerms,
-            groups = GroupsAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, UserId),
-    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
+    {ok, #document{value = #od_space{
+        name = Name,
+        providers_supports = Providers
+    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    RootDir = case Providers of
+        [] ->
+            null;
+        _ ->
+            fslogic_uuid:uuid_to_guid(
+                fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), SpaceId
+            )
+    end,
 
-    % Make sure that user is allowed to view requested space - he must have
-    % view privileges in this space. If not, return only public data.
-    case HasViewPrivileges of
-        false ->
-            [
-                {<<"id">>, SpaceId},
-                {<<"name">>, Name},
-                {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-                {<<"hasViewPrivilege">>, false},
-                {<<"userPermissions">>, []},
-                {<<"groupPermissions">>, []}
-            ];
+    % Depending on view privileges, show or hide info about members and privs
+    {SpaceUserList, SpaceGroupList} = case HasViewPrivileges of
         true ->
-            UserPermissions = lists:map(
-                fun({UsId, _UsPerms}) ->
-                    op_gui_utils:ids_to_association(UsId, SpaceId)
-                end, UsersAndPerms),
+            {SpaceId, SpaceId};
+        false ->
+            {null, null}
+    end,
+    [
+        {<<"id">>, SpaceId},
+        {<<"name">>, Name},
+        {<<"rootDir">>, RootDir},
+        {<<"hasViewPrivilege">>, HasViewPrivileges},
+        {<<"userList">>, SpaceUserList},
+        {<<"groupList">>, SpaceGroupList}
+    ].
 
-            GroupPermissions = lists:map(
-                fun({GroupId, _GroupPerms}) ->
-                    op_gui_utils:ids_to_association(GroupId, SpaceId)
-                end, GroupsAndPerms),
-            [
-                {<<"id">>, SpaceId},
-                {<<"name">>, Name},
-                {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-                {<<"hasViewPrivilege">>, true},
-                {<<"userPermissions">>, UserPermissions},
-                {<<"groupPermissions">>, GroupPermissions}
-            ]
-    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-user-list record based on space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_user_list_record(SpaceId :: binary()) -> proplists:proplist().
+space_user_list_record(SpaceId) ->
+    UserId = gui_session:get_user_id(),
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{value = #od_space{
+        users = UsersWithPerms
+    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    UserPermissions = lists:map(
+        fun({UsId, _UsPerms}) ->
+            op_gui_utils:ids_to_association(UsId, SpaceId)
+        end, UsersWithPerms),
+    [
+        {<<"id">>, SpaceId},
+        {<<"space">>, SpaceId},
+        {<<"userPermissions">>, UserPermissions}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-group-list record based on space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_group_list_record(SpaceId :: binary()) -> proplists:proplist().
+space_group_list_record(SpaceId) ->
+    UserId = gui_session:get_user_id(),
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{value = #od_space{
+        groups = GroupsWithPerms
+    }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    GroupPermissions = lists:map(
+        fun({GrId, _GrPerms}) ->
+            op_gui_utils:ids_to_association(GrId, SpaceId)
+        end, GroupsWithPerms),
+    [
+        {<<"id">>, SpaceId},
+        {<<"space">>, SpaceId},
+        {<<"groupPermissions">>, GroupPermissions}
+    ].
 
 
 %%--------------------------------------------------------------------
@@ -378,7 +420,7 @@ space_user_permission_record(AssocId) ->
         end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"space">>, SpaceId},
+        {<<"userList">>, SpaceId},
         {<<"systemUser">>, UserId}
     ].
 
@@ -408,7 +450,7 @@ space_group_permission_record(AssocId) ->
         end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"space">>, SpaceId},
+        {<<"userList">>, SpaceId},
         {<<"systemGroup">>, GroupId}
     ].
 

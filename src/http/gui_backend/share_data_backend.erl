@@ -93,33 +93,7 @@ find(ModelType, ShareId) ->
 find_all(<<"share-public">>) ->
     gui_error:report_error(<<"Not implemented">>);
 find_all(<<"share">>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    UserId = gui_session:get_user_id(),
-    SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
-    ShareIds = lists:foldl(
-        fun(SpaceId, Acc) ->
-            % Make sure that user is allowed to view shares in this space -
-            % he must have view privileges in this space.
-            Authorized = space_logic:has_effective_privilege(
-                SpaceId, UserId, space_view_data
-            ),
-            case Authorized of
-                true ->
-                    {ok, #document{
-                        value = #od_space{
-                            shares = Shares
-                        }}} = od_space:get(SpaceId),
-                    Shares ++ Acc;
-                false ->
-                    Acc
-            end
-        end, [], SpaceIds),
-    Res = lists:map(
-        fun(ShareId) ->
-            {ok, ShareData} = find(<<"share">>, ShareId),
-            ShareData
-        end, ShareIds),
-    {ok, Res}.
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------

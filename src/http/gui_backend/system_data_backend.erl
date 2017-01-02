@@ -65,32 +65,14 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"system-provider">>, ProviderId) ->
-    {ok, #provider_details{
-        name = Name
-    }} = oz_providers:get_details(provider, ProviderId),
-    {ok, [
-        {<<"id">>, ProviderId},
-        {<<"name">>, Name}
-    ]};
+find(<<"system-provider">>, _ProviderId) ->
+    gui_error:report_error(<<"Not implemented">>);
 
-find(<<"system-user">>, UserId) ->
-    CurrentUserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{value = #od_user{name = UserName}}} =
-        user_logic:get(CurrentUserAuth, UserId),
-    {ok, [
-        {<<"id">>, UserId},
-        {<<"name">>, UserName}
-    ]};
+find(<<"system-user">>, _UserId) ->
+    gui_error:report_error(<<"Not implemented">>);
 
-find(<<"system-group">>, GroupId) ->
-    CurrentUserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{value = #od_group{name = GroupName}}} =
-        group_logic:get(CurrentUserAuth, GroupId),
-    {ok, [
-        {<<"id">>, GroupId},
-        {<<"name">>, GroupName}
-    ]}.
+find(<<"system-group">>, _GroupId) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -111,8 +93,63 @@ find_all(_ResourceType) ->
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(_ResourceType, _Data) ->
-    gui_error:report_error(<<"Not implemented">>).
+find_query(<<"system-provider">>, Data) ->
+    ProviderId = proplists:get_value(<<"id">>, Data),
+    % Do not check context, provider name can always be fetched
+    _Context = proplists:get_value(<<"context">>, Data),
+    {ok, #provider_details{
+        name = Name
+    }} = oz_providers:get_details(provider, ProviderId),
+    {ok, [
+        {<<"id">>, ProviderId},
+        {<<"name">>, Name}
+    ]};
+
+find_query(<<"system-user">>, Data) ->
+    CurrentUserId = gui_session:get_user_id(),
+    UserId = proplists:get_value(<<"id">>, Data),
+    Context = proplists:get_value(<<"context">>, Data),
+    [{EntityType, EntityId}] = Context,
+    Authorized = op_gui_utils:can_view_public_data(
+        CurrentUserId,
+        od_user, UserId,
+        binary_to_existing_atom(EntityType, utf8), EntityId
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            CurrentUserAuth = op_gui_utils:get_user_auth(),
+            {ok, #document{value = #od_user{name = UserName}}} =
+                user_logic:get(CurrentUserAuth, UserId),
+            {ok, [
+                {<<"id">>, UserId},
+                {<<"name">>, UserName}
+            ]}
+    end;
+
+find_query(<<"system-group">>, Data) ->
+    CurrentUserId = gui_session:get_user_id(),
+    GroupId = proplists:get_value(<<"id">>, Data),
+    Context = proplists:get_value(<<"context">>, Data),
+    [{EntityType, EntityId}] = Context,
+    Authorized = op_gui_utils:can_view_public_data(
+        CurrentUserId,
+        od_group, GroupId,
+        binary_to_existing_atom(EntityType, utf8), EntityId
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            CurrentUserAuth = op_gui_utils:get_user_auth(),
+            {ok, #document{value = #od_group{name = GroupName}}} =
+                group_logic:get(CurrentUserAuth, GroupId),
+            {ok, [
+                {<<"id">>, GroupId},
+                {<<"name">>, GroupName}
+            ]}
+    end.
 
 
 %%--------------------------------------------------------------------

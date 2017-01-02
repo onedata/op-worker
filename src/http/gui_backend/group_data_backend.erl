@@ -69,24 +69,36 @@ find(<<"group">>, GroupId) ->
             {ok, group_record(GroupId)}
     end;
 
-% PermissionsRecord matches <<"group-(user|group)-permission">>
-find(PermissionsRecord, AssocId) ->
-    {_, GroupId} = op_gui_utils:association_to_ids(AssocId),
+% PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
+find(PermissionsRecord, RecordId) ->
+    SpaceId = case PermissionsRecord of
+        <<"group-user-list">> ->
+            RecordId;
+        <<"group-group-list">> ->
+            RecordId;
+        _ -> % covers <<"group-(user|group)-permission">>
+            {_, Id} = op_gui_utils:association_to_ids(RecordId),
+            Id
+    end,
     UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
     Authorized = group_logic:has_effective_privilege(
-        GroupId, UserId, group_view_data
+        SpaceId, UserId, group_view_data
     ),
     case Authorized of
         false ->
             gui_error:unauthorized();
         true ->
             case PermissionsRecord of
+                <<"group-user-list">> ->
+                    {ok, group_user_list_record(RecordId)};
+                <<"group-group-list">> ->
+                    {ok, group_group_list_record(RecordId)};
                 <<"group-user-permission">> ->
-                    {ok, group_user_permission_record(AssocId)};
+                    {ok, group_user_permission_record(RecordId)};
                 <<"group-group-permission">> ->
-                    {ok, group_group_permission_record(AssocId)}
+                    {ok, group_group_permission_record(RecordId)}
             end
     end.
 
@@ -98,15 +110,7 @@ find(PermissionsRecord, AssocId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"group">>) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    UserId = gui_session:get_user_id(),
-    GroupIds = op_gui_utils:find_all_groups(UserAuth, UserId),
-    Res = lists:map(
-        fun(GroupId) ->
-            {ok, GroupData} = find(<<"group">>, GroupId),
-            GroupData
-        end, GroupIds),
-    {ok, Res}.
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -238,7 +242,10 @@ update_record(<<"group-group-permission">>, AssocId, Data) ->
         {error, _} ->
             gui_error:report_warning(
                 <<"Cannot change group privileges due to unknown error.">>)
-    end.
+    end;
+
+update_record(_ResourceType, _Id, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -289,49 +296,76 @@ group_record(GroupId) ->
 %%--------------------------------------------------------------------
 -spec group_record(GroupId :: binary(), HasViewPrivileges :: boolean()) ->
     proplists:proplist().
-group_record(GroupId, HasViewPrivileges) ->
+group_record(GroupId, HasViewPrivs) ->
     UserAuth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #od_group{
             name = Name,
-            users = UsersAndPerms,
-            children = GroupsAndPerms,
+            children = ChildrenWithPerms,
             parents = ParentGroups
         }}} = group_logic:get(UserAuth, GroupId),
+    {ChildGroups, _} = lists:unzip(ChildrenWithPerms),
 
-    % Make sure that user is allowed to view requested group - he must have
-    % view privileges in this group. If not, return only public data.
-    case HasViewPrivileges of
-        false ->
-            [
-                {<<"id">>, GroupId},
-                {<<"name">>, Name},
-                {<<"hasViewPrivilege">>, false},
-                {<<"userPermissions">>, []},
-                {<<"groupPermissions">>, []},
-                {<<"parentGroups">>, []},
-                {<<"childGroups">>, []}
-            ];
+    % Depending on view privileges, show or hide info about members and privs
+    {GroupUserList, GroupGroupList, Parents, Children} = case HasViewPrivs of
         true ->
-            {ChildGroups, _} = lists:unzip(GroupsAndPerms),
-            UserPermissions = lists:map(
-                fun({UsId, _UsPerms}) ->
-                    op_gui_utils:ids_to_association(UsId, GroupId)
-                end, UsersAndPerms),
-            GroupPermissions = lists:map(
-                fun({ChildGroupId, _GroupPerms}) ->
-                    op_gui_utils:ids_to_association(ChildGroupId, GroupId)
-                end, GroupsAndPerms),
-            [
-                {<<"id">>, GroupId},
-                {<<"name">>, Name},
-                {<<"hasViewPrivilege">>, true},
-                {<<"userPermissions">>, UserPermissions},
-                {<<"groupPermissions">>, GroupPermissions},
-                {<<"parentGroups">>, ParentGroups},
-                {<<"childGroups">>, ChildGroups}
-            ]
-    end.
+            {GroupId, GroupId, ParentGroups, ChildGroups};
+        false ->
+            {null, null, [], []}
+    end,
+    [
+        {<<"id">>, GroupId},
+        {<<"name">>, Name},
+        {<<"hasViewPrivilege">>, HasViewPrivs},
+        {<<"userList">>, GroupUserList},
+        {<<"groupList">>, GroupGroupList},
+        {<<"parentGroups">>, Parents},
+        {<<"childGroups">>, Children}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-user-list record based on group id.
+%% @end
+%%--------------------------------------------------------------------
+-spec group_user_list_record(SpaceId :: binary()) -> proplists:proplist().
+group_user_list_record(GroupId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{value = #od_group{
+        users = UsersWithPerms
+    }}} = group_logic:get(UserAuth, GroupId),
+    UserPermissions = lists:map(
+        fun({UsId, _UsPerms}) ->
+            op_gui_utils:ids_to_association(UsId, GroupId)
+        end, UsersWithPerms),
+    [
+        {<<"id">>, GroupId},
+        {<<"group">>, GroupId},
+        {<<"userPermissions">>, UserPermissions}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a client-compliant space-group-list record based on group id.
+%% @end
+%%--------------------------------------------------------------------
+-spec group_group_list_record(SpaceId :: binary()) -> proplists:proplist().
+group_group_list_record(GroupId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    {ok, #document{value = #od_group{
+        children = GroupsWithPerms
+    }}} = group_logic:get(UserAuth, GroupId),
+    GroupPermissions = lists:map(
+        fun({GrId, _GrPerms}) ->
+            op_gui_utils:ids_to_association(GrId, GroupId)
+        end, GroupsWithPerms),
+    [
+        {<<"id">>, GroupId},
+        {<<"group">>, GroupId},
+        {<<"groupPermissions">>, GroupPermissions}
+    ].
 
 
 %%--------------------------------------------------------------------
@@ -356,7 +390,7 @@ group_user_permission_record(AssocId) ->
         end, privileges:group_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"group">>, GroupId},
+        {<<"userList">>, GroupId},
         {<<"systemUser">>, UserId}
     ].
 
@@ -384,7 +418,7 @@ group_group_permission_record(AssocId) ->
         end, privileges:group_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"group">>, ParentGroupId},
+        {<<"userList">>, ParentGroupId},
         {<<"systemGroup">>, ChildGroupId}
     ].
 

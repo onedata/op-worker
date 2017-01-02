@@ -75,17 +75,7 @@ find(<<"handle-service">>, HandleServiceId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"handle-service">>) ->
-    Auth = op_gui_utils:get_user_auth(),
-    UserId = gui_session:get_user_id(),
-    {ok, HandleServiceIds} = user_logic:get_effective_handle_services(
-        Auth, UserId
-    ),
-    Res = lists:map(
-        fun(HandleServiceId) ->
-            {ok, Data} = find(<<"handle-service">>, HandleServiceId),
-            Data
-        end, HandleServiceIds),
-    {ok, Res}.
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------

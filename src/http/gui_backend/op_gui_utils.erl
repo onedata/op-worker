@@ -19,6 +19,7 @@
 %% API
 -export([get_user_auth/0]).
 -export([ids_to_association/2, association_to_ids/1]).
+-export([can_view_public_data/5]).
 
 % @todo temporary solution, fix when subscriptions work better
 -export([find_all_spaces/2, find_all_groups/2]).
@@ -50,7 +51,6 @@ ids_to_association(FirstId, SecondId) ->
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Decouples an associative ID into two separate IDs.
 %% @end
@@ -59,6 +59,30 @@ ids_to_association(FirstId, SecondId) ->
 association_to_ids(AssocId) ->
     [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
     {FirstId, SecondId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Predicate telling if given user can view another system entity through
+%% its membership to given entity (for example, user 1 and group 3 belong to
+%% space 8 - then user 1 can view group 3 via space 8).
+%% @end
+%%--------------------------------------------------------------------
+-spec can_view_public_data(UserId :: od_user:id(), EntityType :: atom(),
+    EntityId :: binary(), ViaEntityType :: atom(), ViaEntityId :: binary()) ->
+    boolean().
+% TODO For now, always return true - this can be checked when new
+% subscriptions arrive.
+can_view_public_data(_UserId, od_user, _UserId, od_group, _GroupId) ->
+    true;
+can_view_public_data(_UserId, od_user, _UserId, od_space, _SpaceId) ->
+    true;
+can_view_public_data(_UserId, od_group, _GroupId, od_group, _ParentGroupId) ->
+    true;
+can_view_public_data(_UserId, od_group, _GroupId, od_space, _SpaceId) ->
+    true;
+can_view_public_data(_, _, _, _, _) ->
+    false.
 
 
 %%--------------------------------------------------------------------
