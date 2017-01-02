@@ -156,7 +156,14 @@ resolve_file_entry({parent, Item}, Inputs) ->
             {Parent, _NewFileInfo} = file_info:get_parent(Item, undefined),
             Parent;
         false ->
-            fslogic_utils:get_parent(resolve_file_entry(Item, Inputs))
+            ResolvedEntry = resolve_file_entry(Item, Inputs),
+            case file_info:is_file_info(ResolvedEntry) of
+                true ->
+                    {Parent, _} = file_info:get_parent(ResolvedEntry, undefined),
+                    Parent;
+                false ->
+                    fslogic_utils:get_parent(ResolvedEntry)
+            end
     end.
 
 %%--------------------------------------------------------------------

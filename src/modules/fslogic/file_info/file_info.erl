@@ -38,7 +38,7 @@
 -export([new_by_path/2, new_by_guid/1]).
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
-    get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2]).
+    get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2, get_child/3]).
 -export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1]).
 
 %%%===================================================================
@@ -55,7 +55,8 @@ new_by_path(Ctx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     case session:is_special(fslogic_context:get_session_id(Ctx)) of
         true ->
-            throw({invalid_request, <<"Path resolution requested in the context of root or guest session. You may only operate on guids in this context.">>});
+            throw({invalid_request, <<"Path resolution requested in the context
+of special session. You may only operate on guids in this context.">>});
         false ->
             case Tokens of
                 [<<"/">>] ->
@@ -83,6 +84,16 @@ new_by_path(Ctx, Path) ->
 -spec new_by_guid(guid()) -> file_info().
 new_by_guid(Guid) when Guid =/= undefined ->
     #file_info{guid = Guid}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Create new file_info using file's guid
+%% @end
+%%--------------------------------------------------------------------
+-spec new_by_doc(file_meta:doc(), od_space:id()) -> file_info().
+new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId) ->
+    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
+    #file_info{file_doc = Doc, guid = Guid}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -306,6 +317,35 @@ get_times(FileInfo) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Get child of the file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child(file_info(), file_meta:name(), od_user:id()) ->
+    {ChildFile :: file_info(), NewFile :: file_info()}.
+get_child(FileInfo, Name, UserId) ->
+    case is_root_dir(FileInfo) of
+        true ->
+            {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
+            case lists:keyfind(Name, 2, Spaces) of
+                {SpaceId, _} ->
+                    Child = file_info:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
+                    {Child, FileInfo};
+                false -> throw(?ENOENT)
+            end;
+        _ ->
+            SpaceId = file_info:get_space_id(FileInfo),
+            {FileDoc, FileInfo2} = file_info:get_file_doc(FileInfo),
+            case file_meta:resolve_path(FileDoc, <<"/", Name/binary>>) of
+                {ok, {ChildDoc, _}} ->
+                    Child = new_by_doc(ChildDoc, SpaceId),
+                    {Child, FileInfo2};
+                {error, {not_found, _}} ->
+                    throw(?ENOENT)
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Check if given argument contains file_info record
 %% @end
 %%--------------------------------------------------------------------
@@ -321,16 +361,16 @@ is_file_info(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_space_dir(file_info()) -> boolean().
-is_space_dir(#file_info{guid = Guid}) when is_binary(Guid) ->
-    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(fslogic_uuid:guid_to_uuid(Guid))),
-    is_binary(SpaceId);
-is_space_dir(#file_info{path = Path}) ->
+is_space_dir(#file_info{guid = undefined, path = Path}) ->
     case fslogic_path:split(Path) of
         [<<"/">>, _SpaceId] ->
             true;
         _ ->
             false
-    end.
+    end;
+is_space_dir(#file_info{guid = Guid})->
+    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(fslogic_uuid:guid_to_uuid(Guid))),
+    is_binary(SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -345,7 +385,6 @@ is_user_root_dir(#file_info{guid = Guid, path = undefined}, Ctx) ->
     {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx};
 is_user_root_dir(#file_info{}, Ctx) ->
     {false, Ctx}.
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Check if file is a root dir (any user root).

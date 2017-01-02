@@ -382,8 +382,7 @@ update_timestamps_file_import_test(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 60}),
+init_per_testcase(Case, Config) ->
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),

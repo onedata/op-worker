@@ -129,6 +129,7 @@ cleanup() ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle request and do postprocessing of the response
 %% @end
@@ -151,6 +152,7 @@ handle_request_and_process_response(SessId, Request) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Analyze request data and handle it locally or remotely.
 %% @end
@@ -171,6 +173,7 @@ handle_request(SessId, Request) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle request locally, as it operates on locally supported entity.
 %% @end
@@ -184,6 +187,7 @@ handle_request_locally(Ctx, Req = #proxyio_request{}, File)  ->
     handle_proxyio_request(Ctx, Req, File).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handle request remotely
 %% @end
@@ -224,14 +228,14 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequ
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}, file_info:file_info()) ->
     fuse_response().
 handle_file_request(Ctx, #file_request{file_request = #get_file_attr{}}, File) ->
-attr_req:get_file_attr(Ctx, File);
+    attr_req:get_file_attr(Ctx, File);
+handle_file_request(Ctx, #file_request{file_request = #get_child_attr{name = Name}}, ParentFile) ->
+    attr_req:get_child_attr(Ctx, ParentFile, Name);
 handle_file_request(Ctx, Req, _File) ->
     handle_file_request(Ctx, Req).
 
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
     fuse_response().
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_child_attr{name = Name}}) ->
-    fslogic_req_special:get_child_attr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Name);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #delete_file{silent = Silent}}) ->
     fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Silent);
 handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #create_dir{name = Name, mode = Mode}}) ->
@@ -367,6 +371,7 @@ handle_proxyio_request(_CTX, Req) ->
     erlang:error({invalid_request, Req}).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Do posthook for request response
 %% @end

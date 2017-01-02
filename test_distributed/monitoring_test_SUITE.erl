@@ -245,9 +245,9 @@ init_per_testcase(rrdtool_pool_test = Case, Config) ->
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    clear_state(Worker),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
+    clear_state(Worker),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(monitoring_test = Case, Config) ->

@@ -94,7 +94,7 @@
     block :: #file_block{}
 }).
 
--type file_request_value() ::
+-type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
@@ -103,7 +103,7 @@
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
-    file_request :: file_request_value()
+    file_request :: file_request_type()
 }).
 
 -record(resolve_guid, {
@@ -180,14 +180,14 @@
     uuid :: fslogic_worker:file_guid()
 }).
 
--type fuse_response_value() ::
+-type fuse_response_type() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #uuid{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},
-    fuse_response :: fuse_response_value()
+    fuse_response :: fuse_response_type()
 }).
 
 -endif.
