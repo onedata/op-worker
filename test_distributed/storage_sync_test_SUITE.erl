@@ -382,7 +382,7 @@ update_timestamps_file_import_test(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
-init_per_testcase(Case, Config) ->
+init_per_testcase(_Case, Config) ->
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
@@ -392,10 +392,12 @@ init_per_testcase(Case, Config) ->
     enable_storage_sync(ConfigWithProxy).
 
 end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    W1MountPoint = ?config(w1_mount_point, Config),
+    rpc:multicall(Workers, os, cmd, ["rm -rf " ++ binary_to_list(W1MountPoint) ++ "/*"]),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    clean_storage(Config),
     initializer:unload_quota_mocks(Config),
     initializer:disable_grpca_based_communication(Config),
     ok.
@@ -414,22 +416,13 @@ enable_storage_sync(Config) ->
             {ok, [W1Storage | _]} = rpc:call(W1, storage, list, []),
 
             %% Enable import
-            #document{key = W1StorageId, value = #storage{helpers = [W1Helpers]}} = W1Storage,
-            {ok, _} = rpc:call(W1, space_strategies, set_strategy, [
-                ?SPACE_ID, W1StorageId, storage_import, bfs_scan, #{scan_interval => 10}]),
+            #document{value = #storage{helpers = [W1Helpers]}} = W1Storage,
+            {ok, _ } = rpc:call(W1, storage_sync, start_storage_import, [?SPACE_ID, 10]),
             #helper_init{args = #{<<"root_path">> := W1MountPoint}} = W1Helpers,
             [{w1_mount_point, W1MountPoint} | Config];
         _ ->
             Config
     end.
-
-clean_storage(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = ?config(w1_mount_point, Config),
-    ok = rpc:call(W1, file, delete, [?STORAGE_INIT_FILE_PATH(W1MountPoint)]),
-    rpc:call(W1, file, delete, [?STORAGE_TEST_FILE_PATH(W1MountPoint)]),
-    rpc:call(W1, file, delete, [?STORAGE_TEST_FILE_IN_DIR_PATH(W1MountPoint)]),
-    rpc:call(W1, file, del_dir, [?STORAGE_TEST_DIR_PATH(W1MountPoint)]).
 
 mkdir(Worker, DirPath) ->
     rpc:call(Worker, file, make_dir, [DirPath]).
