@@ -211,7 +211,7 @@ get_file_doc(FileInfo = #file_info{file_doc = FileDoc}) ->
 %%--------------------------------------------------------------------
 -spec get_parent(file_info(), undefined | od_user:id()) -> {ParentFileInfo :: file_info(), NewFileInfo :: file_info()}.
 get_parent(FileInfo = #file_info{parent = undefined}, UserId) ->
-    {Doc, NewFileInfo} = file_info:get_file_doc(FileInfo),
+    {Doc, FileInfo2} = file_info:get_file_doc(FileInfo),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
         case fslogic_uuid:is_root_dir(ParentUuid) of
@@ -223,11 +223,16 @@ get_parent(FileInfo = #file_info{parent = undefined}, UserId) ->
                         fslogic_uuid:uuid_to_guid(ParentUuid, undefined)
                 end;
             false ->
-                SpaceId = file_info:get_space_id(NewFileInfo),
-                fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId)
+                SpaceId = file_info:get_space_id(FileInfo2),
+                case get_share_id(FileInfo2) of
+                    undefined ->
+                        fslogic_uuid:uuid_to_guid(ParentUuid, SpaceId);
+                    ShareId ->
+                        fslogic_uuid:uuid_to_share_guid(ParentUuid, SpaceId, ShareId)
+                end
         end,
     Parent = file_info:new_by_guid(ParentGuid),
-    {Parent, NewFileInfo#file_info{parent = Parent}};
+    {Parent, FileInfo2#file_info{parent = Parent}};
 get_parent(FileInfo = #file_info{parent = Parent}, _UserId) ->
     {Parent, FileInfo}.
 
