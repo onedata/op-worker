@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_file/5]).
+-export([create_file/5, make_file/4]).
 -export([save_handle/2]). %todo delete
 
 %%%===================================================================
@@ -27,7 +27,7 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Creates and opens file. Returns handle to the file, its attributes
+%% @doc Create and open file. Return handle to the file, its attributes
 %% and location.
 %% @end
 %%--------------------------------------------------------------------
@@ -68,6 +68,26 @@ create_file(Ctx, ParentFile, Name, Mode, _Flag) ->
         }
     }.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Create file. Return its attributes.
+%% @end
+%%--------------------------------------------------------------------
+-spec make_file(fslogic_context:ctx(), ParentFile :: file_info:file_info(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
+-check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
+make_file(Ctx, ParentFile, Name, Mode) ->
+    {File, ParentFile2} = create_file_doc(Ctx, ParentFile, Name, Mode),
+
+    SessId = fslogic_context:get_session_id(Ctx),
+    SpaceId = fslogic_context:get_space_id(Ctx),
+    {{uuid, FileUuid}, File2} = file_info:get_uuid_entry(File),
+    sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_info
+
+    {ParentFileEntry, _ParentFile3} = file_info:get_uuid_entry(ParentFile2),
+    fslogic_times:update_mtime_ctime(ParentFileEntry, fslogic_context:get_user_id(Ctx)), %todo pass file_info
+
+    attr_req:get_file_attr_no_permission_check(Ctx, File2).
 
 %%%===================================================================
 %%% Internal functions

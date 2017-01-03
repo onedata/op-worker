@@ -20,8 +20,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/2, open_file/3, make_file/4,
-    truncate/3, release/3]).
+-export([get_file_location/2, open_file/3, truncate/3, release/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
@@ -112,45 +111,6 @@ open_file(Ctx, File, write) ->
     open_file_for_write(Ctx, File);
 open_file(Ctx, File, rdwr) ->
     open_file_for_rdwr(Ctx, File).
-
-%%--------------------------------------------------------------------
-%% @doc Creates file. Returns its attributes.
-%% @end
-%%--------------------------------------------------------------------
--spec make_file(fslogic_context:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
-    Mode :: file_meta:posix_permissions()) -> no_return() | #fuse_response{}.
--check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
-make_file(Ctx, {uuid, ParentUUID}, Name, Mode) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    SpaceId = fslogic_context:get_space_id(Ctx),
-    CTime = erlang:system_time(seconds),
-    File = #document{value = #file_meta{
-        name = Name,
-        type = ?REGULAR_FILE_TYPE,
-        mode = Mode,
-        uid = fslogic_context:get_user_id(Ctx)
-    }},
-
-    {ok, FileUUID} = file_meta:create({uuid, ParentUUID}, File),
-    {ok, _} = times:create(#document{key = FileUUID, value = #times{
-        mtime = CTime, atime = CTime, ctime = CTime
-    }}),
-
-    try sfm_utils:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
-        _ ->
-            fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(Ctx)),
-            Guid = fslogic_uuid:uuid_to_guid(FileUUID),
-            FileInfo = file_info:new_by_guid(Guid),
-            attr_req:get_file_attr(Ctx, FileInfo)
-    catch
-        T:M ->
-            {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
-            lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
-            file_meta:delete({uuid, FileUUID}),
-            ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
-            throw(?EACCES)
-    end.
-
 
 %%--------------------------------------------------------------------
 %% @doc Removes file handle saved in session.
