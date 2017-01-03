@@ -23,23 +23,10 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_path/2, replicate_file/3, check_perms/3, create_share/3, remove_share/2]).
+-export([replicate_file/3, check_perms/3, create_share/3, remove_share/2]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc Translates given file's UUID to absolute path.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_path(fslogic_context:ctx(), {uuid, file_meta:uuid()}) ->
-    #provider_response{} | no_return().
-get_file_path(Ctx, {uuid, FileUUID}) ->
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #file_path{value = fslogic_uuid:uuid_to_path(Ctx, FileUUID)}
-    }.
 
 %%--------------------------------------------------------------------
 %% @doc Changes file owner.

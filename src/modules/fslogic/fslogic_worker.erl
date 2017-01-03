@@ -273,6 +273,8 @@ handle_provider_request(Ctx, #provider_request{provider_request = #get_file_dist
     synchronization_req:get_file_distribution(Ctx, File);
 handle_provider_request(Ctx, #provider_request{provider_request = #get_parent{}}, File) ->
     guid_req:get_parent(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_file_path{}}, File) ->
+    guid_req:get_file_path(Ctx, File);
 handle_provider_request(Ctx, #provider_request{provider_request = #get_xattr{name = XattrName, inherited = Inherited}}, File) ->
     xattr_req:get_xattr(Ctx, File, XattrName, Inherited);
 handle_provider_request(Ctx, #provider_request{provider_request = #set_xattr{xattr = Xattr}}, File) ->
@@ -310,8 +312,6 @@ handle_provider_request(Ctx, Req, _File) ->
 
 -spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
     provider_response().
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_file_path{}}) ->
-    fslogic_req_generic:get_file_path(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #replicate_file{block = Block}}) ->
     fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #check_perms{flag = Flag}}) ->

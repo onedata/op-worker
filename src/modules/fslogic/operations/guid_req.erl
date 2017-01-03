@@ -17,7 +17,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([resolve_guid/2, get_parent/2]).
+-export([resolve_guid/2, get_parent/2, get_file_path/2]).
 
 %%%===================================================================
 %%% API
@@ -31,8 +31,11 @@
 -spec resolve_guid(fslogic_context:ctx(), file_info:file_info()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 resolve_guid(_Ctx, File) ->
-    {Guid, _} = file_info:get_guid(File),
-    #fuse_response{status = #status{code = ?OK}, fuse_response = #uuid{uuid = Guid}}.
+    {Guid, _File2} = file_info:get_guid(File),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #uuid{uuid = Guid}
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,10 +48,22 @@ resolve_guid(_Ctx, File) ->
 get_parent(Ctx, File) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ParentGuid, _File2} = file_info:get_parent_guid(File, UserId),
-
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #dir{uuid = ParentGuid}
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc Translates given file's UUID to absolute path.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_path(fslogic_context:ctx(), file_info:file_info()) ->
+    fslogic_worker:provider_response().
+get_file_path(Ctx, File) ->
+    {Path, _Ctx2, _File2} = file_info:get_logical_path(File, Ctx),
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #file_path{value = Path}
     }.
 
 %%%===================================================================
