@@ -32,7 +32,9 @@
     space_name :: undefined | od_space:name() | od_space:alias(),
     storage_posix_user_context :: undefined | #posix_user_ctx{},
     times :: undefined | times:times(),
-    file_name :: undefined | file_meta:name()
+    file_name :: undefined | file_meta:name(),
+    storage_doc :: undefined | space_storage:doc(),
+    local_file_location_doc :: undefined | file_location:doc()
 }).
 
 -type path() :: file_meta:path().
@@ -44,7 +46,7 @@
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2,
-    get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1]).
+    get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1, get_storage_doc/1, get_local_file_location_doc/1]).
 -export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
@@ -418,6 +420,33 @@ get_file_children(FileInfo, Ctx, Offset, Limit) ->
 get_uuid_entry(FileInfo) ->
     {Guid, FileInfo2} = get_guid(FileInfo),
     {{uuid, fslogic_uuid:guid_to_uuid(Guid)}, FileInfo2}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get storage document fo file's space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_doc(file_info()) -> {space_storage:doc(), file_info()}.
+get_storage_doc(FileInfo = #file_info{storage_doc = undefined}) ->
+    SpaceId = get_space_id(FileInfo),
+    {ok, StorageDoc} = fslogic_storage:select_storage(SpaceId),
+    {StorageDoc, FileInfo#file_info{storage_doc = StorageDoc}};
+get_storage_doc(FileInfo = #file_info{storage_doc = StorageDoc}) ->
+    {StorageDoc, FileInfo}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get local file location for file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_file_location_doc(file_info()) ->
+    {file_location:doc(), file_info()}.
+get_local_file_location_doc(FileInfo = #file_info{local_file_location_doc = undefined}) ->
+    {FileEntry, FileInfo2} = get_uuid_entry(FileInfo),
+    LocalLocation = fslogic_utils:get_local_file_location(FileEntry),
+    {LocalLocation, FileInfo2#file_info{local_file_location_doc = LocalLocation}};
+get_local_file_location_doc(FileInfo = #file_info{local_file_location_doc = Doc}) ->
+    {Doc, FileInfo}.
 
 %%--------------------------------------------------------------------
 %% @doc

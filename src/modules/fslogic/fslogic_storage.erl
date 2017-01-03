@@ -26,7 +26,6 @@
 %%% API
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new user's storage context based on given helper.
@@ -38,7 +37,6 @@ new_user_ctx(HelperInit, SessionId, SpaceUUID) ->
     LumaType = luma_type(),
     LumaType:new_user_ctx(HelperInit, SessionId, SpaceUUID).
 
-
 %%--------------------------------------------------------------------
 %% @doc Retrieves posix user ctx for file attrs
 %% @end
@@ -48,7 +46,6 @@ new_user_ctx(HelperInit, SessionId, SpaceUUID) ->
 get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID) ->
     LumaType = luma_type(),
     LumaType:get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -63,14 +60,13 @@ select_helper(#storage{helpers = []} = Storage) ->
 select_helper(#storage{helpers = [Helper | _]}) ->
     {ok, Helper}.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns any available storage for given space id.
 %% @end
 %%--------------------------------------------------------------------
 -spec select_storage(SpaceId :: binary()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
+    {ok, space_storage:doc()} | {error, Reason :: term()}.
 select_storage(SpaceId) ->
     case space_storage:get(SpaceId) of
         {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} ->
@@ -82,7 +78,6 @@ select_storage(SpaceId) ->
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new helper_init structure.
@@ -91,7 +86,6 @@ select_storage(SpaceId) ->
 -spec new_helper_init(HelperName :: helpers:name(), HelperArgs :: helpers:args()) -> #helper_init{}.
 new_helper_init(HelperName, HelperArgs) ->
     #helper_init{name = HelperName, args = HelperArgs}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,11 +96,9 @@ new_helper_init(HelperName, HelperArgs) ->
 new_storage(Name, Helpers) ->
     #storage{name = Name, helpers = Helpers}.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @private

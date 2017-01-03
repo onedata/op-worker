@@ -19,8 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_file/5, make_file/4]).
--export([save_handle/2]). %todo delete
+-export([create_file/5, make_file/4, open_file/3]).
 
 %%%===================================================================
 %%% API
@@ -89,6 +88,19 @@ make_file(Ctx, ParentFile, Name, Mode) ->
 
     attr_req:get_file_attr_no_permission_check(Ctx, File2).
 
+%%--------------------------------------------------------------------
+%% @doc @equiv open_file(Ctx, File, CreateHandle) with permission check
+%% depending on the open flag
+%%--------------------------------------------------------------------
+-spec open_file(fslogic_context:ctx(), File :: fslogic_worker:file(),
+    OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
+open_file(Ctx, File, read) ->
+    open_file_for_read(Ctx, File);
+open_file(Ctx, File, write) ->
+    open_file_for_write(Ctx, File);
+open_file(Ctx, File, rdwr) ->
+    open_file_for_rdwr(Ctx, File).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -107,8 +119,8 @@ create_file_doc(Ctx, ParentFile, Name, Mode)  ->
         mode = Mode,
         uid = fslogic_context:get_user_id(Ctx)
     }},
-    {FileEntry, ParentFile2} = file_info:get_uuid_entry(ParentFile),
-    {ok, FileUuid} = file_meta:create(FileEntry, File), %todo pass file_info
+    {ParentFileEntry, ParentFile2} = file_info:get_uuid_entry(ParentFile),
+    {ok, FileUuid} = file_meta:create(ParentFileEntry, File), %todo pass file_info
 
     CTime = erlang:system_time(seconds),
     {ok, _} = times:create(#document{key = FileUuid, value = #times{
@@ -131,3 +143,58 @@ save_handle(SessId, Handle) ->
         _ -> session:add_handle(SessId, HandleId, Handle)
     end,
     {ok, HandleId}.
+
+%%--------------------------------------------------------------------
+%% @equiv open_file_impl(Ctx, File, read, CreateHandle) with permission check
+%%--------------------------------------------------------------------
+-spec open_file_for_read(fslogic_context:ctx(), fslogic_worker:file()) ->
+    no_return() | #fuse_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
+open_file_for_read(Ctx, File) ->
+    open_file_impl(Ctx, File, read).
+
+%%--------------------------------------------------------------------
+%% @equiv open_file_impl(Ctx, File, write, CreateHandle) with permission check
+%%--------------------------------------------------------------------
+-spec open_file_for_write(fslogic_context:ctx(), fslogic_worker:file()) ->
+    no_return() | #fuse_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
+open_file_for_write(Ctx, File) ->
+    open_file_impl(Ctx, File, write).
+
+%%--------------------------------------------------------------------
+%% @equiv open_file_impl(Ctx, File, rdwr, CreateHandle) with permission check
+%%--------------------------------------------------------------------
+-spec open_file_for_rdwr(fslogic_context:ctx(), fslogic_worker:file()) ->
+    no_return() | #fuse_response{}.
+-check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
+open_file_for_rdwr(Ctx, File) ->
+    open_file_impl(Ctx, File, rdwr).
+
+%%--------------------------------------------------------------------
+%% @doc Opens a file and returns a handle to it.
+%% For best performance use following arg types: document -> uuid -> path
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_impl(fslogic_context:ctx(), File :: fslogic_worker:file(),
+    fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
+open_file_impl(Ctx, File, Flag) ->
+    {StorageDoc, File2} = file_info:get_storage_doc(File),
+    {{uuid, FileUuid}, File3} = file_info:get_uuid_entry(File2),
+    {#document{value = #file_location{
+        file_id = FileId}
+    }, File4} = file_info:get_local_file_location_doc(File3),
+    SpaceDirUuid = file_info:get_space_dir_uuid(File4),
+    SessId = fslogic_context:get_session_id(Ctx),
+    ShareId = file_info:get_share_id(File4),
+
+    SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, StorageDoc, FileId, ShareId), %todo pass file_info
+    {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
+    {ok, HandleId} = save_handle(SessId, Handle),
+
+    ok = file_handles:register_open(FileUuid, SessId, 1), %todo pass file_info
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened{handle_id = HandleId}
+    }.

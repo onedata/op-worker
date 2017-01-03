@@ -37,7 +37,6 @@
     LogicalTargetPath :: file_meta:path()) ->
     #provider_response{} | no_return().
 copy(Ctx, SourceEntry, LogicalTargetPath) ->
-
     case file_meta:get(SourceEntry) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = SourceDoc} ->
             copy_dir(Ctx, SourceDoc, LogicalTargetPath);

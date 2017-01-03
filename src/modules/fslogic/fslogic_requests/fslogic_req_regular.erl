@@ -20,14 +20,13 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/2, open_file/3, truncate/3, release/3]).
+-export([get_file_location/2, truncate/3, release/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc Truncates file on storage and returns only if operation is complete. Does not change file size in
@@ -98,19 +97,6 @@ get_file_location(Ctx, File) ->
             space_id = SpaceId
         })
     }.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv open_file(Ctx, File, CreateHandle) with permission check
-%% depending on the open flag
-%%--------------------------------------------------------------------
--spec open_file(fslogic_context:ctx(), File :: fslogic_worker:file(),
-    OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file(Ctx, File, read) ->
-    open_file_for_read(Ctx, File);
-open_file(Ctx, File, write) ->
-    open_file_for_write(Ctx, File);
-open_file(Ctx, File, rdwr) ->
-    open_file_for_rdwr(Ctx, File).
 
 %%--------------------------------------------------------------------
 %% @doc Removes file handle saved in session.
@@ -234,62 +220,3 @@ get_file_distribution(_Ctx, {uuid, UUID}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @equiv open_file_impl(Ctx, File, read, CreateHandle) with permission check
-%%--------------------------------------------------------------------
--spec open_file_for_read(fslogic_context:ctx(), fslogic_worker:file()) ->
-    no_return() | #fuse_response{}.
--check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
-open_file_for_read(Ctx, File) ->
-    open_file_impl(Ctx, File, read).
-
-%%--------------------------------------------------------------------
-%% @equiv open_file_impl(Ctx, File, write, CreateHandle) with permission check
-%%--------------------------------------------------------------------
--spec open_file_for_write(fslogic_context:ctx(), fslogic_worker:file()) ->
-    no_return() | #fuse_response{}.
--check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-open_file_for_write(Ctx, File) ->
-    open_file_impl(Ctx, File, write).
-
-%%--------------------------------------------------------------------
-%% @equiv open_file_impl(Ctx, File, rdwr, CreateHandle) with permission check
-%%--------------------------------------------------------------------
--spec open_file_for_rdwr(fslogic_context:ctx(), fslogic_worker:file()) ->
-    no_return() | #fuse_response{}.
--check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
-open_file_for_rdwr(Ctx, File) ->
-    open_file_impl(Ctx, File, rdwr).
-
-%%--------------------------------------------------------------------
-%% @doc Opens a file and returns a handle to it.
-%% For best performance use following arg types: document -> uuid -> path
-%% @end
-%%--------------------------------------------------------------------
--spec open_file_impl(fslogic_context:ctx(), File :: fslogic_worker:file(),
-    fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file_impl(Ctx, File, Flag) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    SpaceId = fslogic_context:get_space_id(Ctx),
-    ShareId = file_info:get_share_id(Ctx),
-    {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(File),
-
-    {ok, StorageDoc} = fslogic_storage:select_storage(SpaceId),
-    #document{value = #file_location{
-        file_id = FileId}
-    } = fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(
-        FileDoc, fslogic_context:get_user_id(Ctx)
-    ),
-
-    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, StorageDoc, FileId, ShareId),
-    {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
-    {ok, HandleId} = file_req:save_handle(SessId, Handle),
-
-    ok = file_handles:register_open(FileUUID, SessId, 1),
-
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_opened{handle_id = HandleId}
-    }.

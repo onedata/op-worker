@@ -58,7 +58,7 @@ get_file_attr_no_permission_check(Ctx, File) ->
     {ParentGuid, File5} = file_info:get_parent_guid(File4, UserId),
     {{ATime, CTime, MTime}, _File6} = file_info:get_times(File5),
 
-    FinalUID = fix_wrong_uid(UID, UserId, OwnerId), %todo see function doc
+    FinalUID = fix_wrong_uid(UID, UserId, OwnerId), %todo remove, see function doc
     #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
         gid = GID, parent_uuid = ParentGuid,
         uuid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
