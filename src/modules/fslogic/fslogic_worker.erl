@@ -254,13 +254,13 @@ handle_file_request(Ctx, #file_request{file_request = #release{handle_id = Handl
     file_req:release(Ctx, File, HandleId);
 handle_file_request(Ctx, #file_request{file_request = #get_file_location{}}, File) ->
     file_req:get_file_location(Ctx, File);
+handle_file_request(Ctx, #file_request{file_request = #truncate{size = Size}}, File) ->
+    truncate_req:truncate(Ctx, File, Size);
 handle_file_request(Ctx, Req, _File) ->
     handle_file_request(Ctx, Req).
 
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
     fuse_response().
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #truncate{size = Size}}) ->
-    fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Size);
 handle_file_request(Ctx, #file_request{context_guid = Guid,
     file_request = #synchronize_block{block = Block, prefetch = Prefetch}}) ->
     fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block, Prefetch);

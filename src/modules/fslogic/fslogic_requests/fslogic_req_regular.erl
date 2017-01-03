@@ -20,56 +20,12 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([truncate/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc Truncates file on storage and returns only if operation is complete. Does not change file size in
-%%      #file_meta model. Model's size should be changed by write events.
-%% For best performance use following arg types: document -> uuid -> path
-%% @end
-%%--------------------------------------------------------------------
--spec truncate(fslogic_context:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
-    FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-truncate(Ctx, Entry, Size) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(Entry),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(Ctx)),
-
-    %% START -> Quota check
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    OldSize = fslogic_blocks:get_file_size(FileDoc),
-    ok = space_quota:assert_write(SpaceId, Size - OldSize),
-    %% END   -> Quota check
-
-    Results = lists:map(
-        fun({SID, FID} = Loc) ->
-            {ok, Storage} = storage:get(SID),
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
-            case storage_file_manager:open(SFMHandle, write) of
-                {ok, Handle} ->
-                    {Loc, storage_file_manager:truncate(Handle, Size)};
-                Error ->
-                    {Loc, Error}
-            end
-        end, fslogic_utils:get_local_storage_file_locations(Entry)),
-
-    case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
-        [] -> ok;
-        Errors ->
-            [?error("Unable to truncate [FileId: ~p] [StoragId: ~p] to size ~p due to: ~p", [FID, SID, Size, Reason])
-                || {{SID, FID}, {error, Reason}} <- Errors],
-            ok
-    end,
-
-    fslogic_times:update_mtime_ctime(FileDoc, fslogic_context:get_user_id(Ctx)),
-    #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
 %% @doc Gets parent of file
