@@ -34,7 +34,8 @@
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage_doc :: undefined | space_storage:doc(),
-    local_file_location_doc :: undefined | file_location:doc()
+    local_file_location_doc :: undefined | file_location:doc(),
+    location_ids :: undefined | [file_location:id()]
 }).
 
 -type path() :: file_meta:path().
@@ -46,7 +47,7 @@
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2,
-    get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1, get_storage_doc/1, get_local_file_location_doc/1]).
+    get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1, get_storage_doc/1, get_local_file_location_doc/1, get_file_location_ids/1]).
 -export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
@@ -447,6 +448,22 @@ get_local_file_location_doc(FileInfo = #file_info{local_file_location_doc = unde
     {LocalLocation, FileInfo2#file_info{local_file_location_doc = LocalLocation}};
 get_local_file_location_doc(FileInfo = #file_info{local_file_location_doc = Doc}) ->
     {Doc, FileInfo}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file location ids
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_ids(file_info()) ->
+    {file_location:doc(), file_info()}.
+get_file_location_ids(FileInfo = #file_info{location_ids = undefined}) ->
+    {FileDoc, FileInfo2} = get_file_doc(FileInfo),
+    {ok, Locations} = file_meta:get_locations(FileDoc),
+    {Locations, FileInfo2#file_info{location_ids = Locations}};
+get_file_location_ids(FileInfo = #file_info{location_ids = Locations}) ->
+    {Locations, FileInfo}.
+
+
 
 %%--------------------------------------------------------------------
 %% @doc

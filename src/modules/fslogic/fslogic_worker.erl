@@ -256,17 +256,10 @@ handle_file_request(Ctx, #file_request{file_request = #get_file_location{}}, Fil
     file_req:get_file_location(Ctx, File);
 handle_file_request(Ctx, #file_request{file_request = #truncate{size = Size}}, File) ->
     truncate_req:truncate(Ctx, File, Size);
-handle_file_request(Ctx, Req, _File) ->
-    handle_file_request(Ctx, Req).
-
--spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
-    fuse_response().
-handle_file_request(Ctx, #file_request{context_guid = Guid,
-    file_request = #synchronize_block{block = Block, prefetch = Prefetch}}) ->
-    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block, Prefetch);
-handle_file_request(Ctx, #file_request{context_guid = Guid,
-    file_request = #synchronize_block_and_compute_checksum{block = Block}}) ->
-    fslogic_req_regular:synchronize_block_and_compute_checksum(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block).
+handle_file_request(Ctx, #file_request{file_request = #synchronize_block{block = Block, prefetch = Prefetch}}, File) ->
+    synchronization_req:synchronize_block(Ctx, File, Block, Prefetch);
+handle_file_request(Ctx, #file_request{file_request = #synchronize_block_and_compute_checksum{block = Block}}, File) ->
+    synchronization_req:synchronize_block_and_compute_checksum(Ctx, File, Block).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -276,6 +269,8 @@ handle_file_request(Ctx, #file_request{context_guid = Guid,
 %%--------------------------------------------------------------------
 -spec handle_provider_request(fslogic_context:ctx(), provider_request(), file_info:file_info()) ->
     provider_response().
+handle_provider_request(Ctx, #provider_request{provider_request = #get_file_distribution{}}, File) ->
+    synchronization_req:get_file_distribution(Ctx, File);
 handle_provider_request(Ctx, Req, _File) ->
     handle_provider_request(Ctx, Req).
 
@@ -311,8 +306,6 @@ handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_req
     fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Value);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_file_path{}}) ->
     fslogic_req_generic:get_file_path(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_file_distribution{}}) ->
-    fslogic_req_regular:get_file_distribution(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #replicate_file{block = Block}}) ->
     fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_metadata{type = Type, names = Names, inherited = Inherited}}) ->

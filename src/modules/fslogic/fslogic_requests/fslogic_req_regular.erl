@@ -20,8 +20,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
-    get_file_distribution/2]).
+-export([get_parent/2]).
 
 %%%===================================================================
 %%% API functions
@@ -73,65 +72,7 @@ get_parent(Ctx, File) ->
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Synchronizes given block with remote replicas.
-%% @end
-%%--------------------------------------------------------------------
--spec synchronize_block(fslogic_context:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block(), boolean()) ->
-    #fuse_response{}.
-synchronize_block(Ctx, {uuid, FileUUID}, undefined, Prefetch) ->
-    Size = fslogic_blocks:get_file_size({uuid, FileUUID}),
-    synchronize_block(Ctx, {uuid, FileUUID}, #file_block{offset = 0, size = Size}, Prefetch);
-synchronize_block(Ctx, {uuid, FileUUID}, Block, Prefetch) ->
-    ok = replica_synchronizer:synchronize(Ctx, FileUUID, Block, Prefetch),
-    #fuse_response{status = #status{code = ?OK}}.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Synchronizes given block with remote replicas and returns checksum of
-%% synchronized data.
-%% @end
-%%--------------------------------------------------------------------
--spec synchronize_block_and_compute_checksum(fslogic_context:ctx(),
-    {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
-synchronize_block_and_compute_checksum(Ctx, {uuid, FileUUID},
-    Range = #file_block{offset = Offset, size = Size}) ->
-
-    SessId = fslogic_context:get_session_id(Ctx),
-    {ok, Handle} = lfm_files:open(SessId, {guid, fslogic_uuid:uuid_to_guid(FileUUID)}, read),
-    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
-    Checksum = crypto:hash(md4, Data),
-    LocationToSend =
-        fslogic_file_location:prepare_location_for_client({uuid, FileUUID}, Range),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #sync_response{checksum = Checksum, file_location = LocationToSend}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get distribution of file over providers' storages.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution(fslogic_context:ctx(), {uuid, file_meta:uuid()}) ->
-    #provider_response{}.
-get_file_distribution(_Ctx, {uuid, UUID}) ->
-    {ok, Locations} = file_meta:get_locations({uuid, UUID}),
-    ProviderDistributions = lists:map( %todo VFS-2813 support multi location
-        fun(LocationId) ->
-            {ok, #document{value = #file_location{
-                provider_id = ProviderId,
-                blocks = Blocks
-            }}} = file_location:get(LocationId),
-
-            #provider_file_distribution{
-                provider_id = ProviderId,
-                blocks = Blocks
-            }
-        end, Locations),
-    #provider_response{status = #status{code = ?OK}, provider_response =
-    #file_distribution{provider_file_distributions = ProviderDistributions}}.
 
 %%%===================================================================
 %%% Internal functions
