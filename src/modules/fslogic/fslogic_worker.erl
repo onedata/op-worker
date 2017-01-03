@@ -250,6 +250,8 @@ handle_file_request(Ctx, #file_request{file_request = #make_file{name = Name, mo
     file_req:make_file(Ctx, ParentFile, Name, Mode);
 handle_file_request(Ctx, #file_request{file_request = #open_file{flag = Flag}}, File) ->
     file_req:open_file(Ctx, File, Flag);
+handle_file_request(Ctx, #file_request{file_request = #release{handle_id = HandleId}}, File) ->
+    file_req:release(Ctx, File, HandleId);
 handle_file_request(Ctx, Req, _File) ->
     handle_file_request(Ctx, Req).
 
@@ -259,8 +261,6 @@ handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_
     fslogic_req_regular:get_file_location(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #truncate{size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Size);
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #release{handle_id = HandleId}}) ->
-    fslogic_req_regular:release(Ctx, fslogic_uuid:guid_to_uuid(Guid), HandleId);
 handle_file_request(Ctx, #file_request{context_guid = Guid,
     file_request = #synchronize_block{block = Block, prefetch = Prefetch}}) ->
     fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block, Prefetch);

@@ -20,7 +20,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/2, truncate/3, release/3]).
+-export([get_file_location/2, truncate/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
@@ -97,19 +97,6 @@ get_file_location(Ctx, File) ->
             space_id = SpaceId
         })
     }.
-
-%%--------------------------------------------------------------------
-%% @doc Removes file handle saved in session.
-%% @end
-%%--------------------------------------------------------------------
--spec release(fslogic_context:ctx(), FileUUID :: file_meta:uuid(), HandleId :: binary()) ->
-    no_return() | #fuse_response{}.
-release(Ctx, FileUUID, HandleId) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    ok = session:remove_handle(SessId, HandleId),
-    ok = file_handles:register_release(FileUUID, SessId, 1),
-    #fuse_response{status = #status{code = ?OK}}.
-
 
 %%--------------------------------------------------------------------
 %% @doc Gets parent of file

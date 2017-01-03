@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_file/5, make_file/4, open_file/3]).
+-export([create_file/5, make_file/4, open_file/3, release/3]).
 
 %%%===================================================================
 %%% API
@@ -100,6 +100,19 @@ open_file(Ctx, File, write) ->
     open_file_for_write(Ctx, File);
 open_file(Ctx, File, rdwr) ->
     open_file_for_rdwr(Ctx, File).
+
+%%--------------------------------------------------------------------
+%% @doc Remove file handle saved in session.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(fslogic_context:ctx(), file_info:file_info(), HandleId :: binary()) ->
+    fslogic_worker:fuse_response().
+release(Ctx, File, HandleId) ->
+    SessId = fslogic_context:get_session_id(Ctx),
+    ok = session:remove_handle(SessId, HandleId),
+    {{uuid, FileUuid}, _File2} = file_info:get_uuid_entry(File),
+    ok = file_handles:register_release(FileUuid, SessId, 1), %todo pass file_info
+    #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
 %%% Internal functions
