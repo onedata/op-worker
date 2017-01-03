@@ -19,7 +19,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2, get_child_attr/3, chmod/3, update_times/5]).
+-export([get_file_attr/2, get_file_attr_no_permission_check/2, get_child_attr/3, chmod/3, update_times/5]).
 
 %%%===================================================================
 %%% API
@@ -27,13 +27,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's attributes.
+%% Check perms and get file's attributes
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(fslogic_context:ctx(), file_info:file_info()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(Ctx, File) ->
+    get_file_attr_no_permission_check(Ctx, File).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file's attributes.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_attr_no_permission_check(fslogic_context:ctx(), file_info:file_info()) ->
+    fslogic_worker:fuse_response().
+get_file_attr_no_permission_check(Ctx, File) ->
     {FileDoc = #document{key = Uuid, value = #file_meta{
         type = Type, mode = Mode, provider_id = ProviderId, uid = OwnerId,
         shares = Shares}}, File2
@@ -59,7 +69,7 @@ get_file_attr(Ctx, File) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetches attributes of directory's child (if exists).
+%% Fetch attributes of directory's child (if exists).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(fslogic_context:ctx(), ParentFile :: file_info:file_info(),
@@ -72,7 +82,7 @@ get_child_attr(Ctx, ParentFile, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Changes file permissions.
+%% Change file permissions.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_context:ctx(), file_info:file_info(), Perms :: fslogic_worker:posix_permissions()) ->
@@ -95,7 +105,7 @@ chmod(Ctx, File, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Changes file's access times.
+%% Change file's access times.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_times(fslogic_context:ctx(), file_info:file_info(),

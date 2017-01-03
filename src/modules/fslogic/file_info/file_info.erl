@@ -44,7 +44,7 @@
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2,
-    get_child/3, get_file_children/4, get_logical_path/2]).
+    get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1]).
 -export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
@@ -407,6 +407,17 @@ get_file_children(FileInfo, Ctx, Offset, Limit) ->
                     {Error, Ctx2, FileInfo2}
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @todo remove this function and pass file info wherever possible
+%% @doc
+%% Get file uuid entry
+%% @end
+%%--------------------------------------------------------------------
+-spec get_uuid_entry(file_info()) -> {{uuid, file_meta:uuid()}, file_info()}.
+get_uuid_entry(FileInfo) ->
+    {Guid, FileInfo2} = get_guid(FileInfo),
+    {{uuid, fslogic_uuid:guid_to_uuid(Guid)}, FileInfo2}.
 
 %%--------------------------------------------------------------------
 %% @doc

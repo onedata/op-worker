@@ -15,12 +15,15 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
+
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod_storage_files/3, rename_storage_file/5, rename_on_storage/3]).
+-export([chmod_storage_files/3, rename_storage_file/5, rename_on_storage/3,
+    create_storage_file_if_not_exists/2, create_storage_file/4]).
 
 %%%===================================================================
 %%% API
@@ -136,6 +139,97 @@ rename_on_storage(Ctx, TargetSpaceId, SourceEntry) ->
         SourceEntry,
         Mode
     ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Create storage file and file_location if there is no file_location defined
+%% @end
+%%--------------------------------------------------------------------
+-spec create_storage_file_if_not_exists(od_space:id(), datastore:document()) ->
+    ok | {error, term()}.
+create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
+    value = #file_meta{mode = Mode, uid = UserId}}) ->
+    file_location:critical_section(FileUuid,
+        fun() ->
+            case fslogic_utils:get_local_file_locations(FileDoc) of
+                [] ->
+                    create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
+                    chown_file(FileUuid, UserId, SpaceId),
+                    ok;
+                _ ->
+                    ok
+            end
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Create file_location and storage file
+%% @end
+%%--------------------------------------------------------------------
+-spec create_storage_file(binary(), file_meta:uuid(), session:id(), file_meta:posix_permissions()) ->
+    {FileId :: binary(), StorageId :: storage:id()}.
+create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
+
+    {ok, Path} = fslogic_path:gen_storage_path({uuid, FileUuid}),
+    FileId0 = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, Path, 0),
+    LeafLess = fslogic_path:dirname(FileId0),
+
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
+    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok -> ok;
+        {error, eexist} ->
+            ok
+    end,
+
+    FileCreatorFun = fun FileCreator(ToCreate, Version) ->
+        SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, ToCreate),
+        case storage_file_manager:create(SFMHandle1, Mode) of
+            ok -> {ok, ToCreate};
+            {error, eexist} ->
+                NextVersion = Version + 1,
+                NextFileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, Path, NextVersion),
+                case NextFileId of
+                    ToCreate ->
+                        ?error("Unable to generate different conflicted fileId: ~p vs ~p",
+                            [{ToCreate, Version}, {NextFileId, NextVersion}]),
+                        {error, create_loop_detected};
+                    _ ->
+                        FileCreator(NextFileId, NextVersion)
+                end
+        end
+    end,
+
+    {ok, FileId} = FileCreatorFun(FileId0, 0),
+
+    Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
+        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
+        space_id = SpaceId},
+    {ok, LocId} = file_location:create(#document{value = Location}),
+    file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
+
+    {StorageId, FileId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% If given UserId is present in provider, then file owner is changes.
+%% Otherwise, file is added to files awaiting owner change.
+%% @end
+%%--------------------------------------------------------------------
+-spec chown_file(file_meta:uuid(), od_user:id(), od_space:id()) -> ok.
+chown_file(FileUuid, UserId, SpaceId) ->
+    case od_user:exists(UserId) of
+        true ->
+            files_to_chown:chown_file(FileUuid, UserId, SpaceId);
+        false ->
+            case files_to_chown:add(UserId, FileUuid) of
+                {ok, _} ->
+                    ok;
+                AddAns ->
+                    AddAns
+            end
+    end.
 
 %%%===================================================================
 %%% Internal functions

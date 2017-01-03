@@ -152,7 +152,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                     {ok, Uuid} ->
                         Guid = fslogic_uuid:uuid_to_guid(Uuid),
                         FileInfo = file_info:new_by_guid(Guid),
-                        LogicalAttrsResponse_ = attr_req:get_file_attr(
+                        LogicalAttrsResponse_ = attr_req:get_file_attr_no_permission_check(
                             fslogic_context:new(?ROOT_SESS_ID), FileInfo), %todo TL do not create fslogic internal context
                         IsImported_ = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse_),
                         {IsImported_, LogicalAttrsResponse_}

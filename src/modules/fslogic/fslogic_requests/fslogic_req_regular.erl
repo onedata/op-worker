@@ -20,7 +20,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/2, open_file/3, create_file/5, make_file/4,
+-export([get_file_location/2, open_file/3, make_file/4,
     truncate/3, release/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
@@ -114,75 +114,6 @@ open_file(Ctx, File, rdwr) ->
     open_file_for_rdwr(Ctx, File).
 
 %%--------------------------------------------------------------------
-%% @doc Creates and opens file. Returns handle to the file, its attributes
-%% and location.
-%% @end
-%%--------------------------------------------------------------------
--spec create_file(fslogic_context:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
-    Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
-    no_return() | #fuse_response{}.
--check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
-create_file(Ctx, {uuid, ParentUUID}, Name, Mode, _Flag) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    SpaceId = fslogic_context:get_space_id(Ctx),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}, fslogic_context:get_user_id(Ctx)),
-    CTime = erlang:system_time(seconds),
-    File = #document{value = #file_meta{
-        name = Name,
-        type = ?REGULAR_FILE_TYPE,
-        mode = Mode,
-        uid = fslogic_context:get_user_id(Ctx)
-    }},
-
-    {ok, FileUUID} = file_meta:create({uuid, ParentUUID}, File),
-    {ok, _} = times:create(#document{key = FileUUID, value = #times{
-        mtime = CTime, atime = CTime, ctime = CTime
-    }}),
-
-    try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
-        {StorageId, FileId} ->
-            fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(Ctx)),
-
-            {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID,
-                Storage, FileId),
-            {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
-            {ok, HandleId} = save_handle(SessId, Handle),
-
-            Guid = fslogic_uuid:uuid_to_guid(FileUUID),
-            FileInfo = file_info:new_by_guid(Guid),
-            #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-                attr_req:get_file_attr(Ctx, FileInfo),
-
-            FileLocation = #file_location{
-                uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
-                provider_id = oneprovider:get_provider_id(),
-                storage_id = StorageId,
-                file_id = FileId,
-                blocks = [#file_block{offset = 0, size = 0}],
-                space_id = SpaceId
-            },
-
-            ok = file_handles:register_open(FileUUID, SessId, 1),
-
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_created{
-                    handle_id = HandleId,
-                    file_attr = FileAttr,
-                    file_location = FileLocation
-                }
-            }
-    catch
-        T:M ->
-            ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),
-            {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
-            lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
-            file_meta:delete({uuid, FileUUID}),
-            throw(?EACCES)
-    end.
-
-%%--------------------------------------------------------------------
 %% @doc Creates file. Returns its attributes.
 %% @end
 %%--------------------------------------------------------------------
@@ -205,7 +136,7 @@ make_file(Ctx, {uuid, ParentUUID}, Name, Mode) ->
         mtime = CTime, atime = CTime, ctime = CTime
     }}),
 
-    try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
+    try sfm_utils:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         _ ->
             fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(Ctx)),
             Guid = fslogic_uuid:uuid_to_guid(FileUUID),
@@ -394,7 +325,7 @@ open_file_impl(Ctx, File, Flag) ->
 
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, StorageDoc, FileId, ShareId),
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
-    {ok, HandleId} = save_handle(SessId, Handle),
+    {ok, HandleId} = file_req:save_handle(SessId, Handle),
 
     ok = file_handles:register_open(FileUUID, SessId, 1),
 
@@ -402,17 +333,3 @@ open_file_impl(Ctx, File, Flag) ->
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}
     }.
-
-%%--------------------------------------------------------------------
-%% @doc Saves file handle in user's session, returns id of saved handle
-%% @end
-%%--------------------------------------------------------------------
--spec save_handle(session:id(), storage_file_manager:handle()) ->
-    {ok, binary()}.
-save_handle(SessId, Handle) ->
-    HandleId = base64:encode(crypto:rand_bytes(20)),
-    case session:is_special(SessId) of
-    	true -> ok;
-    	_ -> session:add_handle(SessId, HandleId, Handle)
-    end,
-    {ok, HandleId}.
