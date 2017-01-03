@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_file/5, make_file/4, open_file/3, release/3]).
+-export([create_file/5, make_file/4, get_file_location/2, open_file/3, release/3]).
 
 %%%===================================================================
 %%% API
@@ -87,6 +87,33 @@ make_file(Ctx, ParentFile, Name, Mode) ->
     fslogic_times:update_mtime_ctime(ParentFileEntry, fslogic_context:get_user_id(Ctx)), %todo pass file_info
 
     attr_req:get_file_attr_no_permission_check(Ctx, File2).
+
+%%--------------------------------------------------------------------
+%% @doc Returns file location.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location(fslogic_context:ctx(), file_info:file_info()) ->
+    fslogic_worker:fuse_response().
+-check_permissions([{traverse_ancestors, 2}]).
+get_file_location(_Ctx, File) ->
+    {#document{key = StorageId}, File2} = file_info:get_storage_doc(File),
+    {#document{value = #file_location{
+        blocks = Blocks, file_id = FileId
+    }}, File3} = file_info:get_local_file_location_doc(File2),
+    {FileGuid, File4} = file_info:get_guid(File3),
+    SpaceId = file_info:get_space_id(File4),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
+            uuid = FileGuid,
+            provider_id = oneprovider:get_provider_id(),
+            storage_id = StorageId,
+            file_id = FileId,
+            blocks = Blocks,
+            space_id = SpaceId
+        })
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv open_file(Ctx, File, CreateHandle) with permission check

@@ -20,7 +20,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/2, truncate/3]).
+-export([truncate/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
@@ -70,33 +70,6 @@ truncate(Ctx, Entry, Size) ->
 
     fslogic_times:update_mtime_ctime(FileDoc, fslogic_context:get_user_id(Ctx)),
     #fuse_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% @doc Returns file location.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_location(fslogic_context:ctx(), File :: fslogic_worker:file()) ->
-    no_return() | #fuse_response{}.
--check_permissions([{traverse_ancestors, 2}]).
-get_file_location(Ctx, File) ->
-    SpaceId = fslogic_context:get_space_id(Ctx),
-    {ok, #document{key = FileUUID}} = file_meta:get(File),
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
-    #document{value = #file_location{
-        blocks = Blocks, file_id = FileId
-    }} = fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location
-
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
-            provider_id = oneprovider:get_provider_id(),
-            storage_id = StorageId,
-            file_id = FileId,
-            blocks = Blocks,
-            space_id = SpaceId
-        })
-    }.
 
 %%--------------------------------------------------------------------
 %% @doc Gets parent of file
