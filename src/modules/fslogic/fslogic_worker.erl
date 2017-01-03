@@ -273,48 +273,47 @@ handle_provider_request(Ctx, #provider_request{provider_request = #get_file_dist
     synchronization_req:get_file_distribution(Ctx, File);
 handle_provider_request(Ctx, #provider_request{provider_request = #get_parent{}}, File) ->
     guid_req:get_parent(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_xattr{name = XattrName, inherited = Inherited}}, File) ->
+    xattr_req:get_xattr(Ctx, File, XattrName, Inherited);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_xattr{xattr = Xattr}}, File) ->
+    xattr_req:set_xattr(Ctx, File, Xattr);
+handle_provider_request(Ctx, #provider_request{provider_request = #remove_xattr{name = XattrName}}, File) ->
+    xattr_req:remove_xattr(Ctx, File, XattrName);
+handle_provider_request(Ctx, #provider_request{provider_request = #list_xattr{inherited = Inherited, show_internal = ShowInternal}}, File) ->
+    xattr_req:list_xattr(Ctx, File, Inherited, ShowInternal);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_acl{}}, File) ->
+    acl_req:get_acl(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_acl{acl = Acl}}, File) ->
+    acl_req:set_acl(Ctx, File, Acl);
+handle_provider_request(Ctx, #provider_request{provider_request = #remove_acl{}}, File) ->
+    acl_req:remove_acl(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_transfer_encoding{}}, File) ->
+    cdmi_metadata_req:get_transfer_encoding(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_transfer_encoding{value = Value}}, File) ->
+    cdmi_metadata_req:set_transfer_encoding(Ctx, File, Value);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_cdmi_completion_status{}}, File) ->
+    cdmi_metadata_req:get_cdmi_completion_status(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_cdmi_completion_status{value = Value}}, File) ->
+    cdmi_metadata_req:set_cdmi_completion_status(Ctx, File, Value);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_mimetype{}}, File) ->
+    cdmi_metadata_req:get_mimetype(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_mimetype{value = Value}}, File) ->
+    cdmi_metadata_req:set_mimetype(Ctx, File, Value);
+handle_provider_request(Ctx, #provider_request{provider_request = #get_metadata{type = Type, names = Names, inherited = Inherited}}, File) ->
+    metadata_req:get_metadata(Ctx, File, Type, Names, Inherited);
+handle_provider_request(Ctx, #provider_request{provider_request = #set_metadata{metadata = #metadata{type = Type, value = Value}, names = Names}}, File) ->
+    metadata_req:set_metadata(Ctx, File, Type, Value, Names);
+handle_provider_request(Ctx, #provider_request{provider_request = #remove_metadata{type = Type}}, File) ->
+    metadata_req:remove_metadata(Ctx, File, Type);
 handle_provider_request(Ctx, Req, _File) ->
     handle_provider_request(Ctx, Req).
 
 -spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
     provider_response().
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_xattr{name = XattrName, inherited = Inherited}}) ->
-    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, XattrName, Inherited);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #set_xattr{xattr = Xattr}}) ->
-    fslogic_req_generic:set_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Xattr);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #remove_xattr{name = XattrName}}) ->
-    fslogic_req_generic:remove_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, XattrName);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #list_xattr{inherited = Inherited, show_internal = ShowInternal}}) ->
-    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Inherited, ShowInternal);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_acl{}}) ->
-    fslogic_req_generic:get_acl(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #set_acl{acl = Acl}}) ->
-    fslogic_req_generic:set_acl(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Acl);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #remove_acl{}}) ->
-    fslogic_req_generic:remove_acl(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_transfer_encoding{}}) ->
-    fslogic_req_generic:get_transfer_encoding(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #set_transfer_encoding{value = Value}}) ->
-    fslogic_req_generic:set_transfer_encoding(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Value);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_cdmi_completion_status{}}) ->
-    fslogic_req_generic:get_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #set_cdmi_completion_status{value = Value}}) ->
-    fslogic_req_generic:set_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Value);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_mimetype{}}) ->
-    fslogic_req_generic:get_mimetype(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #set_mimetype{value = Value}}) ->
-    fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Value);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_file_path{}}) ->
     fslogic_req_generic:get_file_path(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #replicate_file{block = Block}}) ->
     fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_metadata{type = Type, names = Names, inherited = Inherited}}) ->
-    fslogic_req_generic:get_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Type, Names, Inherited);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #set_metadata{metadata =
-#metadata{type = Type, value = Value}, names = Names}}) ->
-    fslogic_req_generic:set_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Type, Value, Names);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #remove_metadata{type = Type}}) ->
-    fslogic_req_generic:remove_metadata(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Type);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #check_perms{flag = Flag}}) ->
     fslogic_req_generic:check_perms(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Flag);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #create_share{name = Name}}) ->
