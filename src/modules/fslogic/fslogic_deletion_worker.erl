@@ -94,17 +94,13 @@ handle({fslogic_deletion_request, Ctx, File, Silent}) ->
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
     case file_handles:exists(FileUuid) of
-    true ->
+        true ->
             UserId = fslogic_context:get_user_id(Ctx),
             {ParentFile, File3} = file_info:get_parent(File2, UserId),
-            {ParentDoc, _ParentFile2} = file_info:get_file_doc(ParentFile),
-            {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId), %todo do not get parent, simply get path
-
             NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
-            Path = <<ParentPath/binary, ?DIRECTORY_SEPARATOR, NewName/binary>>,
-            #fuse_response{status = #status{code = ?OK}} = fslogic_rename:rename(
-                Ctx, {uuid, FileUuid}, Path),
 
+            #fuse_response{status = #status{code = ?OK}} = rename_req:rename(
+                Ctx, File3, ParentFile, NewName),
             ok = file_handles:mark_to_remove(FileUuid),
             fslogic_event:emit_file_renamed_to_client(File3, NewName, SessId);
         false ->

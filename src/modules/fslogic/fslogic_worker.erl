@@ -241,17 +241,14 @@ handle_file_request(Ctx, #file_request{file_request = #create_dir{name = Name, m
     dir_req:mkdir(Ctx, ParentFile, Name, Mode);
 handle_file_request(Ctx, #file_request{file_request = #get_file_children{offset = Offset, size = Size}}, File) ->
     dir_req:read_dir(Ctx, File, Offset, Size);
+handle_file_request(Ctx, #file_request{file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}, SourceFile) ->
+    TargetParentFile = file_info:new_by_guid(TargetParentGuid),
+    rename_req:rename(Ctx, SourceFile, TargetParentFile, TargetName);
 handle_file_request(Ctx, Req, _File) ->
     handle_file_request(Ctx, Req).
 
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
     fuse_response().
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    %% Use lfm_files wrapper for fslogic as the target uuid may not be local
-    {ok, TargetParentPath} = lfm_files:get_file_path(SessId, TargetParentGuid),
-    TargetPath = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, TargetParentPath, TargetName]),
-    fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, TargetPath);
 handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #create_file{name = Name,
     flag = Flag, mode = Mode}}) ->
     fslogic_req_regular:create_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode, Flag);

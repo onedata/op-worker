@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests related to file guid
+%%% Requests operating on file attributes.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(attr_req).

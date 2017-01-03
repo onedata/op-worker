@@ -23,7 +23,7 @@
 
 %% Record definition
 -record(file_info, {
-    path :: undefined | path(),
+    cannonical_path :: undefined | path(),
     guid :: undefined | guid(),
     space_dir_doc :: undefined | file_meta:doc(),
     file_doc :: undefined | file_meta:doc() | {error, term()},
@@ -44,7 +44,7 @@
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2,
-    get_child/3, get_file_children/4]).
+    get_child/3, get_file_children/4, get_logical_path/2]).
 -export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
@@ -68,7 +68,7 @@ of special session. You may only operate on guids in this context.">>});
                 [<<"/">>] ->
                     {UserRootDirUuid, NewCtx} = fslogic_context:get_user_root_dir_uuid(Ctx),
                     UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserRootDirUuid),
-                    {NewCtx, #file_info{path = filename:join(Tokens), guid = UserRootDirGuid}};
+                    {NewCtx, #file_info{cannonical_path = filename:join(Tokens), guid = UserRootDirGuid}};
                 [<<"/">>, SpaceName | Rest] ->
                     {#document{value = #od_user{space_aliases = Spaces}}, Ctx2} =
                         fslogic_context:get_user(Ctx),
@@ -77,7 +77,7 @@ of special session. You may only operate on guids in this context.">>});
                         false ->
                             throw(?ENOENT);
                         {SpaceId, SpaceName} ->
-                            {Ctx2, #file_info{path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}}
+                            {Ctx2, #file_info{cannonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}}
                     end
             end
     end.
@@ -107,12 +107,39 @@ get_share_id(Ctx) -> %todo TL return share_id cached in file_info
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file's cannonical path (starting with "/SpaceId/....
+%% Get file's cannonical path (starting with "/SpaceId/...."
 %% @end
 %%--------------------------------------------------------------------
--spec get_path(file_info()) -> path().
-get_path(#file_info{path = Path}) ->
+-spec get_path(file_info()) -> {path(), file_info()}.
+get_path(FileInfo = #file_info{cannonical_path = undefined}) ->
+    case is_root_dir(FileInfo) of
+        true ->
+            {<<"/">>, FileInfo#file_info{cannonical_path = <<"/">>}};
+        false ->
+            {Guid, FileInfo2} = get_guid(FileInfo),
+            Uuid = fslogic_uuid:guid_to_uuid(Guid),
+            LogicalPath = fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, Uuid),
+            {ok, [<<"/">>, _SpaceName | Rest]} = fslogic_path:tokenize_skipping_dots(LogicalPath),
+            SpaceId = get_space_id(FileInfo2),
+            CanonicalPath = filename:join([<<"/">>, SpaceId | Rest]),
+            {CanonicalPath, FileInfo2#file_info{cannonical_path = CanonicalPath}}
+    end;
+get_path(#file_info{cannonical_path = Path}) ->
     Path.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file's logical path (starting with "/SpaceName/...."
+%% @end
+%%--------------------------------------------------------------------
+-spec get_logical_path(file_info(), fslogic_context:ctx()) ->
+    {file_meta:path(), fslogic_context:ctx(), file_info()}.
+get_logical_path(FileInfo, Ctx) ->
+    {Path, FileInfo2} = get_path(FileInfo),
+    {SpaceName, Ctx2, FileInfo3} = get_space_name(FileInfo2, Ctx),
+    [<<"/">>, _SpaceId | Rest] = fslogic_path:tokenize_skipping_dots(Path),
+    Path = filename:join([<<"/">>, SpaceName | Rest]),
+    {Path, Ctx2, FileInfo3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -122,7 +149,7 @@ get_path(#file_info{path = Path}) ->
 -spec get_space_id(file_info()) -> od_space:id().
 get_space_id(#file_info{space_dir_doc = #document{key = SpaceUuid}}) ->
     fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid);
-get_space_id(#file_info{guid = undefined, path = Path}) ->
+get_space_id(#file_info{guid = undefined, cannonical_path = Path}) ->
     case fslogic_path:split(Path) of
         [<<"/">>, SpaceId | _] ->
             SpaceId;
@@ -149,7 +176,7 @@ get_space_dir_uuid(FileInfo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_guid(file_info()) -> {fslogic_worker:file_guid(), file_info()}.
-get_guid(FileInfo = #file_info{guid = undefined, path = Path}) ->
+get_guid(FileInfo = #file_info{guid = undefined, cannonical_path = Path}) ->
     {ok, Uuid} = file_meta:to_uuid({path, Path}),
     SpaceId = get_space_id(FileInfo),
     Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
@@ -398,7 +425,7 @@ is_file_info(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_space_dir(file_info()) -> boolean().
-is_space_dir(#file_info{guid = undefined, path = Path}) ->
+is_space_dir(#file_info{guid = undefined, cannonical_path = Path}) ->
     case fslogic_path:split(Path) of
         [<<"/">>, _SpaceId] ->
             true;
@@ -415,9 +442,9 @@ is_space_dir(#file_info{guid = Guid})->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_user_root_dir(file_info(), fslogic_context:ctx()) -> {boolean(), NewCtx :: fslogic_context:ctx()}.
-is_user_root_dir(#file_info{path = <<"/">>}, Ctx) ->
+is_user_root_dir(#file_info{cannonical_path = <<"/">>}, Ctx) ->
     {true, Ctx};
-is_user_root_dir(#file_info{guid = Guid, path = undefined}, Ctx) ->
+is_user_root_dir(#file_info{guid = Guid, cannonical_path = undefined}, Ctx) ->
     {UserRootDirUuid, NewCtx} = fslogic_context:get_user_root_dir_uuid(Ctx),
     {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx};
 is_user_root_dir(#file_info{}, Ctx) ->
@@ -429,9 +456,9 @@ is_user_root_dir(#file_info{}, Ctx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_root_dir(file_info()) -> boolean().
-is_root_dir(#file_info{path = <<"/">>}) ->
+is_root_dir(#file_info{cannonical_path = <<"/">>}) ->
     true;
-is_root_dir(#file_info{guid = Guid, path = undefined}) ->
+is_root_dir(#file_info{guid = Guid, cannonical_path = undefined}) ->
     Uuid = fslogic_uuid:guid_to_uuid(Guid),
     fslogic_uuid:is_root_dir(Uuid);
 is_root_dir(#file_info{}) ->

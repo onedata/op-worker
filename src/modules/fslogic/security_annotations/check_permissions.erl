@@ -152,19 +152,13 @@ resolve_file_entry(Item, Inputs) when is_integer(Item) ->
 resolve_file_entry({path, Item}, Inputs) when is_integer(Item) ->
     {path, resolve_file_entry(Item, Inputs)};
 resolve_file_entry({parent, Item}, Inputs) ->
-    case file_info:is_file_info(Item) of
+    ResolvedEntry = resolve_file_entry(Item, Inputs),
+    case file_info:is_file_info(ResolvedEntry) of
         true ->
-            {Parent, _NewFileInfo} = file_info:get_parent(Item, undefined),
+            {Parent, _NewFileInfo} = file_info:get_parent(ResolvedEntry, undefined),
             Parent;
         false ->
-            ResolvedEntry = resolve_file_entry(Item, Inputs),
-            case file_info:is_file_info(ResolvedEntry) of
-                true ->
-                    {Parent, _} = file_info:get_parent(ResolvedEntry, undefined),
-                    Parent;
-                false ->
-                    fslogic_utils:get_parent(ResolvedEntry)
-            end
+            fslogic_utils:get_parent(ResolvedEntry)
     end.
 
 %%--------------------------------------------------------------------

@@ -212,7 +212,7 @@ rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
     TargetSpaceProviders = ordsets:from_list(Providers),
     case ordsets:is_element(oneprovider:get_provider_id(), TargetSpaceProviders) of
         true ->
-            {ok, TargetFileId} = fslogic_rename:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId, 0),
+            {ok, TargetFileId} = sfm_utils:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId, 0),
 
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
             NewBlocks = lists:map(fun(Block) ->

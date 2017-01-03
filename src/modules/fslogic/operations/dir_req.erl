@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests operating on directories
+%%% Requests operating on directories.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_req).
