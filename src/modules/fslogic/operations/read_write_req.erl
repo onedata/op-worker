@@ -9,7 +9,7 @@
 %%% FSLogic request handlers for ProxyIO helper.
 %%% @end
 %%%-------------------------------------------------------------------
--module(fslogic_proxyio).
+-module(read_write_req).
 -author("Konrad Zemek").
 
 -include("modules/fslogic/fslogic_common.hrl").
@@ -25,6 +25,23 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads data from a location uniquely specified by {StorageID, FileID}
+%% pair.
+%% @end
+%%--------------------------------------------------------------------
+-spec read(fslogic_context:ctx(), file_info:file_info(), HandleId :: storage_file_manager:handle_id(),
+    StorageId :: storage:id(), FileId :: helpers:file(),
+    Offset :: non_neg_integer(), Size :: pos_integer()) ->
+    fslogic_worker:proxyio_response().
+read(Ctx, File, HandleId, StorageId, FileId, Offset, Size) ->
+    #fuse_response{status = #status{code = ?OK}} =
+        synchronization_req:synchronize_block(Ctx, File, #file_block{offset = Offset, size = Size}, false),
+    {ok, Handle} =  get_handle(Ctx, File, HandleId, StorageId, FileId, read),
+    {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
+    #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,23 +62,6 @@ write(Ctx, File, HandleId, StorageId, FileId, ByteSequences) ->
 
     #proxyio_response{status = #status{code = ?OK},
                       proxyio_response = #remote_write_result{wrote = Wrote}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Reads data from a location uniquely specified by {StorageID, FileID}
-%% pair.
-%% @end
-%%--------------------------------------------------------------------
--spec read(fslogic_context:ctx(), file_info:file_info(), HandleId :: storage_file_manager:handle_id(),
-    StorageId :: storage:id(), FileId :: helpers:file(),
-    Offset :: non_neg_integer(), Size :: pos_integer()) ->
-    fslogic_worker:proxyio_response().
-read(Ctx, File, HandleId, StorageId, FileId, Offset, Size) ->
-    #fuse_response{status = #status{code = ?OK}} =
-        synchronization_req:synchronize_block(Ctx, File, #file_block{offset = Offset, size = Size}, false),
-    {ok, Handle} =  get_handle(Ctx, File, HandleId, StorageId, FileId, read),
-    {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
-    #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}}.
 
 %%%===================================================================
 %%% Internal functions

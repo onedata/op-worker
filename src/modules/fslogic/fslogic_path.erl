@@ -21,7 +21,7 @@
 %% API
 -export([gen_path/2, gen_storage_path/1, check_path/1]).
 -export([tokenize_skipping_dots/1, get_canonical_file_entry/2]).
--export([basename/1, split/1, join/1, basename_and_parent/1]).
+-export([split/1, join/1, basename_and_parent/1]).
 -export([dirname/1]).
 
 %%%===================================================================
@@ -196,17 +196,6 @@ tokenize_skipping_dots(FileName) ->
     case lists:any(fun(X) -> X =:= <<"..">> end, Tokens) of
         true -> {error, wrong_filename};
         _ -> {ok, Tokens}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Gives file's name based on its path.
-%% @end
-%%--------------------------------------------------------------------
--spec basename(Path :: file_meta:path()) -> file_meta:path().
-basename(Path) ->
-    case lists:reverse(split(Path)) of
-        [Leaf | _] -> Leaf;
-        _ -> <<?DIRECTORY_SEPARATOR>>
     end.
 
 %%--------------------------------------------------------------------

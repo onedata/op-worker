@@ -333,7 +333,7 @@ handle_proxyio_request(Ctx, #proxyio_request{
     parameters = Parameters
 }, File) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
-    fslogic_proxyio:write(Ctx, File, HandleId, SID, FID, ByteSequences);
+    read_write_req:write(Ctx, File, HandleId, SID, FID, ByteSequences);
 handle_proxyio_request(Ctx, #proxyio_request{
     parameters = Parameters,
     storage_id = SID,
@@ -341,7 +341,7 @@ handle_proxyio_request(Ctx, #proxyio_request{
     proxyio_request = #remote_read{offset = Offset, size = Size}
 }, File) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
-    fslogic_proxyio:read(Ctx, File, HandleId, SID, FID, Offset, Size);
+    read_write_req:read(Ctx, File, HandleId, SID, FID, Offset, Size);
 handle_proxyio_request(_Ctx, Req, _File) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
