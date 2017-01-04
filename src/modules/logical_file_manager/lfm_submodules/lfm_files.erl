@@ -66,11 +66,7 @@ mv(SessId, FileKey, TargetPath) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, Guid,
-        #copy{target_path = TargetPath},
-        fun(#file_copied{new_uuid = NewGuid}) ->
-            {ok, NewGuid}
-        end).
+    copy:copy(SessId, {guid, Guid}, TargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc
