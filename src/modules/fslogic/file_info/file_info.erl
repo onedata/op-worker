@@ -140,9 +140,9 @@ get_path(#file_info{cannonical_path = Path}) ->
 get_logical_path(FileInfo, Ctx) ->
     {Path, FileInfo2} = get_path(FileInfo),
     {SpaceName, Ctx2, FileInfo3} = get_space_name(FileInfo2, Ctx),
-    [<<"/">>, _SpaceId | Rest] = fslogic_path:tokenize_skipping_dots(Path),
-    Path = filename:join([<<"/">>, SpaceName | Rest]),
-    {Path, Ctx2, FileInfo3}.
+    {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:tokenize_skipping_dots(Path),
+    LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
+    {LogicalPath, Ctx2, FileInfo3}.
 
 %%--------------------------------------------------------------------
 %% @doc
