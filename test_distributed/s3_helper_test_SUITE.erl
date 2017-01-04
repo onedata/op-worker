@@ -225,41 +225,45 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
-    HelperArgs = #{
-        <<"scheme">> => <<"http">>,
-        <<"host_name">> => atom_to_binary(?config(host_name, S3Config), utf8),
-        <<"bucket_name">> => ?S3_BUCKET_NAME
-    },
-    UserCtx = #s3_user_ctx{
-        access_key = atom_to_binary(?config(access_key, S3Config), utf8),
-        secret_key = atom_to_binary(?config(secret_key, S3Config), utf8)
-    },
+
+    UserCtx = helper:new_s3_user_ctx(
+        atom_to_binary(?config(access_key, S3Config), utf8),
+        atom_to_binary(?config(secret_key, S3Config), utf8)
+    ),
+    Helper = helper:new_s3_helper(
+        atom_to_binary(?config(host_name, S3Config), utf8),
+        ?S3_BUCKET_NAME,
+        false,
+        #{},
+        UserCtx,
+        false
+    ),
 
     spawn(Node, fun() ->
-        helper_loop(?S3_HELPER_NAME, HelperArgs, UserCtx)
+        helper_loop(Helper, UserCtx)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(HelperName, HelperArgs, UserCtx) ->
-    Ctx = helpers:new_handle(HelperName, HelperArgs, UserCtx),
-    helper_loop(Ctx).
+helper_loop(Helper, UserCtx) ->
+    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    helper_loop(Handle).
 
-helper_loop(Ctx) ->
+helper_loop(Handle) ->
     receive
         exit ->
             ok;
 
         {Pid, {run_helpers, open, Args}} ->
-            {ok, FileHandle} = apply(helpers, open, [Ctx | Args]),
+            {ok, FileHandle} = apply(helpers, open, [Handle | Args]),
             HandlePid = spawn_link(fun() -> helper_handle_loop(FileHandle) end),
             Pid ! {self(), {ok, HandlePid}},
-            helper_loop(Ctx);
+            helper_loop(Handle);
 
         {Pid, {run_helpers, Method, Args}} ->
-            Pid ! {self(), apply(helpers, Method, [Ctx | Args])},
-            helper_loop(Ctx)
+            Pid ! {self(), apply(helpers, Method, [Handle | Args])},
+            helper_loop(Handle)
     end.
 
 helper_handle_loop(FileHandle) ->

@@ -37,7 +37,7 @@
 
 -type file() :: file_meta:entry(). %% Type alias for better code organization
 -type ext_file() :: file_meta:entry() | {guid, file_guid()}.
--type open_flag() :: rdwr | write | read.
+-type open_flag() :: helpers:open_flag().
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
@@ -213,9 +213,9 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{file_uuid = Guid,
     storage_id = StorageId}}, undefined) ->
     storage_req:create_storage_test_file(Ctx, Guid, StorageId);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{space_uuid = SpaceDirUuid,
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{space_id = SpaceId,
     storage_id = StorageId, file_id = FileId, file_content = FileContent}}, undefined) ->
-    storage_req:verify_storage_test_file(Ctx, SpaceDirUuid, StorageId, FileId, FileContent);
+    storage_req:verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}, File) ->
     handle_file_request(Ctx, FileRequest, File).
 

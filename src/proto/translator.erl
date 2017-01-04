@@ -224,9 +224,9 @@ translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = Fo
     #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
 translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileUuid}) ->
     #create_storage_test_file{storage_id = Id, file_uuid = FileUuid};
-translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_uuid = SpaceUuid,
+translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_id = SpaceId,
     file_id = FId, file_content = FContent}) ->
-    #verify_storage_test_file{storage_id = SId, space_uuid = SpaceUuid,
+    #verify_storage_test_file{storage_id = SId, space_id = SpaceId,
         file_id = FId, file_content = FContent};
 
 translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid, file_request = {_, Record}}) ->
@@ -739,10 +739,10 @@ translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = Hel
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
     #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
-    space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}) ->
+    space_id = SpaceId, file_id = FileId, file_content = FileContent}) ->
     {_, Record} = translate_to_protobuf(HelperParams),
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
-        space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
+        space_id = SpaceId, file_id = FileId, file_content = FileContent}};
 translate_to_protobuf(#sync_response{checksum = Value, file_location = FileLocation}) ->
     {_, ProtoFileLocation} = translate_to_protobuf(FileLocation),
     {sync_response, #'SyncResponse'{checksum = Value, file_location = ProtoFileLocation}};
