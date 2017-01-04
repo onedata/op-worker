@@ -12,6 +12,7 @@
 -module(synchronization_req).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -85,6 +86,55 @@ get_file_distribution(_Ctx, File) ->
     #provider_response{status = #status{code = ?OK}, provider_response =
     #file_distribution{provider_file_distributions = ProviderDistributions}}.
 
+%%--------------------------------------------------------------------
+%% @equiv replicate_file(Ctx, {uuid, Uuid}, Block, 0)
+%%--------------------------------------------------------------------
+-spec replicate_file(fslogic_context:ctx(), file_info:file_info(), fslogic_blocks:block()) ->
+    fslogic_worker:provider_response().
+replicate_file(Ctx, File, Block) ->
+    replicate_file(Ctx, File, Block, 0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Replicate given dir or file on current provider
+%% (the space has to be locally supported).
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_file(fslogic_context:ctx(), file_info:file_info(),
+    fslogic_blocks:block(), non_neg_integer()) ->
+    fslogic_worker:provider_response().
+-check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
+replicate_file(Ctx, File, Block, Offset) ->
+    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+    case file_info:is_dir(File) of
+        {true, File2} ->
+            case file_info:get_file_children(File2, Ctx, Offset, Chunk) of
+                {Children, _File3} when length(Children) < Chunk ->
+                    replicate_children(Ctx, Children, Block),
+                    #provider_response{status = #status{code = ?OK}};
+                {Children, File3} ->
+                    replicate_children(Ctx, Children, Block),
+                    replicate_file(Ctx, File3, Block, Offset + Chunk);
+                Other ->
+                    Other
+            end;
+        {false, File2} ->
+            #fuse_response{status = Status} = synchronize_block(Ctx, File2, Block, false),
+            #provider_response{status = Status}
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Replicate children list
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_children(fslogic_context:ctx(), [file_info:file_info()], fslogic_blocks:block()) -> ok.
+replicate_children(Ctx, Children, Block) ->
+    utils:pforeach(
+        fun(Child) ->
+            replicate_file(Ctx, Child, Block)
+        end, Children).

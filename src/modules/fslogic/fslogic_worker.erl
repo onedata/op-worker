@@ -271,6 +271,8 @@ handle_file_request(Ctx, #file_request{file_request = #synchronize_block_and_com
     provider_response().
 handle_provider_request(Ctx, #provider_request{provider_request = #get_file_distribution{}}, File) ->
     synchronization_req:get_file_distribution(Ctx, File);
+handle_provider_request(Ctx, #provider_request{provider_request = #replicate_file{block = Block}}, File) ->
+    synchronization_req:replicate_file(Ctx, File, Block);
 handle_provider_request(Ctx, #provider_request{provider_request = #get_parent{}}, File) ->
     guid_req:get_parent(Ctx, File);
 handle_provider_request(Ctx, #provider_request{provider_request = #get_file_path{}}, File) ->
@@ -312,8 +314,6 @@ handle_provider_request(Ctx, Req, _File) ->
 
 -spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
     provider_response().
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #replicate_file{block = Block}}) ->
-    fslogic_req_generic:replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Block);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #check_perms{flag = Flag}}) ->
     fslogic_req_generic:check_perms(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Flag);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #create_share{name = Name}}) ->

@@ -23,7 +23,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([replicate_file/3, check_perms/3, create_share/3, remove_share/2]).
+-export([check_perms/3, create_share/3, remove_share/2]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -38,50 +38,6 @@
 -check_permissions([{?write_owner, 2}]).
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
-
-%%--------------------------------------------------------------------
-%% @equiv replicate_file(Ctx, {uuid, Uuid}, Block, 0)
-%%--------------------------------------------------------------------
--spec replicate_file(fslogic_context:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
-    #provider_response{}.
-replicate_file(Ctx, {uuid, Uuid}, Block) ->
-    replicate_file(Ctx, {uuid, Uuid}, Block, 0).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Replicate given dir or file on current provider
-%% (the space has to be locally supported).
-%% @end
-%%--------------------------------------------------------------------
--spec replicate_file(fslogic_context:ctx(), {uuid, file_meta:uuid()},
-    fslogic_blocks:block(), non_neg_integer()) ->
-    #provider_response{}.
--check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-replicate_file(Ctx, {uuid, Uuid}, Block, Offset) ->
-    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    case file_meta:get({uuid, Uuid}) of
-        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
-            case dir_req:read_dir(Ctx, file_info:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)), Offset, Chunk) of
-                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}}
-                    when length(ChildLinks) < Chunk ->
-                    utils:pforeach(
-                        fun(#child_link{uuid = ChildGuid}) ->
-                            replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)
-                        end, ChildLinks),
-                    #provider_response{status = #status{code = ?OK}};
-                #fuse_response{fuse_response = #file_children{child_links = ChildLinks}} ->
-                    utils:pforeach(
-                        fun(#child_link{uuid = ChildGuid}) ->
-                            replicate_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, Block)
-                        end, ChildLinks),
-                    replicate_file(Ctx, {uuid, Uuid}, Block, Offset + Chunk);
-                Other ->
-                    Other
-            end;
-        {ok, _} ->
-            #fuse_response{status = Status} = fslogic_req_regular:synchronize_block(Ctx, {uuid, Uuid}, Block, false),
-            #provider_response{status = Status}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
