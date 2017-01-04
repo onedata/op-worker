@@ -52,7 +52,7 @@ set_acl(Ctx, File, #acl{value = Val}) ->
         {ok, _} ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid), %todo pass file_info
             ok = sfm_utils:chmod_storage_files( %todo pass file_info
-                fslogic_context:set_session_id(Ctx, ?ROOT_SESS_ID),
+                fslogic_context:new(?ROOT_SESS_ID),
                 {uuid, FileUuid}, 8#000
             ),
             fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_info
@@ -72,9 +72,9 @@ remove_acl(Ctx, File) ->
     case xattr:delete_by_name(FileUuid, ?ACL_KEY) of
         ok ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid), %todo pass file_info
-            {#document{value = #file_meta{mode = Mode}}, File2} = file_info:get_file_doc(File),
+            {#document{value = #file_meta{mode = Mode}}, _File2} = file_info:get_file_doc(File),
             ok = sfm_utils:chmod_storage_files( %todo pass file_info
-                fslogic_context:set_session_id(Ctx, ?ROOT_SESS_ID),
+                fslogic_context:new(?ROOT_SESS_ID),
                 {uuid, FileUuid}, Mode
             ),
             ok = fslogic_event:emit_file_perm_changed(FileUuid), %todo pass file_info

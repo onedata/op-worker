@@ -162,14 +162,13 @@ handle_request(SessId, Request) ->
     Ctx = fslogic_context:new(SessId),
     {File, Ctx2} = fslogic_request:get_file(Ctx, Request),
     {File2, Request2} = fslogic_request:update_target_guid_if_file_is_phantom(File, Request),
-    {Providers, Ctx3} = fslogic_request:get_target_providers(Ctx2, File2, Request2),
+    Providers = fslogic_request:get_target_providers(Ctx2, File2, Request2),
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            {Ctx4, File3} = fslogic_request:update_share_info_in_context(Ctx3, File2),
-            handle_request_locally(Ctx4, Request2, File3);
+            handle_request_locally(Ctx2, Request2, File2);
         false ->
-            handle_request_remotely(Ctx3, Request2, Providers)
+            handle_request_remotely(Ctx2, Request2, Providers)
     end.
 
 %%--------------------------------------------------------------------

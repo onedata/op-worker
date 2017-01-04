@@ -19,8 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2,
-    update_share_info_in_context/2]).
+-export([get_file/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
 
 %%%===================================================================
 %%% API
@@ -58,15 +57,15 @@ get_file(_Ctx, Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_target_providers(fslogic_context:ctx(), file_info:file_info(), fslogic_worker:request()) ->
-    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
-get_target_providers(Ctx, undefined, _) ->
-    {[oneprovider:get_provider_id()], Ctx};
+    [oneprovider:id()].
+get_target_providers(_Ctx, undefined, _) ->
+    [oneprovider:get_provider_id()];
 get_target_providers(Ctx, File, #fuse_request{fuse_request = #resolve_guid{}}) ->
     get_target_providers_for_attr_req(Ctx, File);
 get_target_providers(Ctx, File, #fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) ->
     get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(Ctx, _File, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
-    {[ProviderId], Ctx};
+get_target_providers(_Ctx, _File, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
+    [ProviderId];
 get_target_providers(Ctx, File, _Req) ->
     get_target_providers_for_file(Ctx, File).
 
@@ -102,21 +101,6 @@ update_target_guid_if_file_is_phantom(File, Request) ->
             {File, Request}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Update SpaceId in the fslogic_context (efectivelly updating also ShareId).
-%% @todo delete this function when ShareId will be stored in file_info
-%% @end
-%%--------------------------------------------------------------------
--spec update_share_info_in_context(fslogic_context:ctx(), file_info:file_info()) ->
-    {NewCtx :: fslogic_context:ctx(), NewFileInfo :: file_info:file_info()}.
-update_share_info_in_context(Ctx, undefined) ->
-    {Ctx, undefined};
-update_share_info_in_context(Ctx, File) ->
-    {Guid, NewFile} = file_info:get_guid(File),
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, Guid}),
-    {NewCtx, NewFile}.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -128,12 +112,12 @@ update_share_info_in_context(Ctx, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_target_providers_for_attr_req(fslogic_context:ctx(), file_info:file_info()) ->
-    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
+    [oneprovider:id()].
 get_target_providers_for_attr_req(Ctx, File) ->
     %todo TL handle guids stored in file_force_proxy
     case file_info:is_space_dir(File) of
         true ->
-            {[oneprovider:get_provider_id()], Ctx};
+            [oneprovider:get_provider_id()];
         false ->
             get_target_providers_for_file(Ctx, File)
     end.
@@ -145,13 +129,11 @@ get_target_providers_for_attr_req(Ctx, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_target_providers_for_file(fslogic_context:ctx(), file_info:file_info()) ->
-    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
+    [oneprovider:id()].
 get_target_providers_for_file(Ctx, File) ->
-    {IsUserRootDir, NewCtx} = file_info:is_user_root_dir(File, Ctx),
-
-    case IsUserRootDir of
+    case file_info:is_user_root_dir(File, Ctx) of
         true ->
-            {[oneprovider:get_provider_id()], NewCtx};
+            [oneprovider:get_provider_id()];
         false ->
             SpaceId = file_info:get_space_id(File),
             Auth = fslogic_context:get_auth(Ctx),
@@ -160,9 +142,9 @@ get_target_providers_for_file(Ctx, File) ->
 
             case lists:member(oneprovider:get_provider_id(), ProviderIds) of
                 true ->
-                    {[oneprovider:get_provider_id()], NewCtx};
+                    [oneprovider:get_provider_id()];
                 false ->
-                    {ProviderIds, NewCtx}
+                    ProviderIds
             end
     end.
 

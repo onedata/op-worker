@@ -135,7 +135,7 @@ rename_on_storage(Ctx, TargetSpaceId, SourceEntry) ->
     end, fslogic_utils:get_local_file_locations(SourceEntry)),
 
     ok = sfm_utils:chmod_storage_files(
-        fslogic_context:set_session_id(Ctx, ?ROOT_SESS_ID),
+        fslogic_context:new(?ROOT_SESS_ID),
         SourceEntry,
         Mode
     ).

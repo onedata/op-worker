@@ -69,9 +69,9 @@ of special session. You may only operate on guids in this context.">>});
         false ->
             case Tokens of
                 [<<"/">>] ->
-                    {UserRootDirUuid, NewCtx} = fslogic_context:get_user_root_dir_uuid(Ctx),
-                    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserRootDirUuid),
-                    {NewCtx, #file_info{cannonical_path = filename:join(Tokens), guid = UserRootDirGuid}};
+                    UserId = fslogic_context:get_user_id(Ctx),
+                    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
+                    #file_info{cannonical_path = filename:join(Tokens), guid = UserRootDirGuid};
                 [<<"/">>, SpaceName | Rest] ->
                     {#document{value = #od_user{space_aliases = Spaces}}, Ctx2} =
                         fslogic_context:get_user(Ctx),
@@ -386,9 +386,9 @@ get_child(FileInfo, Name, UserId) ->
     {Children :: [file_info()] | {error, term()}, NewCtx :: fslogic_context:ctx(), NewFileInfo :: file_info()}.
 get_file_children(FileInfo, Ctx, Offset, Limit) ->
     case is_user_root_dir(FileInfo, Ctx) of
-        {true, Ctx2} ->
-            {#document{value = #od_user{space_aliases = Spaces}}, Ctx3} =
-                fslogic_context:get_user(Ctx2),
+        true ->
+            {#document{value = #od_user{space_aliases = Spaces}}, Ctx2} =
+                fslogic_context:get_user(Ctx),
 
             Children =
                 case Offset < length(Spaces) of
@@ -401,8 +401,8 @@ get_file_children(FileInfo, Ctx, Offset, Limit) ->
                     false ->
                         []
                 end,
-            {Children, Ctx3, FileInfo};
-        {false, Ctx2} ->
+            {Children, Ctx2, FileInfo};
+        false ->
             {FileDoc = #document{}, FileInfo2} = get_file_doc(FileInfo),
             case file_meta:list_children(FileDoc, Offset, Limit) of
                 {ok, ChildrenLinks} ->
@@ -412,9 +412,9 @@ get_file_children(FileInfo, Ctx, Offset, Limit) ->
                         lists:map(fun(#child_link{name = Name, uuid = Uuid}) ->
                             new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                         end, ChildrenLinks),
-                    {Children, Ctx2, FileInfo2};
+                    {Children, Ctx, FileInfo2};
                 Error ->
-                    {Error, Ctx2, FileInfo2}
+                    {Error, Ctx, FileInfo2}
             end
     end.
 
@@ -505,14 +505,15 @@ is_space_dir(#file_info{guid = Guid})->
 %% Check if file is an user root dir.
 %% @end
 %%--------------------------------------------------------------------
--spec is_user_root_dir(file_info(), fslogic_context:ctx()) -> {boolean(), NewCtx :: fslogic_context:ctx()}.
-is_user_root_dir(#file_info{cannonical_path = <<"/">>}, Ctx) ->
-    {true, Ctx};
+-spec is_user_root_dir(file_info(), fslogic_context:ctx()) -> boolean().
+is_user_root_dir(#file_info{cannonical_path = <<"/">>}, _Ctx) ->
+    true;
 is_user_root_dir(#file_info{guid = Guid, cannonical_path = undefined}, Ctx) ->
-    {UserRootDirUuid, NewCtx} = fslogic_context:get_user_root_dir_uuid(Ctx),
-    {UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid), NewCtx};
-is_user_root_dir(#file_info{}, Ctx) ->
-    {false, Ctx}.
+    UserId = fslogic_context:get_user_id(Ctx),
+    UserRootDirUuid = fslogic_uuid:user_root_dir_uuid(UserId),
+    UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid);
+is_user_root_dir(#file_info{}, _Ctx) ->
+    false.
 
 %%--------------------------------------------------------------------
 %% @doc
