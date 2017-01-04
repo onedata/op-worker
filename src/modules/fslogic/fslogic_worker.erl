@@ -309,13 +309,13 @@ handle_provider_request(Ctx, #provider_request{provider_request = #set_metadata{
     metadata_req:set_metadata(Ctx, File, Type, Value, Names);
 handle_provider_request(Ctx, #provider_request{provider_request = #remove_metadata{type = Type}}, File) ->
     metadata_req:remove_metadata(Ctx, File, Type);
+handle_provider_request(Ctx, #provider_request{provider_request = #check_perms{flag = Flag}}, File) ->
+    permission_req:check_perms(Ctx, File, Flag);
 handle_provider_request(Ctx, Req, _File) ->
     handle_provider_request(Ctx, Req).
 
 -spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
     provider_response().
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #check_perms{flag = Flag}}) ->
-    fslogic_req_generic:check_perms(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Flag);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #create_share{name = Name}}) ->
     fslogic_req_generic:create_share(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Name);
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #remove_share{}}) ->

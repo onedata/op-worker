@@ -19,12 +19,8 @@
 %% Add rollback or any other means of rescuing from failed renaming
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/credentials.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("annotations/include/annotations.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API

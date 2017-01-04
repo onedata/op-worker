@@ -23,7 +23,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([check_perms/3, create_share/3, remove_share/2]).
+-export([create_share/3, remove_share/2]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -39,19 +39,6 @@
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Check given permission on file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_perms(fslogic_context:ctx(), {uuid, file_meta:uuid()}, fslogic_worker:open_flag()) ->
-    #provider_response{}.
-check_perms(Ctx, Uuid, read) ->
-    check_perms_read(Ctx, Uuid);
-check_perms(Ctx, Uuid, write) ->
-    check_perms_write(Ctx, Uuid);
-check_perms(Ctx, Uuid, rdwr) ->
-    check_perms_rdwr(Ctx, Uuid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,36 +77,3 @@ remove_share(Ctx, {uuid, FileUuid}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check read permission on file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_perms_read(fslogic_context:ctx(), {uuid, file_meta:uuid()}) ->
-    #provider_response{}.
--check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
-check_perms_read(_Ctx, _Uuid) ->
-    #provider_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check write permission on file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_perms_write(fslogic_context:ctx(), {uuid, file_meta:uuid()}) ->
-    #provider_response{}.
--check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-check_perms_write(_Ctx, _Uuid) ->
-    #provider_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check rdwr permission on file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_perms_rdwr(fslogic_context:ctx(), {uuid, file_meta:uuid()}) ->
-    #provider_response{}.
--check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
-check_perms_rdwr(_Ctx, _Uuid) ->
-    #provider_response{status = #status{code = ?OK}}.

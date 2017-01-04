@@ -19,7 +19,6 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 -define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
