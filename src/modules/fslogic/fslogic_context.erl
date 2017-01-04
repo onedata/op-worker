@@ -41,23 +41,21 @@
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
 new(SessId) ->
-    {ok, Session} = session:get(SessId),
-    #fslogic_context{session = Session}.
+    {ok, Session = #document{value = #session{
+        auth = Auth,
+        identity = #user_identity{user_id = UserId}
+    }}} = session:get(SessId),
+    {ok, User} = od_user:get_or_fetch(Auth, UserId),
+    #fslogic_context{session = Session, user_doc = User}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Get user from request's context
 %% @end
 %%--------------------------------------------------------------------
--spec get_user(ctx()) -> {od_user:doc(), ctx()}.
-get_user(Ctx = #fslogic_context{
-    user_doc = undefined,
-    session = #document{value = #session{auth = Auth, identity = #user_identity{user_id = UserId}}}
-}) ->
-    {ok, User} = od_user:get_or_fetch(Auth, UserId),
-    {User, Ctx#fslogic_context{user_doc = User}};
+-spec get_user(ctx()) -> od_user:doc().
 get_user(Ctx) ->
-    {Ctx#fslogic_context.user_doc, Ctx}.
+    Ctx#fslogic_context.user_doc.
 
 %%--------------------------------------------------------------------
 %% @doc Retrieves user ID from fslogic context.

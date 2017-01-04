@@ -32,21 +32,17 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file(fslogic_context:ctx(), fslogic_worker:request()) ->
-    {file_info:file_info() | undefined, fslogic_context:ctx()}.
+    file_info:file_info() | undefined.
 get_file(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    {Ctx2, FileInfo} = file_info:new_by_path(Ctx, Path),
-    {FileInfo, Ctx2};
-get_file(Ctx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
-    FileInfo = file_info:new_by_guid(FileGuid),
-    {FileInfo, Ctx};
-get_file(Ctx, #fuse_request{}) ->
-    {undefined, Ctx};
-get_file(Ctx, #provider_request{context_guid = FileGuid}) ->
-    FileInfo = file_info:new_by_guid(FileGuid),
-    {FileInfo, Ctx};
-get_file(Ctx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
-    FileInfo = file_info:new_by_guid(FileGuid),
-    {FileInfo, Ctx};
+    file_info:new_by_path(Ctx, Path);
+get_file(_Ctx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
+    file_info:new_by_guid(FileGuid);
+get_file(_Ctx, #fuse_request{}) ->
+    undefined;
+get_file(_Ctx, #provider_request{context_guid = FileGuid}) ->
+    file_info:new_by_guid(FileGuid);
+get_file(_Ctx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
+    file_info:new_by_guid(FileGuid);
 get_file(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

@@ -177,9 +177,9 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
                     rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath)
             end;
         false ->
-            {#document{value = #od_user{}}, Ctx2} = fslogic_context:get_user(Ctx),
-            Auth = fslogic_context:get_auth(Ctx2),
-            UserId = fslogic_context:get_user_id(Ctx2),
+            #document{value = #od_user{}} = fslogic_context:get_user(Ctx),
+            Auth = fslogic_context:get_auth(Ctx),
+            UserId = fslogic_context:get_user_id(Ctx),
             TargetProvidersSet = get_supporting_providers(SourceSpaceId, Auth, UserId),
             SourceProvidersSet = get_supporting_providers(TargetSpaceId, Auth, UserId),
             CommonProvidersSet = ordsets:intersection(TargetProvidersSet, SourceProvidersSet),

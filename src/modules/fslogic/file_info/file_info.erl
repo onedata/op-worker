@@ -59,7 +59,7 @@
 %% Create new file_info using file's path
 %% @end
 %%--------------------------------------------------------------------
--spec new_by_path(fslogic_context:ctx(), path()) -> {NewCtx :: fslogic_context:ctx(), file_info()}.
+-spec new_by_path(fslogic_context:ctx(), path()) -> file_info().
 new_by_path(Ctx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     case session:is_special(fslogic_context:get_session_id(Ctx)) of
@@ -73,14 +73,12 @@ of special session. You may only operate on guids in this context.">>});
                     UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
                     #file_info{cannonical_path = filename:join(Tokens), guid = UserRootDirGuid};
                 [<<"/">>, SpaceName | Rest] ->
-                    {#document{value = #od_user{space_aliases = Spaces}}, Ctx2} =
-                        fslogic_context:get_user(Ctx),
-
+                    #document{value = #od_user{space_aliases = Spaces}} = fslogic_context:get_user(Ctx),
                     case lists:keyfind(SpaceName, 2, Spaces) of
                         false ->
                             throw(?ENOENT);
                         {SpaceId, SpaceName} ->
-                            {Ctx2, #file_info{cannonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}}
+                            #file_info{cannonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}
                     end
             end
     end.
@@ -134,16 +132,16 @@ get_path(#file_info{cannonical_path = Path}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_logical_path(file_info(), fslogic_context:ctx()) ->
-    {file_meta:path(), fslogic_context:ctx(), file_info()}.
+    {file_meta:path(), file_info()}.
 get_logical_path(FileInfo, Ctx) ->
     case get_path(FileInfo) of
         {<<"/">>, FileInfo2} ->
-            {<<"/">>, Ctx, FileInfo2};
+            {<<"/">>, FileInfo2};
         {Path, FileInfo2} ->
-            {SpaceName, Ctx2, FileInfo3} = get_space_name(FileInfo2, Ctx),
+            {SpaceName, FileInfo3} = get_space_name(FileInfo2, Ctx),
             {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:tokenize_skipping_dots(Path),
             LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
-            {LogicalPath, Ctx2, FileInfo3}
+            {LogicalPath, FileInfo3}
     end.
 
 %%--------------------------------------------------------------------
@@ -271,20 +269,19 @@ get_storage_file_id(FileInfo) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_name(file_info(), fslogic_context:ctx()) ->
-    {od_space:name() | od_space:alias(), fslogic_context:ctx(), file_info()}.
+    {od_space:name() | od_space:alias(), file_info()}.
 get_space_name(FileInfo = #file_info{space_name = undefined}, Ctx) ->
     SpaceId = get_space_id(FileInfo),
-    {#document{value = #od_user{space_aliases = Spaces}}, Ctx2} =
-        fslogic_context:get_user(Ctx),
+    #document{value = #od_user{space_aliases = Spaces}} = fslogic_context:get_user(Ctx),
 
     case lists:keyfind(SpaceId, 1, Spaces) of
         false ->
             throw(?ENOENT);
         {SpaceId, SpaceName} ->
-            {SpaceName, Ctx2, FileInfo#file_info{space_name = SpaceName}}
+            {SpaceName, FileInfo#file_info{space_name = SpaceName}}
     end;
-get_space_name(FileInfo = #file_info{space_name = SpaceName}, Ctx) ->
-    {SpaceName, Ctx, FileInfo}.
+get_space_name(FileInfo = #file_info{space_name = SpaceName}, _Ctx) ->
+    {SpaceName, FileInfo}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -292,23 +289,23 @@ get_space_name(FileInfo = #file_info{space_name = SpaceName}, Ctx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_aliased_name(file_info(), fslogic_context:ctx()) ->
-    {file_meta:name(), fslogic_context:ctx(), file_info()}.
+    {file_meta:name(), file_info()}.
 get_aliased_name(FileInfo = #file_info{file_name = undefined}, Ctx) ->
     SessionIsNotSpecial = (not session:is_special(fslogic_context:get_session_id(Ctx))),
     case is_space_dir(FileInfo) andalso SessionIsNotSpecial of
         false ->
             case get_file_doc(FileInfo) of
                 {#document{value = #file_meta{name = Name}}, FileInfo2} ->
-                    {Name, Ctx, FileInfo2#file_info{file_name = Name}};
+                    {Name, FileInfo2#file_info{file_name = Name}};
                 ErrorResponse ->
                     ErrorResponse
             end;
         true ->
-            {Name, Ctx2, FileInfo2} = get_space_name(FileInfo, Ctx),
-            {Name, Ctx2, FileInfo2#file_info{file_name = Name}}
+            {Name, FileInfo2} = get_space_name(FileInfo, Ctx),
+            {Name, FileInfo2#file_info{file_name = Name}}
     end;
-get_aliased_name(FileInfo = #file_info{file_name = FileName}, Ctx) ->
-    {FileName, Ctx, FileInfo}.
+get_aliased_name(FileInfo = #file_info{file_name = FileName}, _Ctx) ->
+    {FileName, FileInfo}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -383,12 +380,11 @@ get_child(FileInfo, Name, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(file_info(), fslogic_context:ctx(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
-    {Children :: [file_info()] | {error, term()}, NewCtx :: fslogic_context:ctx(), NewFileInfo :: file_info()}.
+    {Children :: [file_info()] | {error, term()}, NewFileInfo :: file_info()}.
 get_file_children(FileInfo, Ctx, Offset, Limit) ->
     case is_user_root_dir(FileInfo, Ctx) of
         true ->
-            {#document{value = #od_user{space_aliases = Spaces}}, Ctx2} =
-                fslogic_context:get_user(Ctx),
+            #document{value = #od_user{space_aliases = Spaces}} = fslogic_context:get_user(Ctx),
 
             Children =
                 case Offset < length(Spaces) of
@@ -401,7 +397,7 @@ get_file_children(FileInfo, Ctx, Offset, Limit) ->
                     false ->
                         []
                 end,
-            {Children, Ctx2, FileInfo};
+            {Children, FileInfo};
         false ->
             {FileDoc = #document{}, FileInfo2} = get_file_doc(FileInfo),
             case file_meta:list_children(FileDoc, Offset, Limit) of
@@ -412,9 +408,9 @@ get_file_children(FileInfo, Ctx, Offset, Limit) ->
                         lists:map(fun(#child_link{name = Name, uuid = Uuid}) ->
                             new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                         end, ChildrenLinks),
-                    {Children, Ctx, FileInfo2};
+                    {Children, FileInfo2};
                 Error ->
-                    {Error, Ctx, FileInfo2}
+                    {Error, FileInfo2}
             end
     end.
 

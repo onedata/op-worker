@@ -74,9 +74,9 @@ delete_file(Ctx, File, Silent) ->
     fslogic_worker:fuse_response().
 check_if_empty_and_delete(Ctx, File, Silent)  ->
     case file_info:get_file_children(File, Ctx, 0, 1) of
-        {[], _Ctx2, File2} ->
+        {[], File2} ->
             delete_impl(Ctx, File2, Silent);
-        {_, _Ctx2, _File2} ->
+        {_, _File2} ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
     end.
 

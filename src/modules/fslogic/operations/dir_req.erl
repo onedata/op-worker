@@ -65,11 +65,11 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
 read_dir(Ctx, File, Offset, Limit) ->
     {FileDoc, File2} = file_info:get_file_doc(File),
-    {Children, Ctx2, _File3} = file_info:get_file_children(File2, Ctx, Offset, Limit),
+    {Children, _File3} = file_info:get_file_children(File2, Ctx, Offset, Limit),
     ChildrenLinks =
         lists:map(fun(ChildFile) ->
             {ChildGuid, ChildFile2} = file_info:get_guid(ChildFile),
-            {ChildName, _Ctx3, _ChildFile3} = file_info:get_aliased_name(ChildFile2, Ctx2),
+            {ChildName, _ChildFile3} = file_info:get_aliased_name(ChildFile2, Ctx),
             #child_link{name = ChildName, uuid = ChildGuid}
         end, Children),
     fslogic_times:update_atime(FileDoc, fslogic_context:get_user_id(Ctx)), %todo pass file_info

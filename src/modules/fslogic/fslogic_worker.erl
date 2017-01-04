@@ -160,15 +160,15 @@ handle_request_and_process_response(SessId, Request) ->
 -spec handle_request(session:id(), request()) -> response().
 handle_request(SessId, Request) ->
     Ctx = fslogic_context:new(SessId),
-    {File, Ctx2} = fslogic_request:get_file(Ctx, Request),
+    File = fslogic_request:get_file(Ctx, Request),
     {File2, Request2} = fslogic_request:update_target_guid_if_file_is_phantom(File, Request),
-    Providers = fslogic_request:get_target_providers(Ctx2, File2, Request2),
+    Providers = fslogic_request:get_target_providers(Ctx, File2, Request2),
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            handle_request_locally(Ctx2, Request2, File2);
+            handle_request_locally(Ctx, Request2, File2);
         false ->
-            handle_request_remotely(Ctx2, Request2, Providers)
+            handle_request_remotely(Ctx, Request2, Providers)
     end.
 
 %%--------------------------------------------------------------------

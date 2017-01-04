@@ -60,7 +60,7 @@ get_parent(Ctx, File) ->
 -spec get_file_path(fslogic_context:ctx(), file_info:file_info()) ->
     fslogic_worker:provider_response().
 get_file_path(Ctx, File) ->
-    {Path, _Ctx2, _File2} = file_info:get_logical_path(File, Ctx),
+    {Path, _File2} = file_info:get_logical_path(File, Ctx),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #file_path{value = Path}
