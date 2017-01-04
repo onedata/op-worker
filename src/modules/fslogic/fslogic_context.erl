@@ -21,10 +21,9 @@
 %% Context definition
 -record(fslogic_context, {
     session :: session:doc(),
-    space_id :: undefined | file_meta:uuid(),
+    space_id :: undefined | od_space:id(),
     user_root_dir_uuid :: undefined | file_meta:uuid(),
-    user_doc :: undefined | od_user:doc(),
-    share_id :: undefined | od_share:id() %todo TL remove it from here
+    user_doc :: undefined | od_user:doc()
 }).
 
 -type ctx() :: #fslogic_context{}.
@@ -33,8 +32,7 @@
 -export([new/1, new/2]).
 -export([set_space_id/2, set_session_id/2]).
 -export([get_user_root_dir_uuid/1, get_user/1]).
--export([get_user_id/1, get_session_id/1, get_auth/1, get_space_id/1,
-    get_share_id/1]).
+-export([get_user_id/1, get_session_id/1, get_auth/1, get_space_id/1]).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -68,17 +66,15 @@ set_session_id(Ctx, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets space ID and share ID in fslogic context based on given file.
+%% Sets space ID in fslogic context based on given file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_space_id(#fslogic_context{},fslogic_worker:ext_file()) ->
-    #fslogic_context{}.
+-spec set_space_id(ctx(), file_meta:entry() | {guid, fslogic_worker:file_guid()}) -> ctx().
 set_space_id(#fslogic_context{} = Ctx, {guid, FileGUID}) ->
-    case fslogic_uuid:unpack_share_guid(FileGUID) of
-        {FileUUID, undefined, ShareId} ->
-            set_space_id(Ctx#fslogic_context{share_id = ShareId}, {uuid, FileUUID});
-        {_, SpaceId, ShareId} ->
-            Ctx#fslogic_context{space_id = SpaceId, share_id = ShareId}
+    case fslogic_uuid:unpack_guid(FileGUID) of
+        {FileUUID, undefined} -> set_space_id(Ctx, {uuid, FileUUID});
+        {_, SpaceId} ->
+            Ctx#fslogic_context{space_id = SpaceId}
     end;
 set_space_id(#fslogic_context{} = Ctx, Entry) ->
     case catch fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(Ctx)) of
@@ -87,27 +83,6 @@ set_space_id(#fslogic_context{} = Ctx, Entry) ->
         {ok, #document{key = SpaceUUID}} ->
             Ctx#fslogic_context{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}
     end.
-
-%todo TL use this instead of the previous one
-%%%%--------------------------------------------------------------------
-%%%% @doc
-%%%% Sets space ID in fslogic context based on given file.
-%%%% @end
-%%%%--------------------------------------------------------------------
-%%-spec set_space_id(ctx(), file_meta:entry() | {guid, fslogic_worker:file_guid()}) -> ctx().
-%%set_space_id(#fslogic_context{} = Ctx, {guid, FileGUID}) ->
-%%    case fslogic_uuid:unpack_guid(FileGUID) of
-%%        {FileUUID, undefined} -> set_space_id(Ctx, {uuid, FileUUID});
-%%        {_, SpaceId} ->
-%%            Ctx#fslogic_context{space_id = SpaceId}
-%%    end;
-%%set_space_id(#fslogic_context{} = Ctx, Entry) ->
-%%    case catch fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(Ctx)) of
-%%        {not_a_space, _} ->
-%%            Ctx#fslogic_context{space_id = undefined};
-%%        {ok, #document{key = SpaceUUID}} ->
-%%            Ctx#fslogic_context{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}
-%%    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -167,14 +142,6 @@ get_auth(#fslogic_context{session = #document{value = #session{auth = Auth}}}) -
 %% @doc Retrieves space_id from fslogic context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id(ctx()) -> file_meta:uuid(). %todo TL do something with type
+-spec get_space_id(ctx()) -> od_space:id(). %todo TL do something with type
 get_space_id(#fslogic_context{space_id = SpaceId}) ->
     SpaceId.
-
-%%--------------------------------------------------------------------
-%% @doc Retrieves share_id from fslogic context.
-%% @end
-%%--------------------------------------------------------------------
--spec get_share_id(ctx()) -> undeined | od_share:id(). %todo TL remove it from here and use file_info instead
-get_share_id(#fslogic_context{share_id = ShareId}) ->
-    ShareId.

@@ -78,7 +78,7 @@ make_file(Ctx, ParentFile, Name, Mode) ->
     {File, ParentFile2} = create_file_doc(Ctx, ParentFile, Name, Mode),
 
     SessId = fslogic_context:get_session_id(Ctx),
-    SpaceId = fslogic_context:get_space_id(Ctx),
+    SpaceId = file_info:get_space_id(ParentFile2),
     {{uuid, FileUuid}, File2} = file_info:get_uuid_entry(File),
     sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_info
 

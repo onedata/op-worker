@@ -104,9 +104,7 @@ get_share_id(#file_info{guid = undefined}) ->
     undefined;
 get_share_id(#file_info{guid = Guid}) ->
     {_FileUuid, _SpaceId, ShareId} = fslogic_uuid:unpack_share_guid(Guid),
-    ShareId;
-get_share_id(Ctx) -> %todo TL return share_id cached in file_info
-    fslogic_context:get_share_id(Ctx).
+    ShareId.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -21,7 +21,7 @@
 -include("timeouts.hrl").
 
 %% API
--export([synchronize/3, synchronize/4]).
+-export([synchronize/4]).
 
 -define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 4194304)).
 -define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
@@ -30,13 +30,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @equiv synchronize(CTX, Uuid, Block, true).
-%%--------------------------------------------------------------------
--spec synchronize(fslogic_context:ctx(), file_meta:uuid(), fslogic_blocks:block()) -> ok.
-synchronize(CTX, Uuid, Block) ->
-    synchronize(CTX, Uuid, Block, true).
 
 %%--------------------------------------------------------------------
 %% @doc
