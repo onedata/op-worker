@@ -462,7 +462,7 @@ get_local_file_location_doc(FileInfo = #file_info{local_file_location_doc = Doc}
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location_ids(file_info()) ->
-    {file_location:doc(), file_info()}.
+    {[file_location:id()], file_info()}.
 get_file_location_ids(FileInfo = #file_info{location_ids = undefined}) ->
     {FileDoc, FileInfo2} = get_file_doc(FileInfo),
     {ok, Locations} = file_meta:get_locations(FileDoc),
