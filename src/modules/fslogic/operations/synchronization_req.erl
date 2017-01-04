@@ -19,7 +19,8 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([synchronize_block/4, synchronize_block_and_compute_checksum/3, get_file_distribution/2]).
+-export([synchronize_block/4, synchronize_block_and_compute_checksum/3,
+    get_file_distribution/2, replicate_file/3]).
 
 %%%===================================================================
 %%% API
@@ -94,7 +95,13 @@ get_file_distribution(_Ctx, File) ->
 replicate_file(Ctx, File, Block) ->
     replicate_file(Ctx, File, Block, 0).
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Replicate given dir or file on current provider
 %% (the space has to be locally supported).
@@ -123,11 +130,8 @@ replicate_file(Ctx, File, Block, Offset) ->
             #provider_response{status = Status}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Replicate children list
 %% @end

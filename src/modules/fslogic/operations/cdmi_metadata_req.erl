@@ -18,12 +18,13 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
+-export([get_transfer_encoding/2, set_transfer_encoding/3,
+    get_cdmi_completion_status/2, set_cdmi_completion_status/3,
+    get_mimetype/2, set_mimetype/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
@@ -55,6 +56,7 @@ set_transfer_encoding(Ctx, File, Encoding) ->
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns completion status, which tells if the file is under modification by
@@ -90,6 +92,7 @@ set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
+
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
