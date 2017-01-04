@@ -311,15 +311,15 @@ handle_provider_request(Ctx, #provider_request{provider_request = #remove_metada
     metadata_req:remove_metadata(Ctx, File, Type);
 handle_provider_request(Ctx, #provider_request{provider_request = #check_perms{flag = Flag}}, File) ->
     permission_req:check_perms(Ctx, File, Flag);
+handle_provider_request(Ctx, #provider_request{provider_request = #create_share{name = Name}}, File) ->
+    share_req:create_share(Ctx, File, Name);
+handle_provider_request(Ctx, #provider_request{provider_request = #remove_share{}}, File) ->
+    share_req:remove_share(Ctx, File);
 handle_provider_request(Ctx, Req, _File) ->
     handle_provider_request(Ctx, Req).
 
 -spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
     provider_response().
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #create_share{name = Name}}) ->
-    fslogic_req_generic:create_share(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Name);
-handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #remove_share{}}) ->
-    fslogic_req_generic:remove_share(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #copy{target_path = TargetPath}}) ->
     fslogic_copy:copy(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, TargetPath);
 handle_provider_request(_Ctx, Req = #provider_request{context_guid = _Guid, provider_request = #fsync{}}) ->
