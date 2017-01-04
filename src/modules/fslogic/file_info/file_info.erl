@@ -138,11 +138,15 @@ get_path(#file_info{cannonical_path = Path}) ->
 -spec get_logical_path(file_info(), fslogic_context:ctx()) ->
     {file_meta:path(), fslogic_context:ctx(), file_info()}.
 get_logical_path(FileInfo, Ctx) ->
-    {Path, FileInfo2} = get_path(FileInfo),
-    {SpaceName, Ctx2, FileInfo3} = get_space_name(FileInfo2, Ctx),
-    {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:tokenize_skipping_dots(Path),
-    LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
-    {LogicalPath, Ctx2, FileInfo3}.
+    case get_path(FileInfo) of
+        {<<"/">>, FileInfo2} ->
+            {<<"/">>, Ctx, FileInfo2};
+        {Path, FileInfo2} ->
+            {SpaceName, Ctx2, FileInfo3} = get_space_name(FileInfo2, Ctx),
+            {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:tokenize_skipping_dots(Path),
+            LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
+            {LogicalPath, Ctx2, FileInfo3}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
