@@ -316,6 +316,7 @@ handle_provider_request(Ctx, #provider_request{provider_request = #create_share{
 handle_provider_request(Ctx, #provider_request{provider_request = #remove_share{}}, File) ->
     share_req:remove_share(Ctx, File);
 handle_provider_request(_Ctx, Req, _File) ->
+    ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
 %%--------------------------------------------------------------------
@@ -326,28 +327,23 @@ handle_provider_request(_Ctx, Req, _File) ->
 %%--------------------------------------------------------------------
 -spec handle_proxyio_request(fslogic_context:ctx(), proxyio_request(), file_info:file_info()) ->
     proxyio_response().
-handle_proxyio_request(Ctx, Req, _File) ->
-    handle_proxyio_request(Ctx, Req).
-
--spec handle_proxyio_request(fslogic_context:ctx(), proxyio_request()) ->
-    proxyio_response().
 handle_proxyio_request(Ctx, #proxyio_request{
-    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}, storage_id = SID, file_id = FID,
-    proxyio_request = #remote_write{byte_sequence = ByteSequences}}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    ShareId = file_info:get_share_id(Ctx),
-    FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
-    fslogic_proxyio:write(SessId, Parameters#{?PROXYIO_PARAMETER_FILE_GUID := FileUUID,
-        ?PROXYIO_PARAMETER_SHARE_ID => ShareId}, SID, FID, ByteSequences);
+    storage_id = SID,
+    file_id = FID,
+    proxyio_request = #remote_write{byte_sequence = ByteSequences},
+    parameters = Parameters
+}, File) ->
+    HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
+    fslogic_proxyio:write(Ctx, File, HandleId, SID, FID, ByteSequences);
 handle_proxyio_request(Ctx, #proxyio_request{
-    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}, storage_id = SID, file_id = FID,
-    proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    ShareId = file_info:get_share_id(Ctx),
-    FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
-    fslogic_proxyio:read(SessId, Parameters#{?PROXYIO_PARAMETER_FILE_GUID := FileUUID,
-        ?PROXYIO_PARAMETER_SHARE_ID => ShareId}, SID, FID, Offset, Size);
-handle_proxyio_request(_CTX, Req) ->
+    parameters = Parameters,
+    storage_id = SID,
+    file_id = FID,
+    proxyio_request = #remote_read{offset = Offset, size = Size}
+}, File) ->
+    HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
+    fslogic_proxyio:read(Ctx, File, HandleId, SID, FID, Offset, Size);
+handle_proxyio_request(_Ctx, Req, _File) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 

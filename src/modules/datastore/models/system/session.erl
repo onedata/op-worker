@@ -479,7 +479,7 @@ add_transfer(SessionId, TransferId) ->
 %% Add link to handle.
 %% @end
 %%--------------------------------------------------------------------
--spec add_handle(SessionId :: id(), HandleID :: binary(),
+-spec add_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id(),
     Handle :: storage_file_manager:handle()) -> ok | datastore:generic_error().
 add_handle(SessionId, HandleID, Handle) ->
     case sfm_handle:create(#document{value = Handle}) of
@@ -494,7 +494,7 @@ add_handle(SessionId, HandleID, Handle) ->
 %% Remove link to handle.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_handle(SessionId :: id(), HandleID :: binary()) -> ok | datastore:generic_error().
+-spec remove_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) -> ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
     case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
         {ok, {HandleKey, sfm_handle}} ->
@@ -515,7 +515,7 @@ remove_handle(SessionId, HandleID) ->
 %% Gets handle.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(SessionId :: id(), HandleID :: binary()) ->
+-spec get_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | datastore:generic_error().
 get_handle(SessionId, HandleID) ->
     case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of

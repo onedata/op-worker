@@ -20,7 +20,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% API
--export([write/5, read/6]).
+-export([write/6, read/7]).
 
 %%%===================================================================
 %%% API functions
@@ -32,25 +32,19 @@
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec write(SessId :: session:id(), Parameters :: #{binary() => binary()},
-    StorageId :: storage:id(), FileId :: helpers:file(),
-    ByteSequences :: [#byte_sequence{}]) ->
-    #proxyio_response{}.
-write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
-    try
-        {ok, Handle} = get_handle(SessionId, Parameters, StorageId, FileId, write),
-        Wrote =
-            lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
-                Acc + write_all(Handle, Offset, Data, 0)
-            end, 0, ByteSequences),
+-spec write(fslogic_context:ctx(), file_info:file_info(),
+    HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
+    FileId :: helpers:file(), ByteSequences :: [#byte_sequence{}]) ->
+    fslogic_worker:proxyio_response().
+write(Ctx, File, HandleId, StorageId, FileId, ByteSequences) ->
+    {ok, Handle} = get_handle(Ctx, File, HandleId, StorageId, FileId, write),
+    Wrote =
+        lists:foldl(fun(#byte_sequence{offset = Offset, data = Data}, Acc) ->
+            Acc + write_all(Handle, Offset, Data, 0)
+        end, 0, ByteSequences),
 
-        #proxyio_response{status = #status{code = ?OK},
-                          proxyio_response = #remote_write_result{wrote = Wrote}}
-    catch
-      _:{badmatch, Error} ->
-          #proxyio_response{status = fslogic_errors:gen_status_message(Error)}
-    end.
-
+    #proxyio_response{status = #status{code = ?OK},
+                      proxyio_response = #remote_write_result{wrote = Wrote}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,35 +52,16 @@ write(SessionId, Parameters, StorageId, FileId, ByteSequences) ->
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(SessionId :: session:id(), Parameters :: #{binary() => binary()},
+-spec read(fslogic_context:ctx(), file_info:file_info(), HandleId :: storage_file_manager:handle_id(),
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
-    #proxyio_response{}.
-read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
-
-    UUID = maps:get(?PROXYIO_PARAMETER_FILE_GUID, Parameters),
-    lfm_utils:call_fslogic(SessionId, file_request, fslogic_uuid:uuid_to_guid(UUID),
-        #synchronize_block{block = #file_block{offset = Offset, size = Size}},
-        fun(_) -> ok end),
-
-    {Status, Response} =
-        case get_handle(SessionId, Parameters, StorageId, FileId, read) of
-            {ok, Handle} ->
-                case storage_file_manager:read(Handle, Offset, Size) of
-                    {ok, Data} ->
-                        {
-                            #status{code = ?OK},
-                            #remote_data{data = Data}
-                        };
-                    Error1 ->
-                        {fslogic_errors:gen_status_message(Error1), undefined}
-                end;
-
-            Error2 ->
-                {fslogic_errors:gen_status_message(Error2), undefined}
-        end,
-
-    #proxyio_response{status = Status, proxyio_response = Response}.
+    fslogic_worker:proxyio_response().
+read(Ctx, File, HandleId, StorageId, FileId, Offset, Size) ->
+    #fuse_response{status = #status{code = ?OK}} =
+        synchronization_req:synchronize_block(Ctx, File, #file_block{offset = Offset, size = Size}, false),
+    {ok, Handle} =  get_handle(Ctx, File, HandleId, StorageId, FileId, read),
+    {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
+    #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -98,26 +73,21 @@ read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 %% Returns handle by either retrieving it from session or opening file
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(SessionId :: session:id(), Parameters :: #{binary() => binary()},
+-spec get_handle(fslogic_context:ctx(), file_info:file_info(), HandleId :: storage_file_manager:handle_id(),
     StorageId :: storage:id(), FileId :: helpers:file(), OpenFlag :: helpers:open_flag()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
-get_handle(SessionId, Parameters, StorageId, FileId, OpenFlag)->
-    {ok, #document{value = #session{identity = #user_identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    case maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined) of
-        undefined ->
-            FileUuid = maps:get(?PROXYIO_PARAMETER_FILE_GUID, Parameters),
-            ShareId = maps:get(?PROXYIO_PARAMETER_SHARE_ID, Parameters),
-            {ok, #document{key = SpaceUUID}} =
-                fslogic_spaces:get_space({uuid, FileUuid}, UserId),
-            {ok, Storage} = storage:get(StorageId),
-            SFMHandle =
-                storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId, ShareId),
-            storage_file_manager:open(SFMHandle, OpenFlag);
-        HandleId ->
-            session:get_handle(SessionId, HandleId)
-    end.
-
+get_handle(Ctx, File, undefined, StorageId, FileId, OpenFlag)->
+    SessId = fslogic_context:get_session_id(Ctx),
+    SpaceDirUuid = file_info:get_space_dir_uuid(File),
+    {{uuid, FileUuid}, File2} = file_info:get_uuid_entry(File),
+    {ok, Storage} = storage:get(StorageId),
+    ShareId = file_info:get_share_id(File2),
+    SFMHandle =
+        storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId, ShareId),
+    storage_file_manager:open(SFMHandle, OpenFlag);
+get_handle(Ctx, _File, HandleId, _StorageId, _FileId, _OpenFlag)->
+    SessId = fslogic_context:get_session_id(Ctx),
+    session:get_handle(SessId, HandleId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -126,8 +96,8 @@ get_handle(SessionId, Parameters, StorageId, FileId, OpenFlag)->
 %% @end
 %%--------------------------------------------------------------------
 -spec write_all(Handle :: storage_file_manager:handle(),
-                Offset :: non_neg_integer(), Data :: binary(),
-                Wrote :: non_neg_integer()) -> non_neg_integer().
+    Offset :: non_neg_integer(), Data :: binary(),
+    Wrote :: non_neg_integer()) -> non_neg_integer().
 write_all(_Handle, _Offset, <<>>, Wrote) -> Wrote;
 write_all(Handle, Offset, Data, Wrote) ->
     {ok, WroteNow} = storage_file_manager:write(Handle, Offset, Data),
