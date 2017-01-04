@@ -166,17 +166,15 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
     TargetSpaceId = file_info:get_space_id(TargetParentFile),
     {LogicalTargetPath, _} = get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName),
 
-    %todo TL pass file_info to subfunctions and refactor them
-    {Guid, _SourceFile2} = file_info:get_guid(SourceFile),
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+
 
     case SourceSpaceId =:= TargetSpaceId of
         true ->
             case FileType of
                 ?REGULAR_FILE_TYPE ->
-                    rename_file_trivial(Ctx, {uuid, Uuid}, CanonicalTargetPath, LogicalTargetPath);
+                    rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath);
                 ?DIRECTORY_TYPE ->
-                    rename_dir_trivial(Ctx, {uuid, Uuid}, CanonicalTargetPath, LogicalTargetPath)
+                    rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath)
             end;
         false ->
             {#document{value = #od_user{}}, Ctx2} = fslogic_context:get_user(Ctx),
@@ -189,58 +187,63 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
                 true ->
                     case FileType of
                         ?REGULAR_FILE_TYPE ->
-                            rename_file_interspace(Ctx, {uuid, Uuid}, CanonicalTargetPath, LogicalTargetPath);
+                            rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath);
                         ?DIRECTORY_TYPE ->
-                            rename_dir_interspace(Ctx, {uuid, Uuid}, CanonicalTargetPath, LogicalTargetPath)
+                            rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath)
                     end;
                 false ->
-                    rename_interprovider(Ctx, {uuid, Uuid}, LogicalTargetPath)
+                    rename_interprovider(Ctx, SourceFile, LogicalTargetPath)
             end
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions before renaming regular file within one space.
 %%--------------------------------------------------------------------
--spec rename_file_trivial(fslogic_context:ctx(), fslogic_worker:file(),
+-spec rename_file_trivial(fslogic_context:ctx(), file_info:file_info(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
-rename_file_trivial(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
+rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
+    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
     rename_trivial(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions before renaming directory within one space.
 %%--------------------------------------------------------------------
--spec rename_dir_trivial(fslogic_context:ctx(), fslogic_worker:file(),
+-spec rename_dir_trivial(fslogic_context:ctx(), file_info:file_info(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
-rename_dir_trivial(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
+rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
+    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
     rename_trivial(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Renames file within one space.
 %%--------------------------------------------------------------------
--spec rename_trivial(fslogic_context:ctx(), fslogic_worker:file(),
+-spec rename_trivial(fslogic_context:ctx(), file_info:file_info(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
-rename_trivial(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
+rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
+    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
     rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
 
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions before renaming regular file within one provider.
 %%--------------------------------------------------------------------
--spec rename_file_interspace(fslogic_context:ctx(), fslogic_worker:file(),
+-spec rename_file_interspace(fslogic_context:ctx(), file_info:file_info(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
-rename_file_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
+rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
+    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
     rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions before renaming directory within one provider.
 %%--------------------------------------------------------------------
--spec rename_dir_interspace(fslogic_context:ctx(), fslogic_worker:file(),
+-spec rename_dir_interspace(fslogic_context:ctx(), file_info:file_info(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
-rename_dir_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
+rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
+    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
     rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
