@@ -36,7 +36,7 @@
 
 %% API
 -export([get_configuration/1, get_helper_params/3, create_storage_test_file/3,
-    verify_storage_test_file/5, remove_storage_test_file/3]).
+    verify_storage_test_file/5, remove_storage_test_file/4]).
 
 %%%===================================================================
 %%% API
@@ -108,12 +108,10 @@ create_storage_test_file(Ctx, Guid, StorageId) ->
             Dirname = fslogic_path:dirname(FileId),
             TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
+            FileContent = storage_detector:create_test_file(Helper, ServerUserCtx, TestFileId),
 
-            Handle = helpers:get_helper_handle(Helper, ServerUserCtx),
-            FileContent = storage_detector:create_test_file(Handle, TestFileId),
-
-            spawn(storage_req, remove_storage_test_file, [Handle, TestFileId,
-                ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+            spawn(storage_req, remove_storage_test_file, [
+                Helper, ServerUserCtx, TestFileId, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
 
             #fuse_response{
                 status = #status{code = ?OK},
@@ -140,8 +138,7 @@ verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent) ->
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
     {ok, UserCtx} = luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName),
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
-    verify_storage_test_file_loop(Handle, FileId, FileContent, ?ENOENT,
+    verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
 %%%===================================================================
@@ -154,11 +151,11 @@ verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent) ->
 %% Removes test file referenced by handle after specified delay.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_storage_test_file(helpers:helper_handle(), helpers:file_id(),
+-spec remove_storage_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
     Delay :: timeout()) -> ok.
-remove_storage_test_file(Handle, FileId, Delay) ->
+remove_storage_test_file(Helper, UserCtx, FileId, Delay) ->
     timer:sleep(Delay),
-    storage_detector:remove_test_file(Handle, FileId).
+    storage_detector:remove_test_file(Helper, UserCtx, FileId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -168,22 +165,24 @@ remove_storage_test_file(Handle, FileId, Delay) ->
 %% its content doesn't match expected one.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_storage_test_file_loop(helpers:helper_handle(), helpers:file_id(),
-    FileContent :: binary(), Code :: atom(), Attempts :: non_neg_integer()) ->
-    #fuse_response{}.
-verify_storage_test_file_loop(_, _, _, Code, 0) ->
+-spec verify_storage_test_file_loop(helpers:helper(), helper:user_ctx(),
+    helpers:file_id(), FileContent :: binary(), Code :: atom(),
+    Attempts :: non_neg_integer()) -> #fuse_response{}.
+verify_storage_test_file_loop(_, _, _, _, Code, 0) ->
     #fuse_response{status = #status{code = Code}};
 
-verify_storage_test_file_loop(Handle, FileId, FileContent, _, Attempts) ->
-    try storage_detector:read_test_file(Handle, FileId) of
+verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent, _, Attempts) ->
+    try storage_detector:read_test_file(Helper, UserCtx, FileId) of
         FileContent ->
-            storage_detector:remove_test_file(Handle, FileId),
+            storage_detector:remove_test_file(Helper, UserCtx, FileId),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Handle, FileId, FileContent, ?EINVAL, Attempts - 1)
+            verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent,
+                ?EINVAL, Attempts - 1)
     catch
         {_, {error, ?ENOENT}} ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Handle, FileId, FileContent, ?ENOENT, Attempts - 1)
+            verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent,
+                ?ENOENT, Attempts - 1)
     end.
