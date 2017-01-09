@@ -8,7 +8,7 @@
 %%% @doc This test verifies if the nagios endpoint works as expected.
 %%% @end
 %%%--------------------------------------------------------------------
--module(nagios_test_SUITE).
+-module(core_mechanism_test_SUITE).
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
@@ -18,12 +18,18 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
+
+-define(TIMEOUT, timer:minutes(5)).
+-define(call_store(N, F, A), ?call(N, datastore, F, A)).
+-define(call(N, M, F, A), ?call(N, M, F, A, ?TIMEOUT)).
+-define(call(N, M, F, A, T), rpc:call(N, M, F, A, T)).
 
 %% export for ct
 -export([all/0]).
--export([nagios_test/1]).
+-export([nagios_test/1, test_models/1]).
 
-all() -> ?ALL([nagios_test]).
+all() -> ?ALL([nagios_test, test_models]).
 
 % Path to nagios endpoint
 -define(HEALTHCHECK_PATH, "http://127.0.0.1:6666/nagios").
@@ -35,6 +41,40 @@ all() -> ?ALL([nagios_test]).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+test_models(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Models = ?call(Worker, datastore_config, models, []),
+
+    lists:foreach(fun(ModelName) ->
+%%        ct:print("Module ~p", [ModelName]),
+
+        #model_config{store_level = SL} = MC = ?call(Worker, ModelName, model_init, []),
+        Cache = case SL of
+            ?GLOBALLY_CACHED_LEVEL -> true;
+            ?LOCALLY_CACHED_LEVEL -> true;
+            _ -> false
+        end,
+
+        Key = list_to_binary("key_tm_" ++ atom_to_list(ModelName)),
+        Doc =  #document{
+            key = Key,
+            value = MC#model_config.defaults
+        },
+        ?assertMatch({ok, _}, ?call_store(Worker, save, [SL, Doc])),
+        ?assertMatch({ok, true}, ?call_store(Worker, exists, [SL, ModelName, Key])),
+
+%%        ct:print("Module ok ~p", [ModelName]),
+
+        case Cache of
+            true ->
+                PModule = ?call_store(Worker, driver_to_module, [persistence_driver_module]),
+                ?assertMatch({ok, true}, ?call(Worker, PModule, exists, [MC, Key]), 10);
+%%                ct:print("Module caching ok ~p", [ModelName]);
+            _ ->
+                ok
+        end
+    end, Models).
 
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
