@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2]).
+-export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2, new_storage/3]).
 -export([new_user_ctx/3, get_posix_user_ctx/3]).
 
 %%%===================================================================
@@ -95,12 +95,23 @@ new_helper_init(HelperName, HelperArgs) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new storage structure.
+%% Creates new storage structure with readonly attribute set to false.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_storage(Name :: storage:name(), [#helper_init{}]) -> #storage{}.
 new_storage(Name, Helpers) ->
-    #storage{name = Name, helpers = Helpers}.
+    new_storage(Name, false, Helpers).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new storage structure.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_storage(Name :: storage:name(), ReadOnly :: boolean(),
+    [#helper_init{}]) -> #storage{}.
+new_storage(Name, ReadOnly, Helpers) ->
+    #storage{name = Name, helpers = Helpers, readonly = ReadOnly}.
 
 
 %%%===================================================================

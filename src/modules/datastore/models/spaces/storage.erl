@@ -34,7 +34,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4, list/0]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 
 %%--------------------------------------------------------------------
@@ -50,8 +50,26 @@ record_struct(1) ->
             {name, string},
             {args, #{string => string}}
         ]}]}
+    ]};
+record_struct(2) ->
+    {record, [
+        {name, binary},
+        {helpers, [{record, 1, [
+            {name, string},
+            {args, #{string => string}}
+        ]}]},
+        {readonly, boolean}
     ]}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, Name, Helpers}) ->
+    {2, #storage{name=Name, helpers = Helpers}}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -139,7 +157,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(system_config_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    Config = ?MODEL_CONFIG(system_config_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc

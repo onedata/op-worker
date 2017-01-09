@@ -298,7 +298,8 @@
 %% Model for storing storage information
 -record(storage, {
     name :: undefined | storage:name(),
-    helpers :: undefined | [helpers:init()]
+    helpers :: undefined | [helpers:init()],
+    readonly = false :: boolean()
 }).
 
 %% Model for storing file's location data
