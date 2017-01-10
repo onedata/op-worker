@@ -211,7 +211,7 @@ end_per_testcase(_Case, Config) ->
     HandleServer = ?config(helper_handle_server, Config),
     HandleServer ! exit,
 
-    os:cmd("rm -rf " ++ binary_to_list(?path(Config, <<"helpers_test_*">>))),
+    os:cmd("rm -rf " ++ binary_to_list(?path(Config, <<"posix_helper_test_*">>))),
     ok.
 
 
@@ -220,7 +220,7 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 gen_filename() ->
-    http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
+    http_utils:url_encode(<<"posix_helper_test_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
 
 helper_handle_server(Config) ->
     UserCtx = helper:new_posix_user_ctx(0, 0),

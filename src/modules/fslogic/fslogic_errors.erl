@@ -100,8 +100,8 @@ report_error(Request, Error, LogLevel, Stacktrace) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
     MsgFormat =
-        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace: ~p",
-    FormatArgs = [Request, Description, Code, Stacktrace],
+        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace:~s",
+    FormatArgs = [Request, Description, Code, lager:pr_stacktrace(Stacktrace)],
     case LogLevel of
         debug -> ?debug(MsgFormat, FormatArgs);
         warning -> ?warning(MsgFormat, FormatArgs);
