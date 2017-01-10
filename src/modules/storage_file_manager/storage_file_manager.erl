@@ -54,7 +54,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid() | undefined,
-  Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: od_share:id() | undefined) ->
+    Storage :: datastore:document(), FileId :: helpers:file(), ShareId :: od_share:id() | undefined) ->
     handle().
 new_handle(SessionId, SpaceUUID, FileUUID, #document{} = Storage, FileId, ShareId) ->
     FSize =
@@ -181,11 +181,11 @@ mkdir(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid 
             Tokens = fslogic_path:split(FileId),
             case Tokens of
                 [_] -> ok;
-                [_ | _]  ->
+                [_ | _] ->
                     LeafLess = fslogic_path:dirname(Tokens),
                     case mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
                         ok -> ok;
-                        {error,eexist} -> ok;
+                        {error, eexist} -> ok;
                         ParentError ->
                             ?error("Cannot create parent for file ~p, error ~p", [FileId, ParentError]),
                             throw(ParentError)
@@ -234,18 +234,12 @@ chmod(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid 
 %%--------------------------------------------------------------------
 -spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) ->
     ok | logical_file_manager:error_reply().
-chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID, space_uuid = SpaceUUID}, UserId, SpaceId) ->
+chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID,
+    space_uuid = SpaceUUID}, UserId, SpaceId) ->
     {ok, HelperHandle} = session:get_helper(?ROOT_SESS_ID, SpaceUUID, Storage),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-
-    case helpers:name(HelperHandle) of
-        ?DIRECTIO_HELPER_NAME ->
-            #posix_user_ctx{uid = Uid, gid = Gid} = fslogic_storage:get_posix_user_ctx(?DIRECTIO_HELPER_NAME, #user_identity{user_id = UserId}, SpaceUuid),
-            helpers:chown(HelperHandle, FileId, Uid, Gid);
-        _ ->
-            ok
-    end;
-chown(_,_,_) ->
+    {Uid, Gid} = luma:get_posix_user_ctx(UserId, SpaceId),
+    helpers:chown(HelperHandle, FileId, Uid, Gid);
+chown(_, _, _) ->
     throw(?EPERM).
 
 
@@ -301,7 +295,8 @@ readdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, se
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
     {ok, non_neg_integer()} | logical_file_manager:error_reply().
-write(#sfm_handle{is_local = true, open_flag = undefined}, _, _) -> throw(?EPERM);
+write(#sfm_handle{is_local = true, open_flag = undefined}, _, _) ->
+    throw(?EPERM);
 write(#sfm_handle{is_local = true, open_flag = read}, _, _) -> throw(?EPERM);
 write(#sfm_handle{space_uuid = SpaceUUID, is_local = true, file_handle = FileHandle, file_size = CSize}, Offset, Buffer) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
@@ -329,7 +324,8 @@ write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUUID
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) ->
     {ok, binary()} | logical_file_manager:error_reply().
-read(#sfm_handle{is_local = true, open_flag = undefined}, _, _) -> throw(?EPERM);
+read(#sfm_handle{is_local = true, open_flag = undefined}, _, _) ->
+    throw(?EPERM);
 read(#sfm_handle{is_local = true, open_flag = write}, _, _) -> throw(?EPERM);
 read(#sfm_handle{is_local = true, file_handle = FileHandle}, Offset, MaxSize) ->
     helpers:read(FileHandle, Offset, MaxSize);
@@ -386,7 +382,8 @@ create(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid
 %%--------------------------------------------------------------------
 -spec truncate(handle(), Size :: integer()) ->
     ok | logical_file_manager:error_reply().
-truncate(#sfm_handle{is_local = true, open_flag = undefined}, _) -> throw(?EPERM);
+truncate(#sfm_handle{is_local = true, open_flag = undefined}, _) ->
+    throw(?EPERM);
 truncate(#sfm_handle{is_local = true, open_flag = read}, _) -> throw(?EPERM);
 truncate(#sfm_handle{is_local = true, storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Size) ->
     {ok, HelperHandle} = session:get_helper(SessionId, SpaceUUID, Storage),

@@ -26,28 +26,22 @@ helpers_test_() ->
         fun start/0,
         fun stop/1,
         [
-            fun new_obj/0,
-            fun username_to_uid/0,
-            fun groupname_to_gid/0,
+            fun get_handle/0,
             fun readdir/0
         ]}.
 
-new_obj() ->
-    ?assertMatch({ok, _}, helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>})).
-
-username_to_uid() ->
-    ?assertMatch({ok, 0}, helpers_nif:username_to_uid(<<"root">>)),
-    ?assertMatch({error, einval}, helpers_nif:username_to_uid(<<"sadmlknfqlwknd">>)).
-
-groupname_to_gid() ->
-    ?assertMatch({ok, 0}, helpers_nif:groupname_to_gid(<<"root">>)),
-    ?assertMatch({error, einval}, helpers_nif:groupname_to_gid(<<"sadmlknfqlwknd">>)).
+get_handle() ->
+    ?assertMatch({ok, _}, helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"mountPoint">> => <<"/tmp">>
+    })).
 
 readdir() ->
-    {ok, Helper} = helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>}),
+    {ok, Handle} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"mountPoint">> => <<"/tmp">>
+    }),
     {ok, Result} = file:list_dir(<<"/tmp">>),
     BinaryResult = lists:map(fun list_to_binary/1, Result),
-    {ok, Guard} = helpers_nif:readdir(Helper, <<"">>, 0, 100),
+    {ok, Guard} = helpers_nif:readdir(Handle, <<"">>, 0, 100),
     NifResult =
         receive
             {Guard, Res} ->
@@ -78,7 +72,7 @@ stop(_) ->
 -spec prepare_environment() -> ok.
 prepare_environment() ->
     application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
-    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
+    application:set_env(?APP_NAME, posix_helper_threads_number, 1),
     application:set_env(?APP_NAME, s3_helper_threads_number, 1),
     application:set_env(?APP_NAME, swift_helper_threads_number, 1).
 

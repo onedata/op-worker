@@ -143,7 +143,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
 
     %then
-    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [UserId]),
+    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [UserId, SpaceId]),
     {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileFID])]),
     ?assertEqual(Uid, FileInfo#file_info.uid),
@@ -194,7 +194,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
 
 
     %then
-    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [ExternalUser]),
+    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [ExternalUser, SpaceId]),
     {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo1} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File1FID])]),
     {ok, FileInfo2} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File2FID])]),

@@ -182,7 +182,7 @@ route_and_send_answer(#client_message{message_id = Id,
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = OriginSessId,
     message_body = #get_configuration{}}) ->
     spawn(fun() ->
-        Configuration = fuse_config_manager:get_configuration(effective_session_id(Msg)),
+        Configuration = storage_req:get_configuration(effective_session_id(Msg)),
         communicator:send(#server_message{
             message_id = Id, message_body = Configuration
         }, OriginSessId)

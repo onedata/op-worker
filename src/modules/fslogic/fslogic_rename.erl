@@ -382,6 +382,7 @@ rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
                         FileSnapshots = [File],
                         lists:foreach(
                             fun(Snapshot) ->
+                                maybe_sync_file(SessId, Snapshot, SourceSpaceId, TargetSpaceId),
                                 ok = rename_on_storage(Ctx, TargetSpaceId, Snapshot)
                             end, FileSnapshots),
                         {Acc, undefined};
@@ -411,6 +412,7 @@ rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
             FileSnapshots = [File],
             lists:foreach(
                 fun(Snapshot) ->
+                    maybe_sync_file(SessId, Snapshot, SourceSpaceId, TargetSpaceId),
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
                     ok = rename_on_storage(Ctx, TargetSpaceId, Snapshot)
                 end, FileSnapshots),
@@ -510,7 +512,7 @@ rename_on_storage(Ctx, TargetSpaceId, SourceEntry) ->
         ok = replica_updater:rename(SourceUUID, TargetFileId, TargetSpaceId)
     end, fslogic_utils:get_local_file_locations(SourceEntry)),
 
-    ok = fslogic_req_generic:chmod_storage_files(
+    ok = sfm_utils:chmod_storage_files(
         fslogic_context:set_session_id(Ctx, ?ROOT_SESS_ID),
         SourceEntry,
         Mode
@@ -739,4 +741,24 @@ create_phantom_files(Entries, OldSpaceId, NewSpaceId) ->
                     file_meta:create_phantom_file(fslogic_uuid:guid_to_uuid(OldGuid),
                         OldSpaceId, NewGuid)
                 end, Entries)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Requests file replication to current provider if
+%% NewSpaceId is different than OldSpaceId
+%%--------------------------------------------------------------------
+-spec maybe_sync_file(SessId :: session:id(), Entry :: file_meta:entry(),
+    OldSpaceId :: binary(), NewSpaceId :: binary()) ->
+    ok.
+maybe_sync_file(SessId, Entry, OldSpaceId, NewSpaceId) ->
+    case OldSpaceId =:= NewSpaceId of
+        false ->
+            {ok, Uuid} = file_meta:to_uuid(Entry),
+            logical_file_manager:replicate_file(
+                SessId,
+                {guid, fslogic_uuid:uuid_to_guid(Uuid, OldSpaceId)},
+                oneprovider:get_provider_id()
+            );
+        true ->
+            ok
     end.

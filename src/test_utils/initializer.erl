@@ -206,7 +206,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
 
 
 clear_cache(W) ->
-    A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
+    _A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
 %%     A2 = gen_server2:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
 %%     A3 = gen_server2:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
 %%     ?assertMatch({ok, ok, {ok, ok}}, {A1, A2, A3}).
@@ -355,15 +355,15 @@ setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
-    {ok, StorageId} = rpc:call(
-        Worker, storage, create, [
-            #document{value = fslogic_storage:new_storage(
-                <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
-                [fslogic_storage:new_helper_init(
-                    <<"DirectIO">>,
-                    #{<<"root_path">> => list_to_binary(TmpDir)}
-                )]
-            )}]),
+    StorageDoc = storage:new(
+        <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
+        [helper:new_posix_helper(
+            list_to_binary(TmpDir),
+            #{},
+            helper:new_posix_user_ctx(0, 0)
+        )]
+    ),
+    {ok, StorageId} = rpc:call(Worker, storage, create, [StorageDoc]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
@@ -527,8 +527,8 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                     case get_same_domain_workers(Config, Domain) of
                         [Worker | _] ->
                             {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                storage, get_by_name, [StorageName])),
-                            StorageId = rpc:call(Worker, storage, id, [Storage]),
+                                storage, select, [StorageName])),
+                            StorageId = rpc:call(Worker, storage, get_id, [Storage]),
                             {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
                                 space_storage, add, [SpaceId, StorageId]));
                         _ -> ok
@@ -680,7 +680,10 @@ oz_users_mock_setup(Workers, Users) ->
         {_, #user_config{name = UName, id = UID}} = lists:keyfind(Macaroon, 1, Users),
         {ok, #user_details{
             id = UID,
-            name = UName
+            name = UName,
+            connected_accounts = [],
+            email_list = [],
+            alias = <<>>
         }}
     end),
 

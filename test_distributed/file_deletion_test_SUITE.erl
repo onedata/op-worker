@@ -153,17 +153,18 @@ invalidating_session_open_files_test(Config) ->
 init_should_clear_open_files_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    FileUUID = create_test_file(Config, Worker, SessId),
+    FileGuid = create_test_file(Config, Worker, SessId),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileUUID, SessId, 30])),
+        [FileUuid, SessId, 30])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [<<"file_uuid2">>, SessId, 30])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [<<"file_uuid3">>, SessId, 30])),
 
     %% One file should be also removed.
-    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileUUID])),
+    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileUuid])),
 
     {ok, OpenFiles} = rpc:call(Worker, file_handles, list, []),
 
@@ -181,9 +182,10 @@ init_should_clear_open_files_test(Config) ->
 open_file_deletion_request_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    FileUUID = create_test_file(Config, Worker, SessId),
+    FileGuid = create_test_file(Config, Worker, SessId),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
-    ?assertEqual(ok, ?req(Worker, {open_file_deletion_request, FileUUID})),
+    ?assertEqual(ok, ?req(Worker, {open_file_deletion_request, FileUuid})),
 
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
@@ -195,10 +197,11 @@ deletion_of_not_open_file_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     SpaceId = <<"SpaceId">>,
     Ctx = rpc:call(Worker, fslogic_context, new, [SessId, SpaceId]),
-    FileUUID = create_test_file(Config, Worker, SessId),
+    FileGuid = create_test_file(Config, Worker, SessId),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUUID])),
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, FileUUID, false})),
+    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
+    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, file_info:new_by_guid(FileGuid), false})),
 
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
@@ -207,16 +210,17 @@ deletion_of_not_open_file_test(Config) ->
 deletion_of_open_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    FileUUID = create_test_file(Config, Worker, SessId),
+    FileGuid = create_test_file(Config, Worker, SessId),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
     SpaceId = <<"SpaceId">>,
     Ctx = rpc:call(Worker, fslogic_context, new, [SessId, SpaceId]),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileUUID, SessId, 1])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUUID])),
+        [FileUuid, SessId, 1])),
+    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUuid])),
 
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, FileUUID, false})),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUUID])),
+    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, file_info:new_by_guid(FileGuid), false})),
+    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUuid])),
 
     %% File should be marked to remove and renamed.
     test_utils:mock_assert_num_calls(Worker, fslogic_rename, rename, 3, 1),
@@ -226,8 +230,8 @@ deletion_of_open_file_test(Config) ->
 
     %% Release of file mark to remove should remove it.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileUUID, SessId, 1])),
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUUID])),
+        [FileUuid, SessId, 1])),
+    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
 
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     %% Calls rename
@@ -323,4 +327,4 @@ create_test_file(Config, Worker, SessId) ->
     File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0"])),
 
     {ok, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#770)),
-    fslogic_uuid:guid_to_uuid(GUID).
+    GUID.

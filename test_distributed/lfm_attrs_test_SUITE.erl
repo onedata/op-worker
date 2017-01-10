@@ -35,8 +35,10 @@
     create_and_get_view/1,
     get_empty_json/1,
     get_empty_rdf/1,
-    has_custom_metadata_test/1
-]).
+    has_custom_metadata_test/1,
+    resolve_guid_of_root_should_return_root_guid/1,
+    resolve_guid_of_space_should_return_space_guid/1,
+    resolve_guid_of_dir_should_return_dir_guid/1]).
 
 all() ->
     ?ALL([
@@ -48,7 +50,10 @@ all() ->
         create_and_get_view,
         get_empty_json,
         get_empty_rdf,
-        has_custom_metadata_test
+        has_custom_metadata_test,
+        resolve_guid_of_root_should_return_root_guid,
+        resolve_guid_of_space_should_return_space_guid,
+        resolve_guid_of_dir_should_return_dir_guid
     ]).
 
 %%%====================================================================
@@ -208,6 +213,32 @@ has_custom_metadata_test(Config) ->
     ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})),
     ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, GUID}, <<"name">>)),
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, {guid, GUID})).
+
+resolve_guid_of_root_should_return_root_guid(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    RootUuid = rpc:call(Worker, fslogic_uuid, user_root_dir_uuid, [UserId]),
+    RootGuid = rpc:call(Worker, fslogic_uuid, user_root_dir_guid, [RootUuid]),
+
+    ?assertEqual({ok, RootGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/">>)).
+
+resolve_guid_of_space_should_return_space_guid(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SpaceDirGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+
+    ?assertEqual({ok, SpaceDirGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/", SpaceName/binary>>)).
+
+resolve_guid_of_dir_should_return_dir_guid(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    DirPath = <<"/", SpaceName/binary, "/dir">>,
+    {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
+
+    ?assertEqual({ok, Guid}, lfm_proxy:resolve_guid(Worker, SessId, DirPath)).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

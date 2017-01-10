@@ -133,7 +133,10 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
             Init = space_sync_worker:init(storage_update, SpaceId, StorageId, InitialImportJobData),
             case lists:member(ok, space_sync_worker:run(Init)) of
                 true ->
-                    fslogic_req_generic:get_file_attr(CTX, {path, LogicalPath});
+                    {ok, #document{key = Uuid}} = file_meta:get({path, LogicalPath}),
+                    Guid = fslogic_uuid:uuid_to_guid(Uuid),
+                    FileInfo = file_info:new_by_guid(Guid),
+                    attr_req:get_file_attr(CTX, FileInfo);
                 _ ->
                     undefined
             end

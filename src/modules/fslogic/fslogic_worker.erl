@@ -37,7 +37,7 @@
 
 -type file() :: file_meta:entry(). %% Type alias for better code organization
 -type ext_file() :: file_meta:entry() | {guid, file_guid()}.
--type open_flag() :: rdwr | write | read.
+-type open_flag() :: helpers:open_flag().
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
@@ -166,8 +166,8 @@ handle_request(SessId, Request) ->
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            {Ctx4, _File3} = fslogic_request:update_share_info_in_context(Ctx3, File2),
-            handle_request_locally(Ctx4, Request2); %todo pass file to this function
+            {Ctx4, File3} = fslogic_request:update_share_info_in_context(Ctx3, File2),
+            handle_request_locally(Ctx4, Request2, File3);
         false ->
             handle_request_remotely(Ctx3, Request2, Providers)
     end.
@@ -178,13 +178,13 @@ handle_request(SessId, Request) ->
 %% Handle request locally, as it operates on locally supported entity.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request_locally(fslogic_context:ctx(), request()) -> response().
-handle_request_locally(Ctx, Req = #fuse_request{})  ->
-    handle_fuse_request(Ctx, Req);
-handle_request_locally(Ctx, Req = #provider_request{})  ->
-    handle_provider_request(Ctx, Req);
-handle_request_locally(Ctx, Req = #proxyio_request{})  ->
-    handle_proxyio_request(Ctx, Req).
+-spec handle_request_locally(fslogic_context:ctx(), request(), file_info:file_info()) -> response().
+handle_request_locally(Ctx, Req = #fuse_request{}, File)  ->
+    handle_fuse_request(Ctx, Req, File);
+handle_request_locally(Ctx, Req = #provider_request{}, File)  ->
+    handle_provider_request(Ctx, Req, File);
+handle_request_locally(Ctx, Req = #proxyio_request{}, File)  ->
+    handle_proxyio_request(Ctx, Req, File).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -203,22 +203,21 @@ handle_request_remotely(Ctx, Req, Providers)  ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(fslogic_context:ctx(), fuse_request()) ->
+-spec handle_fuse_request(fslogic_context:ctx(), fuse_request(), file_info:file_info()) ->
     fuse_response().
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
-    fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{} = Req}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    fuse_config_manager:create_storage_test_file(SessId, Req);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{} = Req}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    fuse_config_manager:verify_storage_test_file(SessId, Req);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}) ->
-    handle_file_request(Ctx, FileRequest).
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{}}, File) ->
+    guid_req:resolve_guid(Ctx, File);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID,
+    force_proxy_io = ForceProxy}}, undefined) ->
+    storage_req:get_helper_params(Ctx, SID, ForceProxy);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{file_uuid = Guid,
+    storage_id = StorageId}}, undefined) ->
+    storage_req:create_storage_test_file(Ctx, Guid, StorageId);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{space_id = SpaceId,
+    storage_id = StorageId, file_id = FileId, file_content = FileContent}}, undefined) ->
+    storage_req:verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}, File) ->
+    handle_file_request(Ctx, FileRequest, File).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -226,28 +225,33 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequ
 %% Processes a file request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_file_request(fslogic_context:ctx(), #file_request{}, file_info:file_info()) ->
+    fuse_response().
+handle_file_request(Ctx, #file_request{file_request = #get_file_attr{}}, File) ->
+    attr_req:get_file_attr(Ctx, File);
+handle_file_request(Ctx, #file_request{file_request = #get_child_attr{name = Name}}, ParentFile) ->
+    attr_req:get_child_attr(Ctx, ParentFile, Name);
+handle_file_request(Ctx, #file_request{file_request = #change_mode{mode = Mode}}, File) ->
+    attr_req:chmod(Ctx, File, Mode);
+handle_file_request(Ctx, #file_request{file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}, File) ->
+    attr_req:update_times(Ctx, File, ATime, MTime, CTime);
+handle_file_request(Ctx, #file_request{file_request = #delete_file{silent = Silent}}, File) ->
+    delete_req:delete(Ctx, File, Silent);
+handle_file_request(Ctx, #file_request{file_request = #create_dir{name = Name, mode = Mode}}, ParentFile) ->
+    dir_req:mkdir(Ctx, ParentFile, Name, Mode);
+handle_file_request(Ctx, #file_request{file_request = #get_file_children{offset = Offset, size = Size}}, File) ->
+    dir_req:read_dir(Ctx, File, Offset, Size);
+handle_file_request(Ctx, Req, _File) ->
+    handle_file_request(Ctx, Req).
+
 -spec handle_file_request(fslogic_context:ctx(), #file_request{}) ->
     fuse_response().
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_file_attr{}}) ->
-    fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)});
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_child_attr{name = Name}}) ->
-    fslogic_req_special:get_child_attr(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Name);
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #delete_file{silent = Silent}}) ->
-    fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Silent);
-handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #create_dir{name = Name, mode = Mode}}) ->
-    fslogic_req_special:mkdir(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode);
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #get_file_children{offset = Offset, size = Size}}) ->
-    fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Offset, Size);
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #change_mode{mode = Mode}}) ->
-    fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, Mode);
 handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}) ->
     SessId = fslogic_context:get_session_id(Ctx),
     %% Use lfm_files wrapper for fslogic as the target uuid may not be local
     {ok, TargetParentPath} = lfm_files:get_file_path(SessId, TargetParentGuid),
     TargetPath = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, TargetParentPath, TargetName]),
     fslogic_rename:rename(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, TargetPath);
-handle_file_request(Ctx, #file_request{context_guid = Guid, file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}) ->
-    fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:guid_to_uuid(Guid)}, ATime, MTime, CTime);
 handle_file_request(Ctx, #file_request{context_guid = ParentGuid, file_request = #create_file{name = Name,
     flag = Flag, mode = Mode}}) ->
     fslogic_req_regular:create_file(Ctx, {uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, Name, Mode, Flag);
@@ -274,6 +278,11 @@ handle_file_request(Ctx, #file_request{context_guid = Guid,
 %% Processes provider request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_provider_request(fslogic_context:ctx(), provider_request(), file_info:file_info()) ->
+    provider_response().
+handle_provider_request(Ctx, Req, _File) ->
+    handle_provider_request(Ctx, Req).
+
 -spec handle_provider_request(fslogic_context:ctx(), provider_request()) ->
     provider_response().
 handle_provider_request(Ctx, #provider_request{context_guid = Guid, provider_request = #get_parent{}}) ->
@@ -334,6 +343,11 @@ handle_provider_request(_Ctx, Req = #provider_request{context_guid = _Guid, prov
 %% Processes proxyio request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_proxyio_request(fslogic_context:ctx(), proxyio_request(), file_info:file_info()) ->
+    proxyio_response().
+handle_proxyio_request(Ctx, Req, _File) ->
+    handle_proxyio_request(Ctx, Req).
+
 -spec handle_proxyio_request(fslogic_context:ctx(), proxyio_request()) ->
     proxyio_response().
 handle_proxyio_request(Ctx, #proxyio_request{
