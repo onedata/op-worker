@@ -23,7 +23,7 @@
 
 %% API
 -export([chmod_storage_files/3, rename_storage_file/5, rename_on_storage/3,
-    create_storage_file_if_not_exists/2, create_storage_file/4]).
+    create_storage_file_if_not_exists/2, create_storage_file/4, chown_file/3]).
 
 %%%===================================================================
 %%% API

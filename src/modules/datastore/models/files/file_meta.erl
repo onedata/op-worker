@@ -635,7 +635,7 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                                 Err
                         end;
                     {error, link_not_found} -> %% Map links errors to document errors
-                        {error, {not_found, ?MODEL_NAME}};
+                        {error, {not_found, ?MODEL_NAME}}; %todo fails when resolving guid of /space1, due to race with od_user:fetch
                     {error, Reason} ->
                         {error, Reason}
                 end;
@@ -778,15 +778,25 @@ get_space_dir(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec to_uuid(entry() | {guid, fslogic_worker:file_guid()}) -> {ok, uuid()} | datastore:generic_error().
 to_uuid({uuid, UUID}) ->
+    ?critical("to_uuid1({uuid, ~p}", [UUID]),
+    ?critical("1-> {ok, ~p}", [UUID]),
     {ok, UUID};
 to_uuid({guid, FileGUID}) ->
-    {ok, fslogic_uuid:guid_to_uuid(FileGUID)};
+    ?critical("to_uuid2({guid, ~p})", [FileGUID]),
+    Res = fslogic_uuid:guid_to_uuid(FileGUID),
+    ?critical("2-> {ok, ~p}", [Res]),
+    {ok, Res};
 to_uuid(#document{key = UUID}) ->
+    ?critical("3to_uuid({doc, ~p}", [UUID]),
+    ?critical("3-> {ok, ~p}", [UUID]),
     {ok, UUID};
 to_uuid({path, Path}) ->
+    ?critical("4to_uuid({path, ~p}", [Path]),
     ?run(begin
         {ok, {Doc, _}} = resolve_path(Path),
-        to_uuid(Doc)
+        Res = to_uuid(Doc),
+        ?critical("4-> {ok, ~p}", [Res]),
+        Res
     end).
 
 %%--------------------------------------------------------------------

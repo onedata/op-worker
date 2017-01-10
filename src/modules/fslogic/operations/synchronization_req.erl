@@ -38,8 +38,7 @@ synchronize_block(Ctx, File, undefined, Prefetch) ->
     Size = fslogic_blocks:get_file_size(FileEntry), %todo pass file_info
     synchronize_block(Ctx, File2, #file_block{offset = 0, size = Size}, Prefetch);
 synchronize_block(Ctx, File, Block, Prefetch) ->
-    {{uuid, FileUuid}, _File2} = file_info:get_uuid_entry(File),
-    ok = replica_synchronizer:synchronize(Ctx, FileUuid, Block, Prefetch), %todo pass file_info
+    ok = replica_synchronizer:synchronize(Ctx, File, Block, Prefetch),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -116,14 +115,12 @@ replicate_file(Ctx, File, Block, Offset) ->
     case file_info:is_dir(File) of
         {true, File2} ->
             case file_info:get_file_children(File2, Ctx, Offset, Chunk) of
-                {Children, _File3} when length(Children) < Chunk ->
+                {Children, _File3} when is_list(Children) andalso length(Children) < Chunk ->
                     replicate_children(Ctx, Children, Block),
                     #provider_response{status = #status{code = ?OK}};
-                {Children, File3} ->
+                {Children, File3} when is_list(Children) ->
                     replicate_children(Ctx, Children, Block),
-                    replicate_file(Ctx, File3, Block, Offset + Chunk);
-                Other ->
-                    Other
+                    replicate_file(Ctx, File3, Block, Offset + Chunk)
             end;
         {false, File2} ->
             #fuse_response{status = Status} = synchronize_block(Ctx, File2, Block, false),

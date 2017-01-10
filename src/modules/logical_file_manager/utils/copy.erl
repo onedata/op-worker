@@ -51,8 +51,7 @@ copy(SessId, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Checks permissions and copies directory.
 %%--------------------------------------------------------------------
--spec copy_dir(session:id(), SourceEntry :: {guid, fslogic_worker:file_guid()},
-    LogicalTargetPath :: file_meta:path()) ->
+-spec copy_dir(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 copy_dir(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
     {ok, TargetGuid} = logical_file_manager:mkdir(SessId, LogicalTargetPath),
@@ -63,8 +62,7 @@ copy_dir(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions and copies file.
 %%--------------------------------------------------------------------
--spec copy_file(session:id(), SourceEntry :: {guid, fslogic_worker:file_guid()},
-    LogicalTargetPath :: file_meta:path()) ->
+-spec copy_file(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 copy_file(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
     {ok, TargetGuid} = logical_file_manager:create(SessId, LogicalTargetPath),

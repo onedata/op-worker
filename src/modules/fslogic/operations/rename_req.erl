@@ -203,8 +203,7 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
 rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
-    rename_trivial(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
+    rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions before renaming directory within one space.
@@ -213,8 +212,7 @@ rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
-    rename_trivial(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
+    rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Renames file within one space.
@@ -222,9 +220,7 @@ rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
 -spec rename_trivial(fslogic_context:ctx(), file_info:file_info(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
-    rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
-
+    rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions before renaming regular file within one provider.
@@ -233,8 +229,7 @@ rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
 rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
-    rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
+    rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Checks permissions before renaming directory within one provider.
@@ -243,15 +238,15 @@ rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) 
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
-    rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
+    rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Renames file within one provider.
 %%--------------------------------------------------------------------
--spec rename_interspace(fslogic_context:ctx(), fslogic_worker:file(),
+-spec rename_interspace(fslogic_context:ctx(), file_info:file_info(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
-rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
+rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
+    {SourceEntry, _File2} = file_info:get_uuid_entry(SourceFile), %todo pass file_info
     SessId = fslogic_context:get_session_id(Ctx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
@@ -356,9 +351,10 @@ rename_interspace(Ctx, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Renames file moving it to another space supported by another provider.
 %%--------------------------------------------------------------------
--spec rename_interprovider(fslogic_context:ctx(), fslogic_worker:file(), file_meta:path()) ->
+-spec rename_interprovider(fslogic_context:ctx(), file_info:file_info(), file_meta:path()) ->
     fslogic_worker:fuse_response().
-rename_interprovider(Ctx, SourceEntry, LogicalTargetPath) ->
+rename_interprovider(Ctx, SourceFile, LogicalTargetPath) ->
+    {SourceEntry, _SourceFile2} = file_info:get_uuid_entry(SourceFile), %todo remove and use file_info
     SessId = fslogic_context:get_session_id(Ctx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 

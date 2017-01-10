@@ -215,7 +215,7 @@ open_file_for_rdwr(Ctx, File) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_impl(fslogic_context:ctx(), File :: fslogic_worker:file(),
+-spec open_file_impl(fslogic_context:ctx(), File :: file_info:file_info(),
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file_impl(Ctx, File, Flag) ->
     {StorageDoc, File2} = file_info:get_storage_doc(File),

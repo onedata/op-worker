@@ -152,12 +152,10 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                     {ok, Uuid} ->
                         Guid = fslogic_uuid:uuid_to_guid(Uuid),
                         FileInfo = file_info:new_by_guid(Guid),
-                        LogicalAttrsResponse_ = attr_req:get_file_attr_no_permission_check(
-                            fslogic_context:new(?ROOT_SESS_ID), FileInfo), %todo TL do not create fslogic internal context
+                        LogicalAttrsResponse_ = get_attr(FileInfo),
                         IsImported_ = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse_),
                         {IsImported_, LogicalAttrsResponse_}
                 end,
-
 
             LocalResult = case IsImported of
                 true ->
@@ -211,15 +209,20 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
 %% Checks whether given file on given storage is already imported to onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
--spec is_imported(storage:id(), helpers:file(), file_meta:type(), #fuse_response{}) ->
+-spec is_imported(storage:id(), helpers:file(), file_meta:type(), fslogic_worker:fuse_response()) ->
     boolean().
-is_imported(_StorageId, _FileId, FileType, #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{type = FileType = ?DIRECTORY_TYPE}}) ->
+is_imported(_StorageId, _FileId, ?DIRECTORY_TYPE, #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = #file_attr{type = ?DIRECTORY_TYPE}
+}) ->
     true;
-is_imported(StorageId, FileId, FileType, #fuse_response{status = #status{code = ?OK},
-    fuse_response = #file_attr{type = FileType = ?REGULAR_FILE_TYPE, uuid = FileUUID}}) ->
-    FileIds = [{SID, FID} || #document{value = #file_location{storage_id = SID, file_id = FID}} <- fslogic_utils:get_local_file_locations({guid, FileUUID})],
+is_imported(StorageId, FileId, ?REGULAR_FILE_TYPE, #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, uuid = FileGuid}
+}) ->
+    FileIds = [{SID, FID} || #document{value = #file_location{storage_id = SID, file_id = FID}} <- fslogic_utils:get_local_file_locations({guid, FileGuid})],
     lists:member({StorageId, FileId}, FileIds);
-is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code = ?OK}}) ->
+is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{}}) ->
     false;
 is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code = ?ENOENT}}) ->
     false.
@@ -231,7 +234,7 @@ is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code
 %%--------------------------------------------------------------------
 -spec import_file(storage:id(), od_space:id(), #statbuf{}, space_strategy:job(), file_meta:path()) ->
     ok | no_return().
-import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data} = Job, LogicalPath) ->
+import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data}, LogicalPath) ->
     #{storage_file_id := FileId} = Data,
     {FileName, ParentPath} = fslogic_path:basename_and_parent(LogicalPath),
     {_StorageFileName, StorageParentPath} = fslogic_path:basename_and_parent(FileId),
@@ -251,25 +254,25 @@ import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data} = Job,
         size = FSize
     }},
 
-    {ok, FileUUID} =
+    {ok, FileUuid} =
         case file_meta:create({path, ParentPath}, File, true) of
-            {ok, FileUUID0} ->
-                {ok, FileUUID0};
+            {ok, FileUuid0} ->
+                {ok, FileUuid0};
             {error, {not_found, _}} ->
                 InitParent = space_sync_worker:init(storage_update, SpaceId, StorageId, Data#{storage_file_id => StorageParentPath, max_depth => 0}),
                 space_sync_worker:run(InitParent),
                 file_meta:create({path, ParentPath}, File, true)
         end,
-    {ok, _} = times:create(#document{key = FileUUID, value = #times{
+    {ok, _} = times:create(#document{key = FileUuid, value = #times{
         mtime = MTime, atime = ATime, ctime = CTime}}),
 
     case file_type(Mode) of
         ?REGULAR_FILE_TYPE ->
             Location = #file_location{blocks = [#file_block{offset = 0, size = FSize, file_id = FileId, storage_id = StorageId}],
-                provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUUID,
+                provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
                 space_id = SpaceId, size = FSize},
             {ok, LocId} = file_location:create(#document{value = Location}),
-            ok = file_meta:attach_location({uuid, FileUUID}, LocId, oneprovider:get_provider_id());
+            ok = file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id());
         _ ->
             ok
     end,
@@ -313,4 +316,19 @@ file_type(Mode) ->
     case IsDir of
         true -> ?DIRECTORY_TYPE;
         false -> ?REGULAR_FILE_TYPE
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get file attr, catching all exceptions and returning always fuse_response
+%% @end
+%%--------------------------------------------------------------------
+-spec get_attr(file_info:file_info()) -> fslogic_worker:fuse_response().
+get_attr(File) ->
+    try
+        attr_req:get_file_attr_no_permission_check(
+            fslogic_context:new(?ROOT_SESS_ID), File)
+    catch
+        _:Error ->
+            #fuse_response{status = fslogic_errors:gen_status_message(Error)}
     end.

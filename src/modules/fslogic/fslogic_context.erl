@@ -45,8 +45,8 @@ new(SessId) ->
         auth = Auth,
         identity = #user_identity{user_id = UserId}
     }}} = session:get(SessId),
-    {ok, User} = od_user:get_or_fetch(Auth, UserId),
-    #fslogic_context{session = Session, user_doc = User}.
+%%    {ok, User} = od_user:get_or_fetch(Auth, UserId), %todo enable after fixing race
+    #fslogic_context{session = Session}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -55,7 +55,10 @@ new(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
 get_user(Ctx) ->
-    Ctx#fslogic_context.user_doc.
+    Auth = get_auth(Ctx),
+    UserId = get_user_id(Ctx),
+    {ok, User} = od_user:get_or_fetch(Auth, UserId), %todo remove after fixing race
+    User.
 
 %%--------------------------------------------------------------------
 %% @doc Retrieves user ID from fslogic context.

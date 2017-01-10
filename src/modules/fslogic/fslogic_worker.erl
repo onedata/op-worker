@@ -341,10 +341,7 @@ handle_proxyio_request(Ctx, #proxyio_request{
     proxyio_request = #remote_read{offset = Offset, size = Size}
 }, File) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
-    read_write_req:read(Ctx, File, HandleId, SID, FID, Offset, Size);
-handle_proxyio_request(_Ctx, Req, _File) ->
-    ?log_bad_request(Req),
-    erlang:error({invalid_request, Req}).
+    read_write_req:read(Ctx, File, HandleId, SID, FID, Offset, Size).
 
 %%--------------------------------------------------------------------
 %% @private
