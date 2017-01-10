@@ -152,6 +152,7 @@ session_details() ->
             client_name = ProviderName
         }}} = od_provider:get_or_fetch(ProviderId),
     Res = [
+        {<<"userId">>, gui_session:get_user_id()},
         {<<"providerId">>, ProviderId},
         {<<"providerName">>, ProviderName},
         {<<"manageProvidersURL">>,
