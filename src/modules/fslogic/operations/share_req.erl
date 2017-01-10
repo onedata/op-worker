@@ -31,12 +31,12 @@
 -spec create_share(user_context:ctx(), file_context:ctx(), od_share:name()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 create_share(Ctx, File, Name) ->
-    {Guid, File2} = file_context:get_guid(File),
+    Guid = file_context:get_guid(File),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
 
     Auth = user_context:get_auth(Ctx),
-    SpaceId = file_context:get_space_id(File2),
+    SpaceId = file_context:get_space_id(File),
     {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
     {ok, _} = file_meta:add_share(File, ShareId),
     #provider_response{status = #status{code = ?OK}, provider_response = #share{share_id = ShareId, share_file_uuid = ShareGuid}}.
@@ -53,8 +53,8 @@ remove_share(Ctx, File) ->
     Auth = user_context:get_auth(Ctx),
     ok = share_logic:delete(Auth, ShareId),
 
-    {{uuid, FileUuid}, File2} = file_context:get_uuid_entry(File),
-    {ok, _} = file_meta:remove_share(File2, ShareId),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {ok, _} = file_meta:remove_share(File, ShareId),
     ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid), %todo pass file_context
 
     #provider_response{status = #status{code = ?OK}}.

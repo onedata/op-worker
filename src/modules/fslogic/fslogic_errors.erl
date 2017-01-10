@@ -37,12 +37,12 @@
     fslogic_worker:response().
 handle_error(Request, _Type, Error) ->
     Stacktrace = erlang:get_stacktrace(),
-    Status = #status{code = Code, description = Description} =
+    Status = #status{code = Code} =
         fslogic_errors:gen_status_message(Error),
     LogLevel = code_to_loglevel(Code),
     MsgFormat =
         "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace: ~p",
-    FormatArgs = [Request, Description, Code, Stacktrace],
+    FormatArgs = [Request, Error, Code, Stacktrace],
     case LogLevel of
         debug -> ?debug(MsgFormat, FormatArgs);
         error -> ?error(MsgFormat, FormatArgs)

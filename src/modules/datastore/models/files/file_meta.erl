@@ -778,25 +778,15 @@ get_space_dir(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec to_uuid(entry() | {guid, fslogic_worker:file_guid()}) -> {ok, uuid()} | datastore:generic_error().
 to_uuid({uuid, UUID}) ->
-    ?critical("to_uuid1({uuid, ~p}", [UUID]),
-    ?critical("1-> {ok, ~p}", [UUID]),
     {ok, UUID};
 to_uuid({guid, FileGUID}) ->
-    ?critical("to_uuid2({guid, ~p})", [FileGUID]),
-    Res = fslogic_uuid:guid_to_uuid(FileGUID),
-    ?critical("2-> {ok, ~p}", [Res]),
-    {ok, Res};
+    {ok, fslogic_uuid:guid_to_uuid(FileGUID)};
 to_uuid(#document{key = UUID}) ->
-    ?critical("3to_uuid({doc, ~p}", [UUID]),
-    ?critical("3-> {ok, ~p}", [UUID]),
     {ok, UUID};
 to_uuid({path, Path}) ->
-    ?critical("4to_uuid({path, ~p}", [Path]),
     ?run(begin
         {ok, {Doc, _}} = resolve_path(Path),
-        Res = to_uuid(Doc),
-        ?critical("4-> {ok, ~p}", [Res]),
-        Res
+        to_uuid(Doc)
     end).
 
 %%--------------------------------------------------------------------
@@ -861,7 +851,7 @@ get_guid_from_phantom_file(OldUUID) ->
 %%--------------------------------------------------------------------
 -spec add_share(file_context:ctx(), od_share:id()) -> {ok, uuid()}  | datastore:generic_error().
 add_share(File, ShareId) ->
-    {FileEntry, _File2} = file_context:get_uuid_entry(File),
+    FileEntry = file_context:get_uuid_entry(File),
     update(FileEntry,
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
@@ -874,7 +864,7 @@ add_share(File, ShareId) ->
 %%--------------------------------------------------------------------
 -spec remove_share(file_context:ctx(), od_share:id()) -> {ok, uuid()} | datastore:generic_error().
 remove_share(File, ShareId) ->
-    {FileEntry, _File2} = file_context:get_uuid_entry(File),
+    FileEntry = file_context:get_uuid_entry(File),
     update(FileEntry,
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = Shares -- [ShareId]}}

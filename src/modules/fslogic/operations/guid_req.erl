@@ -31,7 +31,7 @@
 -spec resolve_guid(user_context:ctx(), file_context:ctx()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 resolve_guid(_Ctx, File) ->
-    {Guid, _File2} = file_context:get_guid(File),
+    Guid = file_context:get_guid(File),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #uuid{uuid = Guid}

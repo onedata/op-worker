@@ -64,8 +64,8 @@ read_dir(Ctx, File, Offset, Limit) ->
     {Children, _File3} = file_context:get_file_children(File2, Ctx, Offset, Limit),
     ChildrenLinks =
         lists:map(fun(ChildFile) ->
-            {ChildGuid, ChildFile2} = file_context:get_guid(ChildFile),
-            {ChildName, _ChildFile3} = file_context:get_aliased_name(ChildFile2, Ctx),
+            ChildGuid = file_context:get_guid(ChildFile),
+            {ChildName, _ChildFile3} = file_context:get_aliased_name(ChildFile, Ctx),
             #child_link{name = ChildName, uuid = ChildGuid}
         end, Children),
     fslogic_times:update_atime(FileDoc, user_context:get_user_id(Ctx)), %todo pass file_context

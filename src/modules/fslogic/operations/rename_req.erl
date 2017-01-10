@@ -43,7 +43,7 @@ rename(Ctx, SourceFile, TargetParentFile, TargetName) ->
 
     case CanonicalSourcePath =:= CanonicalTargetPath of
         true ->
-            {Guid, _SourceFile3} = file_context:get_guid(SourceFile2),
+            Guid = file_context:get_guid(SourceFile2),
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_renamed{
                     new_uuid = Guid}};
@@ -114,7 +114,7 @@ check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, 
         true ->
             #fuse_response{status = #status{code = ?EINVAL}};
         false ->
-            {Guid, _} = file_context:get_guid(TargetParentFile),
+            Guid = file_context:get_guid(TargetParentFile),
             case logical_file_manager:get_child_attr(SessId, Guid, TargetName) of
                 {error, ?ENOENT} ->
                     ok;
@@ -133,7 +133,7 @@ check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, 
     ok | fslogic_worker:fuse_response().
 check_reg_preconditions(Ctx, TargetParentFile, TargetName) ->
     SessId = user_context:get_session_id(Ctx),
-    {TargetParentGuid, _TargetParentFile2} = file_context:get_guid(TargetParentFile),
+    TargetParentGuid = file_context:get_guid(TargetParentFile),
     case logical_file_manager:get_child_attr(SessId, TargetParentGuid, TargetName) of
         {error, ?ENOENT} ->
             ok;
@@ -246,7 +246,7 @@ rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) -
 -spec rename_interspace(user_context:ctx(), file_context:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    {SourceEntry, _File2} = file_context:get_uuid_entry(SourceFile), %todo pass file_context
+    SourceEntry = file_context:get_uuid_entry(SourceFile), %todo pass file_context
     SessId = user_context:get_session_id(Ctx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
@@ -354,7 +354,7 @@ rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
 -spec rename_interprovider(user_context:ctx(), file_context:ctx(), file_meta:path()) ->
     fslogic_worker:fuse_response().
 rename_interprovider(Ctx, SourceFile, LogicalTargetPath) ->
-    {SourceEntry, _SourceFile2} = file_context:get_uuid_entry(SourceFile), %todo remove and use file_context
+    SourceEntry = file_context:get_uuid_entry(SourceFile), %todo remove and use file_context
     SessId = user_context:get_session_id(Ctx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
@@ -630,7 +630,7 @@ maybe_sync_file(SessId, Entry, OldSpaceId, NewSpaceId) ->
     {LogicalPath:: file_meta:path(), CanonicalPath :: file_meta:path()}.
 get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName) ->
     SessId = user_context:get_session_id(Ctx),
-    {Guid, _TargetParentFile2} = file_context:get_guid(TargetParentFile),
+    Guid = file_context:get_guid(TargetParentFile),
     {ok, LogicalTargetParentPath} = logical_file_manager:get_file_path(SessId, Guid),
     case fslogic_path:tokenize_skipping_dots(LogicalTargetParentPath) of
         {ok, [<<"/">>]} ->

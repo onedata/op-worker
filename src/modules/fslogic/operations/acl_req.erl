@@ -32,7 +32,7 @@
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
 get_acl(_Ctx, File) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case xattr:get_by_name(FileUuid, ?ACL_KEY) of %todo pass file_context
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = fslogic_acl:from_json_format_to_acl(Val)}};
@@ -47,7 +47,7 @@ get_acl(_Ctx, File) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 set_acl(Ctx, File, #acl{value = Val}) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case xattr:save(FileUuid, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of %todo pass file_context
         {ok, _} ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid), %todo pass file_context
@@ -68,7 +68,7 @@ set_acl(Ctx, File, #acl{value = Val}) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 remove_acl(Ctx, File) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case xattr:delete_by_name(FileUuid, ?ACL_KEY) of
         ok ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid), %todo pass file_context

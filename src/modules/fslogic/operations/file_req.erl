@@ -34,20 +34,20 @@
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
 create_file(Ctx, ParentFile, Name, Mode, _Flag) ->
-    {File, ParentFile2} = create_file_doc(Ctx, ParentFile, Name, Mode),
+    File = create_file_doc(Ctx, ParentFile, Name, Mode),
     SessId = user_context:get_session_id(Ctx),
-    SpaceId = file_context:get_space_id(ParentFile2),
-    {{uuid, FileUuid}, File2} = file_context:get_uuid_entry(File),
+    SpaceId = file_context:get_space_id(ParentFile),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     {StorageId, FileId} = sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_context
-    {ParentFileEntry, _ParentFile3} = file_context:get_uuid_entry(ParentFile2),
+    ParentFileEntry = file_context:get_uuid_entry(ParentFile),
     fslogic_times:update_mtime_ctime(ParentFileEntry, user_context:get_user_id(Ctx)), %todo pass file_context
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    SpaceDirUuid = file_context:get_space_dir_uuid(ParentFile2),
+    SpaceDirUuid = file_context:get_space_dir_uuid(ParentFile),
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
     {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
     {ok, HandleId} = save_handle(SessId, Handle),
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_no_permission_check(Ctx, File2),
-    {FileGuid, _File3} = file_context:get_guid(File2),
+    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_no_permission_check(Ctx, File),
+    FileGuid = file_context:get_guid(File),
     FileLocation = #file_location{
         uuid = FileGuid,
         provider_id = oneprovider:get_provider_id(),
@@ -75,17 +75,17 @@ create_file(Ctx, ParentFile, Name, Mode, _Flag) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
 make_file(Ctx, ParentFile, Name, Mode) ->
-    {File, ParentFile2} = create_file_doc(Ctx, ParentFile, Name, Mode),
+    File = create_file_doc(Ctx, ParentFile, Name, Mode),
 
     SessId = user_context:get_session_id(Ctx),
-    SpaceId = file_context:get_space_id(ParentFile2),
-    {{uuid, FileUuid}, File2} = file_context:get_uuid_entry(File),
+    SpaceId = file_context:get_space_id(ParentFile),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_context
 
-    {ParentFileEntry, _ParentFile3} = file_context:get_uuid_entry(ParentFile2),
+    ParentFileEntry = file_context:get_uuid_entry(ParentFile),
     fslogic_times:update_mtime_ctime(ParentFileEntry, user_context:get_user_id(Ctx)), %todo pass file_context
 
-    attr_req:get_file_attr_no_permission_check(Ctx, File2).
+    attr_req:get_file_attr_no_permission_check(Ctx, File).
 
 %%--------------------------------------------------------------------
 %% @doc Returns file location.
@@ -99,8 +99,8 @@ get_file_location(_Ctx, File) ->
     {#document{value = #file_location{
         blocks = Blocks, file_id = FileId
     }}, File3} = file_context:get_local_file_location_doc(File2),
-    {FileGuid, File4} = file_context:get_guid(File3),
-    SpaceId = file_context:get_space_id(File4),
+    FileGuid = file_context:get_guid(File3),
+    SpaceId = file_context:get_space_id(File3),
 
     #fuse_response{
         status = #status{code = ?OK},
@@ -136,7 +136,7 @@ open_file(Ctx, File, rdwr) ->
 release(Ctx, File, HandleId) ->
     SessId = user_context:get_session_id(Ctx),
     ok = session:remove_handle(SessId, HandleId),
-    {{uuid, FileUuid}, _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     ok = file_handles:register_release(FileUuid, SessId, 1), %todo pass file_context
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -150,7 +150,7 @@ release(Ctx, File, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file_doc(user_context:ctx(), file_context:ctx(), file_meta:name(), file_meta:mode()) ->
-    {ChildFile :: file_context:ctx(), NewParentFile :: file_context:ctx()}.
+    ChildFile :: file_context:ctx().
 create_file_doc(Ctx, ParentFile, Name, Mode)  ->
     File = #document{value = #file_meta{
         name = Name,
@@ -158,7 +158,7 @@ create_file_doc(Ctx, ParentFile, Name, Mode)  ->
         mode = Mode,
         uid = user_context:get_user_id(Ctx)
     }},
-    {ParentFileEntry, ParentFile2} = file_context:get_uuid_entry(ParentFile),
+    ParentFileEntry = file_context:get_uuid_entry(ParentFile),
     {ok, FileUuid} = file_meta:create(ParentFileEntry, File), %todo pass file_context
 
     CTime = erlang:system_time(seconds),
@@ -166,8 +166,8 @@ create_file_doc(Ctx, ParentFile, Name, Mode)  ->
         mtime = CTime, atime = CTime, ctime = CTime
     }}),
 
-    SpaceId = file_context:get_space_id(ParentFile2),
-    {file_context:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)), ParentFile2}.
+    SpaceId = file_context:get_space_id(ParentFile),
+    file_context:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
 
 %%--------------------------------------------------------------------
 %% @doc Saves file handle in user's session, returns id of saved handle
@@ -219,13 +219,13 @@ open_file_for_rdwr(Ctx, File) ->
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file_impl(Ctx, File, Flag) ->
     {StorageDoc, File2} = file_context:get_storage_doc(File),
-    {{uuid, FileUuid}, File3} = file_context:get_uuid_entry(File2),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File2),
     {#document{value = #file_location{
         file_id = FileId}
-    }, File4} = file_context:get_local_file_location_doc(File3),
-    SpaceDirUuid = file_context:get_space_dir_uuid(File4),
+    }, File3} = file_context:get_local_file_location_doc(File2),
+    SpaceDirUuid = file_context:get_space_dir_uuid(File3),
     SessId = user_context:get_session_id(Ctx),
-    ShareId = file_context:get_share_id(File4),
+    ShareId = file_context:get_share_id(File3),
 
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, StorageDoc, FileId, ShareId), %todo pass file_context
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),

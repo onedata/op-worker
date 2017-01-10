@@ -87,8 +87,7 @@ get_child_attr(Ctx, ParentFile, Name) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
 chmod(Ctx, File, Mode) ->
-    {Guid, _File2} = file_context:get_guid(File),
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
+    {uuid, Uuid} = file_context:get_uuid_entry(File),
     sfm_utils:chmod_storage_files(Ctx, {uuid, Uuid}, Mode), %todo pass file_context
 
     % remove acl
@@ -116,8 +115,7 @@ update_times(Ctx, File, ATime, MTime, CTime) ->
     UpdateMap1 = maps:filter(fun(_Key, Value) ->
         is_integer(Value) end, UpdateMap),
 
-    {Guid, _File2} = file_context:get_guid(File),
-    Uuid = fslogic_uuid:guid_to_uuid(Guid),
-    fslogic_times:update_times_and_emit({uuid, Uuid}, UpdateMap1, user_context:get_user_id(Ctx)), %todo pass file_context
+    FileEntry = file_context:get_uuid_entry(File),
+    fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, user_context:get_user_id(Ctx)), %todo pass file_context
 
     #fuse_response{status = #status{code = ?OK}}.

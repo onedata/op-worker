@@ -77,11 +77,10 @@ get_target_providers(Ctx, File, _Req) ->
 update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
 update_target_guid_if_file_is_phantom(File, Request) ->
-    try file_context:get_file_doc(File) of
+    try file_context:get_file_doc(file_context:fill_guid(File)) of
         {{error, {not_found, file_meta}}, File2} ->
             try
-                {Guid, _File3} = file_context:get_guid(File2),
-                Uuid = fslogic_uuid:guid_to_uuid(Guid),
+                {uuid, Uuid} = file_context:get_uuid_entry(File2),
                 {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
                 NewRequest = change_target_guid(Request, NewGuid),
                 NewFile = file_context:new_by_guid(NewGuid),

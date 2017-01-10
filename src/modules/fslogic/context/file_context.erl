@@ -44,11 +44,15 @@
 
 %% API
 -export([new_by_path/2, new_by_guid/1]).
+
+-export([fill_guid/1]).
+
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1, get_parent_guid/2,
     get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1,
     get_storage_doc/1, get_local_file_location_doc/1, get_file_location_ids/1]).
+
 -export([is_file_context/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
@@ -95,6 +99,20 @@ new_by_guid(Guid) when Guid =/= undefined ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Fill guid field in file context record.
+%% @end
+%%--------------------------------------------------------------------
+-spec fill_guid(ctx()) -> ctx().
+fill_guid(FileCtx = #file_context{guid = undefined, cannonical_path = Path}) ->
+    {ok, Uuid} = file_meta:to_uuid({path, Path}),
+    SpaceId = get_space_id(FileCtx),
+    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
+    FileCtx#file_context{guid = Guid};
+fill_guid(FileCtx) ->
+    FileCtx.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Get file's share_id.
 %% @end
 %%--------------------------------------------------------------------
@@ -116,13 +134,13 @@ get_path(FileCtx = #file_context{cannonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_context{cannonical_path = <<"/">>}};
         false ->
-            {Guid, FileCtx2} = get_guid(FileCtx),
+            Guid = get_guid(FileCtx),
             Uuid = fslogic_uuid:guid_to_uuid(Guid),
             LogicalPath = fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, Uuid),
             {ok, [<<"/">>, _SpaceName | Rest]} = fslogic_path:tokenize_skipping_dots(LogicalPath),
-            SpaceId = get_space_id(FileCtx2),
+            SpaceId = get_space_id(FileCtx),
             CanonicalPath = filename:join([<<"/">>, SpaceId | Rest]),
-            {CanonicalPath, FileCtx2#file_context{cannonical_path = CanonicalPath}}
+            {CanonicalPath, FileCtx#file_context{cannonical_path = CanonicalPath}}
     end;
 get_path(#file_context{cannonical_path = Path}) ->
     Path.
@@ -179,14 +197,9 @@ get_space_dir_uuid(FileCtx) ->
 %% Get file's guid
 %% @end
 %%--------------------------------------------------------------------
--spec get_guid(ctx()) -> {fslogic_worker:file_guid(), ctx()}.
-get_guid(FileCtx = #file_context{guid = undefined, cannonical_path = Path}) ->
-    {ok, Uuid} = file_meta:to_uuid({path, Path}),
-    SpaceId = get_space_id(FileCtx),
-    Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
-    {Guid, FileCtx#file_context{guid = Guid}};
-get_guid(FileCtx = #file_context{guid = Guid}) ->
-    {Guid, FileCtx}.
+-spec get_guid(ctx()) -> fslogic_worker:file_guid().
+get_guid(#file_context{guid = Guid}) ->
+    Guid.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -195,12 +208,12 @@ get_guid(FileCtx = #file_context{guid = Guid}) ->
 %%--------------------------------------------------------------------
 -spec get_file_doc(ctx()) -> {file_meta:doc() | {error, term()}, ctx()}.
 get_file_doc(FileCtx = #file_context{file_doc = undefined}) ->
-    {Guid, NewFileCtx} = get_guid(FileCtx),
+    Guid = get_guid(FileCtx),
     case file_meta:get({uuid, fslogic_uuid:guid_to_uuid(Guid)}) of
         {ok, FileDoc} ->
-            {FileDoc, NewFileCtx#file_context{file_doc = FileDoc}};
+            {FileDoc, FileCtx#file_context{file_doc = FileDoc}};
         Error ->
-            {Error, NewFileCtx#file_context{file_doc = Error}}
+            {Error, FileCtx#file_context{file_doc = Error}}
     end;
 get_file_doc(FileCtx = #file_context{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
@@ -249,7 +262,7 @@ get_parent_guid(FileCtx, UserId) ->
             {undefined, FileCtx};
         false ->
             {ParentFile, NewFile} = file_context:get_parent(FileCtx, UserId),
-            {ParentGuid, _} = file_context:get_guid(ParentFile),
+            ParentGuid = file_context:get_guid(ParentFile),
             {ParentGuid, NewFile}
     end.
 
@@ -260,9 +273,9 @@ get_parent_guid(FileCtx, UserId) ->
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file(), ctx()}.
 get_storage_file_id(FileCtx) ->
-    {Guid, NewFileCtx} = get_guid(FileCtx),
-    FileId = fslogic_utils:gen_storage_file_id({uuid, fslogic_uuid:guid_to_uuid(Guid)}), %todo TL do not use this util function, as it it overcomplicated
-    {FileId, NewFileCtx#file_context{storage_file_id = FileId}}.
+    FileEntry = get_uuid_entry(FileCtx),
+    FileId = fslogic_utils:gen_storage_file_id(FileEntry), %todo TL do not use this util function, as it it overcomplicated
+    {FileId, FileCtx#file_context{storage_file_id = FileId}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -332,12 +345,12 @@ get_posix_storage_user_context(FileCtx, UserId) ->
 %%--------------------------------------------------------------------
 -spec get_times(ctx()) -> {times:times() | {error, term()}, ctx()}.
 get_times(FileCtx) ->
-    {Guid, FileCtx2} = file_context:get_guid(FileCtx),
-    case times:get_or_default(fslogic_uuid:guid_to_uuid(Guid)) of
+    {uuid, FileUuid} = file_context:get_uuid_entry(FileCtx),
+    case times:get_or_default(FileUuid) of
         {ok, Times} ->
-            {Times, FileCtx2#file_context{times = Times}};
+            {Times, FileCtx#file_context{times = Times}};
         Error ->
-            {Error, FileCtx2}
+            {Error, FileCtx}
     end.
 
 %%--------------------------------------------------------------------
@@ -416,10 +429,10 @@ get_file_children(FileCtx, Ctx, Offset, Limit) ->
 %% Get file uuid entry
 %% @end
 %%--------------------------------------------------------------------
--spec get_uuid_entry(ctx()) -> {{uuid, file_meta:uuid()}, ctx()}.
+-spec get_uuid_entry(ctx()) -> {uuid, file_meta:uuid()}.
 get_uuid_entry(FileCtx) ->
-    {Guid, FileCtx2} = get_guid(FileCtx),
-    {{uuid, fslogic_uuid:guid_to_uuid(Guid)}, FileCtx2}.
+    Guid = get_guid(FileCtx),
+    {uuid, fslogic_uuid:guid_to_uuid(Guid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -442,9 +455,9 @@ get_storage_doc(FileCtx = #file_context{storage_doc = StorageDoc}) ->
 -spec get_local_file_location_doc(ctx()) ->
     {file_location:doc(), ctx()}.
 get_local_file_location_doc(FileCtx = #file_context{local_file_location_doc = undefined}) ->
-    {FileEntry, FileCtx2} = get_uuid_entry(FileCtx),
+    FileEntry = get_uuid_entry(FileCtx),
     LocalLocation = fslogic_utils:get_local_file_location(FileEntry),
-    {LocalLocation, FileCtx2#file_context{local_file_location_doc = LocalLocation}};
+    {LocalLocation, FileCtx#file_context{local_file_location_doc = LocalLocation}};
 get_local_file_location_doc(FileCtx = #file_context{local_file_location_doc = Doc}) ->
     {Doc, FileCtx}.
 

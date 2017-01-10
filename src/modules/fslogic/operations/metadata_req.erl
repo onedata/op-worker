@@ -33,7 +33,7 @@
     custom_metadata:filter(), Inherited :: boolean()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_metadata(_Ctx, File, json, Names, Inherited) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of %todo pass file_context
         {ok, Meta} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = json, value = Meta}};
@@ -41,7 +41,7 @@ get_metadata(_Ctx, File, json, Names, Inherited) ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end;
 get_metadata(_Ctx, File, rdf, _, _) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case custom_metadata:get_rdf_metadata(FileUuid) of %todo pass file_context
         {ok, Meta} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = rdf, value = Meta}};
@@ -58,11 +58,11 @@ get_metadata(_Ctx, File, rdf, _, _) ->
     custom_metadata:value(), custom_metadata:filter()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_metadata(_Ctx, File, json, Value, Names) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names), %todo pass file_context
     #provider_response{status = #status{code = ?OK}};
 set_metadata(_Ctx, File, rdf, Value, _) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     {ok, _} = custom_metadata:set_rdf_metadata(FileUuid, Value),
     #provider_response{status = #status{code = ?OK}}.
 
@@ -75,11 +75,11 @@ set_metadata(_Ctx, File, rdf, Value, _) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_metadata(_Ctx, File, json) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     ok = custom_metadata:remove_json_metadata(FileUuid), %todo pass file_context
     #provider_response{status = #status{code = ?OK}};
 remove_metadata(_Ctx, File, rdf) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     ok = custom_metadata:remove_rdf_metadata(FileUuid), %todo pass file_context
     #provider_response{status = #status{code = ?OK}}.
 

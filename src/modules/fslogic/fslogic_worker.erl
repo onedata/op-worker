@@ -166,7 +166,8 @@ handle_request(SessId, Request) ->
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            handle_request_locally(Ctx, Request2, File2);
+            File3 = file_context:fill_guid(File2),
+            handle_request_locally(Ctx, Request2, File3);
         false ->
             handle_request_remotely(Ctx, Request2, Providers)
     end.

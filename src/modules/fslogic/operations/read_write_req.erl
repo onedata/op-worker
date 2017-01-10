@@ -79,9 +79,9 @@ write(Ctx, File, HandleId, StorageId, FileId, ByteSequences) ->
 get_handle(Ctx, File, undefined, StorageId, FileId, OpenFlag)->
     SessId = user_context:get_session_id(Ctx),
     SpaceDirUuid = file_context:get_space_dir_uuid(File),
-    {{uuid, FileUuid}, File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     {ok, Storage} = storage:get(StorageId),
-    ShareId = file_context:get_share_id(File2),
+    ShareId = file_context:get_share_id(File),
     SFMHandle =
         storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId, ShareId),
     storage_file_manager:open(SFMHandle, OpenFlag);

@@ -36,7 +36,7 @@ truncate(Ctx, File, Size) ->
     File2 = update_quota(File, Size),
     SessId = user_context:get_session_id(Ctx),
     SpaceDirUuid = file_context:get_space_dir_uuid(File2),
-    {{uuid, FileUuid}, File3} = file_context:get_uuid_entry(File2),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File2),
     lists:foreach(
         fun({SID, FID}) ->
             {ok, Storage} = storage:get(SID),
@@ -45,7 +45,7 @@ truncate(Ctx, File, Size) ->
             ok = storage_file_manager:truncate(Handle, Size)
         end, fslogic_utils:get_local_storage_file_locations({uuid, FileUuid})), %todo consider caching in file_context
 
-    {FileDoc, _File4} = file_context:get_file_doc(File3),
+    {FileDoc, _File4} = file_context:get_file_doc(File2),
     fslogic_times:update_mtime_ctime(FileDoc, user_context:get_user_id(Ctx)), %todo pass file_context
     #fuse_response{status = #status{code = ?OK}}.
 

@@ -90,13 +90,12 @@ handle(healthcheck) ->
     ok;
 handle({fslogic_deletion_request, Ctx, File, Silent}) ->
     SessId = user_context:get_session_id(Ctx),
-    {FileGuid, File2} = file_context:get_guid(File),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
 
     case file_handles:exists(FileUuid) of
         true ->
             UserId = user_context:get_user_id(Ctx),
-            {ParentFile, File3} = file_context:get_parent(File2, UserId),
+            {ParentFile, File3} = file_context:get_parent(File, UserId),
             NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
 
             #fuse_response{status = #status{code = ?OK}} = rename_req:rename(

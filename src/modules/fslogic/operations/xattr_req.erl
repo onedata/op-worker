@@ -115,7 +115,7 @@ set_xattr(Ctx, File, Xattr) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_xattr(Ctx, File, XattrName) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_context
         ok ->
             fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
@@ -133,7 +133,7 @@ remove_xattr(Ctx, File, XattrName) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 list_xattr(_Ctx, File, Inherited, ShowInternal) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case xattr:list(FileUuid, Inherited) of
         {ok, XattrList} ->
             FilteredXattrList = case ShowInternal of
@@ -165,7 +165,7 @@ list_xattr(_Ctx, File, Inherited, ShowInternal) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_custom_xattr(_Ctx, File, XattrName, Inherited) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case xattr:get_by_name(FileUuid, XattrName, Inherited) of %todo pass file_context
         {ok, XattrValue} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = XattrName, value = XattrValue}};
@@ -182,7 +182,7 @@ get_custom_xattr(_Ctx, File, XattrName, Inherited) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_custom_xattr(Ctx, File, #xattr{name = XattrName, value = XattrValue}) ->
-    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry(File),
     case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_context
         {ok, _} ->
             fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
