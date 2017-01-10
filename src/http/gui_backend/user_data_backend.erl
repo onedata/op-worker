@@ -109,7 +109,7 @@ create_record(<<"user">>, _Data) ->
     ok | gui_error:error_result().
 update_record(<<"user">>, ?CURRENT_USER_ID, Data) ->
     case Data of
-        [{<<"defaultSpace">>, DefaultSpace}] ->
+        [{<<"defaultSpaceId">>, DefaultSpace}] ->
             UserAuth = op_gui_utils:get_user_auth(),
             case user_logic:set_default_space(UserAuth, DefaultSpace) of
                 ok ->
@@ -179,7 +179,7 @@ user_record(Auth, UserId) ->
     [
         {<<"id">>, UserId},
         {<<"name">>, Name},
-        {<<"defaultSpace">>, DefaultSpace},
+        {<<"defaultSpaceId">>, DefaultSpace},
         {<<"groups">>, Groups},
         {<<"spaces">>, Spaces},
         {<<"shares">>, Shares},
