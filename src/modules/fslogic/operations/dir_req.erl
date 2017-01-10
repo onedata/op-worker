@@ -42,16 +42,12 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
     }},
     {ParentDoc = #document{key = ParentUuid}, ParentFile2} = file_info:get_file_doc(ParentFile),
     SpaceId = file_info:get_space_id(ParentFile2),
-    case file_meta:create(ParentDoc, File) of %todo maybe pass file_info inside
-        {ok, DirUUID} ->
-            {ok, _} = times:create(#document{key = DirUUID, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
-            fslogic_times:update_mtime_ctime({uuid, ParentUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_info
-            #fuse_response{status = #status{code = ?OK},
-                fuse_response = #dir{uuid = fslogic_uuid:uuid_to_guid(DirUUID, SpaceId)}
-            };
-        {error, already_exists} ->
-            #fuse_response{status = #status{code = ?EEXIST}}
-    end.
+    {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_info inside
+    {ok, _} = times:create(#document{key = DirUuid, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
+    fslogic_times:update_mtime_ctime({uuid, ParentUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_info
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #dir{uuid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
