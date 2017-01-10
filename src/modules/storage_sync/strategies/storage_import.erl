@@ -195,7 +195,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                     import_file(StorageId, SpaceId, FileStats, Job, LogicalPath)
             end,
 
-            SubJobs = import_children(SFMHandle, FileType, Job, LogicalPath, maps:get(dir_offset, Data, 0), ?DIR_BATCH),
+            SubJobs = import_children(SFMHandle, FileType, Job, maps:get(dir_offset, Data, 0), ?DIR_BATCH),
 
             {LocalResult, SubJobs}
     end.
@@ -205,6 +205,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Checks whether given file on given storage is already imported to onedata filesystem.
 %% @end
@@ -228,6 +229,7 @@ is_imported(_StorageId, _FileId, _FileType, #fuse_response{status = #status{code
     false.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Imports given storage file to onedata filesystem.
 %% @end
@@ -281,15 +283,16 @@ import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data}, Logic
     ok.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Generates jobs for importing children of given directory to onedata filesystem.
 %% @end
 %%--------------------------------------------------------------------
 -spec import_children(storage_file_manager:handle(), file_meta:type(), space_strategy:job(),
-    file_meta:path(), Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
+    Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
     [space_strategy:job()].
 import_children(SFMHandle, ?DIRECTORY_TYPE, Job = #space_strategy_job{data = Data = #{max_depth := MaxDepth}},
-    LogicalPath, Offset, Count) when MaxDepth > 0 ->
+    Offset, Count) when MaxDepth > 0 ->
     #{storage_file_id := FileId} = Data,
     {ok, ChildrenIds} = storage_file_manager:readdir(SFMHandle, Offset, Count),
     case ChildrenIds of
@@ -301,10 +304,11 @@ import_children(SFMHandle, ?DIRECTORY_TYPE, Job = #space_strategy_job{data = Dat
                 || ChildId <- ChildrenIds],
             [Job#space_strategy_job{data = Data#{dir_offset => Offset + length(ChildrenIds)}}| Jobs]
     end;
-import_children(_SFMHandle, _, _Job = #space_strategy_job{data = _Data}, _LogicalPath, _Offset, _Count) ->
+import_children(_SFMHandle, _, _Job = #space_strategy_job{data = _Data}, _Offset, _Count) ->
     [].
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Return type of file depending on its posix mode.
 %% @end
@@ -319,6 +323,7 @@ file_type(Mode) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Get file attr, catching all exceptions and returning always fuse_response
 %% @end
