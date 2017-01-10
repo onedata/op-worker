@@ -52,18 +52,16 @@ get_file_attr_no_permission_check(Ctx, File) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {FileName, File3} = file_info:get_aliased_name(File2, Ctx),
     SpaceId = file_info:get_space_id(File3),
-    {#posix_user_ctx{gid = GID, uid = UID}, File4} =
-        file_info:get_storage_user_context(File3, Ctx),
+    {{Uid, Gid}, File4} = file_info:get_posix_storage_user_context(File3, OwnerId),
     Size = fslogic_blocks:get_file_size(FileDoc), %todo TL consider caching file_location in File record
     {ParentGuid, File5} = file_info:get_parent_guid(File4, UserId),
     {{ATime, CTime, MTime}, _File6} = file_info:get_times(File5),
 
-    FinalUID = fix_wrong_uid(UID, UserId, OwnerId), %todo remove, see function doc
     #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
-        gid = GID, parent_uuid = ParentGuid,
+        uid = Uid, gid = Gid, parent_uuid = ParentGuid,
         uuid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
         type = Type, mode = Mode, atime = ATime, mtime = MTime,
-        ctime = CTime, uid = FinalUID, size = Size, name = FileName, provider_id = ProviderId,
+        ctime = CTime, size = Size, name = FileName, provider_id = ProviderId,
         shares = Shares, owner_id = OwnerId
     }}.
 
@@ -123,20 +121,3 @@ update_times(Ctx, File, ATime, MTime, CTime) ->
     fslogic_times:update_times_and_emit({uuid, Uuid}, UpdateMap1, fslogic_context:get_user_id(Ctx)), %todo pass file_info
 
     #fuse_response{status = #status{code = ?OK}}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @todo TL something is messed up with luma design, if we need to put such code here
-%% @doc
-%% Not sure why we need it. Remove asap after fixing luma.
-%% @end
-%%--------------------------------------------------------------------
--spec fix_wrong_uid(posix_user:uid(), UserId :: od_user:id(), FileOwnerId :: od_user:id()) ->
-    posix_user:uid().
-fix_wrong_uid(Uid, UserId, UserId) ->
-    Uid;
-fix_wrong_uid(_Uid, _UserId, OwnerId) ->
-    luma_utils:gen_storage_uid(OwnerId).

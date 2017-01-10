@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Cache that maps space ID to storage ID.
+%%% Model that stores list of storage IDs attached to the space.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_storage).
@@ -20,19 +20,26 @@
 -export_type([doc/0]).
 
 %% API
--export([add/2]).
+-export([add/2, get_storage_ids/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 -export([record_struct/1]).
 
+-type id() :: od_space:id().
+-type model() :: #space_storage{}.
+-type doc() :: #document{value :: model()}.
+
+-export_type([id/0, model/0, doc/0]).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns structure of the record in specified version.
 %% @end
 %%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+-spec record_struct(datastore_json:record_version()) ->
+    datastore_json:record_struct().
 record_struct(1) ->
     {record, [
         {storage_ids, [string]}
@@ -47,7 +54,8 @@ record_struct(1) ->
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
+-spec save(datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
@@ -56,8 +64,8 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(datastore:key(), datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
@@ -66,7 +74,8 @@ update(Key, Diff) ->
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
+-spec create(datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
@@ -75,7 +84,7 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -84,7 +93,7 @@ get(Key) ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
@@ -93,7 +102,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
@@ -111,9 +120,8 @@ model_init() ->
 %% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
+-spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -122,8 +130,8 @@ model_init() ->
 %% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+-spec before(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -133,68 +141,39 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds space-storage mapping.
+%% Adds storage to the space.
 %% @end
 %%--------------------------------------------------------------------
--spec add(SpaceId :: binary(), StorageId :: storage:id()) ->
-    {ok, SpaceId :: binary()} | {error, Reason :: term()}.
+-spec add(od_space:id(), storage:id()) ->
+    {ok, od_space:id()} | {error, Reason :: term()}.
 add(SpaceId, StorageId) ->
-    case space_storage:get(SpaceId) of
-        {ok, #document{value = SpaceStorage} = Doc} ->
-            NewSpaceStorage = add_storage(SpaceStorage, StorageId),
-            ok = attach_strategies(SpaceId, StorageId),
-            space_storage:save(Doc#document{value = NewSpaceStorage});
-        {error, {not_found, _}} ->
-            SpaceStorage = new(SpaceId, StorageId),
-            case create(SpaceStorage) of
-                {ok, SpaceStorageId} ->
-                    ok = attach_strategies(SpaceId, StorageId),
-                    {ok, SpaceStorageId};
-                {error, already_exists} ->
-                    add(SpaceId, StorageId);
-                {error, Reason} -> {error, Reason}
-            end;
+    Doc = #document{
+        key = SpaceId, value = #space_storage{storage_ids = [StorageId]}
+    },
+
+    Diff = fun(#space_storage{storage_ids = StorageIds} = Model) ->
+        case lists:member(StorageId, StorageIds) of
+            true -> {error, already_exists};
+            false ->
+                {ok, Model#space_storage{storage_ids = [StorageId | StorageIds]}}
+        end
+    end,
+
+    case datastore:create_or_update(?STORE_LEVEL, Doc, Diff) of
+        {ok, SpaceId} ->
+            ok = space_strategies:add_storage(SpaceId, StorageId),
+            {ok, SpaceId};
         {error, Reason} ->
             {error, Reason}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Returns datastore document for space-storage mapping.
+%% Returns list of storage IDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
--spec new(SpaceId :: binary(), StorageId :: storage:id()) -> Doc :: #document{}.
-new(SpaceId, StorageId) ->
-    #document{key = SpaceId, value = #space_storage{storage_ids = [StorageId]}}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Adds storage to existing space-storage mapping.
-%% @end
-%%--------------------------------------------------------------------
--spec add_storage(SpaceStorage :: #space_storage{}, StorageId :: storage:id()) ->
-    NewSpaceStorage :: #space_storage{}.
-add_storage(#space_storage{storage_ids = StorageIds} = SpaceStorage, StorageId) ->
-    case lists:member(StorageId, StorageIds) of
-        true ->
-            SpaceStorage;
-        false ->
-            SpaceStorage#space_storage{storage_ids = [StorageId | StorageIds]}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add space strategies for this new storage.
-%% @end
-%%--------------------------------------------------------------------
--spec attach_strategies(SpaceId :: binary(), StorageId :: storage:id()) -> ok.
-attach_strategies(SpaceId, StorageId) ->
-    space_strategies:add_storage(SpaceId, StorageId).
+-spec get_storage_ids(model() | doc()) -> [storage:id()].
+get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
+    StorageIds;
+get_storage_ids(#document{value = #space_storage{} = Value}) ->
+    get_storage_ids(Value).

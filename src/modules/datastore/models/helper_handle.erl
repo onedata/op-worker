@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model for holding a local helper instance.
+%%% Model for caching a local helper handle.
 %%% @end
 %%%-------------------------------------------------------------------
--module(helper_instance).
+-module(helper_handle).
 -author("Konrad Zemek").
 -behaviour(model_behaviour).
 
@@ -23,6 +23,10 @@
 %% API
 -export([create/3]).
 
+-type doc() :: #document{value :: #helper_handle{}}.
+
+-export_type([doc/0]).
+
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
@@ -32,7 +36,8 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
@@ -41,7 +46,7 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
+-spec update(datastore:key(), datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
@@ -51,7 +56,8 @@ update(Key, Diff) ->
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(#document{} = Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
@@ -60,7 +66,8 @@ create(#document{} = Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) ->
+    {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -69,7 +76,8 @@ get(Key) ->
 %% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+-spec list() ->
+    {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
     datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
@@ -98,16 +106,15 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(helper_instance_bucket, [], ?LOCAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(helper_handle_bucket, [], ?LOCAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
+-spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -116,8 +123,8 @@ model_init() ->
 %% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+-spec before(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -127,29 +134,15 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a helper instance for the specified session.
-%% The instance is retained in the database.
+%% Creates and caches helper handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create(session:id(), SpaceUuid :: file_meta:uuid(),
-    Storage :: #document{value :: #storage{}} | storage:id()) ->
-    {ok, #document{value :: #helper_instance{}}}.
-create(SessionId, SpaceUuid, #storage{} = Storage) ->
-    {ok, HelperInit} = fslogic_storage:select_helper(Storage),
-    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUuid),
-    HelperHandle = helpers:new_handle(HelperInit, UserCtx),
-    HelperDoc = #document{value = #helper_instance{handle = HelperHandle}},
-
+-spec create(od_user:id(), od_space:id(), storage:doc()) -> {ok, doc()}.
+create(UserId, SpaceId, StorageDoc) ->
+    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
+    HelperName = helper:get_name(Helper),
+    {ok, UserCtx} = luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName),
+    HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
+    HelperDoc = #document{value = HelperHandle},
     {ok, Key} = create(HelperDoc),
-    {ok, HelperDoc#document{key = Key}};
-
-create(SessionId, SpaceUuid, #document{value = Storage}) ->
-    create(SessionId, SpaceUuid, Storage);
-
-create(SessionId, SpaceUuid, StorageId) ->
-    {ok, StorageDoc} = storage:get(StorageId),
-    create(SessionId, SpaceUuid, StorageDoc).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+    {ok, HelperDoc#document{key = Key}}.

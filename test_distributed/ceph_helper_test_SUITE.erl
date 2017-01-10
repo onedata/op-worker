@@ -240,41 +240,45 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     CephConfig = ?config(ceph, ?config(ceph, ?config(storages, Config))),
-    HelperArgs = #{
-        <<"mon_host">> => atom_to_binary(?config(host_name, CephConfig), utf8),
-        <<"cluster_name">> => ?CEPH_CLUSTER_NAME,
-        <<"pool_name">> => ?CEPH_POOL_NAME
-    },
-    UserCtx = #ceph_user_ctx{
-        user_name = atom_to_binary(?config(username, CephConfig), utf8),
-        user_key = atom_to_binary(?config(key, CephConfig), utf8)
-    },
+
+    UserCtx = helper:new_ceph_user_ctx(
+        atom_to_binary(?config(username, CephConfig), utf8),
+        atom_to_binary(?config(key, CephConfig), utf8)
+    ),
+    Helper = helper:new_ceph_helper(
+        atom_to_binary(?config(host_name, CephConfig), utf8),
+        ?CEPH_CLUSTER_NAME,
+        ?CEPH_POOL_NAME,
+        #{},
+        UserCtx,
+        false
+    ),
 
     spawn_link(Node, fun() ->
-        helper_loop(?CEPH_HELPER_NAME, HelperArgs, UserCtx)
+        helper_loop(Helper, UserCtx)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(HelperName, HelperArgs, UserCtx) ->
-    Ctx = helpers:new_handle(HelperName, HelperArgs, UserCtx),
-    helper_loop(Ctx).
+helper_loop(Helper, UserCtx) ->
+    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    helper_loop(Handle).
 
-helper_loop(Ctx) ->
+helper_loop(Handle) ->
     receive
         exit ->
             ok;
 
         {Pid, {run_helpers, open, Args}} ->
-            {ok, FileHandle} = apply(helpers, open, [Ctx | Args]),
+            {ok, FileHandle} = apply(helpers, open, [Handle | Args]),
             HandlePid = spawn_link(fun() -> helper_handle_loop(FileHandle) end),
             Pid ! {self(), {ok, HandlePid}},
-            helper_loop(Ctx);
+            helper_loop(Handle);
 
         {Pid, {run_helpers, Method, Args}} ->
-            Pid ! {self(), apply(helpers, Method, [Ctx | Args])},
-            helper_loop(Ctx)
+            Pid ! {self(), apply(helpers, Method, [Handle | Args])},
+            helper_loop(Handle)
     end.
 
 helper_handle_loop(FileHandle) ->

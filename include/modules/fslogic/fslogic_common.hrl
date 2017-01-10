@@ -37,7 +37,6 @@
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_SESS, #session{identity = #user_identity{user_id = ?GUEST_USER_ID}}).
--define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
 
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).

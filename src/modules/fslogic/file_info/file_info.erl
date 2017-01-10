@@ -28,9 +28,9 @@
     space_dir_doc :: undefined | file_meta:doc(),
     file_doc :: undefined | file_meta:doc() | {error, term()},
     parent :: undefined | file_info(),
-    storage_file_id :: undefined | helpers:file(),
+    storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name() | od_space:alias(),
-    storage_posix_user_context :: undefined | #posix_user_ctx{},
+    storage_posix_user_context :: undefined | luma:posix_user_ctx(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage_doc :: undefined | space_storage:doc(),
@@ -46,8 +46,9 @@
 -export([new_by_path/2, new_by_guid/1]).
 -export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
-    get_aliased_name/2, get_storage_user_context/2, get_times/1, get_parent_guid/2,
-    get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1, get_storage_doc/1, get_local_file_location_doc/1, get_file_location_ids/1]).
+    get_aliased_name/2, get_posix_storage_user_context/2, get_times/1, get_parent_guid/2,
+    get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1,
+    get_storage_doc/1, get_local_file_location_doc/1, get_file_location_ids/1]).
 -export([is_file_info/1, is_space_dir/1, is_user_root_dir/2, is_root_dir/1, is_dir/1]).
 
 %%%===================================================================
@@ -149,7 +150,7 @@ get_logical_path(FileInfo, Ctx) ->
 %% Get file's SpaceId
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id(file_info()) -> od_space:id().
+-spec get_space_id(file_info()) -> od_space:id() | undefined.
 get_space_id(#file_info{space_dir_doc = #document{key = SpaceUuid}}) ->
     fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid);
 get_space_id(#file_info{guid = undefined, cannonical_path = Path}) ->
@@ -312,22 +313,17 @@ get_aliased_name(FileInfo = #file_info{file_name = FileName}, _Ctx) ->
 %% Get posix storage user context, holding uid and gid of file on posix storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_user_context(file_info(), fslogic_context:ctx()) ->
-    {#posix_user_ctx{}, file_info()}.
-get_storage_user_context(FileInfo, Ctx) ->
+-spec get_posix_storage_user_context(file_info(), fslogic_context:ctx()) ->
+    {luma:posix_user_ctx(), file_info()}.
+get_posix_storage_user_context(FileInfo, UserId) ->
     IsSpaceDir = is_space_dir(FileInfo),
     IsUserRootDir = is_root_dir(FileInfo),
-    case IsSpaceDir orelse IsUserRootDir of
-        true ->
-            {?ROOT_POSIX_CTX, FileInfo#file_info{storage_posix_user_context = ?ROOT_POSIX_CTX}};
-        false ->
-            SpaceDirUuid = get_space_dir_uuid(FileInfo),
-            StorageId = luma_utils:get_storage_id(SpaceDirUuid), %todo use SpaceId in luma instead of SpaceDirUuid
-            StorageType = luma_utils:get_storage_type(StorageId),
-            SessId = fslogic_context:get_session_id(Ctx),
-            StorageContext = fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceDirUuid),
-            {StorageContext, FileInfo#file_info{storage_posix_user_context = StorageContext}}
-    end.
+    SpaceId = get_space_id(FileInfo),
+    UserCtx = case IsSpaceDir orelse IsUserRootDir of
+        true -> luma:get_posix_user_ctx(?ROOT_USER_ID, SpaceId);
+        false -> luma:get_posix_user_ctx(UserId, SpaceId)
+    end,
+    {UserCtx, FileInfo#file_info{storage_posix_user_context = UserCtx}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -492,7 +488,7 @@ is_space_dir(#file_info{guid = undefined, cannonical_path = Path}) ->
         _ ->
             false
     end;
-is_space_dir(#file_info{guid = Guid})->
+is_space_dir(#file_info{guid = Guid}) ->
     SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(fslogic_uuid:guid_to_uuid(Guid))),
     is_binary(SpaceId).
 

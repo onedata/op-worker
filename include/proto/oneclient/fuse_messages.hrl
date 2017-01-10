@@ -122,8 +122,8 @@
 
 -record(verify_storage_test_file, {
     storage_id :: storage:id(),
-    space_uuid :: file_meta:uuid(),
-    file_id :: helpers:file(),
+    space_id :: od_space:id(),
+    file_id :: helpers:file_id(),
     file_content :: binary()
 }).
 
@@ -145,14 +145,14 @@
 }).
 
 -record(helper_params, {
-    helper_name :: binary(),
+    helper_name :: helper:name(),
     helper_args :: [#helper_arg{}]
 }).
 
 -record(storage_test_file, {
     helper_params :: #helper_params{},
-    space_uuid :: file_meta:uuid(),
-    file_id :: helpers:file(),
+    space_id :: od_space:id(),
+    file_id :: helpers:file_id(),
     file_content :: binary()
 }).
 

@@ -64,7 +64,7 @@ gen_status_message({case_clause, Error}) ->
     gen_status_message(Error);
 gen_status_message({not_a_space, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
-gen_status_message({not_found, file_meta}) ->
+gen_status_message({not_found, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
     #status{code = ?EEXIST, description = describe_error(?EEXIST)};

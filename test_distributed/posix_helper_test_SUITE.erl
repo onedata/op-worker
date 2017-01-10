@@ -8,7 +8,7 @@
 %%% @doc Tests for helpers module.
 %%% @end
 %%%-------------------------------------------------------------------
--module(helpers_test_SUITE).
+-module(posix_helper_test_SUITE).
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
@@ -28,7 +28,7 @@
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([ctx_server/1, ctx_server/2]).
+-export([helper_handle_server/1, helper_handle_server/2]).
 -export([
     getattr_test/1, access_test/1, mknod_test/1, mkdir_test/1, unlink_test/1, rmdir_test/1, symlink_test/1,
     rename_test/1, chmod_test/1, chown_test/1, truncate_test/1, open_test/1, read_test/1, write_test/1,
@@ -203,13 +203,13 @@ fsync_test(Config) ->
 
 init_per_testcase(_Case, Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-    CTXServer = spawn(Node, fun() -> ctx_server(Config) end),
-    lists:keystore(ctx_server, 1, Config,
-        {ctx_server, CTXServer}).
+    HandleServer = spawn(Node, fun() -> helper_handle_server(Config) end),
+    lists:keystore(helper_handle_server, 1, Config,
+        {helper_handle_server, HandleServer}).
 
 end_per_testcase(_Case, Config) ->
-    CTXServer = ?config(ctx_server, Config),
-    CTXServer ! exit,
+    HandleServer = ?config(helper_handle_server, Config),
+    HandleServer ! exit,
 
     os:cmd("rm -rf " ++ binary_to_list(?path(Config, <<"helpers_test_*">>))),
     ok.
@@ -222,26 +222,27 @@ end_per_testcase(_Case, Config) ->
 gen_filename() ->
     http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>).
 
-ctx_server(Config) ->
-    CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")},
-        #posix_user_ctx{uid = 0, gid = 0}),
-    ctx_server(Config, CTX).
-ctx_server(Config, CTX) ->
+helper_handle_server(Config) ->
+    UserCtx = helper:new_posix_user_ctx(0, 0),
+    Helper = helper:new_posix_helper(?path(Config, ""), #{}, UserCtx),
+    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    helper_handle_server(Config, Handle).
+helper_handle_server(Config, Handle) ->
     receive
         {Pid, get} ->
-            Pid ! CTX;
+            Pid ! Handle;
         {Pid, {run_helpers, open, Args}} ->
-            {ok, FileHandle} = apply(helpers, open, [CTX | Args]),
+            {ok, FileHandle} = apply(helpers, open, [Handle | Args]),
             HandlePid = spawn_link(fun() -> file_handle_server(FileHandle) end),
             Pid ! {ok, HandlePid};
         {Pid, {run_helpers, Method, Args}} ->
-            Pid ! apply(helpers, Method, [CTX | Args]);
+            Pid ! apply(helpers, Method, [Handle | Args]);
         {Pid, {run, Module, Method, Args}} ->
             Pid ! apply(Module, Method, Args);
         exit ->
             exit(normal)
     end,
-    ctx_server(Config, CTX).
+    helper_handle_server(Config, Handle).
 
 
 file_handle_server(FileHandle) ->
@@ -265,8 +266,8 @@ call(Handle, Method, Args) when is_pid(Handle) ->
     end;
 
 call(Config, Method, Args) ->
-    CTXServer = ?config(ctx_server, Config),
-    CTXServer ! {self(), {run_helpers, Method, Args}},
+    HandleServer = ?config(helper_handle_server, Config),
+    HandleServer ! {self(), {run_helpers, Method, Args}},
     receive
         Resp -> Resp
     after
@@ -274,8 +275,8 @@ call(Config, Method, Args) ->
     end.
 
 call(Config, Module, Method, Args) ->
-    CTXServer = ?config(ctx_server, Config),
-    CTXServer ! {self(), {run, Module, Method, Args}},
+    HandleServer = ?config(helper_handle_server, Config),
+    HandleServer ! {self(), {run, Module, Method, Args}},
     receive
         Resp -> Resp
     after
