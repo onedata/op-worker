@@ -975,9 +975,39 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
 
 verify(Config, TestFun) ->
     Workers = ?config(op_worker_nodes, Config),
-    lists:foldl(fun(W, Acc) ->
-        [TestFun(W) | Acc]
-    end, [], Workers).
+
+    process_flag(trap_exit, true),
+    TestAns = verify_helper(Workers, TestFun),
+
+    Error = lists:any(fun
+        ({_W, error, _Reason}) -> true;
+        (_) -> false
+    end, TestAns),
+    case Error of
+        true -> ?assert(TestAns);
+        _ -> ok
+    end,
+
+    lists:map(fun({_W, Ans}) -> Ans end, TestAns).
+
+verify_helper([], _TestFun) ->
+    [];
+verify_helper([W | Workers], TestFun) ->
+    Master = self(),
+    Pid = spawn_link(fun() ->
+        Ans = TestFun(W),
+        Master ! {verify_ans, Ans}
+    end),
+    TmpAns = verify_helper(Workers, TestFun),
+    receive
+        {verify_ans, TestAns} ->
+            [{W, TestAns} | TmpAns];
+        {'EXIT', Pid , Error} when Error /= normal ->
+            [{W, error, Error} | TmpAns]
+    after
+        timer:minutes(10) ->
+            [{W, error, timeout} | TmpAns]
+    end.
 
 verify_stats(Config, File, IsDir) ->
     SessId = ?config(session, Config),
