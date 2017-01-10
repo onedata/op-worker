@@ -30,7 +30,7 @@
 %% Check perms and get file's attributes
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_file_attr(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(Ctx, File) ->
@@ -41,7 +41,7 @@ get_file_attr(Ctx, File) ->
 %% Get file's attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr_no_permission_check(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_file_attr_no_permission_check(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_attr_no_permission_check(Ctx, File) ->
     {FileDoc = #document{key = Uuid, value = #file_meta{
@@ -49,7 +49,7 @@ get_file_attr_no_permission_check(Ctx, File) ->
         shares = Shares}}, File2
     } = file_context:get_file_doc(File),
     ShareId = file_context:get_share_id(File),
-    UserId = fslogic_context:get_user_id(Ctx),
+    UserId = user_context:get_user_id(Ctx),
     {FileName, File3} = file_context:get_aliased_name(File2, Ctx),
     SpaceId = file_context:get_space_id(File3),
     {{Uid, Gid}, File4} = file_context:get_posix_storage_user_context(File3, OwnerId),
@@ -70,11 +70,11 @@ get_file_attr_no_permission_check(Ctx, File) ->
 %% Fetch attributes of directory's child (if exists).
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_attr(fslogic_context:ctx(), ParentFile :: file_context:ctx(),
+-spec get_child_attr(user_context:ctx(), ParentFile :: file_context:ctx(),
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 get_child_attr(Ctx, ParentFile, Name) ->
-    UserId = fslogic_context:get_user_id(Ctx),
+    UserId = user_context:get_user_id(Ctx),
     {ChildFile, _NewParentFile} = file_context:get_child(ParentFile, Name, UserId),
     attr_req:get_file_attr(Ctx, ChildFile).
 
@@ -83,7 +83,7 @@ get_child_attr(Ctx, ParentFile, Name) ->
 %% Change file permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(fslogic_context:ctx(), file_context:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
+-spec chmod(user_context:ctx(), file_context:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
 chmod(Ctx, File, Mode) ->
@@ -96,7 +96,7 @@ chmod(Ctx, File, Mode) ->
     {ok, _} = file_meta:update({uuid, Uuid}, #{mode => Mode}),
     ok = permissions_cache:invalidate_permissions_cache(file_meta, Uuid),
 
-    fslogic_times:update_ctime({uuid, Uuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+    fslogic_times:update_ctime({uuid, Uuid}, user_context:get_user_id(Ctx)), %todo pass file_context
     fslogic_event:emit_file_perm_changed(Uuid), %todo pass file_context
 
     #fuse_response{status = #status{code = ?OK}}.
@@ -106,7 +106,7 @@ chmod(Ctx, File, Mode) ->
 %% Change file's access times.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(fslogic_context:ctx(), file_context:ctx(),
+-spec update_times(user_context:ctx(), file_context:ctx(),
     ATime :: file_meta:time() | undefined,
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
@@ -118,6 +118,6 @@ update_times(Ctx, File, ATime, MTime, CTime) ->
 
     {Guid, _File2} = file_context:get_guid(File),
     Uuid = fslogic_uuid:guid_to_uuid(Guid),
-    fslogic_times:update_times_and_emit({uuid, Uuid}, UpdateMap1, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+    fslogic_times:update_times_and_emit({uuid, Uuid}, UpdateMap1, user_context:get_user_id(Ctx)), %todo pass file_context
 
     #fuse_response{status = #status{code = ?OK}}.

@@ -28,7 +28,7 @@
 %% Resolve file guid basing on its path.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_guid(fslogic_context:ctx(), file_context:ctx()) -> fslogic_worker:fuse_response().
+-spec resolve_guid(user_context:ctx(), file_context:ctx()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 resolve_guid(_Ctx, File) ->
     {Guid, _File2} = file_context:get_guid(File),
@@ -42,11 +42,11 @@ resolve_guid(_Ctx, File) ->
 %% Get parent of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(fslogic_context:ctx(), fslogic_worker:file()) ->
+-spec get_parent(user_context:ctx(), fslogic_worker:file()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 get_parent(Ctx, File) ->
-    UserId = fslogic_context:get_user_id(Ctx),
+    UserId = user_context:get_user_id(Ctx),
     {ParentGuid, _File2} = file_context:get_parent_guid(File, UserId),
     #provider_response{
         status = #status{code = ?OK},
@@ -57,7 +57,7 @@ get_parent(Ctx, File) ->
 %% @doc Translates given file's UUID to absolute path.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_file_path(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 get_file_path(Ctx, File) ->
     {Path, _File2} = file_context:get_logical_path(File, Ctx),

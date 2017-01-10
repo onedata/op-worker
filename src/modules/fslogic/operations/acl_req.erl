@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 %% @doc Get access control list of file.
 %%--------------------------------------------------------------------
--spec get_acl(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_acl(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
 get_acl(_Ctx, File) ->
@@ -43,7 +43,7 @@ get_acl(_Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @doc Sets access control list of file.
 %%--------------------------------------------------------------------
--spec set_acl(fslogic_context:ctx(), file_context:ctx(), #acl{}) ->
+-spec set_acl(user_context:ctx(), file_context:ctx(), #acl{}) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 set_acl(Ctx, File, #acl{value = Val}) ->
@@ -52,10 +52,10 @@ set_acl(Ctx, File, #acl{value = Val}) ->
         {ok, _} ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid), %todo pass file_context
             ok = sfm_utils:chmod_storage_files( %todo pass file_context
-                fslogic_context:new(?ROOT_SESS_ID),
+                user_context:new(?ROOT_SESS_ID),
                 {uuid, FileUuid}, 8#000
             ),
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+            fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -64,7 +64,7 @@ set_acl(Ctx, File, #acl{value = Val}) ->
 %%--------------------------------------------------------------------
 %% @doc Removes access control list of file.
 %%--------------------------------------------------------------------
--spec remove_acl(fslogic_context:ctx(), file_context:ctx()) ->
+-spec remove_acl(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 remove_acl(Ctx, File) ->
@@ -74,11 +74,11 @@ remove_acl(Ctx, File) ->
             ok = permissions_cache:invalidate_permissions_cache(custom_metadata, FileUuid), %todo pass file_context
             {#document{value = #file_meta{mode = Mode}}, _File2} = file_context:get_file_doc(File),
             ok = sfm_utils:chmod_storage_files( %todo pass file_context
-                fslogic_context:new(?ROOT_SESS_ID),
+                user_context:new(?ROOT_SESS_ID),
                 {uuid, FileUuid}, Mode
             ),
             ok = fslogic_event:emit_file_perm_changed(FileUuid), %todo pass file_context
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+            fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

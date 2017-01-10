@@ -29,7 +29,7 @@
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(fslogic_context:ctx(), file_context:ctx(), xattr:name(), Inherited :: boolean()) ->
+-spec get_xattr(user_context:ctx(), file_context:ctx(), xattr:name(), Inherited :: boolean()) ->
     fslogic_worker:provider_response().
 get_xattr(Ctx, File, ?ACL_KEY, _Inherited) ->
     case acl_req:get_acl(Ctx, File) of
@@ -85,7 +85,7 @@ get_xattr(Ctx, File, XattrName, Inherited) ->
 %% Decides if xattr is normal or internal, and routes request to specific function
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(fslogic_context:ctx(), file_context:ctx(), #xattr{}) ->
+-spec set_xattr(user_context:ctx(), file_context:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
 set_xattr(Ctx, File, #xattr{name = ?ACL_KEY, value = Acl}) ->
     acl_req:set_acl(Ctx, File, #acl{value = fslogic_acl:from_json_format_to_acl(Acl)});
@@ -111,14 +111,14 @@ set_xattr(Ctx, File, Xattr) ->
 %% Removes file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(fslogic_context:ctx(), file_context:ctx(), xattr:name()) ->
+-spec remove_xattr(user_context:ctx(), file_context:ctx(), xattr:name()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_xattr(Ctx, File, XattrName) ->
     {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
     case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_context
         ok ->
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+            fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -129,7 +129,7 @@ remove_xattr(Ctx, File, XattrName) ->
 %% Returns complete list of extended attributes' keys of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(fslogic_context:ctx(), file_context:ctx(), Inherited :: boolean(), ShowInternal :: boolean()) ->
+-spec list_xattr(user_context:ctx(), file_context:ctx(), Inherited :: boolean(), ShowInternal :: boolean()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 list_xattr(_Ctx, File, Inherited, ShowInternal) ->
@@ -161,7 +161,7 @@ list_xattr(_Ctx, File, Inherited, ShowInternal) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_custom_xattr(fslogic_context:ctx(), file_context:ctx(), xattr:name(), Inherited :: boolean()) ->
+-spec get_custom_xattr(user_context:ctx(), file_context:ctx(), xattr:name(), Inherited :: boolean()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_custom_xattr(_Ctx, File, XattrName, Inherited) ->
@@ -178,14 +178,14 @@ get_custom_xattr(_Ctx, File, XattrName, Inherited) ->
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_custom_xattr(fslogic_context:ctx(), file_context:ctx(), #xattr{}) ->
+-spec set_custom_xattr(user_context:ctx(), file_context:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_custom_xattr(Ctx, File, #xattr{name = XattrName, value = XattrValue}) ->
     {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
     case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_context
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+            fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

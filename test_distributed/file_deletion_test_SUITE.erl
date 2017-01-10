@@ -195,7 +195,7 @@ open_file_deletion_request_test(Config) ->
 deletion_of_not_open_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    Ctx = rpc:call(Worker, fslogic_context, new, [SessId]),
+    Ctx = rpc:call(Worker, user_context, new, [SessId]),
     FileGuid = create_test_file(Config, Worker, SessId),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
@@ -211,7 +211,7 @@ deletion_of_open_file_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     FileGuid = create_test_file(Config, Worker, SessId),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-    Ctx = rpc:call(Worker, fslogic_context, new, [SessId]),
+    Ctx = rpc:call(Worker, user_context, new, [SessId]),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileUuid, SessId, 1])),

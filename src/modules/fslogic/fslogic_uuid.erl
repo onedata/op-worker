@@ -99,12 +99,12 @@ gen_file_uuid() ->
 %% Converts given file entry to FileGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_guid(fslogic_context:ctx() | session:id(), fslogic_worker:file_guid_or_path()) ->
+-spec ensure_guid(user_context:ctx() | session:id(), fslogic_worker:file_guid_or_path()) ->
     {guid, fslogic_worker:file_guid()}.
 ensure_guid(_, {guid, FileGuid}) ->
     {guid, FileGuid};
 ensure_guid(Ctx, {path, Path}) when is_tuple(Ctx) -> %todo TL use only sessionId
-    ensure_guid(fslogic_context:get_session_id(Ctx), {path, Path});
+    ensure_guid(user_context:get_session_id(Ctx), {path, Path});
 ensure_guid(SessionId, {path, Path}) ->
     lfm_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
@@ -117,7 +117,7 @@ ensure_guid(SessionId, {path, Path}) ->
 %% Converts given file path to Uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec path_to_uuid(fslogic_context:ctx(), file_meta:path()) -> file_meta:uuid().
+-spec path_to_uuid(user_context:ctx(), file_meta:path()) -> file_meta:uuid().
 path_to_uuid(Ctx, Path) when is_tuple(Ctx) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     Entry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
@@ -129,10 +129,10 @@ path_to_uuid(Ctx, Path) when is_tuple(Ctx) ->
 %% Gets full file path.
 %% @end
 %%--------------------------------------------------------------------
--spec uuid_to_path(fslogic_context:ctx() | session:id(), file_meta:uuid()) -> file_meta:path().
+-spec uuid_to_path(user_context:ctx() | session:id(), file_meta:uuid()) -> file_meta:path().
 uuid_to_path(Ctx, FileUuid) when is_tuple(Ctx) ->
-    UserId = fslogic_context:get_user_id(Ctx),
-    SessId = fslogic_context:get_session_id(Ctx),
+    UserId = user_context:get_user_id(Ctx),
+    SessId = user_context:get_session_id(Ctx),
     UserRoot = user_root_dir_uuid(UserId),
     case FileUuid of
         UserRoot -> <<"/">>;

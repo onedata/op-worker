@@ -32,7 +32,7 @@
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(fslogic_context:ctx(), file_context:ctx(), HandleId :: storage_file_manager:handle_id(),
+-spec read(user_context:ctx(), file_context:ctx(), HandleId :: storage_file_manager:handle_id(),
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
@@ -49,7 +49,7 @@ read(Ctx, File, HandleId, StorageId, FileId, Offset, Size) ->
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec write(fslogic_context:ctx(), file_context:ctx(),
+-spec write(user_context:ctx(), file_context:ctx(),
     HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
     FileId :: helpers:file(), ByteSequences :: [#byte_sequence{}]) ->
     fslogic_worker:proxyio_response().
@@ -73,11 +73,11 @@ write(Ctx, File, HandleId, StorageId, FileId, ByteSequences) ->
 %% Returns handle by either retrieving it from session or opening file
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(fslogic_context:ctx(), file_context:ctx(), HandleId :: storage_file_manager:handle_id(),
+-spec get_handle(user_context:ctx(), file_context:ctx(), HandleId :: storage_file_manager:handle_id(),
     StorageId :: storage:id(), FileId :: helpers:file(), OpenFlag :: helpers:open_flag()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
 get_handle(Ctx, File, undefined, StorageId, FileId, OpenFlag)->
-    SessId = fslogic_context:get_session_id(Ctx),
+    SessId = user_context:get_session_id(Ctx),
     SpaceDirUuid = file_context:get_space_dir_uuid(File),
     {{uuid, FileUuid}, File2} = file_context:get_uuid_entry(File),
     {ok, Storage} = storage:get(StorageId),
@@ -86,7 +86,7 @@ get_handle(Ctx, File, undefined, StorageId, FileId, OpenFlag)->
         storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId, ShareId),
     storage_file_manager:open(SFMHandle, OpenFlag);
 get_handle(Ctx, _File, HandleId, _StorageId, _FileId, _OpenFlag)->
-    SessId = fslogic_context:get_session_id(Ctx),
+    SessId = user_context:get_session_id(Ctx),
     session:get_handle(SessId, HandleId).
 
 %%--------------------------------------------------------------------

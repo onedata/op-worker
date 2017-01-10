@@ -6,11 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module provides and manages fslogic context information
-%%% such user's credentials.
+%%% This module provides and manages user context information
+%%% such as user's credentials.
 %%% @end
 %%%--------------------------------------------------------------------
--module(fslogic_context).
+-module(user_context).
 -author("Rafal Slota").
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -19,12 +19,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% Context definition
--record(fslogic_context, {
+-record(user_context, {
     session :: session:doc(),
     user_doc :: undefined | od_user:doc()
 }).
 
--type ctx() :: #fslogic_context{}.
+-type ctx() :: #user_context{}.
 
 %% API
 -export([new/1]).
@@ -36,7 +36,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns newly created fslogic Ctx for given session ID
+%% Returns newly created user Ctx for given session ID
 %% @end
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
@@ -46,7 +46,7 @@ new(SessId) ->
         identity = #user_identity{user_id = UserId}
     }}} = session:get(SessId),
 %%    {ok, User} = od_user:get_or_fetch(Auth, UserId), %todo enable after fixing race
-    #fslogic_context{session = Session}.
+    #user_context{session = Session}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,25 +61,25 @@ get_user(Ctx) ->
     User.
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves user ID from fslogic context.
+%% @doc Retrieves user ID from user context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(ctx()) -> od_user:id().
-get_user_id(#fslogic_context{session = #document{value = #session{identity = #user_identity{user_id = UserId}}}}) ->
+get_user_id(#user_context{session = #document{value = #session{identity = #user_identity{user_id = UserId}}}}) ->
     UserId.
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves SessionID from fslogic context.
+%% @doc Retrieves SessionID from user context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_session_id(ctx()) -> session:id().
-get_session_id(#fslogic_context{session = #document{key = SessId}}) ->
+get_session_id(#user_context{session = #document{key = SessId}}) ->
     SessId.
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves session's auth from fslogic context.
+%% @doc Retrieves session's auth from user context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(ctx()) -> session:auth().
-get_auth(#fslogic_context{session = #document{value = #session{auth = Auth}}}) ->
+get_auth(#user_context{session = #document{value = #session{auth = Auth}}}) ->
     Auth.

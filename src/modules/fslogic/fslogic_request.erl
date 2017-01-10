@@ -31,7 +31,7 @@
 %% specific file, the function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file(fslogic_context:ctx(), fslogic_worker:request()) ->
+-spec get_file(user_context:ctx(), fslogic_worker:request()) ->
     file_context:ctx() | undefined.
 get_file(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
     file_context:new_by_path(Ctx, Path);
@@ -52,7 +52,7 @@ get_file(_Ctx, Req) ->
 %% Get providers capable of handling given request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers(fslogic_context:ctx(), file_context:ctx(), fslogic_worker:request()) ->
+-spec get_target_providers(user_context:ctx(), file_context:ctx(), fslogic_worker:request()) ->
     [oneprovider:id()].
 get_target_providers(_Ctx, undefined, _) ->
     [oneprovider:get_provider_id()];
@@ -107,7 +107,7 @@ update_target_guid_if_file_is_phantom(File, Request) ->
 %% Get providers capable of handling resolve_guid/get_attr request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_attr_req(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_target_providers_for_attr_req(user_context:ctx(), file_context:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_attr_req(Ctx, File) ->
     %todo TL handle guids stored in file_force_proxy
@@ -124,7 +124,7 @@ get_target_providers_for_attr_req(Ctx, File) ->
 %% Get providers cappable of handling generic request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_file(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_target_providers_for_file(user_context:ctx(), file_context:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_file(Ctx, File) ->
     case file_context:is_user_root_dir(File, Ctx) of
@@ -132,8 +132,8 @@ get_target_providers_for_file(Ctx, File) ->
             [oneprovider:get_provider_id()];
         false ->
             SpaceId = file_context:get_space_id(File),
-            Auth = fslogic_context:get_auth(Ctx),
-            UserId = fslogic_context:get_user_id(Ctx),
+            Auth = user_context:get_auth(Ctx),
+            UserId = user_context:get_user_id(Ctx),
             {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_context
 
             case lists:member(oneprovider:get_provider_id(), ProviderIds) of

@@ -29,7 +29,7 @@
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec get_transfer_encoding(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_transfer_encoding(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_Ctx, File) ->
@@ -44,14 +44,14 @@ get_transfer_encoding(_Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(fslogic_context:ctx(), file_context:ctx(),
+-spec set_transfer_encoding(user_context:ctx(), file_context:ctx(),
     xattr:transfer_encoding()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(Ctx, File, Encoding) ->
     {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
     case xattr:save(FileUuid, ?TRANSFER_ENCODING_KEY, Encoding) of %todo pass file_context
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+            fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
@@ -63,7 +63,7 @@ set_transfer_encoding(Ctx, File, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_completion_status(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_cdmi_completion_status(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_Ctx, File) ->
@@ -81,7 +81,7 @@ get_cdmi_completion_status(_Ctx, File) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status(fslogic_context:ctx(), file_context:ctx(),
+-spec set_cdmi_completion_status(user_context:ctx(), file_context:ctx(),
     xattr:cdmi_completion_status()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
@@ -96,7 +96,7 @@ set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
--spec get_mimetype(fslogic_context:ctx(), file_context:ctx()) ->
+-spec get_mimetype(user_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_Ctx, File) ->
@@ -111,14 +111,14 @@ get_mimetype(_Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(fslogic_context:ctx(), file_context:ctx(),
+-spec set_mimetype(user_context:ctx(), file_context:ctx(),
     xattr:mimetype()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(Ctx, File, Mimetype) ->
     {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
     case xattr:save(FileUuid, ?MIMETYPE_KEY, Mimetype) of
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+            fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}

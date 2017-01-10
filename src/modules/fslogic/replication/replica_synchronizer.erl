@@ -36,7 +36,7 @@
 %% Sychronizes File on given range. Does prefetch data if requested.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize(fslogic_context:ctx(), file_context:ctx(), fslogic_blocks:block(),
+-spec synchronize(user_context:ctx(), file_context:ctx(), fslogic_blocks:block(),
     boolean()) -> ok.
 synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = RequestedSize}, Prefetch) ->
     EnlargedBlock =
@@ -59,7 +59,7 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [EnlargedBlock]),
     {FileGuid, File3} = file_context:get_guid(File2),
     SpaceId = file_context:get_space_id(File3),
-    UserId = fslogic_context:get_user_id(Ctx),
+    UserId = user_context:get_user_id(Ctx),
     {{uuid, FileUuid}, _File4} = file_context:get_uuid_entry(File3),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
@@ -77,7 +77,7 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
                     end
                 end, Blocks)
         end, ProvidersAndBlocks),
-    SessId = fslogic_context:get_session_id(Ctx),
+    SessId = user_context:get_session_id(Ctx),
     fslogic_event:emit_file_location_changed({uuid, FileUuid}, [SessId], Block). %todo pass file_context
 
 %%%===================================================================
@@ -89,7 +89,7 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
 %% Trigger prefetching if block includes trigger bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec trigger_prefetching(fslogic_context:ctx(), file_context:ctx(),
+-spec trigger_prefetching(user_context:ctx(), file_context:ctx(),
     fslogic_blocks:block(), boolean()) -> ok.
 trigger_prefetching(Ctx, File, Block, true) ->
     case contains_trigger_byte(Block) of
@@ -107,7 +107,7 @@ trigger_prefetching(_, _, _, _) ->
 %% Returns function that prefetches data starting at given block.
 %% @end
 %%--------------------------------------------------------------------
--spec prefetch_data_fun(fslogic_context:ctx(), file_context:ctx(), fslogic_blocks:block()) -> function().
+-spec prefetch_data_fun(user_context:ctx(), file_context:ctx(), fslogic_blocks:block()) -> function().
 prefetch_data_fun(Ctx, File, #file_block{offset = O, size = _S}) ->
     fun() ->
         try

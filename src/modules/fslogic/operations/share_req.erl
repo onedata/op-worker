@@ -28,14 +28,14 @@
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(fslogic_context:ctx(), file_context:ctx(), od_share:name()) -> fslogic_worker:provider_response().
+-spec create_share(user_context:ctx(), file_context:ctx(), od_share:name()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 create_share(Ctx, File, Name) ->
     {Guid, File2} = file_context:get_guid(File),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
 
-    Auth = fslogic_context:get_auth(Ctx),
+    Auth = user_context:get_auth(Ctx),
     SpaceId = file_context:get_space_id(File2),
     {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
     {ok, _} = file_meta:add_share(File, ShareId),
@@ -46,11 +46,11 @@ create_share(Ctx, File, Name) ->
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(fslogic_context:ctx(), file_context:ctx()) -> fslogic_worker:provider_response().
+-spec remove_share(user_context:ctx(), file_context:ctx()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 remove_share(Ctx, File) ->
     ShareId = file_context:get_share_id(File),
-    Auth = fslogic_context:get_auth(Ctx),
+    Auth = user_context:get_auth(Ctx),
     ok = share_logic:delete(Auth, ShareId),
 
     {{uuid, FileUuid}, File2} = file_context:get_uuid_entry(File),

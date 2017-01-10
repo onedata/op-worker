@@ -29,7 +29,7 @@
 %% Get metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(fslogic_context:ctx(), file_context:ctx(), custom_metadata:type(),
+-spec get_metadata(user_context:ctx(), file_context:ctx(), custom_metadata:type(),
     custom_metadata:filter(), Inherited :: boolean()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_metadata(_Ctx, File, json, Names, Inherited) ->
@@ -54,7 +54,7 @@ get_metadata(_Ctx, File, rdf, _, _) ->
 %% Set metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(fslogic_context:ctx(), file_context:ctx(), custom_metadata:type(),
+-spec set_metadata(user_context:ctx(), file_context:ctx(), custom_metadata:type(),
     custom_metadata:value(), custom_metadata:filter()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_metadata(_Ctx, File, json, Value, Names) ->
@@ -71,7 +71,7 @@ set_metadata(_Ctx, File, rdf, Value, _) ->
 %% Remove metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec remove_metadata(fslogic_context:ctx(), file_context:ctx(), custom_metadata:type()) ->
+-spec remove_metadata(user_context:ctx(), file_context:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_metadata(_Ctx, File, json) ->

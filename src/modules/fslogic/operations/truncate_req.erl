@@ -29,12 +29,12 @@
 %% #file_meta model. Model's size should be changed by write events.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(fslogic_context:ctx(), file_context:ctx(), Size :: non_neg_integer()) ->
+-spec truncate(user_context:ctx(), file_context:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 truncate(Ctx, File, Size) ->
     File2 = update_quota(File, Size),
-    SessId = fslogic_context:get_session_id(Ctx),
+    SessId = user_context:get_session_id(Ctx),
     SpaceDirUuid = file_context:get_space_dir_uuid(File2),
     {{uuid, FileUuid}, File3} = file_context:get_uuid_entry(File2),
     lists:foreach(
@@ -46,7 +46,7 @@ truncate(Ctx, File, Size) ->
         end, fslogic_utils:get_local_storage_file_locations({uuid, FileUuid})), %todo consider caching in file_context
 
     {FileDoc, _File4} = file_context:get_file_doc(File3),
-    fslogic_times:update_mtime_ctime(FileDoc, fslogic_context:get_user_id(Ctx)), %todo pass file_context
+    fslogic_times:update_mtime_ctime(FileDoc, user_context:get_user_id(Ctx)), %todo pass file_context
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================

@@ -94,7 +94,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                     {Response, []};
                 OtherResp ->
                     ProviderIds = ProviderIds0 -- [oneprovider:get_provider_id()],
-                    SessionId = fslogic_context:get_session_id(CTX),
+                    SessionId = user_context:get_session_id(CTX),
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
                     NewJobs = case lists:member(ProxyVia, ProviderIds) of
                         true -> [];

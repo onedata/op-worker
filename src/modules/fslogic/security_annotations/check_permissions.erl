@@ -60,7 +60,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
             Args
     end;
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, Args = [Ctx, File | _]) ->
-    UserId = fslogic_context:get_user_id(Ctx),
+    UserId = user_context:get_user_id(Ctx),
     ShareId = file_context:get_share_id(File),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
     lists:foreach(fun check_rule_and_cache_result/1, ExpandedAccessDefinitions),

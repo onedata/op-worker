@@ -164,7 +164,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         OldMode ->
                             ok;
                         NewMode ->
-%%                            fslogic_req_generic:chmod(fslogic_context:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo deal with different posix mode for space dirs on storage vs db
+%%                            fslogic_req_generic:chmod(user_context:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo deal with different posix mode for space dirs on storage vs db
                             ok
                     end,
 
@@ -332,7 +332,7 @@ file_type(Mode) ->
 get_attr(File) ->
     try
         attr_req:get_file_attr_no_permission_check(
-            fslogic_context:new(?ROOT_SESS_ID), File)
+            user_context:new(?ROOT_SESS_ID), File)
     catch
         _:Error ->
             #fuse_response{status = fslogic_errors:gen_status_message(Error)}

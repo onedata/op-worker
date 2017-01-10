@@ -29,7 +29,7 @@
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(fslogic_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
+-spec delete(user_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 delete(Ctx, File, Silent) ->
@@ -48,7 +48,7 @@ delete(Ctx, File, Silent) ->
 %% @private
 %% @equiv delete_impl(Ctx, File, Silent) with permission check
 %%--------------------------------------------------------------------
--spec delete_dir(fslogic_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
+-spec delete_dir(user_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {?list_container, 2}]).
 delete_dir(Ctx, File, Silent) ->
@@ -58,7 +58,7 @@ delete_dir(Ctx, File, Silent) ->
 %% @private
 %% @equiv delete_impl(Ctx, File, Silent) with permission check
 %%--------------------------------------------------------------------
--spec delete_file(fslogic_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
+-spec delete_file(user_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}]).
 delete_file(Ctx, File, Silent) ->
@@ -70,7 +70,7 @@ delete_file(Ctx, File, Silent) ->
 %% Check if dir is empty and delete it.
 %% @end
 %%--------------------------------------------------------------------
--spec check_if_empty_and_delete(fslogic_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
+-spec check_if_empty_and_delete(user_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 check_if_empty_and_delete(Ctx, File, Silent)  ->
     case file_context:get_file_children(File, Ctx, 0, 1) of
@@ -87,7 +87,7 @@ check_if_empty_and_delete(Ctx, File, Silent)  ->
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_impl(fslogic_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
+-spec delete_impl(user_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 delete_impl(Ctx, File, Silent) ->
     fslogic_deletion_worker:request_deletion(Ctx, File, Silent),

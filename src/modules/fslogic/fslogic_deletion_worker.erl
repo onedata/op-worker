@@ -33,7 +33,7 @@
 %% Request deletion of given file
 %% @end
 %%--------------------------------------------------------------------
--spec request_deletion(fslogic_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
+-spec request_deletion(user_context:ctx(), file_context:ctx(), Silent :: boolean()) ->
     ok.
 request_deletion(Ctx, File, Silent) ->
     ok = worker_proxy:call(fslogic_deletion_worker,
@@ -89,13 +89,13 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fslogic_deletion_request, Ctx, File, Silent}) ->
-    SessId = fslogic_context:get_session_id(Ctx),
+    SessId = user_context:get_session_id(Ctx),
     {FileGuid, File2} = file_context:get_guid(File),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
     case file_handles:exists(FileUuid) of
         true ->
-            UserId = fslogic_context:get_user_id(Ctx),
+            UserId = user_context:get_user_id(Ctx),
             {ParentFile, File3} = file_context:get_parent(File2, UserId),
             NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
 
