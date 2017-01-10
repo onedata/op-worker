@@ -25,8 +25,6 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 -export([user_record/2]).
 
--define(CURRENT_USER_ID, <<"0">>).
-
 %%%===================================================================
 %%% data_backend_behaviour callbacks
 %%%===================================================================
@@ -58,12 +56,14 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"user">>, ?CURRENT_USER_ID) ->
-    Auth = op_gui_utils:get_user_auth(),
-    UserId = gui_session:get_user_id(),
-    {ok, user_record(Auth, UserId)};
-find(<<"user">>, _) ->
-    gui_error:unauthorized().
+find(<<"user">>, UserId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    case gui_session:get_user_id() of
+        UserId ->
+            {ok, user_record(UserAuth, UserId)};
+        _ ->
+            gui_error:unauthorized()
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -107,7 +107,8 @@ create_record(<<"user">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"user">>, ?CURRENT_USER_ID, Data) ->
+update_record(<<"user">>, UserId, Data) ->
+    % FIXME: validate UserId
     case Data of
         [{<<"defaultSpaceId">>, DefaultSpace}] ->
             UserAuth = op_gui_utils:get_user_auth(),
