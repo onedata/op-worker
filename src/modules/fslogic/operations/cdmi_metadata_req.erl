@@ -29,12 +29,12 @@
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec get_transfer_encoding(fslogic_context:ctx(), file_info:file_info()) ->
+-spec get_transfer_encoding(fslogic_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_Ctx, File) ->
-    {{uuid, FileUuid} , _File2} = file_info:get_uuid_entry(File),
-    case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_KEY) of %todo pass file_info
+    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_KEY) of %todo pass file_context
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
         {error, {not_found, custom_metadata}} ->
@@ -44,14 +44,14 @@ get_transfer_encoding(_Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(fslogic_context:ctx(), file_info:file_info(),
+-spec set_transfer_encoding(fslogic_context:ctx(), file_context:ctx(),
     xattr:transfer_encoding()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(Ctx, File, Encoding) ->
-    {{uuid, FileUuid} , _File2} = file_info:get_uuid_entry(File),
-    case xattr:save(FileUuid, ?TRANSFER_ENCODING_KEY, Encoding) of %todo pass file_info
+    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    case xattr:save(FileUuid, ?TRANSFER_ENCODING_KEY, Encoding) of %todo pass file_context
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_info
+            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
@@ -63,12 +63,12 @@ set_transfer_encoding(Ctx, File, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_completion_status(fslogic_context:ctx(), file_info:file_info()) ->
+-spec get_cdmi_completion_status(fslogic_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_Ctx, File) ->
-    {{uuid, FileUuid} , _File2} = file_info:get_uuid_entry(File),
-    case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_KEY) of %todo pass file_info
+    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_KEY) of %todo pass file_context
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Val}};
         {error, {not_found, custom_metadata}} ->
@@ -81,12 +81,12 @@ get_cdmi_completion_status(_Ctx, File) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status(fslogic_context:ctx(), file_info:file_info(),
+-spec set_cdmi_completion_status(fslogic_context:ctx(), file_context:ctx(),
     xattr:cdmi_completion_status()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
-    {{uuid, FileUuid} , _File2} = file_info:get_uuid_entry(File),
-    case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus) of %todo pass file_info
+    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus) of %todo pass file_context
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
@@ -96,12 +96,12 @@ set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
--spec get_mimetype(fslogic_context:ctx(), file_info:file_info()) ->
+-spec get_mimetype(fslogic_context:ctx(), file_context:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_Ctx, File) ->
-    {{uuid, FileUuid} , _File2} = file_info:get_uuid_entry(File),
-    case xattr:get_by_name(FileUuid, ?MIMETYPE_KEY) of %todo pass file_info
+    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
+    case xattr:get_by_name(FileUuid, ?MIMETYPE_KEY) of %todo pass file_context
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
         {error, {not_found, custom_metadata}} ->
@@ -111,14 +111,14 @@ get_mimetype(_Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(fslogic_context:ctx(), file_info:file_info(),
+-spec set_mimetype(fslogic_context:ctx(), file_context:ctx(),
     xattr:mimetype()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(Ctx, File, Mimetype) ->
-    {{uuid, FileUuid} , _File2} = file_info:get_uuid_entry(File),
+    {{uuid, FileUuid} , _File2} = file_context:get_uuid_entry(File),
     case xattr:save(FileUuid, ?MIMETYPE_KEY, Mimetype) of
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_info
+            fslogic_times:update_ctime({uuid, FileUuid}, fslogic_context:get_user_id(Ctx)), %todo pass file_context
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}

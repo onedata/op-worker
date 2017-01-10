@@ -200,7 +200,7 @@ deletion_of_not_open_file_test(Config) ->
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, file_info:new_by_guid(FileGuid), false})),
+    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, file_context:new_by_guid(FileGuid), false})),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
@@ -217,7 +217,7 @@ deletion_of_open_file_test(Config) ->
         [FileUuid, SessId, 1])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUuid])),
 
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, file_info:new_by_guid(FileGuid), false})),
+    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, Ctx, file_context:new_by_guid(FileGuid), false})),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUuid])),
 
     %% File should be marked to remove and renamed.

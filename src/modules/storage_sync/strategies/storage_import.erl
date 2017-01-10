@@ -151,8 +151,8 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         {false, undefined};
                     {ok, Uuid} ->
                         Guid = fslogic_uuid:uuid_to_guid(Uuid),
-                        FileInfo = file_info:new_by_guid(Guid),
-                        LogicalAttrsResponse_ = get_attr(FileInfo),
+                        File = file_context:new_by_guid(Guid),
+                        LogicalAttrsResponse_ = get_attr(File),
                         IsImported_ = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse_),
                         {IsImported_, LogicalAttrsResponse_}
                 end,
@@ -328,7 +328,7 @@ file_type(Mode) ->
 %% Get file attr, catching all exceptions and returning always fuse_response
 %% @end
 %%--------------------------------------------------------------------
--spec get_attr(file_info:file_info()) -> fslogic_worker:fuse_response().
+-spec get_attr(file_context:ctx()) -> fslogic_worker:fuse_response().
 get_attr(File) ->
     try
         attr_req:get_file_attr_no_permission_check(

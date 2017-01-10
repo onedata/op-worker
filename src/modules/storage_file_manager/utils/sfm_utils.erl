@@ -36,7 +36,7 @@
 %%--------------------------------------------------------------------
 -spec chmod_storage_files(fslogic_context:ctx(), file_meta:entry(), file_meta:posix_permissions()) ->
     ok | no_return().
-chmod_storage_files(Ctx, File, Mode) ->  %todo use file_info
+chmod_storage_files(Ctx, File, Mode) ->  %todo use file_context
     SessId = fslogic_context:get_session_id(Ctx),
     case file_meta:get(File) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->

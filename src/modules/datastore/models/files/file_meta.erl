@@ -859,9 +859,9 @@ get_guid_from_phantom_file(OldUUID) ->
 %% Add shareId to file meta
 %% @end
 %%--------------------------------------------------------------------
--spec add_share(file_info:file_info(), od_share:id()) -> {ok, uuid()}  | datastore:generic_error().
+-spec add_share(file_context:ctx(), od_share:id()) -> {ok, uuid()}  | datastore:generic_error().
 add_share(File, ShareId) ->
-    {FileEntry, _File2} = file_info:get_uuid_entry(File),
+    {FileEntry, _File2} = file_context:get_uuid_entry(File),
     update(FileEntry,
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
@@ -872,9 +872,9 @@ add_share(File, ShareId) ->
 %% Remove shareId from file meta
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(file_info:file_info(), od_share:id()) -> {ok, uuid()} | datastore:generic_error().
+-spec remove_share(file_context:ctx(), od_share:id()) -> {ok, uuid()} | datastore:generic_error().
 remove_share(File, ShareId) ->
-    {FileEntry, _File2} = file_info:get_uuid_entry(File),
+    {FileEntry, _File2} = file_context:get_uuid_entry(File),
     update(FileEntry,
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = Shares -- [ShareId]}}

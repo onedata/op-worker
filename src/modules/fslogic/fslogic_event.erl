@@ -186,12 +186,12 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 %% Sends an event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_renamed_to_client(file_info:file_info(), file_meta:name(),
+-spec emit_file_renamed_to_client(file_context:ctx(), file_meta:name(),
     session:id()) -> ok | {error, Reason :: term()}.
 emit_file_renamed_to_client(File, NewName, SessionId) ->
     {ok, UserId} = session:get_user_id(SessionId),
-    {Guid, File2} = file_info:get_guid(File),
-    {ParentGuid, _File3} = file_info:get_parent_guid(File2, UserId),
+    {Guid, File2} = file_context:get_guid(File),
+    {ParentGuid, _File3} = file_context:get_parent_guid(File2, UserId),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
         old_uuid = Guid,
         new_uuid = Guid,

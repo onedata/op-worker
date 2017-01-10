@@ -28,15 +28,15 @@
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(fslogic_context:ctx(), file_info:file_info(), od_share:name()) -> fslogic_worker:provider_response().
+-spec create_share(fslogic_context:ctx(), file_context:ctx(), od_share:name()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 create_share(Ctx, File, Name) ->
-    {Guid, File2} = file_info:get_guid(File),
+    {Guid, File2} = file_context:get_guid(File),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
 
     Auth = fslogic_context:get_auth(Ctx),
-    SpaceId = file_info:get_space_id(File2),
+    SpaceId = file_context:get_space_id(File2),
     {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
     {ok, _} = file_meta:add_share(File, ShareId),
     #provider_response{status = #status{code = ?OK}, provider_response = #share{share_id = ShareId, share_file_uuid = ShareGuid}}.
@@ -46,16 +46,16 @@ create_share(Ctx, File, Name) ->
 %% Share file under given uuid
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(fslogic_context:ctx(), file_info:file_info()) -> fslogic_worker:provider_response().
+-spec remove_share(fslogic_context:ctx(), file_context:ctx()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 remove_share(Ctx, File) ->
-    ShareId = file_info:get_share_id(File),
+    ShareId = file_context:get_share_id(File),
     Auth = fslogic_context:get_auth(Ctx),
     ok = share_logic:delete(Auth, ShareId),
 
-    {{uuid, FileUuid}, File2} = file_info:get_uuid_entry(File),
+    {{uuid, FileUuid}, File2} = file_context:get_uuid_entry(File),
     {ok, _} = file_meta:remove_share(File2, ShareId),
-    ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid), %todo pass file_info
+    ok = permissions_cache:invalidate_permissions_cache(file_meta, FileUuid), %todo pass file_context
 
     #provider_response{status = #status{code = ?OK}}.
 

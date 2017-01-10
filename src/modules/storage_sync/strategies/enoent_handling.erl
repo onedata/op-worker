@@ -135,8 +135,8 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
                 true ->
                     {ok, #document{key = Uuid}} = file_meta:get({path, LogicalPath}),
                     Guid = fslogic_uuid:uuid_to_guid(Uuid),
-                    FileInfo = file_info:new_by_guid(Guid),
-                    (catch attr_req:get_file_attr_no_permission_check(CTX, FileInfo));
+                    File = file_context:new_by_guid(Guid),
+                    (catch attr_req:get_file_attr_no_permission_check(CTX, File));
                 _ ->
                     undefined
             end
@@ -173,12 +173,12 @@ strategy_merge_result([_ | JobsR], [_ | R]) ->
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
-    #file_attr{uuid = FileGUID, provider_id = ProviderId} = FResponse,
+    #file_attr{uuid = FileGuid, provider_id = ProviderId} = FResponse,
     case oneprovider:get_provider_id() of
         ProviderId -> ChildrenResult;
         _ ->
-            #file_attr{uuid = FileGUID} = FResponse,
-            file_force_proxy:save(#document{key = FileGUID, value = #file_force_proxy{provider_id = ProviderId}}),
+            #file_attr{uuid = FileGuid} = FResponse,
+            file_force_proxy:save(#document{key = FileGuid, value = #file_force_proxy{provider_id = ProviderId}}),
             ChildrenResult
     end;
 strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->

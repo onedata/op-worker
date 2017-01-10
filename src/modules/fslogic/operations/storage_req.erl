@@ -86,9 +86,9 @@ get_helper_params(_Ctx, _StorageId, false = _ForceProxy) ->
 -spec create_storage_test_file(fslogic_context:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(Ctx, Guid, StorageId) ->
-    File = file_info:new_by_guid(Guid),
+    File = file_context:new_by_guid(Guid),
     UserId = fslogic_context:get_user_id(Ctx),
-    SpaceId = case file_info:get_space_id(File) of
+    SpaceId = case file_context:get_space_id(File) of
         undefined -> throw(?ENOENT);
         <<_/binary>> = Id -> Id
     end,
@@ -103,7 +103,7 @@ create_storage_test_file(Ctx, Guid, StorageId) ->
                 StorageDoc, HelperName),
             HelperParams = helper:get_params(Helper, ClientUserCtx),
 
-            {FileId, _NewFile} = file_info:get_storage_file_id(File),
+            {FileId, _NewFile} = file_context:get_storage_file_id(File),
             Dirname = fslogic_path:dirname(FileId),
             TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),

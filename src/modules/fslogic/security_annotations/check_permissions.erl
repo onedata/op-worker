@@ -24,7 +24,7 @@
 -export([before_advice/4, after_advice/5, get_validation_subject/2]).
 
 %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
--type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {uuid, file_meta:uuid()} | {parent, item_definition()} | file_info:file_info().
+-type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {uuid, file_meta:uuid()} | {parent, item_definition()} | file_context:ctx().
 -type check_type() :: owner % Check whether user owns the item
 | traverse_ancestors % validates ancestors' exec permission.
 | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
@@ -61,7 +61,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     end;
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, Args = [Ctx, File | _]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    ShareId = file_info:get_share_id(File),
+    ShareId = file_context:get_share_id(File),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
     lists:foreach(fun check_rule_and_cache_result/1, ExpandedAccessDefinitions),
     lists:foreach(fun cache_ok_result/1, ExpandedAccessDefinitions),
@@ -127,16 +127,16 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, ShareId,
 %% @doc Returns file that shall be the subject of permission validation instead given file.
 %%      E.g. for virtual "/" directory returns deafult space file.
 %%--------------------------------------------------------------------
--spec get_validation_subject(od_user:id(), fslogic_worker:ext_file() | file_info:file_info()) ->
+-spec get_validation_subject(od_user:id(), fslogic_worker:ext_file() | file_context:ctx()) ->
     fslogic_worker:file() | no_return().
 get_validation_subject(UserId, #sfm_handle{file_uuid = FileUuid}) ->
     get_validation_subject(UserId, {uuid, FileUuid});
 get_validation_subject(UserId, {guid, FileGUID}) ->
     get_validation_subject(UserId, {uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
 get_validation_subject(_UserId, FileEntry) ->
-    case file_info:is_file_info(FileEntry) of
+    case file_context:is_file_context(FileEntry) of
         true ->
-            {FileDoc = #document{}, _NewFileInfo} = file_info:get_file_doc(FileEntry),
+            {FileDoc = #document{}, _NewFileCtx} = file_context:get_file_doc(FileEntry),
             FileDoc;
         false ->
             {ok, #document{value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
@@ -146,16 +146,16 @@ get_validation_subject(_UserId, FileEntry) ->
 %%--------------------------------------------------------------------
 %% @doc Extracts file() from argument list (Inputs) based on Item description.
 %%--------------------------------------------------------------------
--spec resolve_file_entry(item_definition(), [term()]) -> fslogic_worker:file() | file_info:file_info().
+-spec resolve_file_entry(item_definition(), [term()]) -> fslogic_worker:file() | file_context:ctx().
 resolve_file_entry(Item, Inputs) when is_integer(Item) ->
     lists:nth(Item, Inputs);
 resolve_file_entry({path, Item}, Inputs) when is_integer(Item) ->
     {path, resolve_file_entry(Item, Inputs)};
 resolve_file_entry({parent, Item}, Inputs) ->
     ResolvedEntry = resolve_file_entry(Item, Inputs),
-    case file_info:is_file_info(ResolvedEntry) of
+    case file_context:is_file_context(ResolvedEntry) of
         true ->
-            {Parent, _NewFileInfo} = file_info:get_parent(ResolvedEntry, undefined),
+            {Parent, _NewFileCtx} = file_context:get_parent(ResolvedEntry, undefined),
             Parent;
         false ->
             fslogic_utils:get_parent(ResolvedEntry)
