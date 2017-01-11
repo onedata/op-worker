@@ -309,7 +309,7 @@ get_space_name(FileCtx = #file_context{space_name = SpaceName}, _Ctx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_aliased_name(ctx(), user_context:ctx()) ->
-    {file_meta:name(), ctx()}.
+    {file_meta:name(), ctx()} | no_return().
 get_aliased_name(FileCtx = #file_context{file_name = undefined}, Ctx) ->
     SessionIsNotSpecial = (not session:is_special(user_context:get_session_id(Ctx))),
     case is_space_dir(FileCtx) andalso SessionIsNotSpecial of
@@ -318,7 +318,7 @@ get_aliased_name(FileCtx = #file_context{file_name = undefined}, Ctx) ->
                 {#document{value = #file_meta{name = Name}}, FileCtx2} ->
                     {Name, FileCtx2#file_context{file_name = Name}};
                 ErrorResponse ->
-                    ErrorResponse
+                    throw(ErrorResponse)
             end;
         true ->
             {Name, FileCtx2} = get_space_name(FileCtx, Ctx),
@@ -365,7 +365,7 @@ get_times(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child(ctx(), file_meta:name(), od_user:id()) ->
-    {ChildFile :: ctx(), NewFile :: ctx()}.
+    {ChildFile :: ctx(), NewFile :: ctx()} | no_return().
 get_child(FileCtx, Name, UserId) ->
     case is_root_dir(FileCtx) of
         true ->
