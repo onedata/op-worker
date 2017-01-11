@@ -403,7 +403,7 @@ space_user_permission_record(AssocId) ->
         end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"userList">>, SpaceId},
+        {<<"space">>, SpaceId},
         {<<"systemUser">>, UserId}
     ].
 
@@ -433,7 +433,7 @@ space_group_permission_record(AssocId) ->
         end, privileges:space_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"groupList">>, SpaceId},
+        {<<"space">>, SpaceId},
         {<<"systemGroup">>, GroupId}
     ].
 
