@@ -390,7 +390,7 @@ group_user_permission_record(AssocId) ->
         end, privileges:group_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"userList">>, GroupId},
+        {<<"group">>, GroupId},
         {<<"systemUser">>, UserId}
     ].
 
@@ -418,7 +418,7 @@ group_group_permission_record(AssocId) ->
         end, privileges:group_privileges()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"groupList">>, ParentGroupId},
+        {<<"group">>, ParentGroupId},
         {<<"systemGroup">>, ChildGroupId}
     ].
 
