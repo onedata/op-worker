@@ -1032,7 +1032,12 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(metric_get, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = Workers = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1))
+    end, Workers),
+
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
         {ok, <<"{\"test\":\"rrd\"}">>}
@@ -1040,6 +1045,10 @@ init_per_testcase(metric_get, Config) ->
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1))
+    end, ?config(op_worker_nodes, Config)),
+
     application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),

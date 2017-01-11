@@ -101,6 +101,10 @@ init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]} | Config].
 
 init_per_testcase(_Case, Config) ->
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1))
+    end, ?config(op_worker_nodes, Config)),
+
     ct:timetrap({minutes, 60}),
     application:start(etls),
     hackney:start(),

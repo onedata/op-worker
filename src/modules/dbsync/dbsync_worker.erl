@@ -27,7 +27,6 @@
 -export([has_sync_context/1, get_space_id/1]).
 
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, timer:seconds(3)).
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
 -define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
@@ -70,7 +69,8 @@ init(_Args) ->
     Since = state_get(global_resume_seq),
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
-    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
+    {ok, Interval} = application:get_env(?APP_NAME, dbsync_flush_queue_interval),
+    timer:send_after(Interval, whereis(dbsync_worker), {timer, {flush_queue, global}}),
         catch ets:new(?ETS_CACHE_NAME, [named_table, set, public]),
     {ok, #{changes_stream => undefined}}.
 
@@ -96,7 +96,8 @@ init_stream(Since, Until, Queue) ->
                         fun(SpaceId) ->
                             {SpaceId, #batch{since = Since, until = Since}}
                         end, dbsync_utils:get_spaces_for_provider())),
-                    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
+                    {ok, Interval} = application:get_env(?APP_NAME, dbsync_flush_queue_interval),
+                    timer:send_after(Interval, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
                     state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since, until = Since}),
                     ok
             end;
@@ -118,10 +119,10 @@ init_stream(Since, Until, Queue) ->
             couchdb_datastore_driver:changes_start_link(
                 fun
                     (_, stream_ended, _) ->
-                        worker_proxy:call(dbsync_worker, {Queue, {cleanup, NewUntil}});
+                        worker_proxy:cast(dbsync_worker, {Queue, {cleanup, NewUntil}});
                     (Seq, Doc, Model) ->
-                        worker_proxy:call(dbsync_worker, {Queue,
-                            #change{seq = couchdb_datastore_driver:normalize_seq(Seq), doc = Doc, model = Model}})
+                        worker_proxy:cast(dbsync_worker, {Queue,
+                            #change{seq = Seq, doc = Doc, model = Model}})
                 end, Since, NewUntil, couchdb_datastore_driver:sync_enabled_bucket());
         _ ->
             {ok, already_started}
@@ -216,8 +217,8 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
 
-    FlushInterval = ?FLUSH_QUEUE_INTERVAL,
-    FlushAgainAfter = FlushInterval + crypto:rand_uniform(0, round(?FLUSH_QUEUE_INTERVAL / 2)),
+    {ok, FlushInterval} = application:get_env(?APP_NAME, dbsync_flush_queue_interval),
+    FlushAgainAfter = FlushInterval + crypto:rand_uniform(0, round(FlushInterval / 2)),
 
     case QueueKey of
         global ->
@@ -1078,7 +1079,8 @@ ensure_global_stream_active() ->
     CTime = erlang:monotonic_time(milli_seconds),
 
     %% Check if flush loop works
-    MaxFlushDelay = ?FLUSH_QUEUE_INTERVAL * 4,
+    {ok, FlushInterval} = application:get_env(?APP_NAME, dbsync_flush_queue_interval),
+    MaxFlushDelay = FlushInterval * 4,
     case dbsync_utils:temp_get(last_global_flush) of
         LastFlushTime when is_integer(LastFlushTime),
             LastFlushTime + MaxFlushDelay > CTime ->
