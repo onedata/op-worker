@@ -6,10 +6,14 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Opaque type storing informations about file.
+%%% Opaque type storing information about file, working as a cache.
+%%% Its lifetime is limited by the time of request.
 %%% Once the record is created via new_* function and fslogic_worker has
 %%% determined that the request can be handled locally - all of the functions
-%%% in this module should work. If not - please report it.
+%%% in this module should work (for remote files the operations are limited to
+%%% getting space_id). If effort of computing something is significant,
+%%% the value is cached and the further calls will use it. Therefore some of the
+%%% functions return updated version of context together with the result.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_context).
@@ -69,8 +73,8 @@ new_by_path(Ctx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     case session:is_special(user_context:get_session_id(Ctx)) of
         true ->
-            throw({invalid_request, <<"Path resolution requested in the context
-of special session. You may only operate on guids in this context.">>});
+            throw({invalid_request, <<"Path resolution requested in the context of special session."
+            " You may only operate on guids in this context.">>});
         false ->
             case Tokens of
                 [<<"/">>] ->

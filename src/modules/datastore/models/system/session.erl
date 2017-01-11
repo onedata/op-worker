@@ -469,7 +469,8 @@ add_handle(SessionId, HandleID, Handle) ->
 %% Remove link to handle.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) -> ok | datastore:generic_error().
+-spec remove_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
+    ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
     case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
         {ok, {HandleKey, sfm_handle}} ->
