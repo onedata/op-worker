@@ -23,7 +23,7 @@
 
 %% Record definition
 -record(file_context, {
-    cannonical_path :: undefined | path(),
+    canonical_path :: undefined | path(),
     guid :: undefined | guid(),
     space_dir_doc :: undefined | file_meta:doc(),
     file_doc :: undefined | file_meta:doc() | {error, term()},
@@ -47,7 +47,7 @@
 
 -export([fill_guid/1]).
 
--export([get_share_id/1, get_path/1, get_space_id/1, get_space_dir_uuid/1,
+-export([get_share_id/1, get_canonical_path/1, get_space_id/1, get_space_dir_uuid/1,
     get_guid/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1, get_parent_guid/2,
     get_child/3, get_file_children/4, get_logical_path/2, get_uuid_entry/1,
@@ -76,14 +76,14 @@ of special session. You may only operate on guids in this context.">>});
                 [<<"/">>] ->
                     UserId = user_context:get_user_id(Ctx),
                     UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
-                    #file_context{cannonical_path = filename:join(Tokens), guid = UserRootDirGuid};
+                    #file_context{canonical_path = filename:join(Tokens), guid = UserRootDirGuid};
                 [<<"/">>, SpaceName | Rest] ->
                     #document{value = #od_user{space_aliases = Spaces}} = user_context:get_user(Ctx),
                     case lists:keyfind(SpaceName, 2, Spaces) of
                         false ->
                             throw(?ENOENT);
                         {SpaceId, SpaceName} ->
-                            #file_context{cannonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}
+                            #file_context{canonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}
                     end
             end
     end.
@@ -99,11 +99,13 @@ new_by_guid(Guid) when Guid =/= undefined ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fill guid field in file context record.
+%% Fill guid in file context record. This function is called when we know
+%% that the file is locally supported, to ensure that file_context contains guid
+%% in function later on, to simplify logic.
 %% @end
 %%--------------------------------------------------------------------
 -spec fill_guid(ctx()) -> ctx().
-fill_guid(FileCtx = #file_context{guid = undefined, cannonical_path = Path}) ->
+fill_guid(FileCtx = #file_context{guid = undefined, canonical_path = Path}) ->
     {ok, Uuid} = file_meta:to_uuid({path, Path}),
     SpaceId = get_space_id(FileCtx),
     Guid = fslogic_uuid:uuid_to_guid(Uuid, SpaceId),
@@ -125,14 +127,14 @@ get_share_id(#file_context{guid = Guid}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file's cannonical path (starting with "/SpaceId/...."
+%% Get file's canonical path (starting with "/SpaceId/...."
 %% @end
 %%--------------------------------------------------------------------
--spec get_path(ctx()) -> {path(), ctx()}.
-get_path(FileCtx = #file_context{cannonical_path = undefined}) ->
+-spec get_canonical_path(ctx()) -> {path(), ctx()}.
+get_canonical_path(FileCtx = #file_context{canonical_path = undefined}) ->
     case is_root_dir(FileCtx) of
         true ->
-            {<<"/">>, FileCtx#file_context{cannonical_path = <<"/">>}};
+            {<<"/">>, FileCtx#file_context{canonical_path = <<"/">>}};
         false ->
             Guid = get_guid(FileCtx),
             Uuid = fslogic_uuid:guid_to_uuid(Guid),
@@ -140,20 +142,20 @@ get_path(FileCtx = #file_context{cannonical_path = undefined}) ->
             {ok, [<<"/">>, _SpaceName | Rest]} = fslogic_path:tokenize_skipping_dots(LogicalPath),
             SpaceId = get_space_id(FileCtx),
             CanonicalPath = filename:join([<<"/">>, SpaceId | Rest]),
-            {CanonicalPath, FileCtx#file_context{cannonical_path = CanonicalPath}}
+            {CanonicalPath, FileCtx#file_context{canonical_path = CanonicalPath}}
     end;
-get_path(#file_context{cannonical_path = Path}) ->
+get_canonical_path(#file_context{canonical_path = Path}) ->
     Path.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file's logical path (starting with "/SpaceName/...."
+%% Get file's logical path (starting with "/SpaceName/...", or "/SpaceAlias/...")
 %% @end
 %%--------------------------------------------------------------------
 -spec get_logical_path(ctx(), user_context:ctx()) ->
     {file_meta:path(), ctx()}.
 get_logical_path(FileCtx, Ctx) ->
-    case get_path(FileCtx) of
+    case get_canonical_path(FileCtx) of
         {<<"/">>, FileCtx2} ->
             {<<"/">>, FileCtx2};
         {Path, FileCtx2} ->
@@ -171,7 +173,7 @@ get_logical_path(FileCtx, Ctx) ->
 -spec get_space_id(ctx()) -> od_space:id() | undefined.
 get_space_id(#file_context{space_dir_doc = #document{key = SpaceUuid}}) ->
     fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid);
-get_space_id(#file_context{guid = undefined, cannonical_path = Path}) ->
+get_space_id(#file_context{guid = undefined, canonical_path = Path}) ->
     case fslogic_path:split(Path) of
         [<<"/">>, SpaceId | _] ->
             SpaceId;
@@ -494,7 +496,7 @@ is_file_context(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_space_dir(ctx()) -> boolean().
-is_space_dir(#file_context{guid = undefined, cannonical_path = Path}) ->
+is_space_dir(#file_context{guid = undefined, canonical_path = Path}) ->
     case fslogic_path:split(Path) of
         [<<"/">>, _SpaceId] ->
             true;
@@ -511,9 +513,9 @@ is_space_dir(#file_context{guid = Guid}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_user_root_dir(ctx(), user_context:ctx()) -> boolean().
-is_user_root_dir(#file_context{cannonical_path = <<"/">>}, _Ctx) ->
+is_user_root_dir(#file_context{canonical_path = <<"/">>}, _Ctx) ->
     true;
-is_user_root_dir(#file_context{guid = Guid, cannonical_path = undefined}, Ctx) ->
+is_user_root_dir(#file_context{guid = Guid, canonical_path = undefined}, Ctx) ->
     UserId = user_context:get_user_id(Ctx),
     UserRootDirUuid = fslogic_uuid:user_root_dir_uuid(UserId),
     UserRootDirUuid == fslogic_uuid:guid_to_uuid(Guid);
@@ -526,9 +528,9 @@ is_user_root_dir(#file_context{}, _Ctx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_root_dir(ctx()) -> boolean().
-is_root_dir(#file_context{cannonical_path = <<"/">>}) ->
+is_root_dir(#file_context{canonical_path = <<"/">>}) ->
     true;
-is_root_dir(#file_context{guid = Guid, cannonical_path = undefined}) ->
+is_root_dir(#file_context{guid = Guid, canonical_path = undefined}) ->
     Uuid = fslogic_uuid:guid_to_uuid(Guid),
     fslogic_uuid:is_root_dir(Uuid);
 is_root_dir(#file_context{}) ->

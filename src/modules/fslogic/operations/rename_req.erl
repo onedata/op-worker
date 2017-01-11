@@ -38,7 +38,7 @@
     TargetParentFile :: file_context:ctx(), TargetName :: file_meta:name()) ->
     fslogic_worker:fuse_response().
 rename(Ctx, SourceFile, TargetParentFile, TargetName) ->
-    {CanonicalSourcePath, SourceFile2} = file_context:get_path(SourceFile),
+    {CanonicalSourcePath, SourceFile2} = file_context:get_canonical_path(SourceFile),
     {_, CanonicalTargetPath} = get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName),
 
     case CanonicalSourcePath =:= CanonicalTargetPath of
@@ -149,7 +149,7 @@ check_reg_preconditions(Ctx, TargetParentFile, TargetName) ->
 -spec moving_into_itself(SourceFile :: file_context:ctx(),
     CanonicalTargetPath :: file_meta:path()) -> boolean().
 moving_into_itself(SourceFile, CanonicalTargetPath) ->
-    {CanonicalSourcePath, _SourceFile2} = file_context:get_path(SourceFile),
+    {CanonicalSourcePath, _SourceFile2} = file_context:get_canonical_path(SourceFile),
     SourceTokens = fslogic_path:split(CanonicalSourcePath),
     TargetTokens = fslogic_path:split(CanonicalTargetPath),
     lists:prefix(SourceTokens, TargetTokens).
