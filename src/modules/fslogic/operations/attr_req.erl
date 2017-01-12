@@ -46,7 +46,7 @@ get_file_attr(UserCtx, FileCtx) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx) ->
     {FileDoc = #document{key = Uuid, value = #file_meta{
-        type = Type, mode = Mode, provider_id = ProviderId, uid = OwnerId,
+        type = Type, mode = Mode, provider_id = ProviderId, owner = OwnerId,
         shares = Shares}}, FileCtx2
     } = file_ctx:get_file_doc(FileCtx),
     ShareId = file_ctx:get_share_id_const(FileCtx),

@@ -38,7 +38,7 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
         name = Name,
         type = ?DIRECTORY_TYPE,
         mode = Mode,
-        uid = user_ctx:get_user_id(UserCtx)
+        owner = user_ctx:get_user_id(UserCtx)
     }},
     {ParentDoc = #document{key = ParentUuid}, ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),

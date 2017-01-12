@@ -148,7 +148,7 @@ rename_on_storage(UserCtx, TargetSpaceId, SourceEntry) ->
 -spec create_storage_file_if_not_exists(od_space:id(), datastore:document()) ->
     ok | {error, term()}.
 create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
-    value = #file_meta{mode = Mode, uid = UserId}}) ->
+    value = #file_meta{mode = Mode, owner = UserId}}) ->
     file_location:critical_section(FileUuid,
         fun() ->
             case fslogic_utils:get_local_file_locations(FileDoc) of

@@ -162,7 +162,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
         name = Name,
         type = ?REGULAR_FILE_TYPE,
         mode = Mode,
-        uid = user_ctx:get_user_id(UserCtx)
+        owner = user_ctx:get_user_id(UserCtx)
     }},
     ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
     {ok, FileUuid} = file_meta:create(ParentFileEntry, File), %todo pass file_ctx

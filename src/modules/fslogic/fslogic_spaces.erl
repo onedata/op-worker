@@ -166,7 +166,7 @@ make_space_exist(SpaceId) ->
                 #document{key = SpaceDirUuid,
                     value = #file_meta{
                         name = SpaceId, type = ?DIRECTORY_TYPE,
-                        mode = 8#1775, uid = ?ROOT_USER_ID, is_scope = true
+                        mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true
                     }}) of
                 {ok, _} ->
                     case times:create(#document{key = SpaceDirUuid, value =

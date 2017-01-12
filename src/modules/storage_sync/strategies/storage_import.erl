@@ -252,7 +252,7 @@ import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data}, Logic
         name = FileName,
         type = file_type(Mode),
         mode = Mode band 8#1777,
-        uid = ?ROOT_USER_ID,
+        owner = ?ROOT_USER_ID,
         size = FSize
     }},
 

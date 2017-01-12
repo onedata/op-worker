@@ -99,7 +99,7 @@ dbsync_trigger_should_create_local_file_location(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = UserId
+        owner = UserId
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
@@ -127,7 +127,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         mode = 8#777,
         name = <<"local_file_location_should_have_correct_uid_for_local_user">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = UserId
+        owner = UserId
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
@@ -163,13 +163,13 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears1">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = ExternalUser
+        owner = ExternalUser
     },
     FileMeta2 = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears2">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = ExternalUser
+        owner = ExternalUser
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),
@@ -805,7 +805,7 @@ external_file_location_notification_should_wait_for_local_file_location(Config) 
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = UserId
+        owner = UserId
     },
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
@@ -853,7 +853,7 @@ external_file_location_notification_should_wait_for_links(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = UserId
+        owner = UserId
     },
     ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(W1)),
     ExternalProviderId = <<"external_provider_id">>,
@@ -924,7 +924,7 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = UserId
+        owner = UserId
     }},
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
@@ -972,7 +972,7 @@ changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = UserId
+        owner = UserId
     },
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
@@ -1038,7 +1038,7 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
         mode = 8#777,
         name = <<"file">>,
         type = ?REGULAR_FILE_TYPE,
-        uid = UserId
+        owner = UserId
     }},
     {ok, FileUuid} = ?assertMatch({ok, _}, ?rpc(file_meta, create, [{uuid, Dir2Uuid}, FileMeta])),
     ?assertMatch({ok, _}, ?rpc(times, create, [#document{key = FileUuid, value = #times{atime = CTime, ctime = CTime, mtime = CTime}}])),

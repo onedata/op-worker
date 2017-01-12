@@ -155,7 +155,7 @@ rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
                 blocks = NewBlocks,
                 last_rename = LastRename
             }},
-            {ok, #document{value = #file_meta{uid = UserId}}} = file_meta:get(UUID),
+            {ok, #document{value = #file_meta{owner = UserId}}} = file_meta:get(UUID),
             {renamed, RenamedDoc, UUID, UserId, TargetSpaceId};
         false ->
             %% TODO: VFS-2299 delete file locally without triggering deletion
