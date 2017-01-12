@@ -80,7 +80,7 @@ get_helper_params(_Ctx, _StorageId, false = _ForceProxy) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates test file on a given storage in the directory of a file referenced
-%% by UUID. File is created on behalf of the user associated with the session.
+%% by Guid. File is created on behalf of the user associated with the session.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
@@ -169,7 +169,6 @@ remove_storage_test_file(Helper, UserCtx, FileId, Delay) ->
     Attempts :: non_neg_integer()) -> #fuse_response{}.
 verify_storage_test_file_loop(_, _, _, _, Code, 0) ->
     #fuse_response{status = #status{code = Code}};
-
 verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent, _, Attempts) ->
     try storage_detector:read_test_file(Helper, UserCtx, FileId) of
         FileContent ->

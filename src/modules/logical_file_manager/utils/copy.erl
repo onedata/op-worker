@@ -31,7 +31,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Checks file type and executes type specific copy function.
+%% @doc
+%% Checks file type and executes type specific copy function.
+%% @end
 %%--------------------------------------------------------------------
 -spec copy(session:id(), SourceEntry :: {guid, fslogic_worker:file_guid()}, TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
@@ -49,7 +51,9 @@ copy(SessId, SourceEntry, TargetPath) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks permissions and copies directory.
+%% @doc
+%% Checks permissions and copies directory.
+%% @end
 %%--------------------------------------------------------------------
 -spec copy_dir(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
@@ -60,7 +64,9 @@ copy_dir(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) 
     {ok, TargetGuid}.
 
 %%--------------------------------------------------------------------
-%% @doc Checks permissions and copies file.
+%% @doc
+%% Checks permissions and copies file.
+%% @end
 %%--------------------------------------------------------------------
 -spec copy_file(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.

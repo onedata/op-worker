@@ -321,11 +321,13 @@ replicate_file(SessId, FileKey, ProviderId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% For given file and byte range, returns storage's ID and file's ID (on storage)
-%% that shall be used to store this byte range. Also returns maximum byte count that can be
-%% used for this location. Atom 'default' is returned when location of specific block cannnot be found
-%% and default locations shall be used instead.
+%% For given file and byte range, returns storage's ID and file's ID
+%% (on storage) that shall be used to store this byte range. Also returns
+%% maximum byte count that can be used for this location. Atom 'default' is
+%% returned when location of specific block cannnot be found and default
+%% locations shall be used instead.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_key(OpType :: write | read, lfm_context:handle(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
@@ -350,6 +352,7 @@ get_sfm_handle_key(OpType, Handle, Offset, Size) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Internal impl. of get_sfm_handle_key/3
 %% @end
@@ -372,8 +375,10 @@ get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
     {default, Size}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Helper function for read/write handles caching. Returns given handle or creates new and updates master handle.
+%% Caches read/write handles. Returns given handle or creates new and updates
+%% master handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_n_update_handle(Handle :: logical_file_manager:handle(), Key :: term(),
@@ -409,6 +414,7 @@ get_sfm_handle_n_update_handle(Handle, Key, OpenType) ->
     {{StorageId, FileId}, SFMHandle, NewHandle}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Writes data to a file. Returns number of written bytes.
 %% @end
@@ -437,8 +443,9 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Internal function for writing one portion of data in write/3
+%% Writes one portion of data in write/3
 %% @end
 %%--------------------------------------------------------------------
 -spec write_internal(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
@@ -470,6 +477,7 @@ write_internal(Handle, Offset, Buffer, GenerateEvents) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Reads requested part of a file.
 %% @end
@@ -498,8 +506,9 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Internal function for reading one portion of data in read/3
+%% Reads one portion of data in read/3
 %% @end
 %%--------------------------------------------------------------------
 -spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
@@ -532,9 +541,10 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Returns given file_location with updated blocks filled with storage_id and/or file_id using default values if needed.
+%% @doc
+%% Returns given file_location with updated blocks filled with storage_id and/or
+%% file_id using default values if needed.
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_file_location(#file_location{}) -> #file_location{}.
@@ -543,9 +553,10 @@ normalize_file_location(Loc = #file_location{storage_id = SID, file_id = FID, bl
     Loc#file_location{blocks = NewBlocks}.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Returns given block with filled storage_id and/or file_id using provided default values if needed.
+%% @doc
+%% Returns given block with filled storage_id and/or file_id using provided
+%% default values if needed.
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_file_block(storage:id(), helpers:file(), #file_block{}) -> #file_block{}.

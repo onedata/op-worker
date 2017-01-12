@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Resolve file guid basing on its path.
+%% Resolves file guid basing on its path.
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_guid(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
@@ -39,7 +39,7 @@ resolve_guid(_Ctx, File) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get parent of file
+%% Gets parent of file
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(user_ctx:ctx(), fslogic_worker:file()) ->
@@ -54,7 +54,8 @@ get_parent(Ctx, File) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @doc Translates given file's UUID to absolute path.
+%% @doc
+%% Translates given file's Guid to absolute path.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_path(user_ctx:ctx(), file_ctx:ctx()) ->

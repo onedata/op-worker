@@ -51,8 +51,7 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists directory. Start with ROffset entity and limit returned list to RCount size.
-%% For best performance use following arg types: document -> uuid -> path
+%% Lists directory. Starts with ROffset entity and limits returned list to RCount size.
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir(user_ctx:ctx(), file_ctx:ctx(),

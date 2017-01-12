@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check given permission on file.
+%% Checks given permission on file.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) ->
@@ -42,8 +42,9 @@ check_perms(Ctx, Uuid, rdwr) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Check read permission on file.
+%% Checks read permission on file.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms_read(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -53,8 +54,9 @@ check_perms_read(_Ctx, _File) ->
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Check write permission on file.
+%% Checks write permission on file.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms_write(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -64,8 +66,9 @@ check_perms_write(_Ctx, _File) ->
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Check rdwr permission on file.
+%% Checks rdwr permission on file.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->

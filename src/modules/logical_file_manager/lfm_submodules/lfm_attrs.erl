@@ -210,7 +210,7 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get metadata linked with file
+%% Gets metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
@@ -223,7 +223,7 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Set metadata linked with file
+%% Sets metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
@@ -236,7 +236,7 @@ set_metadata(SessId, FileKey, Type, Value, Names) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if file has custom metadata defined
+%% Checks if file has custom metadata defined
 %% @end
 %%--------------------------------------------------------------------
 -spec has_custom_metadata(session:id(), logical_file_manager:file_key()) ->
@@ -263,7 +263,7 @@ has_custom_metadata(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove metadata linked with file
+%% Removes metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_metadata(session:id(), logical_file_manager:file_key(), custom_metadata:type()) ->

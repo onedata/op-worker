@@ -67,7 +67,7 @@ delete_file(Ctx, File, Silent) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Check if dir is empty and delete it.
+%% Checks if dir is empty and deletes it.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->

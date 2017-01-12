@@ -73,7 +73,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get attribute of a child with given name.
+%% Gets attribute of a child with given name.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
@@ -105,6 +105,7 @@ get_children_count(SessId, FileKey) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Counts all children of a directory, by listing them in chunks as long
 %% as possible

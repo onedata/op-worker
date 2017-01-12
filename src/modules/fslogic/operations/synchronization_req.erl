@@ -64,7 +64,7 @@ synchronize_block_and_compute_checksum(Ctx, File, Range = #file_block{offset = O
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get distribution of file over providers' storages.
+%% Gets distribution of file over providers' storages.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -94,7 +94,6 @@ get_file_distribution(_Ctx, File) ->
 replicate_file(Ctx, File, Block) ->
     replicate_file(Ctx, File, Block, 0).
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -102,7 +101,7 @@ replicate_file(Ctx, File, Block) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Replicate given dir or file on current provider
+%% Replicates given dir or file on current provider
 %% (the space has to be locally supported).
 %% @end
 %%--------------------------------------------------------------------
@@ -130,7 +129,7 @@ replicate_file(Ctx, File, Block, Offset) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Replicate children list
+%% Replicates children list
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()], fslogic_blocks:block()) -> ok.

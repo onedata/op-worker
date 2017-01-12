@@ -28,8 +28,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Reads data from a location uniquely specified by {StorageID, FileID}
-%% pair.
+%% Reads data from a location uniquely specified by {StorageID, FileID} pair.
 %% @end
 %%--------------------------------------------------------------------
 -spec read(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
@@ -45,8 +44,7 @@ read(Ctx, File, HandleId, StorageId, FileId, Offset, Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Writes data to a location uniquely specified by {StorageID, FileID}
-%% pair.
+%% Writes data to a location uniquely specified by {StorageID, FileID} pair.
 %% @end
 %%--------------------------------------------------------------------
 -spec write(user_ctx:ctx(), file_ctx:ctx(),

@@ -50,7 +50,7 @@ new(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get user from request's context
+%% Gets user from request's context
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
@@ -61,7 +61,8 @@ get_user(Ctx) ->
     User.
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves user ID from user context.
+%% @doc
+%% Gets UserId from user context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(ctx()) -> od_user:id().
@@ -69,7 +70,8 @@ get_user_id(#user_ctx{session = #document{value = #session{identity = #user_iden
     UserId.
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves SessionID from user context.
+%% @doc
+%% Gets SessionId from user context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_session_id(ctx()) -> session:id().
@@ -77,7 +79,8 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
     SessId.
 
 %%--------------------------------------------------------------------
-%% @doc Retrieves session's auth from user context.
+%% @doc
+%% Gets session's auth from user context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(ctx()) -> session:auth().

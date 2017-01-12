@@ -157,6 +157,7 @@ list_xattr(_Ctx, File, Inherited, ShowInternal) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns file's extended attribute by key.
 %% @end
@@ -174,6 +175,7 @@ get_custom_xattr(_Ctx, File, XattrName, Inherited) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Updates file's extended attribute by key.
 %% @end

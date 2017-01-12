@@ -27,7 +27,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check perms and get file's attributes
+%% Checks perms and gets file's attributes
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -38,7 +38,7 @@ get_file_attr(Ctx, File) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file's attributes.
+%% Gets file's attributes.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr_no_permission_check(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -67,7 +67,7 @@ get_file_attr_no_permission_check(Ctx, File) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch attributes of directory's child (if exists).
+%% Fetches attributes of directory's child (if exists).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
@@ -80,7 +80,7 @@ get_child_attr(Ctx, ParentFile, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Change file permissions.
+%% Changes file permissions.
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
@@ -102,7 +102,7 @@ chmod(Ctx, File, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Change file's access times.
+%% Changes file's access times.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_times(user_ctx:ctx(), file_ctx:ctx(),

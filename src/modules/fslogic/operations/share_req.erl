@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Share file under given uuid
+%% Shares a given file
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) -> fslogic_worker:provider_response().
@@ -43,7 +43,7 @@ create_share(Ctx, File, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Share file under given uuid
+%% Stops sharing a given file
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:provider_response().

@@ -27,7 +27,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Returns encoding suitable for rest transfer.
+%% @doc
+%% Returns encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
@@ -42,7 +44,9 @@ get_transfer_encoding(_Ctx, File) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Sets encoding suitable for rest transfer.
+%% @doc
+%% Sets encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(user_ctx:ctx(), file_ctx:ctx(),
     xattr:transfer_encoding()) -> fslogic_worker:provider_response().
@@ -94,7 +98,9 @@ set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns mimetype of file.
+%% @doc
+%% Returns mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
@@ -109,7 +115,9 @@ get_mimetype(_Ctx, File) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Sets mimetype of file.
+%% @doc
+%% Sets mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_mimetype(user_ctx:ctx(), file_ctx:ctx(),
     xattr:mimetype()) -> fslogic_worker:provider_response().

@@ -54,8 +54,9 @@ truncate(Ctx, File, Size) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Update space quota.
+%% Updates space quota.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_quota(file_ctx:ctx(), file_meta:size()) -> NewFile :: file_ctx:ctx().

@@ -25,7 +25,8 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Create and open file. Return handle to the file, its attributes
+%% @doc
+%% Creates and open file. Returns handle to the file, its attributes
 %% and location.
 %% @end
 %%--------------------------------------------------------------------
@@ -68,7 +69,7 @@ create_file(Ctx, ParentFile, Name, Mode, _Flag) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create file. Return its attributes.
+%% Creates file. Returns its attributes.
 %% @end
 %%--------------------------------------------------------------------
 -spec make_file(user_ctx:ctx(), ParentFile :: file_ctx:ctx(), Name :: file_meta:name(),
@@ -88,7 +89,8 @@ make_file(Ctx, ParentFile, Name, Mode) ->
     attr_req:get_file_attr_no_permission_check(Ctx, File).
 
 %%--------------------------------------------------------------------
-%% @doc Returns file location.
+%% @doc
+%% Returns file location.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -117,6 +119,7 @@ get_file_location(_Ctx, File) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv open_file(Ctx, File, CreateHandle) with permission check
 %% depending on the open flag
+%% @end
 %%--------------------------------------------------------------------
 -spec open_file(user_ctx:ctx(), File :: fslogic_worker:file(),
     OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
@@ -128,7 +131,8 @@ open_file(Ctx, File, rdwr) ->
     open_file_for_rdwr(Ctx, File).
 
 %%--------------------------------------------------------------------
-%% @doc Remove file handle saved in session.
+%% @doc
+%% Removes file handle saved in session.
 %% @end
 %%--------------------------------------------------------------------
 -spec release(user_ctx:ctx(), file_ctx:ctx(), HandleId :: binary()) ->
@@ -145,8 +149,9 @@ release(Ctx, File, HandleId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Create file_meta and times documents for the new file.
+%% Creates file_meta and times documents for the new file.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file_doc(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta:mode()) ->
@@ -170,7 +175,9 @@ create_file_doc(Ctx, ParentFile, Name, Mode)  ->
     file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
 
 %%--------------------------------------------------------------------
-%% @doc Saves file handle in user's session, returns id of saved handle
+%% @private
+%% @doc
+%% Saves file handle in user's session, returns id of saved handle
 %% @end
 %%--------------------------------------------------------------------
 -spec save_handle(session:id(), storage_file_manager:handle()) ->
@@ -184,6 +191,7 @@ save_handle(SessId, Handle) ->
     {ok, HandleId}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @equiv open_file_impl(Ctx, File, read, CreateHandle) with permission check
 %%--------------------------------------------------------------------
 -spec open_file_for_read(user_ctx:ctx(), fslogic_worker:file()) ->
@@ -193,6 +201,7 @@ open_file_for_read(Ctx, File) ->
     open_file_impl(Ctx, File, read).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @equiv open_file_impl(Ctx, File, write, CreateHandle) with permission check
 %%--------------------------------------------------------------------
 -spec open_file_for_write(user_ctx:ctx(), fslogic_worker:file()) ->
@@ -202,6 +211,7 @@ open_file_for_write(Ctx, File) ->
     open_file_impl(Ctx, File, write).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @equiv open_file_impl(Ctx, File, rdwr, CreateHandle) with permission check
 %%--------------------------------------------------------------------
 -spec open_file_for_rdwr(user_ctx:ctx(), fslogic_worker:file()) ->
@@ -211,8 +221,9 @@ open_file_for_rdwr(Ctx, File) ->
     open_file_impl(Ctx, File, rdwr).
 
 %%--------------------------------------------------------------------
-%% @doc Opens a file and returns a handle to it.
-%% For best performance use following arg types: document -> uuid -> path
+%% @private
+%% @doc
+%% Opens a file and returns a handle to it.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_impl(user_ctx:ctx(), File :: file_ctx:ctx(),

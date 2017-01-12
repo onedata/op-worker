@@ -26,7 +26,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Get access control list of file.
+%% @doc
+%% Gets access control list of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
@@ -41,7 +43,9 @@ get_acl(_Ctx, File) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Sets access control list of file.
+%% @doc
+%% Sets access control list of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
     fslogic_worker:provider_response().
@@ -62,7 +66,9 @@ set_acl(Ctx, File, #acl{value = Val}) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Removes access control list of file.
+%% @doc
+%% Removes access control list of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().

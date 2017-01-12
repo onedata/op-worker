@@ -31,7 +31,8 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Transforms target path to required forms and executes renaming.
+%% @doc
+%% Transforms target path to required forms and executes renaming.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
@@ -51,13 +52,14 @@ rename(Ctx, SourceFile, TargetParentFile, TargetName) ->
             rename(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName)
     end.
 
-%%--------------------------------------------------------------------
-%% Internal functions
-%%--------------------------------------------------------------------
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Executes proper rename case to check permissions.
-%% For best performance use following arg types: path -> uuid -> document
+%% @private
+%% @doc
+%% Executes proper rename case to check permissions.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
@@ -73,7 +75,10 @@ rename(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks necessary permissions and renames directory
+%% @private
+%% @doc
+%% Checks necessary permissions and renames directory
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_dir(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(),
@@ -88,7 +93,10 @@ rename_dir(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) -
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks necessary permissions and renames file
+%% @private
+%% @doc
+%% Checks necessary permissions and renames file
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_file(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(),
@@ -103,7 +111,10 @@ rename_file(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) 
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks preconditions for renaming directory.
+%% @private
+%% @doc
+%% Checks preconditions for renaming directory.
+%% @end
 %%--------------------------------------------------------------------
 -spec check_dir_preconditions(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
@@ -126,7 +137,10 @@ check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, 
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks preconditions for renaming regular file.
+%% @private
+%% @doc
+%% Checks preconditions for renaming regular file.
+%% @end
 %%--------------------------------------------------------------------
 -spec check_reg_preconditions(user_ctx:ctx(),
     TargetParentFile :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
@@ -144,7 +158,10 @@ check_reg_preconditions(Ctx, TargetParentFile, TargetName) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks if renamed entry is one of target path parents.
+%% @private
+%% @doc
+%% Checks if renamed entry is one of target path parents.
+%% @end
 %%--------------------------------------------------------------------
 -spec moving_into_itself(SourceFile :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path()) -> boolean().
@@ -155,7 +172,10 @@ moving_into_itself(SourceFile, CanonicalTargetPath) ->
     lists:prefix(SourceTokens, TargetTokens).
 
 %%--------------------------------------------------------------------
-%% @doc Selects proper rename function - trivial, inter-space or inter-provider.
+%% @private
+%% @doc
+%% Selects proper rename function - trivial, inter-space or inter-provider.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_select(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(),
@@ -197,7 +217,10 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks permissions before renaming regular file within one space.
+%% @private
+%% @doc
+%% Checks permissions before renaming regular file within one space.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_file_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
@@ -206,7 +229,10 @@ rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
     rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
-%% @doc Checks permissions before renaming directory within one space.
+%% @private
+%% @doc
+%% Checks permissions before renaming directory within one space.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_dir_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
@@ -215,7 +241,10 @@ rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
     rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
-%% @doc Renames file within one space.
+%% @private
+%% @doc
+%% Renames file within one space.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
@@ -223,7 +252,10 @@ rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
     rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
-%% @doc Checks permissions before renaming regular file within one provider.
+%% @private
+%% @doc
+%% Checks permissions before renaming regular file within one provider.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_file_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
@@ -232,7 +264,10 @@ rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) 
     rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
-%% @doc Checks permissions before renaming directory within one provider.
+%% @private
+%% @doc
+%% Checks permissions before renaming directory within one provider.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_dir_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
@@ -241,7 +276,10 @@ rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) -
     rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
-%% @doc Renames file within one provider.
+%% @private
+%% @doc
+%% Renames file within one provider.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
@@ -349,7 +387,10 @@ rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @doc Renames file moving it to another space supported by another provider.
+%% @private
+%% @doc
+%% Renames file moving it to another space supported by another provider.
+%% @end
 %%--------------------------------------------------------------------
 -spec rename_interprovider(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) ->
     fslogic_worker:fuse_response().
@@ -413,7 +454,10 @@ rename_interprovider(Ctx, SourceFile, LogicalTargetPath) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @doc Unlinks file if it exists.
+%% @private
+%% @doc
+%% Unlinks file if it exists.
+%% @end
 %%--------------------------------------------------------------------
 -spec ensure_deleted(session:id(), file_meta:path()) -> ok.
 ensure_deleted(SessId, LogicalTargetPath) ->
@@ -425,7 +469,9 @@ ensure_deleted(SessId, LogicalTargetPath) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Traverses files tree depth first, executing Pre function before
+%% @private
+%% @doc
+%% Traverses files tree depth first, executing Pre function before
 %% descending into children and executing Post function after returning
 %% from children.
 %% Data flow:
@@ -436,6 +482,7 @@ ensure_deleted(SessId, LogicalTargetPath) ->
 %% - Second intermediate accumulator and memorized value are passed to Post
 %%   function which returns output accumulator.
 %% - Output Accumulator is returned
+%% @end
 %%--------------------------------------------------------------------
 -spec for_each_child_file(Entry :: fslogic_worker:file(),
     PreFun :: fun((fslogic_worker:file(), AccIn :: term()) -> {AccInt1 :: term(), Mem :: term()}),
@@ -457,7 +504,10 @@ for_each_child_file(Entry, PreFun, PostFun, AccIn) ->
     PostFun(Doc, AccInt2, Mem).
 
 %%--------------------------------------------------------------------
-%% @doc Lists all children of given entry
+%% @private
+%% @doc
+%% Lists all children of given entry
+%% @end
 %%--------------------------------------------------------------------
 -spec list_all_children(fslogic_worker:file()) ->
     {ok, [#child_link{}]}.
@@ -478,7 +528,10 @@ list_all_children(Entry, Offset, Size, AccIn) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Copies file attributes to another file
+%% @private
+%% @doc
+%% Copies file attributes to another file
+%% @end
 %%--------------------------------------------------------------------
 -spec copy_file_attributes(session:id(), From :: fslogic_worker:file_guid_or_path(),
     To :: fslogic_worker:file_guid_or_path()) -> ok.
@@ -525,7 +578,10 @@ copy_file_attributes(SessId, From, To) ->
     ok.
 
 %%--------------------------------------------------------------------
-%% @doc Copies file contents to another file on lfm level
+%% @private
+%% @doc
+%% Copies file contents to another file on lfm level
+%% @end
 %%--------------------------------------------------------------------
 -spec copy_file_contents(session:id(), From :: fslogic_worker:file_guid_or_path(),
     To :: fslogic_worker:file_guid_or_path()) -> ok.
@@ -554,7 +610,10 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Returns list of ids of providers supporting
+%% @private
+%% @doc
+%% Returns list of ids of providers supporting
+%% @end
 %%--------------------------------------------------------------------
 -spec get_supporting_providers(SpaceUUID :: binary(),
     Auth :: oz_endpoint:auth(), UserId :: od_user:id()) -> [binary()].
@@ -564,7 +623,10 @@ get_supporting_providers(SpaceId, Auth, UserId) ->
     ordsets:from_list(Providers).
 
 %%--------------------------------------------------------------------
-%% @doc Converts list of entry tuples to records that can be sent or emitted
+%% @private
+%% @doc
+%% Converts list of entry tuples to records that can be sent or emitted
+%% @end
 %%--------------------------------------------------------------------
 -spec parse_renamed_entries([{OldUuid :: fslogic_worker:file_guid(),
     NewGuid :: fslogic_worker:file_guid(), NewParentGuid :: fslogic_worker:file_guid(),
@@ -581,7 +643,10 @@ parse_renamed_entries([TopEntryRaw | ChildEntriesRaw]) ->
         new_parent_uuid = TopEntryNewParentGuid, new_name = TopEntryNewName}, ChildEntries}.
 
 %%--------------------------------------------------------------------
-%% @doc Creates phantom file for each renamed entry if space has changed
+%% @private
+%% @doc
+%% Creates phantom file for each renamed entry if space has changed
+%% @end
 %%--------------------------------------------------------------------
 -spec create_phantom_files([{OldUuid :: fslogic_worker:file_guid(),
     NewGuid :: fslogic_worker:file_guid(), NewParentGuid :: fslogic_worker:file_guid(),
@@ -600,8 +665,11 @@ create_phantom_files(Entries, OldSpaceId, NewSpaceId) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Requests file replication to current provider if
-%% NewSpaceId is different than OldSpaceId
+%% @private
+%% @doc
+%% Requests file replication to current provider if NewSpaceId is different
+%% than OldSpaceId
+%% @end
 %%--------------------------------------------------------------------
 -spec maybe_sync_file(SessId :: session:id(), Entry :: file_meta:entry(),
     OldSpaceId :: binary(), NewSpaceId :: binary()) ->
@@ -620,6 +688,7 @@ maybe_sync_file(SessId, Entry, OldSpaceId, NewSpaceId) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Fetch canonical path (starting with /SpaceId) of file, routing request to
 %% provider that supports the space of file.

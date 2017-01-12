@@ -8,7 +8,8 @@
 %%% @doc This module offers a high level API for operating on logical filesystem.
 %%% When passing a file in arguments, one can use one of the following:
 %%% {guid, FileGuid} - preferred and fast. guids are returned from 'ls' function.
-%%% {path, BinaryFilePath} - slower than by guid (path has to be resolved). Discouraged, but there are cases when this is useful.
+%%% {path, BinaryFilePath} - slower than by guid (path has to be resolved).
+%%%    Discouraged, but there are cases when this is useful.
 %%% Some functions accepts also Handle obtained from open operation.
 %%%
 %%% This module is merely a convenient wrapper that calls functions from lfm_xxx modules.
@@ -108,7 +109,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get attribute of a child with given name.
+%% Gets attribute of a child with given name.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
@@ -336,7 +337,7 @@ set_acl(SessId, FileKey, EntityList) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove file's Access Control List.
+%% Removes file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
@@ -403,7 +404,9 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal) end).
 
 %%--------------------------------------------------------------------
-%% @doc Returns encoding suitable for rest transfer.
+%% @doc
+%% Returns encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(session:id(), file_key()) ->
     {ok, xattr:transfer_encoding()} | error_reply().
@@ -411,7 +414,9 @@ get_transfer_encoding(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:get_transfer_encoding(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
-%% @doc Sets encoding suitable for rest transfer.
+%% @doc
+%% Sets encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(session:id(), file_key(), xattr:transfer_encoding()) ->
     ok | error_reply().
@@ -443,7 +448,9 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
         lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
 
 %%--------------------------------------------------------------------
-%% @doc Returns mimetype of file.
+%% @doc
+%% Returns mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), file_key()) ->
     {ok, xattr:mimetype()} | error_reply().
@@ -451,7 +458,9 @@ get_mimetype(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:get_mimetype(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
-%% @doc Sets mimetype of file.
+%% @doc
+%% Sets mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_mimetype(session:id(), file_key(), xattr:mimetype()) ->
     ok | error_reply().
