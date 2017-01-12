@@ -119,9 +119,9 @@ init_stream(Since, Until, Queue) ->
             couchdb_datastore_driver:changes_start_link(
                 fun
                     (_, stream_ended, _) ->
-                        worker_proxy:cast(dbsync_worker, {Queue, {cleanup, NewUntil}});
+                        worker_proxy:call(dbsync_worker, {Queue, {cleanup, NewUntil}});
                     (Seq, Doc, Model) ->
-                        worker_proxy:cast(dbsync_worker, {Queue,
+                        worker_proxy:call(dbsync_worker, {Queue,
                             #change{seq = Seq, doc = Doc, model = Model}})
                 end, Since, NewUntil, couchdb_datastore_driver:sync_enabled_bucket());
         _ ->

@@ -18,6 +18,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
+-include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -102,7 +103,9 @@ init_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1))
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2))
     end, ?config(op_worker_nodes, Config)),
 
     ct:timetrap({minutes, 60}),
