@@ -133,6 +133,7 @@ find_query(<<"group">>, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"group">>, Data) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     Name = proplists:get_value(<<"name">>, Data),
     case Name of
         <<"">> ->
@@ -143,6 +144,9 @@ create_record(<<"group">>, Data) ->
                 {ok, GroupId} ->
                     % This group was created by this user -> he has view privs.
                     GroupRecord = group_record(GroupId, true),
+                    gui_async:push_updated(
+                        <<"user">>, user_data_backend:user_record(UserAuth, UserId)
+                    ),
                     {ok, GroupRecord};
                 {error, _} ->
                     gui_error:report_warning(

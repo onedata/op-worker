@@ -135,6 +135,7 @@ find_query(<<"space">>, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     Name = proplists:get_value(<<"name">>, Data),
     case Name of
         <<"">> ->
@@ -145,6 +146,9 @@ create_record(<<"space">>, Data) ->
                 {ok, SpaceId} ->
                     % This space was created by this user -> he has view privs.
                     SpaceRecord = space_record(SpaceId, true),
+                    gui_async:push_updated(
+                        <<"user">>, user_data_backend:user_record(UserAuth, UserId)
+                    ),
                     {ok, SpaceRecord};
                 _ ->
                     gui_error:report_warning(
