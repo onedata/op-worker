@@ -179,12 +179,20 @@ handle_request(SessId, Request) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx()) -> response().
-handle_request_locally(Ctx, Req = #fuse_request{}, File)  ->
+handle_request_locally(Ctx, #fuse_request{fuse_request = #file_request{file_request = Req}}, File) ->
+    handle_file_request(Ctx, Req, File);
+handle_request_locally(Ctx, #fuse_request{fuse_request = Req}, File)  ->
     handle_fuse_request(Ctx, Req, File);
-handle_request_locally(Ctx, Req = #provider_request{}, File)  ->
+handle_request_locally(Ctx, #provider_request{provider_request = Req}, File)  ->
     handle_provider_request(Ctx, Req, File);
-handle_request_locally(Ctx, Req = #proxyio_request{}, File)  ->
-    handle_proxyio_request(Ctx, Req, File).
+handle_request_locally(Ctx, #proxyio_request{
+    storage_id = StorageId,
+    file_id = FileId,
+    parameters = Parameters,
+    proxyio_request = Req
+}, File)  ->
+    HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
+    handle_proxyio_request(Ctx, Req, File, HandleId, StorageId, FileId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -203,21 +211,27 @@ handle_request_remotely(Ctx, Req, Providers)  ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(user_ctx:ctx(), fuse_request(), file_ctx:ctx()) ->
+-spec handle_fuse_request(user_ctx:ctx(), fuse_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{}}, File) ->
+handle_fuse_request(Ctx, #resolve_guid{}, File) ->
     guid_req:resolve_guid(Ctx, File);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID,
-    force_proxy_io = ForceProxy}}, undefined) ->
+handle_fuse_request(Ctx, #get_helper_params{
+    storage_id = SID,
+    force_proxy_io = ForceProxy
+}, undefined) ->
     storage_req:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{file_uuid = Guid,
-    storage_id = StorageId}}, undefined) ->
+handle_fuse_request(Ctx, #create_storage_test_file{
+    file_uuid = Guid,
+    storage_id = StorageId
+}, undefined) ->
     storage_req:create_storage_test_file(Ctx, Guid, StorageId);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #verify_storage_test_file{space_id = SpaceId,
-    storage_id = StorageId, file_id = FileId, file_content = FileContent}}, undefined) ->
-    storage_req:verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequest}, File) ->
-    handle_file_request(Ctx, FileRequest, File).
+handle_fuse_request(Ctx, #verify_storage_test_file{
+    space_id = SpaceId,
+    storage_id = StorageId,
+    file_id = FileId,
+    file_content = FileContent
+}, undefined) ->
+    storage_req:verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -225,40 +239,43 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequ
 %% Processes a file request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_request(user_ctx:ctx(), #file_request{}, file_ctx:ctx()) ->
+-spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(Ctx, #file_request{file_request = #get_file_attr{}}, File) ->
+handle_file_request(Ctx, #get_file_attr{}, File) ->
     attr_req:get_file_attr(Ctx, File);
-handle_file_request(Ctx, #file_request{file_request = #get_child_attr{name = Name}}, ParentFile) ->
+handle_file_request(Ctx, #get_child_attr{name = Name}, ParentFile) ->
     attr_req:get_child_attr(Ctx, ParentFile, Name);
-handle_file_request(Ctx, #file_request{file_request = #change_mode{mode = Mode}}, File) ->
+handle_file_request(Ctx, #change_mode{mode = Mode}, File) ->
     attr_req:chmod(Ctx, File, Mode);
-handle_file_request(Ctx, #file_request{file_request = #update_times{atime = ATime, mtime = MTime, ctime = CTime}}, File) ->
+handle_file_request(Ctx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, File) ->
     attr_req:update_times(Ctx, File, ATime, MTime, CTime);
-handle_file_request(Ctx, #file_request{file_request = #delete_file{silent = Silent}}, File) ->
+handle_file_request(Ctx, #delete_file{silent = Silent}, File) ->
     delete_req:delete(Ctx, File, Silent);
-handle_file_request(Ctx, #file_request{file_request = #create_dir{name = Name, mode = Mode}}, ParentFile) ->
+handle_file_request(Ctx, #create_dir{name = Name, mode = Mode}, ParentFile) ->
     dir_req:mkdir(Ctx, ParentFile, Name, Mode);
-handle_file_request(Ctx, #file_request{file_request = #get_file_children{offset = Offset, size = Size}}, File) ->
+handle_file_request(Ctx, #get_file_children{offset = Offset, size = Size}, File) ->
     dir_req:read_dir(Ctx, File, Offset, Size);
-handle_file_request(Ctx, #file_request{file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}, SourceFile) ->
+handle_file_request(Ctx, #rename{
+    target_parent_uuid = TargetParentGuid,
+    target_name = TargetName
+}, SourceFile) ->
     TargetParentFile = file_ctx:new_by_guid(TargetParentGuid),
     rename_req:rename(Ctx, SourceFile, TargetParentFile, TargetName);
-handle_file_request(Ctx, #file_request{file_request = #create_file{name = Name, flag = Flag, mode = Mode}}, ParentFile) ->
+handle_file_request(Ctx, #create_file{name = Name, flag = Flag, mode = Mode}, ParentFile) ->
     file_req:create_file(Ctx, ParentFile, Name, Mode, Flag);
-handle_file_request(Ctx, #file_request{file_request = #make_file{name = Name, mode = Mode}}, ParentFile) ->
+handle_file_request(Ctx, #make_file{name = Name, mode = Mode}, ParentFile) ->
     file_req:make_file(Ctx, ParentFile, Name, Mode);
-handle_file_request(Ctx, #file_request{file_request = #open_file{flag = Flag}}, File) ->
+handle_file_request(Ctx, #open_file{flag = Flag}, File) ->
     file_req:open_file(Ctx, File, Flag);
-handle_file_request(Ctx, #file_request{file_request = #release{handle_id = HandleId}}, File) ->
+handle_file_request(Ctx, #release{handle_id = HandleId}, File) ->
     file_req:release(Ctx, File, HandleId);
-handle_file_request(Ctx, #file_request{file_request = #get_file_location{}}, File) ->
+handle_file_request(Ctx, #get_file_location{}, File) ->
     file_req:get_file_location(Ctx, File);
-handle_file_request(Ctx, #file_request{file_request = #truncate{size = Size}}, File) ->
+handle_file_request(Ctx, #truncate{size = Size}, File) ->
     truncate_req:truncate(Ctx, File, Size);
-handle_file_request(Ctx, #file_request{file_request = #synchronize_block{block = Block, prefetch = Prefetch}}, File) ->
+handle_file_request(Ctx, #synchronize_block{block = Block, prefetch = Prefetch}, File) ->
     synchronization_req:synchronize_block(Ctx, File, Block, Prefetch);
-handle_file_request(Ctx, #file_request{file_request = #synchronize_block_and_compute_checksum{block = Block}}, File) ->
+handle_file_request(Ctx, #synchronize_block_and_compute_checksum{block = Block}, File) ->
     synchronization_req:synchronize_block_and_compute_checksum(Ctx, File, Block).
 
 %%--------------------------------------------------------------------
@@ -267,53 +284,66 @@ handle_file_request(Ctx, #file_request{file_request = #synchronize_block_and_com
 %% Processes provider request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_provider_request(user_ctx:ctx(), provider_request(), file_ctx:ctx()) ->
+-spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
     provider_response().
-handle_provider_request(Ctx, #provider_request{provider_request = #get_file_distribution{}}, File) ->
+handle_provider_request(Ctx, #get_file_distribution{}, File) ->
     synchronization_req:get_file_distribution(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #replicate_file{block = Block}}, File) ->
+handle_provider_request(Ctx, #replicate_file{block = Block}, File) ->
     synchronization_req:replicate_file(Ctx, File, Block);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_parent{}}, File) ->
+handle_provider_request(Ctx, #get_parent{}, File) ->
     guid_req:get_parent(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_file_path{}}, File) ->
+handle_provider_request(Ctx, #get_file_path{}, File) ->
     guid_req:get_file_path(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_xattr{name = XattrName, inherited = Inherited}}, File) ->
+handle_provider_request(Ctx, #get_xattr{
+    name = XattrName,
+    inherited = Inherited
+}, File) ->
     xattr_req:get_xattr(Ctx, File, XattrName, Inherited);
-handle_provider_request(Ctx, #provider_request{provider_request = #set_xattr{xattr = Xattr}}, File) ->
+handle_provider_request(Ctx, #set_xattr{xattr = Xattr}, File) ->
     xattr_req:set_xattr(Ctx, File, Xattr);
-handle_provider_request(Ctx, #provider_request{provider_request = #remove_xattr{name = XattrName}}, File) ->
+handle_provider_request(Ctx, #remove_xattr{name = XattrName}, File) ->
     xattr_req:remove_xattr(Ctx, File, XattrName);
-handle_provider_request(Ctx, #provider_request{provider_request = #list_xattr{inherited = Inherited, show_internal = ShowInternal}}, File) ->
+handle_provider_request(Ctx, #list_xattr{
+    inherited = Inherited,
+    show_internal = ShowInternal
+}, File) ->
     xattr_req:list_xattr(Ctx, File, Inherited, ShowInternal);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_acl{}}, File) ->
+handle_provider_request(Ctx, #get_acl{}, File) ->
     acl_req:get_acl(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #set_acl{acl = Acl}}, File) ->
+handle_provider_request(Ctx, #set_acl{acl = Acl}, File) ->
     acl_req:set_acl(Ctx, File, Acl);
-handle_provider_request(Ctx, #provider_request{provider_request = #remove_acl{}}, File) ->
+handle_provider_request(Ctx, #remove_acl{}, File) ->
     acl_req:remove_acl(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_transfer_encoding{}}, File) ->
+handle_provider_request(Ctx, #get_transfer_encoding{}, File) ->
     cdmi_metadata_req:get_transfer_encoding(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #set_transfer_encoding{value = Value}}, File) ->
+handle_provider_request(Ctx, #set_transfer_encoding{value = Value}, File) ->
     cdmi_metadata_req:set_transfer_encoding(Ctx, File, Value);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_cdmi_completion_status{}}, File) ->
+handle_provider_request(Ctx, #get_cdmi_completion_status{}, File) ->
     cdmi_metadata_req:get_cdmi_completion_status(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #set_cdmi_completion_status{value = Value}}, File) ->
+handle_provider_request(Ctx, #set_cdmi_completion_status{value = Value}, File) ->
     cdmi_metadata_req:set_cdmi_completion_status(Ctx, File, Value);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_mimetype{}}, File) ->
+handle_provider_request(Ctx, #get_mimetype{}, File) ->
     cdmi_metadata_req:get_mimetype(Ctx, File);
-handle_provider_request(Ctx, #provider_request{provider_request = #set_mimetype{value = Value}}, File) ->
+handle_provider_request(Ctx, #set_mimetype{value = Value}, File) ->
     cdmi_metadata_req:set_mimetype(Ctx, File, Value);
-handle_provider_request(Ctx, #provider_request{provider_request = #get_metadata{type = Type, names = Names, inherited = Inherited}}, File) ->
+handle_provider_request(Ctx, #get_metadata{
+    type = Type,
+    names = Names,
+    inherited = Inherited
+}, File) ->
     metadata_req:get_metadata(Ctx, File, Type, Names, Inherited);
-handle_provider_request(Ctx, #provider_request{provider_request = #set_metadata{metadata = #metadata{type = Type, value = Value}, names = Names}}, File) ->
+handle_provider_request(Ctx, #set_metadata{
+    metadata = #metadata{type = Type, value = Value},
+    names = Names
+}, File) ->
     metadata_req:set_metadata(Ctx, File, Type, Value, Names);
-handle_provider_request(Ctx, #provider_request{provider_request = #remove_metadata{type = Type}}, File) ->
+handle_provider_request(Ctx, #remove_metadata{type = Type}, File) ->
     metadata_req:remove_metadata(Ctx, File, Type);
-handle_provider_request(Ctx, #provider_request{provider_request = #check_perms{flag = Flag}}, File) ->
+handle_provider_request(Ctx, #check_perms{flag = Flag}, File) ->
     permission_req:check_perms(Ctx, File, Flag);
-handle_provider_request(Ctx, #provider_request{provider_request = #create_share{name = Name}}, File) ->
+handle_provider_request(Ctx, #create_share{name = Name}, File) ->
     share_req:create_share(Ctx, File, Name);
-handle_provider_request(Ctx, #provider_request{provider_request = #remove_share{}}, File) ->
+handle_provider_request(Ctx, #remove_share{}, File) ->
     share_req:remove_share(Ctx, File);
 handle_provider_request(_Ctx, Req, _File) ->
     ?log_bad_request(Req),
@@ -325,24 +355,16 @@ handle_provider_request(_Ctx, Req, _File) ->
 %% Processes proxyio request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_proxyio_request(user_ctx:ctx(), proxyio_request(), file_ctx:ctx()) ->
+-spec handle_proxyio_request(user_ctx:ctx(), proxyio_request(), file_ctx:ctx(),
+    HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
+    FileId :: helpers:file_id()) ->
     proxyio_response().
-handle_proxyio_request(Ctx, #proxyio_request{
-    storage_id = SID,
-    file_id = FID,
-    proxyio_request = #remote_write{byte_sequence = ByteSequences},
-    parameters = Parameters
-}, File) ->
-    HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
-    read_write_req:write(Ctx, File, HandleId, SID, FID, ByteSequences);
-handle_proxyio_request(Ctx, #proxyio_request{
-    parameters = Parameters,
-    storage_id = SID,
-    file_id = FID,
-    proxyio_request = #remote_read{offset = Offset, size = Size}
-}, File) ->
-    HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
-    read_write_req:read(Ctx, File, HandleId, SID, FID, Offset, Size).
+handle_proxyio_request(Ctx,#remote_write{byte_sequence = ByteSequences}, File,
+    HandleId, StorageId, FileId) ->
+    read_write_req:write(Ctx, File, HandleId, StorageId, FileId, ByteSequences);
+handle_proxyio_request(Ctx, #remote_read{offset = Offset, size = Size}, File,
+    HandleId, StorageId, FileId) ->
+    read_write_req:read(Ctx, File, HandleId, StorageId, FileId, Offset, Size).
 
 %%--------------------------------------------------------------------
 %% @private
