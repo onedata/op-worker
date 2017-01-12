@@ -144,15 +144,9 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #od_space{name = Name}) of
                 {ok, SpaceId} ->
-                    % Push update of user record. The new space hans't probably
-                    % been synchronized yet, so for now just add the space to
-                    % the list of user's spaces.
-                    UserRecord = user_data_backend:user_record(UserAuth, UserId),
-                    UserRecordWithNewSpaces = user_data_backend:modify_relations(
-                        add, <<"spaces">>, SpaceId, UserRecord
+                    user_data_backend:push_modified_user(
+                        UserAuth, UserId, <<"spaces">>, add, SpaceId
                     ),
-                    gui_async:push_updated(<<"user">>, UserRecordWithNewSpaces),
-                    % This space was created by this user -> he has view privs.
                     SpaceRecord = space_record(SpaceId, true),
                     {ok, SpaceRecord};
                 _ ->
@@ -270,8 +264,12 @@ update_record(_ResourceType, _Id, _Data) ->
     ok | gui_error:error_result().
 delete_record(<<"space">>, SpaceId) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     case space_logic:delete(UserAuth, SpaceId) of
         ok ->
+            user_data_backend:push_modified_user(
+                UserAuth, UserId, <<"spaces">>, remove, SpaceId
+            ),
             ok;
         {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(

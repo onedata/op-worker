@@ -23,7 +23,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([user_record/2, modify_relations/4]).
+-export([user_record/2, push_modified_user/5]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -199,12 +199,13 @@ user_record(Auth, UserId) ->
 %%      <<"handleServices">>
 %% @end
 %%--------------------------------------------------------------------
--spec modify_relations(AddOrRemove :: add | remove, RelationType :: binary(),
-    Ids :: binary() | [binary()], UserRecord :: proplists:proplist()) ->
-    proplists:proplist().
-modify_relations(AddOrRemove, RelationType, Id, UserRecord) when is_binary(Id) ->
-    modify_relations(AddOrRemove, RelationType, [Id], UserRecord);
-modify_relations(AddOrRemove, RelationType, Ids, UserRecord) ->
+-spec push_modified_user(Auth :: #token_auth{}, UserId :: od_user:id(),
+    AddOrRemove :: add | remove, RelationType :: binary(),
+    Ids :: binary() | [binary()]) ->    proplists:proplist().
+push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Id) when is_binary(Id) ->
+    push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, [Id]);
+push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Ids) ->
+    UserRecord = user_record(UserAuth, UserId),
     Relations = proplists:get_value(RelationType, UserRecord),
     NewRelations = case AddOrRemove of
         add ->
@@ -213,6 +214,7 @@ modify_relations(AddOrRemove, RelationType, Ids, UserRecord) ->
         remove ->
             Relations -- Ids
     end,
-    lists:keystore(
+    UserRecordWithNewRelations = lists:keystore(
         RelationType, 1, UserRecord, {RelationType, NewRelations}
-    ).
+    ),
+    gui_async:push_updated(<<"user">>, UserRecordWithNewRelations).

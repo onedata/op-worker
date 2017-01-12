@@ -142,14 +142,9 @@ create_record(<<"group">>, Data) ->
         _ ->
             case group_logic:create(UserAuth, #od_group{name = Name}) of
                 {ok, GroupId} ->
-                    % Push update of user record. The new group hans't probably
-                    % been synchronized yet, so for now just add the group to
-                    % the list of user's groups.
-                    UserRecord = user_data_backend:user_record(UserAuth, UserId),
-                    UserRecordWithNewGroups = user_data_backend:modify_relations(
-                        add, <<"groups">>, GroupId, UserRecord
+                    user_data_backend:push_modified_user(
+                        UserAuth, UserId, <<"groups">>, add, GroupId
                     ),
-                    gui_async:push_updated(<<"user">>, UserRecordWithNewGroups),
                     % This group was created by this user -> he has view privs.
                     GroupRecord = group_record(GroupId, true),
                     {ok, GroupRecord};
@@ -266,8 +261,12 @@ update_record(_ResourceType, _Id, _Data) ->
     ok | gui_error:error_result().
 delete_record(<<"group">>, GroupId) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     case group_logic:delete(UserAuth, GroupId) of
         ok ->
+            user_data_backend:push_modified_user(
+                UserAuth, UserId, <<"groups">>, remove, GroupId
+            ),
             ok;
         {error, {403, <<>>, <<>>}} ->
             gui_error:report_warning(

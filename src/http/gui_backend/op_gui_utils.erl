@@ -145,7 +145,7 @@ find_all_groups(UserAuth, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all_groups(UserAuth :: oz_endpoint:auth(), UserId :: binary(),
-    MaxRetries :: integer()) -> [SpaceId :: binary()].
+    MaxRetries :: integer()) -> [GroupId :: binary()].
 find_all_groups(_, _, 0) ->
     [];
 
