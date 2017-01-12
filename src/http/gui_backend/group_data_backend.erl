@@ -142,11 +142,19 @@ create_record(<<"group">>, Data) ->
         _ ->
             case group_logic:create(UserAuth, #od_group{name = Name}) of
                 {ok, GroupId} ->
+                    % Push update of user record. The new group hans't probably
+                    % been synchronized yet, so for now just add the group to
+                    % the list of user's groups.
+                    UserRecord = user_data_backend:user_record(UserAuth, UserId),
+                    UserGroups = proplists:get_value(<<"groups">>, UserRecord),
+                    % Make sure that the group is not duplicated.
+                    NewGroups = UserGroups -- [GroupId] ++ [GroupId],
+                    UserRecordWithNewGroups = lists:keystore(
+                        <<"groups">>, 1, UserRecord, {<<"groups">>, NewGroups}
+                    ),
+                    gui_async:push_updated(<<"user">>, UserRecordWithNewGroups),
                     % This group was created by this user -> he has view privs.
                     GroupRecord = group_record(GroupId, true),
-                    gui_async:push_updated(
-                        <<"user">>, user_data_backend:user_record(UserAuth, UserId)
-                    ),
                     {ok, GroupRecord};
                 {error, _} ->
                     gui_error:report_warning(

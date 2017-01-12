@@ -144,11 +144,19 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #od_space{name = Name}) of
                 {ok, SpaceId} ->
+                    % Push update of user record. The new space hans't probably
+                    % been synchronized yet, so for now just add the space to
+                    % the list of user's spaces.
+                    UserRecord = user_data_backend:user_record(UserAuth, UserId),
+                    UserSpaces = proplists:get_value(<<"spaces">>, UserRecord),
+                    % Make sure that the space is not duplicated.
+                    NewSpaces = UserSpaces -- [SpaceId] ++ [SpaceId],
+                    UserRecordWithNewSpaces = lists:keystore(
+                        <<"spaces">>, 1, UserRecord, {<<"spaces">>, NewSpaces}
+                    ),
+                    gui_async:push_updated(<<"user">>, UserRecordWithNewSpaces),
                     % This space was created by this user -> he has view privs.
                     SpaceRecord = space_record(SpaceId, true),
-                    gui_async:push_updated(
-                        <<"user">>, user_data_backend:user_record(UserAuth, UserId)
-                    ),
                     {ok, SpaceRecord};
                 _ ->
                     gui_error:report_warning(
