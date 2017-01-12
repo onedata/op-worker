@@ -43,7 +43,7 @@ rename(Ctx, SourceFile, TargetParentFile, TargetName) ->
 
     case CanonicalSourcePath =:= CanonicalTargetPath of
         true ->
-            Guid = file_context:get_guid(SourceFile2),
+            Guid = file_context:get_guid_const(SourceFile2),
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_renamed{
                     new_uuid = Guid}};
@@ -114,7 +114,7 @@ check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, 
         true ->
             #fuse_response{status = #status{code = ?EINVAL}};
         false ->
-            Guid = file_context:get_guid(TargetParentFile),
+            Guid = file_context:get_guid_const(TargetParentFile),
             case logical_file_manager:get_child_attr(SessId, Guid, TargetName) of
                 {error, ?ENOENT} ->
                     ok;
@@ -133,7 +133,7 @@ check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, 
     ok | fslogic_worker:fuse_response().
 check_reg_preconditions(Ctx, TargetParentFile, TargetName) ->
     SessId = user_context:get_session_id(Ctx),
-    TargetParentGuid = file_context:get_guid(TargetParentFile),
+    TargetParentGuid = file_context:get_guid_const(TargetParentFile),
     case logical_file_manager:get_child_attr(SessId, TargetParentGuid, TargetName) of
         {error, ?ENOENT} ->
             ok;
@@ -162,8 +162,8 @@ moving_into_itself(SourceFile, CanonicalTargetPath) ->
     TargetName :: file_meta:name(), FileType :: file_meta:type()) ->
     fslogic_worker:fuse_response().
 rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName, FileType) ->
-    SourceSpaceId = file_context:get_space_id(SourceFile),
-    TargetSpaceId = file_context:get_space_id(TargetParentFile),
+    SourceSpaceId = file_context:get_space_id_const(SourceFile),
+    TargetSpaceId = file_context:get_space_id_const(TargetParentFile),
     {LogicalTargetPath, _} = get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName),
 
 
@@ -246,7 +246,7 @@ rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) -
 -spec rename_interspace(user_context:ctx(), file_context:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    SourceEntry = file_context:get_uuid_entry(SourceFile), %todo pass file_context
+    SourceEntry = file_context:get_uuid_entry_const(SourceFile), %todo pass file_context
     SessId = user_context:get_session_id(Ctx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
@@ -354,7 +354,7 @@ rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
 -spec rename_interprovider(user_context:ctx(), file_context:ctx(), file_meta:path()) ->
     fslogic_worker:fuse_response().
 rename_interprovider(Ctx, SourceFile, LogicalTargetPath) ->
-    SourceEntry = file_context:get_uuid_entry(SourceFile), %todo remove and use file_context
+    SourceEntry = file_context:get_uuid_entry_const(SourceFile), %todo remove and use file_context
     SessId = user_context:get_session_id(Ctx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
@@ -630,14 +630,14 @@ maybe_sync_file(SessId, Entry, OldSpaceId, NewSpaceId) ->
     {LogicalPath:: file_meta:path(), CanonicalPath :: file_meta:path()}.
 get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName) ->
     SessId = user_context:get_session_id(Ctx),
-    Guid = file_context:get_guid(TargetParentFile),
+    Guid = file_context:get_guid_const(TargetParentFile),
     {ok, LogicalTargetParentPath} = logical_file_manager:get_file_path(SessId, Guid),
     case fslogic_path:tokenize_skipping_dots(LogicalTargetParentPath) of
         {ok, [<<"/">>]} ->
             throw(?EPERM);
         {ok, [<<"/">>, _SpaceName | Rest]} ->
             LogicalPath = filename:join(LogicalTargetParentPath, TargetName),
-            SpaceId = file_context:get_space_id(TargetParentFile),
+            SpaceId = file_context:get_space_id_const(TargetParentFile),
             CanonicalPath = filename:join([<<"/">>, SpaceId | Rest] ++ [TargetName]),
             {LogicalPath, CanonicalPath}
     end.

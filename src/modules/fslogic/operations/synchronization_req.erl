@@ -34,7 +34,7 @@
 -spec synchronize_block(user_context:ctx(), file_context:ctx(), fslogic_blocks:block(), Prefetch :: boolean()) ->
     fslogic_worker:fuse_response().
 synchronize_block(Ctx, File, undefined, Prefetch) ->
-    FileEntry = file_context:get_uuid_entry(File),
+    FileEntry = file_context:get_uuid_entry_const(File),
     Size = fslogic_blocks:get_file_size(FileEntry), %todo pass file_context
     synchronize_block(Ctx, File, #file_block{offset = 0, size = Size}, Prefetch);
 synchronize_block(Ctx, File, Block, Prefetch) ->
@@ -51,11 +51,11 @@ synchronize_block(Ctx, File, Block, Prefetch) ->
     file_context:ctx(), fslogic_blocks:block()) -> fslogic_worker:fuse_response().
 synchronize_block_and_compute_checksum(Ctx, File, Range = #file_block{offset = Offset, size = Size}) ->
     SessId = user_context:get_session_id(Ctx),
-    FileGuid = file_context:get_guid(File),
+    FileGuid = file_context:get_guid_const(File),
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read), %todo do not use lfm, operate on fslogic directly
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
 
-    FileEntry = file_context:get_uuid_entry(File),
+    FileEntry = file_context:get_uuid_entry_const(File),
     Checksum = crypto:hash(md4, Data),
     LocationToSend =
         fslogic_file_location:prepare_location_for_client(FileEntry, Range), %todo pass file_context

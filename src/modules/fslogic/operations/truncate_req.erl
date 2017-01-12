@@ -35,8 +35,8 @@
 truncate(Ctx, File, Size) ->
     File2 = update_quota(File, Size),
     SessId = user_context:get_session_id(Ctx),
-    SpaceDirUuid = file_context:get_space_dir_uuid(File2),
-    {uuid, FileUuid} = file_context:get_uuid_entry(File2),
+    SpaceDirUuid = file_context:get_space_dir_uuid_const(File2),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File2),
     lists:foreach(
         fun({SID, FID}) ->
             {ok, Storage} = storage:get(SID),
@@ -61,7 +61,7 @@ truncate(Ctx, File, Size) ->
 -spec update_quota(file_context:ctx(), file_meta:size()) -> NewFile :: file_context:ctx().
 update_quota(File, Size) ->
     {FileDoc, File2} = file_context:get_file_doc(File),
-    SpaceId = file_context:get_space_id(File),
+    SpaceId = file_context:get_space_id_const(File),
     OldSize = fslogic_blocks:get_file_size(FileDoc), %todo pass file_context
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
     File2.

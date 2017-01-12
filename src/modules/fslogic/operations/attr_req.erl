@@ -48,10 +48,10 @@ get_file_attr_no_permission_check(Ctx, File) ->
         type = Type, mode = Mode, provider_id = ProviderId, uid = OwnerId,
         shares = Shares}}, File2
     } = file_context:get_file_doc(File),
-    ShareId = file_context:get_share_id(File),
+    ShareId = file_context:get_share_id_const(File),
     UserId = user_context:get_user_id(Ctx),
     {FileName, File3} = file_context:get_aliased_name(File2, Ctx),
-    SpaceId = file_context:get_space_id(File3),
+    SpaceId = file_context:get_space_id_const(File3),
     {{Uid, Gid}, File4} = file_context:get_posix_storage_user_context(File3, OwnerId),
     Size = fslogic_blocks:get_file_size(FileDoc), %todo TL consider caching file_location in File record
     {ParentGuid, File5} = file_context:get_parent_guid(File4, UserId),
@@ -87,7 +87,7 @@ get_child_attr(Ctx, ParentFile, Name) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
 chmod(Ctx, File, Mode) ->
-    {uuid, Uuid} = file_context:get_uuid_entry(File),
+    {uuid, Uuid} = file_context:get_uuid_entry_const(File),
     sfm_utils:chmod_storage_files(Ctx, {uuid, Uuid}, Mode), %todo pass file_context
 
     % remove acl
@@ -115,7 +115,7 @@ update_times(Ctx, File, ATime, MTime, CTime) ->
     UpdateMap1 = maps:filter(fun(_Key, Value) ->
         is_integer(Value) end, UpdateMap),
 
-    FileEntry = file_context:get_uuid_entry(File),
+    FileEntry = file_context:get_uuid_entry_const(File),
     fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, user_context:get_user_id(Ctx)), %todo pass file_context
 
     #fuse_response{status = #status{code = ?OK}}.

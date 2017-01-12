@@ -90,7 +90,7 @@ handle(healthcheck) ->
     ok;
 handle({fslogic_deletion_request, Ctx, File, Silent}) ->
     SessId = user_context:get_session_id(Ctx),
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
 
     case file_handles:exists(FileUuid) of
         true ->

@@ -61,7 +61,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     end;
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, Args = [Ctx, File | _]) ->
     UserId = user_context:get_user_id(Ctx),
-    ShareId = file_context:get_share_id(File),
+    ShareId = file_context:get_share_id_const(File),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
     lists:foreach(fun check_rule_and_cache_result/1, ExpandedAccessDefinitions),
     lists:foreach(fun cache_ok_result/1, ExpandedAccessDefinitions),
@@ -134,7 +134,7 @@ get_validation_subject(UserId, #sfm_handle{file_uuid = FileUuid}) ->
 get_validation_subject(UserId, {guid, FileGUID}) ->
     get_validation_subject(UserId, {uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
 get_validation_subject(_UserId, FileEntry) ->
-    case file_context:is_file_context(FileEntry) of
+    case file_context:is_file_context_const(FileEntry) of
         true ->
             {FileDoc = #document{}, _NewFileCtx} = file_context:get_file_doc(FileEntry),
             FileDoc;
@@ -153,7 +153,7 @@ resolve_file_entry({path, Item}, Inputs) when is_integer(Item) ->
     {path, resolve_file_entry(Item, Inputs)};
 resolve_file_entry({parent, Item}, Inputs) ->
     ResolvedEntry = resolve_file_entry(Item, Inputs),
-    case file_context:is_file_context(ResolvedEntry) of
+    case file_context:is_file_context_const(ResolvedEntry) of
         true ->
             {Parent, _NewFileCtx} = file_context:get_parent(ResolvedEntry, undefined),
             Parent;

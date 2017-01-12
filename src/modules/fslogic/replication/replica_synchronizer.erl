@@ -57,10 +57,10 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
     [#document{value = #file_location{version_vector = LocalVersion}}] = [Loc || Loc = #document{value = #file_location{provider_id = Id}}
         <- LocationDocs, Id =:= LocalProviderId],
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [EnlargedBlock]),
-    FileGuid = file_context:get_guid(File2),
-    SpaceId = file_context:get_space_id(File2),
+    FileGuid = file_context:get_guid_const(File2),
+    SpaceId = file_context:get_space_id_const(File2),
     UserId = user_context:get_user_id(Ctx),
-    {uuid, FileUuid} = file_context:get_uuid_entry(File2),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File2),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(
@@ -115,7 +115,7 @@ prefetch_data_fun(Ctx, File, #file_block{offset = O, size = _S}) ->
         catch
             _:Error ->
                 ?error_stacktrace("Prefetching of ~p at offset ~p with size ~p failed due to: ~p",
-                    [file_context:get_guid(File), O, ?PREFETCH_SIZE, Error])
+                    [file_context:get_guid_const(File), O, ?PREFETCH_SIZE, Error])
         end
     end.
 

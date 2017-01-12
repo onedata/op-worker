@@ -78,10 +78,10 @@ write(Ctx, File, HandleId, StorageId, FileId, ByteSequences) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
 get_handle(Ctx, File, undefined, StorageId, FileId, OpenFlag)->
     SessId = user_context:get_session_id(Ctx),
-    SpaceDirUuid = file_context:get_space_dir_uuid(File),
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    SpaceDirUuid = file_context:get_space_dir_uuid_const(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
     {ok, Storage} = storage:get(StorageId),
-    ShareId = file_context:get_share_id(File),
+    ShareId = file_context:get_share_id_const(File),
     SFMHandle =
         storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId, ShareId),
     storage_file_manager:open(SFMHandle, OpenFlag);

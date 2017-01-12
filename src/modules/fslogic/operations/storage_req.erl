@@ -88,7 +88,7 @@ get_helper_params(_Ctx, _StorageId, false = _ForceProxy) ->
 create_storage_test_file(Ctx, Guid, StorageId) ->
     File = file_context:new_by_guid(Guid),
     UserId = user_context:get_user_id(Ctx),
-    SpaceId = case file_context:get_space_id(File) of
+    SpaceId = case file_context:get_space_id_const(File) of
         undefined -> throw(?ENOENT);
         <<_/binary>> = Id -> Id
     end,

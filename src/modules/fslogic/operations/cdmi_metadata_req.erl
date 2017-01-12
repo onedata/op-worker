@@ -33,7 +33,7 @@
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_Ctx, File) ->
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_KEY) of %todo pass file_context
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
@@ -48,7 +48,7 @@ get_transfer_encoding(_Ctx, File) ->
     xattr:transfer_encoding()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(Ctx, File, Encoding) ->
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
     case xattr:save(FileUuid, ?TRANSFER_ENCODING_KEY, Encoding) of %todo pass file_context
         {ok, _} ->
             fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
@@ -67,7 +67,7 @@ set_transfer_encoding(Ctx, File, Encoding) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_Ctx, File) ->
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_KEY) of %todo pass file_context
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Val}};
@@ -85,7 +85,7 @@ get_cdmi_completion_status(_Ctx, File) ->
     xattr:cdmi_completion_status()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
     case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus) of %todo pass file_context
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
@@ -100,7 +100,7 @@ set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_Ctx, File) ->
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
     case xattr:get_by_name(FileUuid, ?MIMETYPE_KEY) of %todo pass file_context
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
@@ -115,7 +115,7 @@ get_mimetype(_Ctx, File) ->
     xattr:mimetype()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(Ctx, File, Mimetype) ->
-    {uuid, FileUuid} = file_context:get_uuid_entry(File),
+    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
     case xattr:save(FileUuid, ?MIMETYPE_KEY, Mimetype) of
         {ok, _} ->
             fslogic_times:update_ctime({uuid, FileUuid}, user_context:get_user_id(Ctx)), %todo pass file_context

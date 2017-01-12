@@ -41,7 +41,7 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
         uid = user_context:get_user_id(Ctx)
     }},
     {ParentDoc = #document{key = ParentUuid}, ParentFile2} = file_context:get_file_doc(ParentFile),
-    SpaceId = file_context:get_space_id(ParentFile2),
+    SpaceId = file_context:get_space_id_const(ParentFile2),
     {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_context inside
     {ok, _} = times:create(#document{key = DirUuid, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
     fslogic_times:update_mtime_ctime({uuid, ParentUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
@@ -64,7 +64,7 @@ read_dir(Ctx, File, Offset, Limit) ->
     {Children, _File3} = file_context:get_file_children(File2, Ctx, Offset, Limit),
     ChildrenLinks =
         lists:map(fun(ChildFile) ->
-            ChildGuid = file_context:get_guid(ChildFile),
+            ChildGuid = file_context:get_guid_const(ChildFile),
             {ChildName, _ChildFile3} = file_context:get_aliased_name(ChildFile, Ctx),
             #child_link{name = ChildName, uuid = ChildGuid}
         end, Children),

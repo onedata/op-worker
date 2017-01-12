@@ -80,7 +80,7 @@ update_target_guid_if_file_is_phantom(File, Request) ->
     try file_context:get_file_doc(file_context:fill_guid(File)) of
         {{error, {not_found, file_meta}}, File2} ->
             try
-                {uuid, Uuid} = file_context:get_uuid_entry(File2),
+                {uuid, Uuid} = file_context:get_uuid_entry_const(File2),
                 {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
                 NewRequest = change_target_guid(Request, NewGuid),
                 NewFile = file_context:new_by_guid(NewGuid),
@@ -110,7 +110,7 @@ update_target_guid_if_file_is_phantom(File, Request) ->
     [oneprovider:id()].
 get_target_providers_for_attr_req(Ctx, File) ->
     %todo TL handle guids stored in file_force_proxy
-    case file_context:is_space_dir(File) of
+    case file_context:is_space_dir_const(File) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
@@ -126,11 +126,11 @@ get_target_providers_for_attr_req(Ctx, File) ->
 -spec get_target_providers_for_file(user_context:ctx(), file_context:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_file(Ctx, File) ->
-    case file_context:is_user_root_dir(File, Ctx) of
+    case file_context:is_user_root_dir_const(File, Ctx) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
-            SpaceId = file_context:get_space_id(File),
+            SpaceId = file_context:get_space_id_const(File),
             Auth = user_context:get_auth(Ctx),
             UserId = user_context:get_user_id(Ctx),
             {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_context

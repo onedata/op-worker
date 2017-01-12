@@ -190,7 +190,7 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
     session:id()) -> ok | {error, Reason :: term()}.
 emit_file_renamed_to_client(File, NewName, SessionId) ->
     {ok, UserId} = session:get_user_id(SessionId),
-    Guid = file_context:get_guid(File),
+    Guid = file_context:get_guid_const(File),
     {ParentGuid, _File3} = file_context:get_parent_guid(File, UserId),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
         old_uuid = Guid,
