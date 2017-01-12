@@ -83,21 +83,21 @@ get_target_providers(UserCtx, File, _Req) ->
 update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
 update_target_guid_if_file_is_phantom(FileCtx, Request) ->
-    try file_ctx:get_file_doc(file_ctx:fill_guid(FileCtx)) of
-        {{error, {not_found, file_meta}}, FileCtx2} ->
+    try
+        {_, NewFileCtx} = file_ctx:get_file_doc(file_ctx:fill_guid(FileCtx)),
+        {NewFileCtx, Request}
+    catch
+        _:{badmatch, {error, {not_found, file_meta}}} ->
             try
-                {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx2),
+                {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx),
                 {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
                 NewRequest = change_target_guid(Request, NewGuid),
-                NewFileCtx = file_ctx:new_by_guid(NewGuid),
-                {NewFileCtx, NewRequest}
+                NewFileCtx_ = file_ctx:new_by_guid(NewGuid),
+                {NewFileCtx_, NewRequest}
             catch
                 _:_ ->
-                    {FileCtx2, Request}
+                    {FileCtx, Request}
             end;
-        {_, NewFileCtx} ->
-            {NewFileCtx, Request}
-    catch
         _:_ ->
             {FileCtx, Request}
     end.

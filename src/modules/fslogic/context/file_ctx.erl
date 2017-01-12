@@ -223,15 +223,11 @@ get_logical_path(FileCtx, UserCtx) ->
 %% Returns file's file_meta document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_doc(ctx()) -> {file_meta:doc() | {error, term()}, ctx()}.
+-spec get_file_doc(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     Guid = get_guid_const(FileCtx),
-    case file_meta:get({uuid, fslogic_uuid:guid_to_uuid(Guid)}) of
-        {ok, FileDoc} ->
-            {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
-        Error ->
-            {Error, FileCtx#file_ctx{file_doc = Error}}
-    end;
+    {ok, FileDoc} =  file_meta:get({uuid, fslogic_uuid:guid_to_uuid(Guid)}),
+    {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
 
@@ -326,12 +322,8 @@ get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
     SessionIsNotSpecial = (not session:is_special(user_ctx:get_session_id(UserCtx))),
     case is_space_dir_const(FileCtx) andalso SessionIsNotSpecial of
         false ->
-            case get_file_doc(FileCtx) of
-                {#document{value = #file_meta{name = Name}}, FileCtx2} ->
-                    {Name, FileCtx2#file_ctx{file_name = Name}};
-                ErrorResponse ->
-                    throw(ErrorResponse)
-            end;
+            {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc(FileCtx),
+            {Name, FileCtx2#file_ctx{file_name = Name}};
         true ->
             {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
             {Name, FileCtx2#file_ctx{file_name = Name}}

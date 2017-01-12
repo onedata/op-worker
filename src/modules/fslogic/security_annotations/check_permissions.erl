@@ -136,7 +136,7 @@ get_validation_subject(UserId, {guid, FileGUID}) ->
 get_validation_subject(_UserId, FileEntry) ->
     case file_ctx:is_file_ctx_const(FileEntry) of
         true ->
-            {FileDoc = #document{}, _NewFileCtx} = file_ctx:get_file_doc(FileEntry),
+            {FileDoc, _NewFileCtx} = file_ctx:get_file_doc(FileEntry),
             FileDoc;
         false ->
             {ok, #document{value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
