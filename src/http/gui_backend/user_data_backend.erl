@@ -23,7 +23,7 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([user_record/2]).
+-export([user_record/2, modify_relations/4]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -137,11 +137,10 @@ delete_record(<<"user">>, _Id) ->
 
 
 %%%===================================================================
-%%% Internal functions
+%%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns a client-compliant user record based on space id.
 %% @end
@@ -187,3 +186,33 @@ user_record(Auth, UserId) ->
         {<<"shares">>, Shares},
         {<<"handleServices">>, HandleServices}
     ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Modifies user record by changing one of its relations (adds or removes
+%% relations of given type).
+%% RelationType can be:
+%%      <<"groups">>
+%%      <<"spaces">>
+%%      <<"shares">>
+%%      <<"handleServices">>
+%% @end
+%%--------------------------------------------------------------------
+-spec modify_relations(AddOrRemove :: add | remove, RelationType :: binary(),
+    Ids :: binary() | [binary()], UserRecord :: proplists:proplist()) ->
+    proplists:proplist().
+modify_relations(AddOrRemove, RelationType, Id, UserRecord) when is_binary(Id) ->
+    modify_relations(AddOrRemove, RelationType, [Id], UserRecord);
+modify_relations(AddOrRemove, RelationType, Ids, UserRecord) ->
+    Relations = proplists:get_value(RelationType, UserRecord),
+    NewRelations = case AddOrRemove of
+        add ->
+            % Make sure that the Ids are not duplicated.
+            Ids ++ Relations -- Ids;
+        remove ->
+            Relations -- Ids
+    end,
+    lists:keystore(
+        RelationType, 1, UserRecord, {RelationType, NewRelations}
+    ).

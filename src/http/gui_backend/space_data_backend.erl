@@ -148,11 +148,8 @@ create_record(<<"space">>, Data) ->
                     % been synchronized yet, so for now just add the space to
                     % the list of user's spaces.
                     UserRecord = user_data_backend:user_record(UserAuth, UserId),
-                    UserSpaces = proplists:get_value(<<"spaces">>, UserRecord),
-                    % Make sure that the space is not duplicated.
-                    NewSpaces = [SpaceId | lists:delete(SpaceId, UserSpaces)],
-                    UserRecordWithNewSpaces = lists:keystore(
-                        <<"spaces">>, 1, UserRecord, {<<"spaces">>, NewSpaces}
+                    UserRecordWithNewSpaces = user_data_backend:modify_relations(
+                        add, <<"spaces">>, SpaceId, UserRecord
                     ),
                     gui_async:push_updated(<<"user">>, UserRecordWithNewSpaces),
                     % This space was created by this user -> he has view privs.

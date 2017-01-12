@@ -146,11 +146,8 @@ create_record(<<"group">>, Data) ->
                     % been synchronized yet, so for now just add the group to
                     % the list of user's groups.
                     UserRecord = user_data_backend:user_record(UserAuth, UserId),
-                    UserGroups = proplists:get_value(<<"groups">>, UserRecord),
-                    % Make sure that the group is not duplicated.
-                    NewGroups = [GroupId | lists:delete(GroupId, UserGroups)],
-                    UserRecordWithNewGroups = lists:keystore(
-                        <<"groups">>, 1, UserRecord, {<<"groups">>, NewGroups}
+                    UserRecordWithNewGroups = user_data_backend:modify_relations(
+                        add, <<"groups">>, GroupId, UserRecord
                     ),
                     gui_async:push_updated(<<"user">>, UserRecordWithNewGroups),
                     % This group was created by this user -> he has view privs.
