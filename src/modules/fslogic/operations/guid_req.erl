@@ -30,8 +30,8 @@
 %%--------------------------------------------------------------------
 -spec resolve_guid(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
-resolve_guid(_Ctx, File) ->
-    Guid = file_ctx:get_guid_const(File),
+resolve_guid(_UserCtx, FileCtx) ->
+    Guid = file_ctx:get_guid_const(FileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #uuid{uuid = Guid}
@@ -45,9 +45,9 @@ resolve_guid(_Ctx, File) ->
 -spec get_parent(user_ctx:ctx(), fslogic_worker:file()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
-get_parent(Ctx, File) ->
-    UserId = user_ctx:get_user_id(Ctx),
-    {ParentGuid, _File2} = file_ctx:get_parent_guid(File, UserId),
+get_parent(UserCtx, FileCtx) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserId),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #dir{uuid = ParentGuid}
@@ -60,8 +60,8 @@ get_parent(Ctx, File) ->
 %%--------------------------------------------------------------------
 -spec get_file_path(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_file_path(Ctx, File) ->
-    {Path, _File2} = file_ctx:get_logical_path(File, Ctx),
+get_file_path(UserCtx, FileCtx) ->
+    {Path, _FileCtx2} = file_ctx:get_logical_path(FileCtx, UserCtx),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #file_path{value = Path}

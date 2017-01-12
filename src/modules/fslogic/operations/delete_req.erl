@@ -32,12 +32,12 @@
 -spec delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
-delete(Ctx, File, Silent) ->
-    case file_ctx:is_dir(File) of
-        {true, File2} ->
-            delete_dir(Ctx, File2, Silent);
-        {false, File2} ->
-            delete_file(Ctx, File2, Silent)
+delete(UserCtx, FileCtx, Silent) ->
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            delete_dir(UserCtx, FileCtx2, Silent);
+        {false, FileCtx2} ->
+            delete_file(UserCtx, FileCtx2, Silent)
     end.
 
 %%%===================================================================
@@ -46,23 +46,23 @@ delete(Ctx, File, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_impl(Ctx, File, Silent) with permission check
+%% @equiv delete_impl(UserCtx, FileCtx, Silent) with permission check
 %%--------------------------------------------------------------------
 -spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {?list_container, 2}]).
-delete_dir(Ctx, File, Silent) ->
-    check_if_empty_and_delete(Ctx, File, Silent).
+delete_dir(UserCtx, FileCtx, Silent) ->
+    check_if_empty_and_delete(UserCtx, FileCtx, Silent).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_impl(Ctx, File, Silent) with permission check
+%% @equiv delete_impl(UserCtx, FileCtx, Silent) with permission check
 %%--------------------------------------------------------------------
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}]).
-delete_file(Ctx, File, Silent) ->
-    delete_impl(Ctx, File, Silent).
+delete_file(UserCtx, FileCtx, Silent) ->
+    delete_impl(UserCtx, FileCtx, Silent).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -72,11 +72,11 @@ delete_file(Ctx, File, Silent) ->
 %%--------------------------------------------------------------------
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
-check_if_empty_and_delete(Ctx, File, Silent)  ->
-    case file_ctx:get_file_children(File, Ctx, 0, 1) of
-        {[], File2} ->
-            delete_impl(Ctx, File2, Silent);
-        {_, _File2} ->
+check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
+    case file_ctx:get_file_children(FileCtx, UserCtx, 0, 1) of
+        {[], FileCtx2} ->
+            delete_impl(UserCtx, FileCtx2, Silent);
+        {_, _FileCtx2} ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
     end.
 
@@ -89,6 +89,6 @@ check_if_empty_and_delete(Ctx, File, Silent)  ->
 %%--------------------------------------------------------------------
 -spec delete_impl(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
-delete_impl(Ctx, File, Silent) ->
-    fslogic_deletion_worker:request_deletion(Ctx, File, Silent),
+delete_impl(UserCtx, FileCtx, Silent) ->
+    fslogic_deletion_worker:request_deletion(UserCtx, FileCtx, Silent),
     #fuse_response{status = #status{code = ?OK}}.

@@ -33,12 +33,12 @@
 %%--------------------------------------------------------------------
 -spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(), Prefetch :: boolean()) ->
     fslogic_worker:fuse_response().
-synchronize_block(Ctx, File, undefined, Prefetch) ->
-    FileEntry = file_ctx:get_uuid_entry_const(File),
+synchronize_block(UserCtx, FileCtx, undefined, Prefetch) ->
+    FileEntry = file_ctx:get_uuid_entry_const(FileCtx),
     Size = fslogic_blocks:get_file_size(FileEntry), %todo pass file_ctx
-    synchronize_block(Ctx, File, #file_block{offset = 0, size = Size}, Prefetch);
-synchronize_block(Ctx, File, Block, Prefetch) ->
-    ok = replica_synchronizer:synchronize(Ctx, File, Block, Prefetch),
+    synchronize_block(UserCtx, FileCtx, #file_block{offset = 0, size = Size}, Prefetch);
+synchronize_block(UserCtx, FileCtx, Block, Prefetch) ->
+    ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -49,13 +49,13 @@ synchronize_block(Ctx, File, Block, Prefetch) ->
 %%--------------------------------------------------------------------
 -spec synchronize_block_and_compute_checksum(user_ctx:ctx(),
     file_ctx:ctx(), fslogic_blocks:block()) -> fslogic_worker:fuse_response().
-synchronize_block_and_compute_checksum(Ctx, File, Range = #file_block{offset = Offset, size = Size}) ->
-    SessId = user_ctx:get_session_id(Ctx),
-    FileGuid = file_ctx:get_guid_const(File),
+synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{offset = Offset, size = Size}) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read), %todo do not use lfm, operate on fslogic directly
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
 
-    FileEntry = file_ctx:get_uuid_entry_const(File),
+    FileEntry = file_ctx:get_uuid_entry_const(FileCtx),
     Checksum = crypto:hash(md4, Data),
     LocationToSend =
         fslogic_file_location:prepare_location_for_client(FileEntry, Range), %todo pass file_ctx
@@ -69,8 +69,8 @@ synchronize_block_and_compute_checksum(Ctx, File, Range = #file_block{offset = O
 %%--------------------------------------------------------------------
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_file_distribution(_Ctx, File) ->
-    {Locations, _File2} = file_ctx:get_file_location_ids(File),
+get_file_distribution(_UserCtx, FileCtx) ->
+    {Locations, _FileCtx2} = file_ctx:get_file_location_ids(FileCtx),
     ProviderDistributions = lists:map( %todo VFS-2813 support multi location
         fun(LocationId) ->
             {ok, #document{value = #file_location{
@@ -87,12 +87,12 @@ get_file_distribution(_Ctx, File) ->
     #file_distribution{provider_file_distributions = ProviderDistributions}}.
 
 %%--------------------------------------------------------------------
-%% @equiv replicate_file(Ctx, {uuid, Uuid}, Block, 0)
+%% @equiv replicate_file(UserCtx, {uuid, Uuid}, Block, 0)
 %%--------------------------------------------------------------------
 -spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block()) ->
     fslogic_worker:provider_response().
-replicate_file(Ctx, File, Block) ->
-    replicate_file(Ctx, File, Block, 0).
+replicate_file(UserCtx, FileCtx, Block) ->
+    replicate_file(UserCtx, FileCtx, Block, 0).
 
 %%%===================================================================
 %%% Internal functions
@@ -109,20 +109,20 @@ replicate_file(Ctx, File, Block) ->
     fslogic_blocks:block(), non_neg_integer()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-replicate_file(Ctx, File, Block, Offset) ->
+replicate_file(UserCtx, FileCtx, Block, Offset) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    case file_ctx:is_dir(File) of
-        {true, File2} ->
-            case file_ctx:get_file_children(File2, Ctx, Offset, Chunk) of
-                {Children, _File3} when is_list(Children) andalso length(Children) < Chunk ->
-                    replicate_children(Ctx, Children, Block),
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
+                {Children, _FileCtx3} when is_list(Children) andalso length(Children) < Chunk ->
+                    replicate_children(UserCtx, Children, Block),
                     #provider_response{status = #status{code = ?OK}};
-                {Children, File3} when is_list(Children) ->
-                    replicate_children(Ctx, Children, Block),
-                    replicate_file(Ctx, File3, Block, Offset + Chunk)
+                {Children, FileCtx3} when is_list(Children) ->
+                    replicate_children(UserCtx, Children, Block),
+                    replicate_file(UserCtx, FileCtx3, Block, Offset + Chunk)
             end;
-        {false, File2} ->
-            #fuse_response{status = Status} = synchronize_block(Ctx, File2, Block, false),
+        {false, FileCtx2} ->
+            #fuse_response{status = Status} = synchronize_block(UserCtx, FileCtx2, Block, false),
             #provider_response{status = Status}
     end.
 
@@ -133,8 +133,8 @@ replicate_file(Ctx, File, Block, Offset) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()], fslogic_blocks:block()) -> ok.
-replicate_children(Ctx, Children, Block) ->
+replicate_children(UserCtx, Children, Block) ->
     utils:pforeach(
-        fun(Child) ->
-            replicate_file(Ctx, Child, Block)
+        fun(ChildCtx) ->
+            replicate_file(UserCtx, ChildCtx, Block)
         end, Children).

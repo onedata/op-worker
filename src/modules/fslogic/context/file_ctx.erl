@@ -73,20 +73,20 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec new_by_path(user_ctx:ctx(), path()) -> ctx().
-new_by_path(Ctx, Path) ->
+new_by_path(UserCtx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    case session:is_special(user_ctx:get_session_id(Ctx)) of
+    case session:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             throw({invalid_request, <<"Path resolution requested in the context of special session."
             " You may only operate on guids in this context.">>});
         false ->
             case Tokens of
                 [<<"/">>] ->
-                    UserId = user_ctx:get_user_id(Ctx),
+                    UserId = user_ctx:get_user_id(UserCtx),
                     UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
                     #file_ctx{canonical_path = filename:join(Tokens), guid = UserRootDirGuid};
                 [<<"/">>, SpaceName | Rest] ->
-                    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(Ctx),
+                    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
                     case lists:keyfind(SpaceName, 2, Spaces) of
                         false ->
                             throw(?ENOENT);
@@ -212,12 +212,12 @@ get_canonical_path(#file_ctx{canonical_path = Path}) ->
 %%--------------------------------------------------------------------
 -spec get_logical_path(ctx(), user_ctx:ctx()) ->
     {file_meta:path(), ctx()}.
-get_logical_path(FileCtx, Ctx) ->
+get_logical_path(FileCtx, UserCtx) ->
     case get_canonical_path(FileCtx) of
         {<<"/">>, FileCtx2} ->
             {<<"/">>, FileCtx2};
         {Path, FileCtx2} ->
-            {SpaceName, FileCtx3} = get_space_name(FileCtx2, Ctx),
+            {SpaceName, FileCtx3} = get_space_name(FileCtx2, UserCtx),
             {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:tokenize_skipping_dots(Path),
             LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
             {LogicalPath, FileCtx3}
@@ -246,7 +246,7 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(ctx(), undefined | od_user:id()) -> {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
-get_parent(FileCtx = #file_ctx{parent = undefined}, UserId) ->
+get_parent(FileCtx = #file_ctx{parent = undefined}, UserId) -> %todo use user_ctx
     {Doc, FileCtx2} = get_file_doc(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
@@ -306,9 +306,9 @@ get_storage_file_id(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_space_name(ctx(), user_ctx:ctx()) ->
     {od_space:name() | od_space:alias(), ctx()}.
-get_space_name(FileCtx = #file_ctx{space_name = undefined}, Ctx) ->
+get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     SpaceId = get_space_id_const(FileCtx),
-    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(Ctx),
+    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
 
     case lists:keyfind(SpaceId, 1, Spaces) of
         false ->
@@ -326,8 +326,8 @@ get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
 %%--------------------------------------------------------------------
 -spec get_aliased_name(ctx(), user_ctx:ctx()) ->
     {file_meta:name(), ctx()} | no_return().
-get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, Ctx) ->
-    SessionIsNotSpecial = (not session:is_special(user_ctx:get_session_id(Ctx))),
+get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
+    SessionIsNotSpecial = (not session:is_special(user_ctx:get_session_id(UserCtx))),
     case is_space_dir_const(FileCtx) andalso SessionIsNotSpecial of
         false ->
             case get_file_doc(FileCtx) of
@@ -337,10 +337,10 @@ get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, Ctx) ->
                     throw(ErrorResponse)
             end;
         true ->
-            {Name, FileCtx2} = get_space_name(FileCtx, Ctx),
+            {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
             {Name, FileCtx2#file_ctx{file_name = Name}}
     end;
-get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _Ctx) ->
+get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
     {FileName, FileCtx}.
 
 %%--------------------------------------------------------------------
@@ -412,10 +412,10 @@ get_child(FileCtx, Name, UserId) ->
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
     {Children :: [ctx()] | {error, term()}, NewFileCtx :: ctx()}.
-get_file_children(FileCtx, Ctx, Offset, Limit) ->
-    case is_user_root_dir_const(FileCtx, Ctx) of
+get_file_children(FileCtx, UserCtx, Offset, Limit) ->
+    case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(Ctx),
+            #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
 
             Children =
                 case Offset < length(Spaces) of

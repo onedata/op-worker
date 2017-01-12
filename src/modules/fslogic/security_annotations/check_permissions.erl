@@ -59,8 +59,8 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
         _ ->
             Args
     end;
-before_advice(#annotation{data = AccessDefinitions}, _M, _F, Args = [Ctx, File | _]) ->
-    UserId = user_ctx:get_user_id(Ctx),
+before_advice(#annotation{data = AccessDefinitions}, _M, _F, Args = [UserCtx, File | _]) ->
+    UserId = user_ctx:get_user_id(UserCtx),
     ShareId = file_ctx:get_share_id_const(File),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, ShareId, Args, #{}, #{}, #{}),
     lists:foreach(fun check_rule_and_cache_result/1, ExpandedAccessDefinitions),

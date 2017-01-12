@@ -34,8 +34,8 @@
 -spec get_transfer_encoding(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
-get_transfer_encoding(_Ctx, File) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+get_transfer_encoding(_UserCtx, FileCtx) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_KEY) of %todo pass file_ctx
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
@@ -51,11 +51,11 @@ get_transfer_encoding(_Ctx, File) ->
 -spec set_transfer_encoding(user_ctx:ctx(), file_ctx:ctx(),
     xattr:transfer_encoding()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
-set_transfer_encoding(Ctx, File, Encoding) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+set_transfer_encoding(UserCtx, FileCtx, Encoding) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, ?TRANSFER_ENCODING_KEY, Encoding) of %todo pass file_ctx
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
+            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
@@ -70,8 +70,8 @@ set_transfer_encoding(Ctx, File, Encoding) ->
 -spec get_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
-get_cdmi_completion_status(_Ctx, File) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+get_cdmi_completion_status(_UserCtx, FileCtx) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_KEY) of %todo pass file_ctx
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Val}};
@@ -88,8 +88,8 @@ get_cdmi_completion_status(_Ctx, File) ->
 -spec set_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx(),
     xattr:cdmi_completion_status()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
-set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+set_cdmi_completion_status(_UserCtx, FileCtx, CompletionStatus) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus) of %todo pass file_ctx
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
@@ -105,8 +105,8 @@ set_cdmi_completion_status(_Ctx, File, CompletionStatus) ->
 -spec get_mimetype(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
-get_mimetype(_Ctx, File) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+get_mimetype(_UserCtx, FileCtx) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, ?MIMETYPE_KEY) of %todo pass file_ctx
         {ok, Val} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
@@ -122,11 +122,11 @@ get_mimetype(_Ctx, File) ->
 -spec set_mimetype(user_ctx:ctx(), file_ctx:ctx(),
     xattr:mimetype()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
-set_mimetype(Ctx, File, Mimetype) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+set_mimetype(UserCtx, FileCtx, Mimetype) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, ?MIMETYPE_KEY, Mimetype) of
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
+            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}

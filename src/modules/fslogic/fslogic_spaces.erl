@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Util functions for managing spaces.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_spaces).
@@ -49,11 +49,11 @@ get_space_id({guid, FileGUID}) ->
 %% Returns space ID for given file path.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id(CTX :: user_ctx:ctx(), FilePath :: file_meta:path()) ->
+-spec get_space_id(UserCtx :: user_ctx:ctx(), FilePath :: file_meta:path()) ->
     SpaceId :: binary().
-get_space_id(CTX, Path) ->
+get_space_id(UserCtx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    case fslogic_path:get_canonical_file_entry(CTX, Tokens) of
+    case fslogic_path:get_canonical_file_entry(UserCtx, Tokens) of
         {path, P} = FileEntry ->
             {ok, Tokens1} = fslogic_path:tokenize_skipping_dots(P),
             case Tokens1 of

@@ -30,12 +30,12 @@
 %%--------------------------------------------------------------------
 -spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) ->
     fslogic_worker:provider_response().
-check_perms(Ctx, Uuid, read) ->
-    check_perms_read(Ctx, Uuid);
-check_perms(Ctx, Uuid, write) ->
-    check_perms_write(Ctx, Uuid);
-check_perms(Ctx, Uuid, rdwr) ->
-    check_perms_rdwr(Ctx, Uuid).
+check_perms(UserCtx, FileCtx, read) ->
+    check_perms_read(UserCtx, FileCtx);
+check_perms(UserCtx, FileCtx, write) ->
+    check_perms_write(UserCtx, FileCtx);
+check_perms(UserCtx, FileCtx, rdwr) ->
+    check_perms_rdwr(UserCtx, FileCtx).
 
 %%%===================================================================
 %%% Internal functions
@@ -50,7 +50,7 @@ check_perms(Ctx, Uuid, rdwr) ->
 -spec check_perms_read(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
-check_perms_read(_Ctx, _File) ->
+check_perms_read(_UserCtx, _FileCtx) ->
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -62,7 +62,7 @@ check_perms_read(_Ctx, _File) ->
 -spec check_perms_write(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-check_perms_write(_Ctx, _File) ->
+check_perms_write(_UserCtx, _FileCtx) ->
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -74,5 +74,5 @@ check_perms_write(_Ctx, _File) ->
 -spec check_perms_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
-check_perms_rdwr(_Ctx, _File) ->
+check_perms_rdwr(_UserCtx, _FileCtx) ->
     #provider_response{status = #status{code = ?OK}}.

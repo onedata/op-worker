@@ -36,20 +36,20 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec rename(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
-    TargetParentFile :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     fslogic_worker:fuse_response().
-rename(Ctx, SourceFile, TargetParentFile, TargetName) ->
-    {CanonicalSourcePath, SourceFile2} = file_ctx:get_canonical_path(SourceFile),
-    {_, CanonicalTargetPath} = get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName),
+rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
+    {CanonicalSourcePath, SourceFileCtx2} = file_ctx:get_canonical_path(SourceFileCtx),
+    {_, CanonicalTargetPath} = get_logical_and_canonical_path_of_remote_file(UserCtx, TargetParentFileCtx, TargetName),
 
     case CanonicalSourcePath =:= CanonicalTargetPath of
         true ->
-            Guid = file_ctx:get_guid_const(SourceFile2),
+            Guid = file_ctx:get_guid_const(SourceFileCtx2),
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_renamed{
                     new_uuid = Guid}};
         false ->
-            rename(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName)
+            rename(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName)
     end.
 
 %%%===================================================================
@@ -62,16 +62,16 @@ rename(Ctx, SourceFile, TargetParentFile, TargetName) ->
 %% Executes proper rename case to check permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec rename(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
-    CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+-spec rename(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?delete, 2}]).
-rename(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) ->
-    case file_ctx:is_dir(SourceFile) of
-        {true, SourceFile2} ->
-            rename_dir(Ctx, SourceFile2, CanonicalTargetPath, TargetParentFile, TargetName);
-        {false, SourceFile2} ->
-            rename_file(Ctx, SourceFile2, CanonicalTargetPath, TargetParentFile, TargetName)
+rename(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
+    case file_ctx:is_dir(SourceFileCtx) of
+        {true, SourceFileCtx2} ->
+            rename_dir(UserCtx, SourceFileCtx2, CanonicalTargetPath, TargetParentFileCtx, TargetName);
+        {false, SourceFileCtx2} ->
+            rename_file(UserCtx, SourceFileCtx2, CanonicalTargetPath, TargetParentFileCtx, TargetName)
     end.
 
 %%--------------------------------------------------------------------
@@ -80,14 +80,14 @@ rename(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) ->
 %% Checks necessary permissions and renames directory
 %% @end
 %%--------------------------------------------------------------------
--spec rename_dir(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
-    CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(),
+-spec rename_dir(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
 -check_permissions([{?delete_subcontainer, {parent, 2}}]).
-rename_dir(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) ->
-    case check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) of
+rename_dir(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
+    case check_dir_preconditions(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) of
         ok ->
-            rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName, ?DIRECTORY_TYPE);
+            rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE);
         Error ->
             Error
     end.
@@ -98,14 +98,14 @@ rename_dir(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) -
 %% Checks necessary permissions and renames file
 %% @end
 %%--------------------------------------------------------------------
--spec rename_file(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
-    CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(),
+-spec rename_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
 -check_permissions([{?delete_object, {parent, 2}}]).
-rename_file(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) ->
-    case check_reg_preconditions(Ctx, TargetParentFile, TargetName) of
+rename_file(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
+    case check_reg_preconditions(UserCtx, TargetParentFileCtx, TargetName) of
         ok ->
-            rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName, ?REGULAR_FILE_TYPE);
+            rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE);
         Error ->
             Error
     end.
@@ -116,16 +116,16 @@ rename_file(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) 
 %% Checks preconditions for renaming directory.
 %% @end
 %%--------------------------------------------------------------------
--spec check_dir_preconditions(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
-    CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+-spec check_dir_preconditions(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     fslogic_worker:fuse_response().
-check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName) ->
-    SessId = user_ctx:get_session_id(Ctx),
-    case moving_into_itself(SourceFile, CanonicalTargetPath) of
+check_dir_preconditions(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    case moving_into_itself(SourceFileCtx, CanonicalTargetPath) of
         true ->
             #fuse_response{status = #status{code = ?EINVAL}};
         false ->
-            Guid = file_ctx:get_guid_const(TargetParentFile),
+            Guid = file_ctx:get_guid_const(TargetParentFileCtx),
             case logical_file_manager:get_child_attr(SessId, Guid, TargetName) of
                 {error, ?ENOENT} ->
                     ok;
@@ -143,11 +143,11 @@ check_dir_preconditions(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, 
 %% @end
 %%--------------------------------------------------------------------
 -spec check_reg_preconditions(user_ctx:ctx(),
-    TargetParentFile :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     ok | fslogic_worker:fuse_response().
-check_reg_preconditions(Ctx, TargetParentFile, TargetName) ->
-    SessId = user_ctx:get_session_id(Ctx),
-    TargetParentGuid = file_ctx:get_guid_const(TargetParentFile),
+check_reg_preconditions(UserCtx, TargetParentFileCtx, TargetName) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
     case logical_file_manager:get_child_attr(SessId, TargetParentGuid, TargetName) of
         {error, ?ENOENT} ->
             ok;
@@ -163,10 +163,10 @@ check_reg_preconditions(Ctx, TargetParentFile, TargetName) ->
 %% Checks if renamed entry is one of target path parents.
 %% @end
 %%--------------------------------------------------------------------
--spec moving_into_itself(SourceFile :: file_ctx:ctx(),
+-spec moving_into_itself(SourceFileCtx :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path()) -> boolean().
-moving_into_itself(SourceFile, CanonicalTargetPath) ->
-    {CanonicalSourcePath, _SourceFile2} = file_ctx:get_canonical_path(SourceFile),
+moving_into_itself(SourceFileCtx, CanonicalTargetPath) ->
+    {CanonicalSourcePath, _SourceFileCtx2} = file_ctx:get_canonical_path(SourceFileCtx),
     SourceTokens = fslogic_path:split(CanonicalSourcePath),
     TargetTokens = fslogic_path:split(CanonicalTargetPath),
     lists:prefix(SourceTokens, TargetTokens).
@@ -177,14 +177,14 @@ moving_into_itself(SourceFile, CanonicalTargetPath) ->
 %% Selects proper rename function - trivial, inter-space or inter-provider.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_select(user_ctx:ctx(), SourceFile :: file_ctx:ctx(),
-    CanonicalTargetPath :: file_meta:path(), TargetParentFile :: file_ctx:ctx(),
+-spec rename_select(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(), FileType :: file_meta:type()) ->
     fslogic_worker:fuse_response().
-rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName, FileType) ->
-    SourceSpaceId = file_ctx:get_space_id_const(SourceFile),
-    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFile),
-    {LogicalTargetPath, _} = get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName),
+rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName, FileType) ->
+    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
+    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
+    {LogicalTargetPath, _} = get_logical_and_canonical_path_of_remote_file(UserCtx, TargetParentFileCtx, TargetName),
 
 
 
@@ -192,14 +192,14 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
         true ->
             case FileType of
                 ?REGULAR_FILE_TYPE ->
-                    rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath);
+                    rename_file_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath);
                 ?DIRECTORY_TYPE ->
-                    rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath)
+                    rename_dir_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath)
             end;
         false ->
-            #document{value = #od_user{}} = user_ctx:get_user(Ctx),
-            Auth = user_ctx:get_auth(Ctx),
-            UserId = user_ctx:get_user_id(Ctx),
+            #document{value = #od_user{}} = user_ctx:get_user(UserCtx),
+            Auth = user_ctx:get_auth(UserCtx),
+            UserId = user_ctx:get_user_id(UserCtx),
             TargetProvidersSet = get_supporting_providers(SourceSpaceId, Auth, UserId),
             SourceProvidersSet = get_supporting_providers(TargetSpaceId, Auth, UserId),
             CommonProvidersSet = ordsets:intersection(TargetProvidersSet, SourceProvidersSet),
@@ -207,12 +207,12 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
                 true ->
                     case FileType of
                         ?REGULAR_FILE_TYPE ->
-                            rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath);
+                            rename_file_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath);
                         ?DIRECTORY_TYPE ->
-                            rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath)
+                            rename_dir_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath)
                     end;
                 false ->
-                    rename_interprovider(Ctx, SourceFile, LogicalTargetPath)
+                    rename_interprovider(UserCtx, SourceFileCtx, LogicalTargetPath)
             end
     end.
 
@@ -225,8 +225,8 @@ rename_select(Ctx, SourceFile, CanonicalTargetPath, TargetParentFile, TargetName
 -spec rename_file_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
-rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
+rename_file_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
+    rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -237,8 +237,8 @@ rename_file_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
 -spec rename_dir_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
-rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
+rename_dir_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
+    rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -248,8 +248,8 @@ rename_dir_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 -spec rename_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
-rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
+rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
+    rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -260,8 +260,8 @@ rename_trivial(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
 -spec rename_file_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
-rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
+rename_file_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
+    rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -272,8 +272,8 @@ rename_file_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) 
 -spec rename_dir_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
-rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath).
+rename_dir_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
+    rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -283,18 +283,18 @@ rename_dir_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) -
 %%--------------------------------------------------------------------
 -spec rename_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
-rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
-    SourceEntry = file_ctx:get_uuid_entry_const(SourceFile), %todo pass file_ctx
-    SessId = user_ctx:get_session_id(Ctx),
+rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
+    SourceEntry = file_ctx:get_uuid_entry_const(SourceFileCtx), %todo pass file_ctx
+    SessId = user_ctx:get_session_id(UserCtx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
     {ok, SourceParent} = file_meta:get_parent(SourceEntry),
     {_, CanonicalTargetParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
     {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
     {ok, #document{key = SourceUUID} = SourceDoc} = file_meta:get(SourceEntry),
-    UserId = user_ctx:get_user_id(Ctx),
+    UserId = user_ctx:get_user_id(UserCtx),
     SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
-    TargetSpaceId = fslogic_spaces:get_space_id(Ctx, TargetParentPath),
+    TargetSpaceId = fslogic_spaces:get_space_id(UserCtx, TargetParentPath),
     RenamedEntries = case SourceDoc of
         #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
             %todo VFS-2813 support multi location , get all snapshots: VFS-1966
@@ -330,7 +330,7 @@ rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
                         lists:foreach(
                             fun(Snapshot) ->
                                 maybe_sync_file(SessId, Snapshot, SourceSpaceId, TargetSpaceId),
-                                ok = sfm_utils:rename_on_storage(Ctx, TargetSpaceId, Snapshot)
+                                ok = sfm_utils:rename_on_storage(UserCtx, TargetSpaceId, Snapshot)
                             end, FileSnapshots),
                         {Acc, undefined};
                     (_Dir, Acc) ->
@@ -361,7 +361,7 @@ rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
                 fun(Snapshot) ->
                     maybe_sync_file(SessId, Snapshot, SourceSpaceId, TargetSpaceId),
                     ok = file_meta:rename(Snapshot, {path, NewPath}),
-                    ok = sfm_utils:rename_on_storage(Ctx, TargetSpaceId, Snapshot)
+                    ok = sfm_utils:rename_on_storage(UserCtx, TargetSpaceId, Snapshot)
                 end, FileSnapshots),
 
             {ok, NewName} = file_meta:get_name({uuid, Uuid}),
@@ -394,9 +394,9 @@ rename_interspace(Ctx, SourceFile, CanonicalTargetPath, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 -spec rename_interprovider(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) ->
     fslogic_worker:fuse_response().
-rename_interprovider(Ctx, SourceFile, LogicalTargetPath) ->
-    SourceEntry = file_ctx:get_uuid_entry_const(SourceFile), %todo remove and use file_ctx
-    SessId = user_ctx:get_session_id(Ctx),
+rename_interprovider(UserCtx, SourceFileCtx, LogicalTargetPath) ->
+    SourceEntry = file_ctx:get_uuid_entry_const(SourceFileCtx), %todo remove and use file_ctx
+    SessId = user_ctx:get_session_id(UserCtx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
     {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
@@ -407,7 +407,7 @@ rename_interprovider(Ctx, SourceFile, LogicalTargetPath) ->
     {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
 
     SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
-    TargetSpaceId = fslogic_spaces:get_space_id(Ctx, TargetParentPath),
+    TargetSpaceId = fslogic_spaces:get_space_id(UserCtx, TargetParentPath),
 
     RenamedEntries = for_each_child_file(SourceEntry,
         fun(#document{key = SourceUuid} = Doc, Acc) ->
@@ -435,14 +435,14 @@ rename_interprovider(Ctx, SourceFile, LogicalTargetPath) ->
             ok = logical_file_manager:update_times(SessId, {guid, TargetGuid}, ATime, MTime, CTime),
             ok = logical_file_manager:unlink(SessId, {guid, SourceGuid}, false),
             {NewName, NewParentPath} = fslogic_path:basename_and_parent(NewPath),
-            TargetParentGuid = fslogic_uuid:ensure_guid(Ctx, {path, NewParentPath}),
+            TargetParentGuid = fslogic_uuid:ensure_guid(UserCtx, {path, NewParentPath}),
             [{SourceGuid, TargetGuid, TargetParentGuid, NewName} | Acc]
         end, []),
 
     ok = create_phantom_files(RenamedEntries, SourceSpaceId, TargetSpaceId),
 
     CurrTime = erlang:system_time(seconds),
-    ok = fslogic_times:update_mtime_ctime(SourceParent, user_ctx:get_user_id(Ctx), CurrTime),
+    ok = fslogic_times:update_mtime_ctime(SourceParent, user_ctx:get_user_id(UserCtx), CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, LogicalTargetPath}, undefined, undefined, CurrTime),
     ok = logical_file_manager:update_times(SessId, {path, TargetParentPath}, undefined, CurrTime, CurrTime),
 
@@ -695,18 +695,18 @@ maybe_sync_file(SessId, Entry, OldSpaceId, NewSpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_logical_and_canonical_path_of_remote_file(user_ctx:ctx(),
-    TargetParentFile :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     {LogicalPath:: file_meta:path(), CanonicalPath :: file_meta:path()}.
-get_logical_and_canonical_path_of_remote_file(Ctx, TargetParentFile, TargetName) ->
-    SessId = user_ctx:get_session_id(Ctx),
-    Guid = file_ctx:get_guid_const(TargetParentFile),
+get_logical_and_canonical_path_of_remote_file(UserCtx, TargetParentFileCtx, TargetName) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    Guid = file_ctx:get_guid_const(TargetParentFileCtx),
     {ok, LogicalTargetParentPath} = logical_file_manager:get_file_path(SessId, Guid),
     case fslogic_path:tokenize_skipping_dots(LogicalTargetParentPath) of
         {ok, [<<"/">>]} ->
             throw(?EPERM);
         {ok, [<<"/">>, _SpaceName | Rest]} ->
             LogicalPath = filename:join(LogicalTargetParentPath, TargetName),
-            SpaceId = file_ctx:get_space_id_const(TargetParentFile),
+            SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
             CanonicalPath = filename:join([<<"/">>, SpaceId | Rest] ++ [TargetName]),
             {LogicalPath, CanonicalPath}
     end.

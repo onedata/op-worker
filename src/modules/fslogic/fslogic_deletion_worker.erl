@@ -35,9 +35,9 @@
 %%--------------------------------------------------------------------
 -spec request_deletion(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     ok.
-request_deletion(Ctx, File, Silent) ->
+request_deletion(UserCtx, FileCtx, Silent) ->
     ok = worker_proxy:call(fslogic_deletion_worker,
-        {fslogic_deletion_request, Ctx, File, Silent}).
+        {fslogic_deletion_request, UserCtx, FileCtx, Silent}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -88,20 +88,20 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle({fslogic_deletion_request, Ctx, File, Silent}) ->
-    SessId = user_ctx:get_session_id(Ctx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
 
     case file_handles:exists(FileUuid) of
         true ->
-            UserId = user_ctx:get_user_id(Ctx),
-            {ParentFile, File3} = file_ctx:get_parent(File, UserId),
+            UserId = user_ctx:get_user_id(UserCtx),
+            {ParentFile, FileCtx2} = file_ctx:get_parent(FileCtx, UserId),
             NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
 
             #fuse_response{status = #status{code = ?OK}} = rename_req:rename(
-                Ctx, File3, ParentFile, NewName),
+                UserCtx, FileCtx2, ParentFile, NewName),
             ok = file_handles:mark_to_remove(FileUuid),
-            fslogic_event:emit_file_renamed_to_client(File3, NewName, SessId);
+            fslogic_event:emit_file_renamed_to_client(FileCtx2, NewName, SessId);
         false ->
             remove_file_and_file_meta(FileUuid, SessId, Silent) %todo pass file_ctx
     end,

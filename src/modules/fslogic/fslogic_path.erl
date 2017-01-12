@@ -153,12 +153,12 @@ gen_storage_path(Entry) ->
 %%--------------------------------------------------------------------
 -spec get_canonical_file_entry(user_ctx:ctx(), [file_meta:path()]) ->
     file_meta:entry() | no_return().
-get_canonical_file_entry(Ctx, Tokens) ->
-    case session:is_special(user_ctx:get_session_id(Ctx)) of
+get_canonical_file_entry(UserCtx, Tokens) ->
+    case session:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             {path, fslogic_path:join(Tokens)};
         false ->
-            get_canonical_file_entry_for_user(Ctx, Tokens)
+            get_canonical_file_entry_for_user(UserCtx, Tokens)
     end.
 
 %%--------------------------------------------------------------------
@@ -167,11 +167,11 @@ get_canonical_file_entry(Ctx, Tokens) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_canonical_file_entry_for_user(user_ctx:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
-get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
-    UserId = user_ctx:get_user_id(Ctx),
+get_canonical_file_entry_for_user(UserCtx, [<<?DIRECTORY_SEPARATOR>>]) ->
+    UserId = user_ctx:get_user_id(UserCtx),
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
-get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
-    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(Ctx),
+get_canonical_file_entry_for_user(UserCtx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
+    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
     case lists:keyfind(SpaceName, 2, Spaces) of
         false ->
             throw(?ENOENT);
@@ -179,7 +179,7 @@ get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | To
             {path, fslogic_path:join(
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | Tokens])}
     end;
-get_canonical_file_entry_for_user(_Ctx, Tokens) ->
+get_canonical_file_entry_for_user(_UserCtx, Tokens) ->
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens]),
     {path, Path}.
 

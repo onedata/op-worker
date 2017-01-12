@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
+-export([get_file_ctx/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
 
 %%%===================================================================
 %%% API
@@ -31,19 +31,19 @@
 %% specific file, the function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file(user_ctx:ctx(), fslogic_worker:request()) ->
+-spec get_file_ctx(user_ctx:ctx(), fslogic_worker:request()) ->
     file_ctx:ctx() | undefined.
-get_file(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    file_ctx:new_by_path(Ctx, Path);
-get_file(_Ctx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
+get_file_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
+    file_ctx:new_by_path(UserCtx, Path);
+get_file_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     file_ctx:new_by_guid(FileGuid);
-get_file(_Ctx, #fuse_request{}) ->
+get_file_ctx(_UserCtx, #fuse_request{}) ->
     undefined;
-get_file(_Ctx, #provider_request{context_guid = FileGuid}) ->
+get_file_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->
     file_ctx:new_by_guid(FileGuid);
-get_file(_Ctx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
+get_file_ctx(_UserCtx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
     file_ctx:new_by_guid(FileGuid);
-get_file(_Ctx, Req) ->
+get_file_ctx(_UserCtx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
@@ -54,22 +54,22 @@ get_file(_Ctx, Req) ->
 %%--------------------------------------------------------------------
 -spec get_target_providers(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:request()) ->
     [oneprovider:id()].
-get_target_providers(_Ctx, undefined, _) ->
+get_target_providers(_UserCtx, undefined, _) ->
     [oneprovider:get_provider_id()];
-get_target_providers(Ctx, File, #fuse_request{
+get_target_providers(UserCtx, File, #fuse_request{
     fuse_request = #resolve_guid{}
 }) ->
-    get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(Ctx, File, #fuse_request{fuse_request = #file_request{
+    get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
     file_request = #get_file_attr{}
 }}) ->
-    get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(_Ctx, _File, #provider_request{provider_request = #replicate_file{
+    get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(_UserCtx, _File, #provider_request{provider_request = #replicate_file{
     provider_id = ProviderId
 }}) ->
     [ProviderId];
-get_target_providers(Ctx, File, _Req) ->
-    get_target_providers_for_file(Ctx, File).
+get_target_providers(UserCtx, File, _Req) ->
+    get_target_providers_for_file(UserCtx, File).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -79,27 +79,27 @@ get_target_providers(Ctx, File, _Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_target_guid_if_file_is_phantom(file_ctx:ctx(), fslogic_worker:request()) ->
-    {NewFile :: file_ctx:ctx(), NewRequest :: fslogic_worker:request()}.
+    {NewFileCtx :: file_ctx:ctx(), NewRequest :: fslogic_worker:request()}.
 update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
-update_target_guid_if_file_is_phantom(File, Request) ->
-    try file_ctx:get_file_doc(file_ctx:fill_guid(File)) of
-        {{error, {not_found, file_meta}}, File2} ->
+update_target_guid_if_file_is_phantom(FileCtx, Request) ->
+    try file_ctx:get_file_doc(file_ctx:fill_guid(FileCtx)) of
+        {{error, {not_found, file_meta}}, FileCtx2} ->
             try
-                {uuid, Uuid} = file_ctx:get_uuid_entry_const(File2),
+                {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx2),
                 {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
                 NewRequest = change_target_guid(Request, NewGuid),
-                NewFile = file_ctx:new_by_guid(NewGuid),
-                {NewFile, NewRequest}
+                NewFileCtx = file_ctx:new_by_guid(NewGuid),
+                {NewFileCtx, NewRequest}
             catch
                 _:_ ->
-                    {File2, Request}
+                    {FileCtx2, Request}
             end;
-        {_, NewFile} ->
-            {NewFile, Request}
+        {_, NewFileCtx} ->
+            {NewFileCtx, Request}
     catch
         _:_ ->
-            {File, Request}
+            {FileCtx, Request}
     end.
 
 %%%===================================================================
@@ -114,13 +114,13 @@ update_target_guid_if_file_is_phantom(File, Request) ->
 %%--------------------------------------------------------------------
 -spec get_target_providers_for_attr_req(user_ctx:ctx(), file_ctx:ctx()) ->
     [oneprovider:id()].
-get_target_providers_for_attr_req(Ctx, File) ->
+get_target_providers_for_attr_req(UserCtx, FileCtx) ->
     %todo TL handle guids stored in file_force_proxy
-    case file_ctx:is_space_dir_const(File) of
+    case file_ctx:is_space_dir_const(FileCtx) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
-            get_target_providers_for_file(Ctx, File)
+            get_target_providers_for_file(UserCtx, FileCtx)
     end.
 
 %%--------------------------------------------------------------------
@@ -131,14 +131,14 @@ get_target_providers_for_attr_req(Ctx, File) ->
 %%--------------------------------------------------------------------
 -spec get_target_providers_for_file(user_ctx:ctx(), file_ctx:ctx()) ->
     [oneprovider:id()].
-get_target_providers_for_file(Ctx, File) ->
-    case file_ctx:is_user_root_dir_const(File, Ctx) of
+get_target_providers_for_file(UserCtx, FileCtx) ->
+    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
-            SpaceId = file_ctx:get_space_id_const(File),
-            Auth = user_ctx:get_auth(Ctx),
-            UserId = user_ctx:get_user_id(Ctx),
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            Auth = user_ctx:get_auth(UserCtx),
+            UserId = user_ctx:get_user_id(UserCtx),
             {ok, #document{value = #od_space{providers = ProviderIds}}} =
                 od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_ctx
 

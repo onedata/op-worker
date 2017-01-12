@@ -36,7 +36,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns newly created user Ctx for given session ID
+%% Returns newly created user context for given session ID
 %% @end
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
@@ -54,9 +54,9 @@ new(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
-get_user(Ctx) ->
-    Auth = get_auth(Ctx),
-    UserId = get_user_id(Ctx),
+get_user(UserCtx) ->
+    Auth = get_auth(UserCtx),
+    UserId = get_user_id(UserCtx),
     {ok, User} = od_user:get_or_fetch(Auth, UserId), %todo remove after fixing race
     User.
 

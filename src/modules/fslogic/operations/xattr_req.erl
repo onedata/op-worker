@@ -31,54 +31,54 @@
 %%--------------------------------------------------------------------
 -spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(), Inherited :: boolean()) ->
     fslogic_worker:provider_response().
-get_xattr(Ctx, File, ?ACL_KEY, _Inherited) ->
-    case acl_req:get_acl(Ctx, File) of
+get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
+    case acl_req:get_acl(UserCtx, FileCtx) of
         #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Acl}} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?ACL_KEY, value = fslogic_acl:from_acl_to_json_format(Acl)}};
         Other ->
             Other
     end;
-get_xattr(Ctx, File, ?MIMETYPE_KEY, _Inherited) ->
-    case cdmi_metadata_req:get_mimetype(Ctx, File) of
+get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
+    case cdmi_metadata_req:get_mimetype(UserCtx, FileCtx) of
         #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Mimetype}} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?MIMETYPE_KEY, value = Mimetype}};
         Other ->
             Other
     end;
-get_xattr(Ctx, File, ?TRANSFER_ENCODING_KEY, _Inherited) ->
-    case cdmi_metadata_req:get_transfer_encoding(Ctx, File) of
+get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
+    case cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx) of
         #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Encoding}} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}};
         Other ->
             Other
     end;
-get_xattr(Ctx, File, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
-    case cdmi_metadata_req:get_cdmi_completion_status(Ctx, File) of
+get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
+    case cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx) of
         #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Completion}} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?CDMI_COMPLETION_STATUS_KEY, value = Completion}};
         Other ->
             Other
     end;
-get_xattr(Ctx, File, ?JSON_METADATA_KEY, Inherited) ->
-    case metadata_req:get_metadata(Ctx, File, json, [], Inherited) of
+get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
+    case metadata_req:get_metadata(UserCtx, FileCtx, json, [], Inherited) of
         #provider_response{status = #status{code = ?OK}, provider_response = #metadata{value = JsonTerm}} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?JSON_METADATA_KEY, value = JsonTerm}};
         Other ->
             Other
     end;
-get_xattr(Ctx, File, ?RDF_METADATA_KEY, Inherited) ->
-    case metadata_req:get_metadata(Ctx, File, rdf, [], Inherited) of
+get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
+    case metadata_req:get_metadata(UserCtx, FileCtx, rdf, [], Inherited) of
         #provider_response{status = #status{code = ?OK}, provider_response = #metadata{value = Rdf}} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?RDF_METADATA_KEY, value = Rdf}};
         Other ->
             Other
     end;
-get_xattr(_Ctx, _, <<?CDMI_PREFIX_STR, _/binary>>, _) ->
+get_xattr(_UserCtx, _, <<?CDMI_PREFIX_STR, _/binary>>, _) ->
     throw(?EPERM);
-get_xattr(_Ctx, _, <<?ONEDATA_PREFIX_STR, _/binary>>, _) ->
+get_xattr(_UserCtx, _, <<?ONEDATA_PREFIX_STR, _/binary>>, _) ->
     throw(?EPERM);
-get_xattr(Ctx, File, XattrName, Inherited) ->
-    get_custom_xattr(Ctx, File, XattrName, Inherited).
+get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
+    get_custom_xattr(UserCtx, FileCtx, XattrName, Inherited).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -87,24 +87,24 @@ get_xattr(Ctx, File, XattrName, Inherited) ->
 %%--------------------------------------------------------------------
 -spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
-set_xattr(Ctx, File, #xattr{name = ?ACL_KEY, value = Acl}) ->
-    acl_req:set_acl(Ctx, File, #acl{value = fslogic_acl:from_json_format_to_acl(Acl)});
-set_xattr(Ctx, File, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}) ->
-    cdmi_metadata_req:set_mimetype(Ctx, File, Mimetype);
-set_xattr(Ctx, File, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}) ->
-    cdmi_metadata_req:set_transfer_encoding(Ctx, File, Encoding);
-set_xattr(Ctx, File, #xattr{name = ?CDMI_COMPLETION_STATUS_KEY, value = Completion}) ->
-    cdmi_metadata_req:set_cdmi_completion_status(Ctx, File, Completion);
-set_xattr(Ctx, File, #xattr{name = ?JSON_METADATA_KEY, value = Json}) ->
-    metadata_req:set_metadata(Ctx, File, json, Json, []);
-set_xattr(Ctx, File, #xattr{name = ?RDF_METADATA_KEY, value = Rdf}) ->
-    metadata_req:set_metadata(Ctx, File, rdf, Rdf, []);
-set_xattr(_Ctx, _, #xattr{name = <<?CDMI_PREFIX_STR, _/binary>>}) ->
+set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}) ->
+    acl_req:set_acl(UserCtx, FileCtx, #acl{value = fslogic_acl:from_json_format_to_acl(Acl)});
+set_xattr(UserCtx, FileCtx, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}) ->
+    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Mimetype);
+set_xattr(UserCtx, FileCtx, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}) ->
+    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Encoding);
+set_xattr(UserCtx, FileCtx, #xattr{name = ?CDMI_COMPLETION_STATUS_KEY, value = Completion}) ->
+    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Completion);
+set_xattr(UserCtx, FileCtx, #xattr{name = ?JSON_METADATA_KEY, value = Json}) ->
+    metadata_req:set_metadata(UserCtx, FileCtx, json, Json, []);
+set_xattr(UserCtx, FileCtx, #xattr{name = ?RDF_METADATA_KEY, value = Rdf}) ->
+    metadata_req:set_metadata(UserCtx, FileCtx, rdf, Rdf, []);
+set_xattr(_UserCtx, _, #xattr{name = <<?CDMI_PREFIX_STR, _/binary>>}) ->
     throw(?EPERM);
-set_xattr(_Ctx, _, #xattr{name = <<?ONEDATA_PREFIX_STR, _/binary>>}) ->
+set_xattr(_UserCtx, _, #xattr{name = <<?ONEDATA_PREFIX_STR, _/binary>>}) ->
     throw(?EPERM);
-set_xattr(Ctx, File, Xattr) ->
-    set_custom_xattr(Ctx, File, Xattr).
+set_xattr(UserCtx, FileCtx, Xattr) ->
+    set_custom_xattr(UserCtx, FileCtx, Xattr).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,11 +114,11 @@ set_xattr(Ctx, File, Xattr) ->
 -spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
-remove_xattr(Ctx, File, XattrName) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+remove_xattr(UserCtx, FileCtx, XattrName) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_ctx
         ok ->
-            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
+            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -132,8 +132,8 @@ remove_xattr(Ctx, File, XattrName) ->
 -spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(), ShowInternal :: boolean()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
-list_xattr(_Ctx, File, Inherited, ShowInternal) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:list(FileUuid, Inherited) of
         {ok, XattrList} ->
             FilteredXattrList = case ShowInternal of
@@ -165,8 +165,8 @@ list_xattr(_Ctx, File, Inherited, ShowInternal) ->
 -spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(), Inherited :: boolean()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
-get_custom_xattr(_Ctx, File, XattrName, Inherited) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, XattrName, Inherited) of %todo pass file_ctx
         {ok, XattrValue} ->
             #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = XattrName, value = XattrValue}};
@@ -183,11 +183,11 @@ get_custom_xattr(_Ctx, File, XattrName, Inherited) ->
 -spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
-set_custom_xattr(Ctx, File, #xattr{name = XattrName, value = XattrValue}) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+set_custom_xattr(UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_ctx
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
+            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

@@ -50,10 +50,10 @@ get_provider_to_reroute([ProviderId | _]) ->
 %%--------------------------------------------------------------------
 -spec reroute(user_ctx:ctx(), oneprovider:id(), fslogic_worker:request()) ->
     fslogic_worker:response().
-reroute(Ctx, ProviderId, Request) ->
+reroute(UserCtx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
-    SessId = user_ctx:get_session_id(Ctx),
-    Auth = user_ctx:get_auth(Ctx),
+    SessId = user_ctx:get_session_id(UserCtx),
+    Auth = user_ctx:get_auth(UserCtx),
     {ok, #server_message{message_body = MsgBody}} =
         provider_communicator:communicate(#client_message{
             message_body = Request,

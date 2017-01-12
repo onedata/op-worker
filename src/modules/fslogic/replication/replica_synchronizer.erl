@@ -38,7 +38,7 @@
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
     boolean()) -> ok.
-synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = RequestedSize}, Prefetch) ->
+synchronize(UserCtx, FileCtx, Block = #file_block{offset = RequestedOffset, size = RequestedSize}, Prefetch) ->
     EnlargedBlock =
         case Prefetch of
             true ->
@@ -46,8 +46,8 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
             _ ->
                 Block
         end,
-    trigger_prefetching(Ctx, File, EnlargedBlock, Prefetch),
-    {Locations, File2} = file_ctx:get_file_location_ids(File),
+    trigger_prefetching(UserCtx, FileCtx, EnlargedBlock, Prefetch),
+    {Locations, FileCtx2} = file_ctx:get_file_location_ids(FileCtx),
     LocationDocs = lists:map(
         fun(LocationId) ->
             {ok, Loc} = file_location:get(LocationId),
@@ -57,10 +57,10 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
     [#document{value = #file_location{version_vector = LocalVersion}}] = [Loc || Loc = #document{value = #file_location{provider_id = Id}}
         <- LocationDocs, Id =:= LocalProviderId],
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [EnlargedBlock]),
-    FileGuid = file_ctx:get_guid_const(File2),
-    SpaceId = file_ctx:get_space_id_const(File2),
-    UserId = user_ctx:get_user_id(Ctx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File2),
+    FileGuid = file_ctx:get_guid_const(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    UserId = user_ctx:get_user_id(UserCtx),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(
@@ -77,7 +77,7 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
                     end
                 end, Blocks)
         end, ProvidersAndBlocks),
-    SessId = user_ctx:get_session_id(Ctx),
+    SessId = user_ctx:get_session_id(UserCtx),
     fslogic_event:emit_file_location_changed({uuid, FileUuid}, [SessId], Block). %todo pass file_ctx
 
 %%%===================================================================
@@ -91,10 +91,10 @@ synchronize(Ctx, File, Block = #file_block{offset = RequestedOffset, size = Requ
 %%--------------------------------------------------------------------
 -spec trigger_prefetching(user_ctx:ctx(), file_ctx:ctx(),
     fslogic_blocks:block(), boolean()) -> ok.
-trigger_prefetching(Ctx, File, Block, true) ->
+trigger_prefetching(UserCtx, FileCtx, Block, true) ->
     case contains_trigger_byte(Block) of
         true ->
-            spawn(prefetch_data_fun(Ctx, File, Block)),
+            spawn(prefetch_data_fun(UserCtx, FileCtx, Block)),
             ok;
         false ->
             ok
@@ -108,14 +108,14 @@ trigger_prefetching(_, _, _, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec prefetch_data_fun(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block()) -> function().
-prefetch_data_fun(Ctx, File, #file_block{offset = O, size = _S}) ->
+prefetch_data_fun(UserCtx, FileCtx, #file_block{offset = O, size = _S}) ->
     fun() ->
         try
-            replica_synchronizer:synchronize(Ctx, File, #file_block{offset = O, size = ?PREFETCH_SIZE}, false)
+            replica_synchronizer:synchronize(UserCtx, FileCtx, #file_block{offset = O, size = ?PREFETCH_SIZE}, false)
         catch
             _:Error ->
                 ?error_stacktrace("Prefetching of ~p at offset ~p with size ~p failed due to: ~p",
-                    [file_ctx:get_guid_const(File), O, ?PREFETCH_SIZE, Error])
+                    [file_ctx:get_guid_const(FileCtx), O, ?PREFETCH_SIZE, Error])
         end
     end.
 

@@ -30,24 +30,24 @@
 %% and location.
 %% @end
 %%--------------------------------------------------------------------
--spec create_file(user_ctx:ctx(), ParentFile :: file_ctx:ctx(), Name :: file_meta:name(),
+-spec create_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
-create_file(Ctx, ParentFile, Name, Mode, _Flag) ->
-    File = create_file_doc(Ctx, ParentFile, Name, Mode),
-    SessId = user_ctx:get_session_id(Ctx),
-    SpaceId = file_ctx:get_space_id_const(ParentFile),
+create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
+    File = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    SessId = user_ctx:get_session_id(UserCtx),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
     {StorageId, FileId} = sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_ctx
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFile),
-    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
+    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
+    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(ParentFile),
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(ParentFileCtx),
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
     {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
     {ok, HandleId} = save_handle(SessId, Handle),
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_no_permission_check(Ctx, File),
+    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_no_permission_check(UserCtx, File),
     FileGuid = file_ctx:get_guid_const(File),
     FileLocation = #file_location{
         uuid = FileGuid,
@@ -72,21 +72,21 @@ create_file(Ctx, ParentFile, Name, Mode, _Flag) ->
 %% Creates file. Returns its attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec make_file(user_ctx:ctx(), ParentFile :: file_ctx:ctx(), Name :: file_meta:name(),
+-spec make_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
-make_file(Ctx, ParentFile, Name, Mode) ->
-    File = create_file_doc(Ctx, ParentFile, Name, Mode),
+make_file(UserCtx, ParentFileCtx, Name, Mode) ->
+    FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
 
-    SessId = user_ctx:get_session_id(Ctx),
-    SpaceId = file_ctx:get_space_id_const(ParentFile),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+    SessId = user_ctx:get_session_id(UserCtx),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_ctx
 
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFile),
-    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
+    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
+    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
 
-    attr_req:get_file_attr_no_permission_check(Ctx, File).
+    attr_req:get_file_attr_no_permission_check(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,11 +96,11 @@ make_file(Ctx, ParentFile, Name, Mode) ->
 -spec get_file_location(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
-get_file_location(_Ctx, File) ->
-    {#document{key = StorageId}, File2} = file_ctx:get_storage_doc(File),
+get_file_location(_UserCtx, FileCtx) ->
+    {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {#document{value = #file_location{
         blocks = Blocks, file_id = FileId
-    }}, File3} = file_ctx:get_local_file_location_doc(File2),
+    }}, File3} = file_ctx:get_local_file_location_doc(FileCtx2),
     FileGuid = file_ctx:get_guid_const(File3),
     SpaceId = file_ctx:get_space_id_const(File3),
 
@@ -117,18 +117,18 @@ get_file_location(_Ctx, File) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv open_file(Ctx, File, CreateHandle) with permission check
+%% @doc @equiv open_file(UserCtx, FileCtx, CreateHandle) with permission check
 %% depending on the open flag
 %% @end
 %%--------------------------------------------------------------------
--spec open_file(user_ctx:ctx(), File :: fslogic_worker:file(),
+-spec open_file(user_ctx:ctx(), FileCtx :: fslogic_worker:file(),
     OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file(Ctx, File, read) ->
-    open_file_for_read(Ctx, File);
-open_file(Ctx, File, write) ->
-    open_file_for_write(Ctx, File);
-open_file(Ctx, File, rdwr) ->
-    open_file_for_rdwr(Ctx, File).
+open_file(UserCtx, FileCtx, read) ->
+    open_file_for_read(UserCtx, FileCtx);
+open_file(UserCtx, FileCtx, write) ->
+    open_file_for_write(UserCtx, FileCtx);
+open_file(UserCtx, FileCtx, rdwr) ->
+    open_file_for_rdwr(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -137,10 +137,10 @@ open_file(Ctx, File, rdwr) ->
 %%--------------------------------------------------------------------
 -spec release(user_ctx:ctx(), file_ctx:ctx(), HandleId :: binary()) ->
     fslogic_worker:fuse_response().
-release(Ctx, File, HandleId) ->
-    SessId = user_ctx:get_session_id(Ctx),
+release(UserCtx, FileCtx, HandleId) ->
+    SessId = user_ctx:get_session_id(UserCtx),
     ok = session:remove_handle(SessId, HandleId),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     ok = file_handles:register_release(FileUuid, SessId, 1), %todo pass file_ctx
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -156,14 +156,14 @@ release(Ctx, File, HandleId) ->
 %%--------------------------------------------------------------------
 -spec create_file_doc(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta:mode()) ->
     ChildFile :: file_ctx:ctx().
-create_file_doc(Ctx, ParentFile, Name, Mode)  ->
+create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     File = #document{value = #file_meta{
         name = Name,
         type = ?REGULAR_FILE_TYPE,
         mode = Mode,
-        uid = user_ctx:get_user_id(Ctx)
+        uid = user_ctx:get_user_id(UserCtx)
     }},
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFile),
+    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
     {ok, FileUuid} = file_meta:create(ParentFileEntry, File), %todo pass file_ctx
 
     CTime = erlang:system_time(seconds),
@@ -171,7 +171,7 @@ create_file_doc(Ctx, ParentFile, Name, Mode)  ->
         mtime = CTime, atime = CTime, ctime = CTime
     }}),
 
-    SpaceId = file_ctx:get_space_id_const(ParentFile),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, SpaceId)).
 
 %%--------------------------------------------------------------------
@@ -192,33 +192,33 @@ save_handle(SessId, Handle) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_impl(Ctx, File, read, CreateHandle) with permission check
+%% @equiv open_file_impl(UserCtx, FileCtx, read, CreateHandle) with permission check
 %%--------------------------------------------------------------------
 -spec open_file_for_read(user_ctx:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
-open_file_for_read(Ctx, File) ->
-    open_file_impl(Ctx, File, read).
+open_file_for_read(UserCtx, FileCtx) ->
+    open_file_impl(UserCtx, FileCtx, read).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_impl(Ctx, File, write, CreateHandle) with permission check
+%% @equiv open_file_impl(UserCtx, FileCtx, write, CreateHandle) with permission check
 %%--------------------------------------------------------------------
 -spec open_file_for_write(user_ctx:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-open_file_for_write(Ctx, File) ->
-    open_file_impl(Ctx, File, write).
+open_file_for_write(UserCtx, FileCtx) ->
+    open_file_impl(UserCtx, FileCtx, write).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_impl(Ctx, File, rdwr, CreateHandle) with permission check
+%% @equiv open_file_impl(UserCtx, FileCtx, rdwr, CreateHandle) with permission check
 %%--------------------------------------------------------------------
 -spec open_file_for_rdwr(user_ctx:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
-open_file_for_rdwr(Ctx, File) ->
-    open_file_impl(Ctx, File, rdwr).
+open_file_for_rdwr(UserCtx, FileCtx) ->
+    open_file_impl(UserCtx, FileCtx, rdwr).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -226,17 +226,17 @@ open_file_for_rdwr(Ctx, File) ->
 %% Opens a file and returns a handle to it.
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_impl(user_ctx:ctx(), File :: file_ctx:ctx(),
+-spec open_file_impl(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file_impl(Ctx, File, Flag) ->
-    {StorageDoc, File2} = file_ctx:get_storage_doc(File),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File2),
+open_file_impl(UserCtx, FileCtx, Flag) ->
+    {StorageDoc, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
     {#document{value = #file_location{
         file_id = FileId}
-    }, File3} = file_ctx:get_local_file_location_doc(File2),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(File3),
-    SessId = user_ctx:get_session_id(Ctx),
-    ShareId = file_ctx:get_share_id_const(File3),
+    }, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2),
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx3),
+    SessId = user_ctx:get_session_id(UserCtx),
+    ShareId = file_ctx:get_share_id_const(FileCtx3),
 
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, StorageDoc, FileId, ShareId), %todo pass file_ctx
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
