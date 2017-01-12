@@ -148,7 +148,7 @@ create_record(<<"group">>, Data) ->
                     UserRecord = user_data_backend:user_record(UserAuth, UserId),
                     UserGroups = proplists:get_value(<<"groups">>, UserRecord),
                     % Make sure that the group is not duplicated.
-                    NewGroups = UserGroups -- [GroupId] ++ [GroupId],
+                    NewGroups = [GroupId | lists:delete(GroupId, UserGroups)],
                     UserRecordWithNewGroups = lists:keystore(
                         <<"groups">>, 1, UserRecord, {<<"groups">>, NewGroups}
                     ),

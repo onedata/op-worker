@@ -150,7 +150,7 @@ create_record(<<"space">>, Data) ->
                     UserRecord = user_data_backend:user_record(UserAuth, UserId),
                     UserSpaces = proplists:get_value(<<"spaces">>, UserRecord),
                     % Make sure that the space is not duplicated.
-                    NewSpaces = UserSpaces -- [SpaceId] ++ [SpaceId],
+                    NewSpaces = [SpaceId | lists:delete(SpaceId, UserSpaces)],
                     UserRecordWithNewSpaces = lists:keystore(
                         <<"spaces">>, 1, UserRecord, {<<"spaces">>, NewSpaces}
                     ),
