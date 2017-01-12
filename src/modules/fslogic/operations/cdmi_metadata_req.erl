@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests operating on file's cdmi metadata.
+%%% This module is responsible for handing requests operating on file's cdmi
+%%% metadata.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_metadata_req).
@@ -19,8 +20,8 @@
 
 %% API
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
-    get_cdmi_completion_status/2, set_cdmi_completion_status/3,
-    get_mimetype/2, set_mimetype/3]).
+    get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
+    set_mimetype/3]).
 
 %%%===================================================================
 %%% API
@@ -131,7 +132,3 @@ set_mimetype(UserCtx, FileCtx, Mimetype) ->
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

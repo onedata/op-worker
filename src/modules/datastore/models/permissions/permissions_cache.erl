@@ -23,7 +23,7 @@
     list/0, model_init/0, 'after'/5, before/4]).
 
 %% API
--export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate_permissions_cache/2,
+-export([check_permission/1, cache_permission/2, invalidate_permissions_cache/0, invalidate/2,
     remote_invalidation/4]).
 
 %% Key of document that keeps information about whole cache status.
@@ -227,12 +227,12 @@ invalidate_permissions_cache() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Clears all permissions from cache and inits process of invalidating permissions by other providers
-%% when change of a document is propagated.
+%% Clears all permissions from cache and inits process of invalidating
+%% permissions by other providers when change of a document is propagated.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_permissions_cache(Model :: model_behaviour:model_type(), Key :: datastore:ext_key()) -> ok.
-invalidate_permissions_cache(Model, Key) ->
+-spec invalidate(Model :: model_behaviour:model_type(), Key :: datastore:ext_key()) -> ok.
+invalidate(Model, Key) ->
     invalidate_permissions_cache(),
 
     MC = Model:model_init(),

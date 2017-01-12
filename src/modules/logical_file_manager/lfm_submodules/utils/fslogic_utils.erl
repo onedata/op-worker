@@ -54,8 +54,3 @@ call_fslogic(SessId, fuse_request, Request, OKHandle) ->
         {ok, #fuse_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
-

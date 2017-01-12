@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests synchronizing and getting synchronization state of files.
+%%% This module is responsible for handing requests synchronizing and getting
+%%% synchronization state of files.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(synchronization_req).
@@ -71,23 +72,23 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
     fslogic_worker:provider_response().
 get_file_distribution(_UserCtx, FileCtx) ->
     {Locations, _FileCtx2} = file_ctx:get_file_location_ids(FileCtx),
-    ProviderDistributions = lists:map( %todo VFS-2813 support multi location
-        fun(LocationId) ->
-            {ok, #document{value = #file_location{
-                provider_id = ProviderId,
-                blocks = Blocks
-            }}} = file_location:get(LocationId),
+    ProviderDistributions = lists:map(fun(LocationId) ->
+        {ok, #document{value = #file_location{
+            provider_id = ProviderId,
+            blocks = Blocks
+        }}} = file_location:get(LocationId),
 
-            #provider_file_distribution{
-                provider_id = ProviderId,
-                blocks = Blocks
-            }
-        end, Locations),
+        #provider_file_distribution{
+            provider_id = ProviderId,
+            blocks = Blocks
+        }
+    end, Locations),
     #provider_response{status = #status{code = ?OK}, provider_response =
     #file_distribution{provider_file_distributions = ProviderDistributions}}.
 
 %%--------------------------------------------------------------------
 %% @equiv replicate_file(UserCtx, {uuid, Uuid}, Block, 0)
+%% @end
 %%--------------------------------------------------------------------
 -spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block()) ->
     fslogic_worker:provider_response().
@@ -114,10 +115,10 @@ replicate_file(UserCtx, FileCtx, Block, Offset) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
             case file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Chunk) of
-                {Children, _FileCtx3} when is_list(Children) andalso length(Children) < Chunk ->
+                {Children, _FileCtx3} when length(Children) < Chunk ->
                     replicate_children(UserCtx, Children, Block),
                     #provider_response{status = #status{code = ?OK}};
-                {Children, FileCtx3} when is_list(Children) ->
+                {Children, FileCtx3} ->
                     replicate_children(UserCtx, Children, Block),
                     replicate_file(UserCtx, FileCtx3, Block, Offset + Chunk)
             end;
@@ -134,7 +135,6 @@ replicate_file(UserCtx, FileCtx, Block, Offset) ->
 %%--------------------------------------------------------------------
 -spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()], fslogic_blocks:block()) -> ok.
 replicate_children(UserCtx, Children, Block) ->
-    utils:pforeach(
-        fun(ChildCtx) ->
-            replicate_file(UserCtx, ChildCtx, Block)
-        end, Children).
+    utils:pforeach(fun(ChildCtx) ->
+        replicate_file(UserCtx, ChildCtx, Block)
+    end, Children).

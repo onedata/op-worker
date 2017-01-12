@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests operating on file extended attributes.
+%%% This module is responsible for handing requests operating on file extended
+%%% attributes.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(xattr_req).
@@ -33,43 +34,94 @@
     fslogic_worker:provider_response().
 get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
     case acl_req:get_acl(UserCtx, FileCtx) of
-        #provider_response{status = #status{code = ?OK}, provider_response = #acl{value = Acl}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?ACL_KEY, value = fslogic_acl:from_acl_to_json_format(Acl)}};
+        #provider_response{
+            status = #status{code = ?OK},
+            provider_response = #acl{value = Acl}
+        } ->
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr{
+                    name = ?ACL_KEY,
+                    value = fslogic_acl:from_acl_to_json_format(Acl)
+                }
+            };
         Other ->
             Other
     end;
 get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
     case cdmi_metadata_req:get_mimetype(UserCtx, FileCtx) of
-        #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Mimetype}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?MIMETYPE_KEY, value = Mimetype}};
+        #provider_response{
+            status = #status{code = ?OK},
+            provider_response = #mimetype{value = Mimetype}
+        } ->
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr{
+                    name = ?MIMETYPE_KEY,
+                    value = Mimetype
+                }
+            };
         Other ->
             Other
     end;
 get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
     case cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx) of
-        #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Encoding}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}};
+        #provider_response{
+            status = #status{code = ?OK},
+            provider_response = #transfer_encoding{value = Encoding}
+        } ->
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr{
+                    name = ?TRANSFER_ENCODING_KEY,
+                    value = Encoding
+                }
+            };
         Other ->
             Other
     end;
 get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
     case cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx) of
-        #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Completion}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?CDMI_COMPLETION_STATUS_KEY, value = Completion}};
+        #provider_response{
+            status = #status{code = ?OK},
+            provider_response = #cdmi_completion_status{value = Completion}
+        } ->
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr{
+                    name = ?CDMI_COMPLETION_STATUS_KEY,
+                    value = Completion}
+            };
         Other ->
             Other
     end;
 get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, json, [], Inherited) of
-        #provider_response{status = #status{code = ?OK}, provider_response = #metadata{value = JsonTerm}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?JSON_METADATA_KEY, value = JsonTerm}};
+        #provider_response{
+            status = #status{code = ?OK},
+            provider_response = #metadata{value = JsonTerm}
+        } ->
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr{
+                    name = ?JSON_METADATA_KEY,
+                    value = JsonTerm}
+            };
         Other ->
             Other
     end;
 get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, rdf, [], Inherited) of
-        #provider_response{status = #status{code = ?OK}, provider_response = #metadata{value = Rdf}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = ?RDF_METADATA_KEY, value = Rdf}};
+        #provider_response{
+            status = #status{code = ?OK},
+            provider_response = #metadata{value = Rdf}
+        } ->
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr{
+                    name = ?RDF_METADATA_KEY,
+                    value = Rdf}
+            };
         Other ->
             Other
     end;
@@ -118,7 +170,8 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_ctx
         ok ->
-            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime({uuid, FileUuid},
+                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -129,8 +182,8 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 %% Returns complete list of extended attributes' keys of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(), ShowInternal :: boolean()) ->
-    fslogic_worker:provider_response().
+-spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
+    ShowInternal :: boolean()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
@@ -147,7 +200,10 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
                             end, ?METADATA_INTERNAL_PREFIXES)
                     end, XattrList)
             end,
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr_list{names = FilteredXattrList}};
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr_list{names = FilteredXattrList}
+            };
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
@@ -162,14 +218,17 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(), Inherited :: boolean()) ->
-    fslogic_worker:provider_response().
+-spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
+    Inherited :: boolean()) -> fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, XattrName, Inherited) of %todo pass file_ctx
         {ok, XattrValue} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #xattr{name = XattrName, value = XattrValue}};
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #xattr{name = XattrName, value = XattrValue}
+            };
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
@@ -187,7 +246,8 @@ set_custom_xattr(UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue})
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_ctx
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime({uuid, FileUuid},
+                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

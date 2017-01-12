@@ -331,7 +331,7 @@ file_type(Mode) ->
 -spec get_attr(file_ctx:ctx()) -> fslogic_worker:fuse_response().
 get_attr(File) ->
     try
-        attr_req:get_file_attr_no_permission_check(
+        attr_req:get_file_attr_insecure(
             user_ctx:new(?ROOT_SESS_ID), File)
     catch
         _:Error ->

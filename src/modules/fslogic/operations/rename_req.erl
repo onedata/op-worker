@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Request for renaming files or directories
+%%% This module is responsible for handing request for renaming files or
+%%% directories
 %%% @end
 %%%-------------------------------------------------------------------
 -module(rename_req).

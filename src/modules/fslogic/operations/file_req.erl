@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests operating on file attributes.
+%%% This module is responsible for handing requests operating on file attributes.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_req).
@@ -18,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_file/5, make_file/4, get_file_location/2, open_file/3, release/3]).
+-export([create_file/5, make_file/4, get_file_location/2, open_file/3,
+    release/3]).
 
 %%%===================================================================
 %%% API
@@ -47,7 +48,7 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
     {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
     {ok, HandleId} = save_handle(SessId, Handle),
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_no_permission_check(UserCtx, File),
+    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, File),
     FileGuid = file_ctx:get_guid_const(File),
     FileLocation = #file_location{
         uuid = FileGuid,
@@ -86,7 +87,7 @@ make_file(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
     fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
 
-    attr_req:get_file_attr_no_permission_check(UserCtx, FileCtx).
+    attr_req:get_file_attr_insecure(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,7 +118,7 @@ get_file_location(_UserCtx, FileCtx) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv open_file(UserCtx, FileCtx, CreateHandle) with permission check
+%% @equiv open_file(UserCtx, FileCtx, CreateHandle) with permission check
 %% depending on the open flag
 %% @end
 %%--------------------------------------------------------------------
@@ -192,33 +193,36 @@ save_handle(SessId, Handle) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_impl(UserCtx, FileCtx, read, CreateHandle) with permission check
+%% @equiv open_file_insecure(UserCtx, FileCtx, read, CreateHandle) with permission check
+%% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_read(user_ctx:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
 open_file_for_read(UserCtx, FileCtx) ->
-    open_file_impl(UserCtx, FileCtx, read).
+    open_file_insecure(UserCtx, FileCtx, read).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_impl(UserCtx, FileCtx, write, CreateHandle) with permission check
+%% @equiv open_file_insecure(UserCtx, FileCtx, write, CreateHandle) with permission check
+%% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_write(user_ctx:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 open_file_for_write(UserCtx, FileCtx) ->
-    open_file_impl(UserCtx, FileCtx, write).
+    open_file_insecure(UserCtx, FileCtx, write).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_impl(UserCtx, FileCtx, rdwr, CreateHandle) with permission check
+%% @equiv open_file_insecure(UserCtx, FileCtx, rdwr, CreateHandle) with permission check
+%% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_rdwr(user_ctx:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
 open_file_for_rdwr(UserCtx, FileCtx) ->
-    open_file_impl(UserCtx, FileCtx, rdwr).
+    open_file_insecure(UserCtx, FileCtx, rdwr).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -226,9 +230,9 @@ open_file_for_rdwr(UserCtx, FileCtx) ->
 %% Opens a file and returns a handle to it.
 %% @end
 %%--------------------------------------------------------------------
--spec open_file_impl(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+-spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file_impl(UserCtx, FileCtx, Flag) ->
+open_file_insecure(UserCtx, FileCtx, Flag) ->
     {StorageDoc, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
     {#document{value = #file_location{

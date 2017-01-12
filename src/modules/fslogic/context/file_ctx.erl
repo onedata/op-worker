@@ -29,7 +29,6 @@
 -record(file_ctx, {
     canonical_path :: undefined | path(),
     guid :: undefined | guid(),
-    space_dir_doc :: undefined | file_meta:doc(),
     file_doc :: undefined | file_meta:doc() | {error, term()},
     parent :: undefined | ctx(),
     storage_file_id :: undefined | helpers:file_id(),
@@ -69,7 +68,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new file_ctx using file's path
+%% Creates new file context using file's path
 %% @end
 %%--------------------------------------------------------------------
 -spec new_by_path(user_ctx:ctx(), path()) -> ctx().
@@ -98,7 +97,7 @@ new_by_path(UserCtx, Path) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new file_ctx using file's guid
+%% Creates new file context using file's GUID
 %% @end
 %%--------------------------------------------------------------------
 -spec new_by_guid(guid()) -> ctx().
@@ -107,8 +106,8 @@ new_by_guid(Guid) when Guid =/= undefined ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fills guid in file context record. This function is called when we know
-%% that the file is locally supported, to ensure that file_ctx contains guid
+%% Fills GUID in file context record. This function is called when we know
+%% that the file is locally supported, to ensure that file context contains GUID
 %% in function later on, to simplify logic.
 %% @end
 %%--------------------------------------------------------------------
@@ -123,7 +122,7 @@ fill_guid(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's share_id.
+%% Returns file's share ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_share_id_const(user_ctx:ctx()) -> od_share:id() | undefined.
@@ -135,12 +134,10 @@ get_share_id_const(#file_ctx{guid = Guid}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's SpaceId
+%% Returns file's space ID
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_id_const(ctx()) -> od_space:id() | undefined.
-get_space_id_const(#file_ctx{space_dir_doc = #document{key = SpaceUuid}}) ->
-    fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid);
 get_space_id_const(#file_ctx{guid = undefined, canonical_path = Path}) ->
     case fslogic_path:split(Path) of
         [<<"/">>, SpaceId | _] ->
@@ -153,19 +150,17 @@ get_space_id_const(#file_ctx{guid = Guid}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's SpaceDir uuid
+%% Returns file's space dir UUID
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_dir_uuid_const(ctx()) -> file_meta:uuid().
-get_space_dir_uuid_const(#file_ctx{space_dir_doc = #document{key = SpaceUuid}}) ->
-    SpaceUuid;
 get_space_dir_uuid_const(FileCtx) ->
     SpaceId = get_space_id_const(FileCtx),
     fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's guid
+%% Returns file's GUID
 %% @end
 %%--------------------------------------------------------------------
 -spec get_guid_const(ctx()) -> fslogic_worker:file_guid().
@@ -175,7 +170,7 @@ get_guid_const(#file_ctx{guid = Guid}) ->
 %%--------------------------------------------------------------------
 %% @todo remove this function and pass file info wherever possible
 %% @doc
-%% Gets file uuid entry
+%% Returns file UUID entry
 %% @end
 %%--------------------------------------------------------------------
 -spec get_uuid_entry_const(ctx()) -> {uuid, file_meta:uuid()}.
@@ -185,7 +180,7 @@ get_uuid_entry_const(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's canonical path (starting with "/SpaceId/...."
+%% Returns file's canonical path (starting with "/SpaceId/...")
 %% @end
 %%--------------------------------------------------------------------
 -spec get_canonical_path(ctx()) -> {path(), ctx()}.
@@ -207,7 +202,7 @@ get_canonical_path(#file_ctx{canonical_path = Path}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's logical path (starting with "/SpaceName/...", or "/SpaceAlias/...")
+%% Returns file's logical path (starting with "/SpaceName/...", or "/SpaceAlias/...")
 %% @end
 %%--------------------------------------------------------------------
 -spec get_logical_path(ctx(), user_ctx:ctx()) ->
@@ -225,7 +220,7 @@ get_logical_path(FileCtx, UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's file_meta document.
+%% Returns file's file_meta document.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_doc(ctx()) -> {file_meta:doc() | {error, term()}, ctx()}.
@@ -242,7 +237,7 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets parent's file_ctx.
+%% Returns parent's file context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(ctx(), undefined | od_user:id()) -> {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
@@ -274,7 +269,7 @@ get_parent(FileCtx = #file_ctx{parent = Parent}, _UserId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets Guid of parent, returns undefined when the file is a root dir.
+%% Returns GUID of parent or undefined when the file is a root dir.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent_guid(ctx(), undefined | od_user:id()) -> {fslogic_worker:file_guid(), ctx()}.
@@ -290,7 +285,8 @@ get_parent_guid(FileCtx, UserId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets storage file id (the id of file on storage. In case of posix it is its path on storage)
+%% Returns storage file ID (the ID of file on storage. In case of posix it is
+%% its path on storage)
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file(), ctx()}.
@@ -301,11 +297,11 @@ get_storage_file_id(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets name (or user alias) of the space where the file is located
+%% Returns name (or user alias) of the space where the file is located
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_name(ctx(), user_ctx:ctx()) ->
-    {od_space:name() | od_space:alias(), ctx()}.
+    {od_space:name() | od_space:alias(), ctx()} | no_return().
 get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     SpaceId = get_space_id_const(FileCtx),
     #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
@@ -321,7 +317,7 @@ get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets name of file (if the file represents space dir, returns user's space alias)
+%% Returns name of the file (if the file represents space dir, returns user's space alias)
 %% @end
 %%--------------------------------------------------------------------
 -spec get_aliased_name(ctx(), user_ctx:ctx()) ->
@@ -345,7 +341,7 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets posix storage user context, holding uid and gid of file on posix storage.
+%% Returns posix storage user context, holding UID and GID of file on posix storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_posix_storage_user_context(ctx(), user_ctx:ctx()) ->
@@ -362,22 +358,18 @@ get_posix_storage_user_context(FileCtx, UserId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file atime, ctime and mtime
+%% Returns file's atime, ctime and mtime
 %% @end
 %%--------------------------------------------------------------------
--spec get_times(ctx()) -> {times:times() | {error, term()}, ctx()}.
+-spec get_times(ctx()) -> {times:times(), ctx()}.
 get_times(FileCtx) ->
     {uuid, FileUuid} = get_uuid_entry_const(FileCtx),
-    case times:get_or_default(FileUuid) of
-        {ok, Times} ->
-            {Times, FileCtx#file_ctx{times = Times}};
-        Error ->
-            {Error, FileCtx}
-    end.
+    {ok, Times} = times:get_or_default(FileUuid),
+    {Times, FileCtx#file_ctx{times = Times}}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets child of the file
+%% Returns child of the file with given name
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child(ctx(), file_meta:name(), od_user:id()) ->
@@ -407,7 +399,7 @@ get_child(FileCtx, Name, UserId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets list of file children.
+%% Returns list of file children.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
@@ -416,38 +408,32 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
-
-            Children =
-                case Offset < length(Spaces) of
-                    true ->
-                        SpacesChunk = lists:sublist(Spaces, Offset + 1, Limit),
-                        lists:map(fun({SpaceId, SpaceName}) ->
-                            SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                            new_child_by_uuid(SpaceDirUuid, SpaceName, SpaceId, undefined)
-                        end, SpacesChunk);
-                    false ->
-                        []
-                end,
-            {Children, FileCtx};
+            case Offset < length(Spaces) of
+                true ->
+                    SpacesChunk = lists:sublist(Spaces, Offset + 1, Limit),
+                    Children = lists:map(fun({SpaceId, SpaceName}) ->
+                        SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                        new_child_by_uuid(SpaceDirUuid, SpaceName, SpaceId, undefined)
+                    end, SpacesChunk),
+                    {Children, FileCtx};
+                false ->
+                    {[], FileCtx}
+            end;
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
-            case file_meta:list_children(FileDoc, Offset, Limit) of
-                {ok, ChildrenLinks} ->
-                    SpaceId = get_space_id_const(FileCtx2),
-                    ShareId = get_share_id_const(FileCtx2),
-                    Children =
-                        lists:map(fun(#child_link{name = Name, uuid = Uuid}) ->
-                            new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
-                        end, ChildrenLinks),
-                    {Children, FileCtx2};
-                Error ->
-                    {Error, FileCtx2}
-            end
+            {ok, ChildrenLinks} = file_meta:list_children(FileDoc, Offset, Limit),
+            SpaceId = get_space_id_const(FileCtx2),
+            ShareId = get_share_id_const(FileCtx2),
+            Children =
+                lists:map(fun(#child_link{name = Name, uuid = Uuid}) ->
+                    new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+                end, ChildrenLinks),
+            {Children, FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets storage document fo file's space.
+%% Returns storage document of file's space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_doc(ctx()) -> {space_storage:doc(), ctx()}.
@@ -460,7 +446,7 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets local file location for file
+%% Returns local file location for file
 %% @end
 %%--------------------------------------------------------------------
 -spec get_local_file_location_doc(ctx()) ->
@@ -474,7 +460,7 @@ get_local_file_location_doc(FileCtx = #file_ctx{local_file_location_doc = Doc}) 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file location ids
+%% Get file location IDs
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location_ids(ctx()) ->
@@ -488,7 +474,7 @@ get_file_location_ids(FileCtx = #file_ctx{location_ids = Locations}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if given argument contains file_ctx record
+%% Checks if given argument contains file context record
 %% @end
 %%--------------------------------------------------------------------
 -spec is_file_ctx_const(ctx() | term()) -> boolean().
@@ -545,7 +531,7 @@ is_root_dir_const(#file_ctx{}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if file is a root dir (any user root).
+%% Checks if file is a directory.
 %% @end
 %%--------------------------------------------------------------------
 -spec is_dir(ctx()) -> {boolean(), ctx()}.
@@ -560,7 +546,7 @@ is_dir(FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates new file_ctx using file's guid, and file name
+%% Creates new file context using file's GUID, and file name
 %% @end
 %%--------------------------------------------------------------------
 -spec new_child_by_uuid(file_meta:uuid(), file_meta:name(), od_space:id(), undefined | od_share:id()) -> ctx().
@@ -570,7 +556,7 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates new file_ctx using file's guid
+%% Creates new file context using file's guid
 %% @end
 %%--------------------------------------------------------------------
 -spec new_child_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> ctx().

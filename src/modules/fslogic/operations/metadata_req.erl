@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests operating on file's metadata.
+%%% This module is responsible for handing requests operating on file's metadata.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(metadata_req).
@@ -82,7 +82,3 @@ remove_metadata(_UserCtx, FileCtx, rdf) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     ok = custom_metadata:remove_rdf_metadata(FileUuid), %todo pass file_ctx
     #provider_response{status = #status{code = ?OK}}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

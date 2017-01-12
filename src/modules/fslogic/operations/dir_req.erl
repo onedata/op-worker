@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests operating on directories.
+%%% This module is responsible for handing requests operating on directories.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_req).
@@ -73,7 +73,3 @@ read_dir(UserCtx, FileCtx, Offset, Limit) ->
             child_links = ChildrenLinks
         }
     }.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

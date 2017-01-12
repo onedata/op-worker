@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests truncating file.
+%%% This module is responsible for handing requests for truncating file.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(truncate_req).
@@ -40,7 +40,8 @@ truncate(UserCtx, FileCtx, Size) ->
     lists:foreach(
         fun({SID, FID}) ->
             {ok, Storage} = storage:get(SID),
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FID),
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid,
+                FileUuid, Storage, FID),
             {ok, Handle} = storage_file_manager:open(SFMHandle, write),
             ok = storage_file_manager:truncate(Handle, Size)
         end, fslogic_utils:get_local_storage_file_locations({uuid, FileUuid})), %todo consider caching in file_ctx

@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests operating on file attributes.
+%%% This module is responsible for handing requests operating on file attributes.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(attr_req).
@@ -19,7 +19,8 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2, get_file_attr_no_permission_check/2, get_child_attr/3, chmod/3, update_times/5]).
+-export([get_file_attr/2, get_file_attr_insecure/2, get_child_attr/3, chmod/3,
+    update_times/5]).
 
 %%%===================================================================
 %%% API
@@ -27,23 +28,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks perms and gets file's attributes
+%% Returns file attributes with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(UserCtx, FileCtx) ->
-    get_file_attr_no_permission_check(UserCtx, FileCtx).
+    get_file_attr_insecure(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file's attributes.
+%% Returns file attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr_no_permission_check(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-get_file_attr_no_permission_check(UserCtx, FileCtx) ->
+get_file_attr_insecure(UserCtx, FileCtx) ->
     {FileDoc = #document{key = Uuid, value = #file_meta{
         type = Type, mode = Mode, provider_id = ProviderId, uid = OwnerId,
         shares = Shares}}, FileCtx2
@@ -67,7 +68,7 @@ get_file_attr_no_permission_check(UserCtx, FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetches attributes of directory's child (if exists).
+%% Returns attributes of directory child (if exists).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
@@ -93,7 +94,7 @@ chmod(UserCtx, FileCtx, Mode) ->
     % remove acl
     xattr:delete_by_name(Uuid, ?ACL_KEY),
     {ok, _} = file_meta:update({uuid, Uuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate_permissions_cache(file_meta, Uuid),
+    ok = permissions_cache:invalidate(file_meta, Uuid),
 
     fslogic_times:update_ctime({uuid, Uuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
     fslogic_event:emit_file_perm_changed(Uuid), %todo pass file_ctx
@@ -102,7 +103,7 @@ chmod(UserCtx, FileCtx, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Changes file's access times.
+%% Changes file access times.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_times(user_ctx:ctx(), file_ctx:ctx(),

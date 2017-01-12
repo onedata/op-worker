@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests related to file guid.
+%%% This module is responsible for handing requests related to file guid.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(guid_req).
@@ -66,7 +66,3 @@ get_file_path(UserCtx, FileCtx) ->
         status = #status{code = ?OK},
         provider_response = #file_path{value = Path}
     }.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

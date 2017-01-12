@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests for checking file permission.
+%%% This module is responsible for handing requests for checking file permission.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(permission_req).

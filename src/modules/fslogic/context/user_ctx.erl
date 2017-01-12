@@ -6,8 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module provides and manages user context information
-%%% such as user's credentials.
+%%% This module provides access to user context information, such as user's
+%%% credentials, along with context management functions.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(user_ctx).

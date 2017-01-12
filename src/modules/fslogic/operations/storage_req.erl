@@ -7,9 +7,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests related to storage
-%%% This module contains functions used during remote client
-%%% initialization.
+%%% This module is responsible for handing requests related to storage.
+%%% It is used during remote client initialization.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_req).

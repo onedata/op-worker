@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Request deleting file or dir.
+%%% This module is responsible for handing request deleting file or dir.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(delete_req).
@@ -46,7 +46,8 @@ delete(UserCtx, FileCtx, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_impl(UserCtx, FileCtx, Silent) with permission check
+%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check
+%% @end
 %%--------------------------------------------------------------------
 -spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
@@ -56,13 +57,14 @@ delete_dir(UserCtx, FileCtx, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_impl(UserCtx, FileCtx, Silent) with permission check
+%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check
+%% @end
 %%--------------------------------------------------------------------
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}]).
 delete_file(UserCtx, FileCtx, Silent) ->
-    delete_impl(UserCtx, FileCtx, Silent).
+    delete_insecure(UserCtx, FileCtx, Silent).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -75,7 +77,7 @@ delete_file(UserCtx, FileCtx, Silent) ->
 check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
     case file_ctx:get_file_children(FileCtx, UserCtx, 0, 1) of
         {[], FileCtx2} ->
-            delete_impl(UserCtx, FileCtx2, Silent);
+            delete_insecure(UserCtx, FileCtx2, Silent);
         {_, _FileCtx2} ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
     end.
@@ -87,8 +89,8 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_impl(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
+-spec delete_insecure(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
-delete_impl(UserCtx, FileCtx, Silent) ->
+delete_insecure(UserCtx, FileCtx, Silent) ->
     fslogic_deletion_worker:request_deletion(UserCtx, FileCtx, Silent),
     #fuse_response{status = #status{code = ?OK}}.

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% FSLogic request handlers for ProxyIO helper.
+%%% This module is responsible for handing request for ProxyIO helper.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(read_write_req).
@@ -37,10 +37,14 @@
     fslogic_worker:proxyio_response().
 read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size) ->
     #fuse_response{status = #status{code = ?OK}} =
-        synchronization_req:synchronize_block(UserCtx, FileCtx, #file_block{offset = Offset, size = Size}, false),
+        synchronization_req:synchronize_block(UserCtx, FileCtx,
+            #file_block{offset = Offset, size = Size}, false),
     {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, StorageId, FileId, read),
     {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
-    #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}}.
+    #proxyio_response{
+        status = #status{code = ?OK},
+        proxyio_response = #remote_data{data = Data}
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,8 +62,10 @@ write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
             Acc + write_all(Handle, Offset, Data, 0)
         end, 0, ByteSequences),
 
-    #proxyio_response{status = #status{code = ?OK},
-                      proxyio_response = #remote_write_result{wrote = Wrote}}.
+    #proxyio_response{
+        status = #status{code = ?OK},
+        proxyio_response = #remote_write_result{wrote = Wrote}
+    }.
 
 %%%===================================================================
 %%% Internal functions
