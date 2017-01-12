@@ -56,11 +56,17 @@ get_file(_Ctx, Req) ->
     [oneprovider:id()].
 get_target_providers(_Ctx, undefined, _) ->
     [oneprovider:get_provider_id()];
-get_target_providers(Ctx, File, #fuse_request{fuse_request = #resolve_guid{}}) ->
+get_target_providers(Ctx, File, #fuse_request{
+    fuse_request = #resolve_guid{}
+}) ->
     get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(Ctx, File, #fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) ->
+get_target_providers(Ctx, File, #fuse_request{fuse_request = #file_request{
+    file_request = #get_file_attr{}
+}}) ->
     get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(_Ctx, _File, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
+get_target_providers(_Ctx, _File, #provider_request{provider_request = #replicate_file{
+    provider_id = ProviderId
+}}) ->
     [ProviderId];
 get_target_providers(Ctx, File, _Req) ->
     get_target_providers_for_file(Ctx, File).
@@ -133,7 +139,8 @@ get_target_providers_for_file(Ctx, File) ->
             SpaceId = file_ctx:get_space_id_const(File),
             Auth = user_ctx:get_auth(Ctx),
             UserId = user_ctx:get_user_id(Ctx),
-            {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_ctx
+            {ok, #document{value = #od_space{providers = ProviderIds}}} =
+                od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_ctx
 
             case lists:member(oneprovider:get_provider_id(), ProviderIds) of
                 true ->
@@ -156,7 +163,11 @@ change_target_guid(#file_request{} = Request, Guid) ->
     Request#file_request{context_guid = Guid};
 change_target_guid(#provider_request{} = Request, Guid) ->
     Request#provider_request{context_guid = Guid};
-change_target_guid(#proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := _} = Parameters} = Request, Guid) ->
-    Request#proxyio_request{parameters = Parameters#{?PROXYIO_PARAMETER_FILE_GUID => Guid}};
+change_target_guid(#proxyio_request{
+    parameters = #{?PROXYIO_PARAMETER_FILE_GUID := _} = Parameters
+} = Request, Guid) ->
+    Request#proxyio_request{
+        parameters = Parameters#{?PROXYIO_PARAMETER_FILE_GUID => Guid}
+    };
 change_target_guid(Request, _) ->
     Request.
