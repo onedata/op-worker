@@ -106,7 +106,7 @@ ensure_guid(_, {guid, FileGuid}) ->
 ensure_guid(UserCtx, {path, Path}) when is_tuple(UserCtx) -> %todo TL use only sessionId
     ensure_guid(user_ctx:get_session_id(UserCtx), {path, Path});
 ensure_guid(SessionId, {path, Path}) ->
-    fslogic_utils:call_fslogic(SessionId, fuse_request,
+    remote_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
         fun(#uuid{uuid = Guid}) ->
             {guid, Guid}

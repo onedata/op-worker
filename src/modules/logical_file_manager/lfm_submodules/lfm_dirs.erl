@@ -36,7 +36,7 @@ mkdir(SessId, Path) ->
     {ok, DirGuid :: fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mkdir(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    fslogic_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = ParentPath},
+    remote_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = ParentPath},
         fun(#uuid{uuid = ParentGuid}) ->
             mkdir(SessId, ParentGuid, Name, Mode)
         end).
@@ -48,7 +48,7 @@ mkdir(SessId, ParentGuid, Name, undefined) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, ParentGuid, Name, Mode);
 mkdir(SessId, ParentGuid, Name, Mode) ->
-    fslogic_utils:call_fslogic(SessId, file_request, ParentGuid,
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid,
         #create_dir{name = Name, mode = Mode},
         fun(#dir{uuid = DirGuid}) ->
             {ok, DirGuid}
@@ -65,7 +65,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, file_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children{offset = Offset, size = Limit},
         fun(#file_children{child_links = List}) ->
             {ok, [{Guid_, FileName} || #child_link{uuid = Guid_, name = FileName} <- List]}
@@ -80,7 +80,7 @@ ls(SessId, FileKey, Offset, Limit) ->
     ChildName :: file_meta:name()) ->
     {ok, #file_attr{}} | logical_file_manager:error_reply().
 get_child_attr(SessId, ParentGuid, ChildName)  ->
-    fslogic_utils:call_fslogic(SessId, file_request, ParentGuid,
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid,
         #get_child_attr{name = ChildName},
         fun(Attrs) ->
             {ok, Attrs}

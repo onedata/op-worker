@@ -36,7 +36,7 @@
     storage_posix_user_context :: undefined | luma:posix_user_ctx(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
-    storage_doc :: undefined | space_storage:doc(),
+    storage_doc :: undefined | storage:doc(),
     local_file_location_doc :: undefined | file_location:doc(),
     location_ids :: undefined | [file_location:id()]
 }).

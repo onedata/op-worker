@@ -9,7 +9,7 @@
 %%% This module exports utility functions for calling fslogic.
 %%% @end
 %%%-------------------------------------------------------------------
--module(fslogic_utils).
+-module(remote_utils).
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").

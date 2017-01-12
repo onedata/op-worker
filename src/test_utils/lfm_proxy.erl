@@ -340,7 +340,7 @@ remove_share_by_guid(Worker, SessId, ShareGuid) ->
 -spec resolve_guid(node(), session:id(), file_ctx:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 resolve_guid(Worker, SessId, Path) ->
-    ?EXEC(Worker, fslogic_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = Path},
+    ?EXEC(Worker, remote_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = Path},
         fun(#uuid{uuid = Guid}) ->
             {ok, Guid}
         end)).

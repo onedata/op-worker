@@ -39,7 +39,7 @@
     ok | logical_file_manager:error_reply().
 unlink(SessId, FileEntry, Silent) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileEntry),
-    fslogic_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
+    remote_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
@@ -62,7 +62,7 @@ mv(SessId, FileKey, TargetPath) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
     {guid, TargetDirGuid} = fslogic_uuid:ensure_guid(SessId, {path, TargetDir}),
-    fslogic_utils:call_fslogic(SessId, file_request, Guid,
+    remote_utils:call_fslogic(SessId, file_request, Guid,
         #rename{target_parent_uuid = TargetDirGuid, target_name = TargetName},
         fun(#file_renamed{new_uuid = NewGuid}) ->
             {ok, NewGuid}
@@ -88,7 +88,7 @@ cp(SessId, FileKey, TargetPath) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 get_parent(SessId, FileKey) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_parent{},
         fun(#dir{uuid = ParentGuid}) ->
             {ok, ParentGuid}
@@ -102,7 +102,7 @@ get_parent(SessId, FileKey) ->
 -spec get_file_path(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGuid) ->
-    fslogic_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_path{},
         fun(#file_path{value = Path}) ->
             {ok, Path}
@@ -117,7 +117,7 @@ get_file_path(SessId, FileGuid) ->
     ok | logical_file_manager:error_reply().
 replicate_file(SessId, FileKey, ProviderId) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #replicate_file{provider_id = ProviderId},
         fun(_) -> ok end).
 
@@ -136,7 +136,7 @@ create(SessId, Path) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    fslogic_utils:call_fslogic(SessId, fuse_request,
+    remote_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
         fun(#uuid{uuid = ParentGuid}) ->
             lfm_files:create(SessId, ParentGuid, Name, Mode)
@@ -149,7 +149,7 @@ create(SessId, ParentGuid, Name, undefined) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     create(SessId, ParentGuid, Name, DefaultMode);
 create(SessId, ParentGuid, Name, Mode) ->
-    fslogic_utils:call_fslogic(SessId, file_request, ParentGuid,
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid,
         #make_file{name = Name, mode = Mode},
         fun(#file_attr{uuid = Guid}) ->
             {ok, Guid}  %todo consider returning file_attr
@@ -168,11 +168,11 @@ open(SessId, FileKey, Flag) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     ShareId = fslogic_uuid:guid_to_share_id(FileGuid),
 
-    fslogic_utils:call_fslogic(SessId, file_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_location{},
         fun(#file_location{provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId} = Location) ->
-            fslogic_utils:call_fslogic(SessId, file_request, FileGuid,
+            remote_utils:call_fslogic(SessId, file_request, FileGuid,
                 #open_file{flag = Flag},
                 fun(#file_opened{handle_id = HandleId}) ->
                     {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGuid),
@@ -212,7 +212,7 @@ release(Handle) ->
         HandleId ->
             SessionId = lfm_context:get_session_id(Handle),
             FileGuid = lfm_context:get_guid(Handle),
-            fslogic_utils:call_fslogic(SessionId, file_request,
+            remote_utils:call_fslogic(SessionId, file_request,
                 FileGuid, #release{handle_id = HandleId},
                 fun(_) -> ok end)
     end.
@@ -285,7 +285,7 @@ silent_read(FileHandle, Offset, MaxSize) ->
     ok | logical_file_manager:error_reply().
 truncate(SessId, FileKey, Size) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, file_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #truncate{size = Size},
         fun(_) ->
             ok = fslogic_event:emit_file_truncated(FileGuid, Size, SessId)
@@ -300,7 +300,7 @@ truncate(SessId, FileKey, Size) ->
     {ok, list()} | logical_file_manager:error_reply().
 get_file_distribution(SessId, FileKey) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
             Distribution =
@@ -517,7 +517,7 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     Flag = lfm_context:get_open_flag(Handle),
     SessId = lfm_context:get_session_id(Handle),
 
-    ok = fslogic_utils:call_fslogic(SessId, file_request, Guid,
+    ok = remote_utils:call_fslogic(SessId, file_request, Guid,
         #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
             prefetch = PrefetchData},
         fun(_) -> ok end),

@@ -42,7 +42,7 @@ resolve_guid(_UserCtx, FileCtx) ->
 %% Gets parent of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(user_ctx:ctx(), fslogic_worker:file()) ->
+-spec get_parent(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}]).
 get_parent(UserCtx, FileCtx) ->

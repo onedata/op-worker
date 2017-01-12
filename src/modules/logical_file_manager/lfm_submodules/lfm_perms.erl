@@ -34,7 +34,7 @@
     ok | logical_file_manager:error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, file_request, Guid,
+    remote_utils:call_fslogic(SessId, file_request, Guid,
         #change_mode{mode = NewPerms},
         fun(_) -> ok end).
 
@@ -47,7 +47,7 @@ set_perms(SessId, FileKey, NewPerms) ->
     {ok, boolean()} | logical_file_manager:error_reply().
 check_perms(SessId, FileKey, Flag) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    case fslogic_utils:call_fslogic(SessId, provider_request, Guid,
+    case remote_utils:call_fslogic(SessId, provider_request, Guid,
         #check_perms{flag = Flag}, fun(_) -> ok end)
     of
         ok ->
@@ -69,7 +69,7 @@ check_perms(SessId, FileKey, Flag) ->
     {ok, [access_control_entity()]} | logical_file_manager:error_reply().
 get_acl(SessId, FileKey) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, provider_request, Guid, #get_acl{},
+    remote_utils:call_fslogic(SessId, provider_request, Guid, #get_acl{},
         fun(#acl{value = Acl}) ->
             {ok, Acl}
         end).
@@ -84,7 +84,7 @@ get_acl(SessId, FileKey) ->
     ok | logical_file_manager:error_reply().
 set_acl(SessId, FileKey, Acl) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, provider_request, Guid,
+    remote_utils:call_fslogic(SessId, provider_request, Guid,
         #set_acl{acl = #acl{value = Acl}},
         fun(_) -> ok end).
 
@@ -97,5 +97,5 @@ set_acl(SessId, FileKey, Acl) ->
     ok | logical_file_manager:error_reply().
 remove_acl(SessId, FileKey) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    fslogic_utils:call_fslogic(SessId, provider_request, Guid, #remove_acl{},
+    remote_utils:call_fslogic(SessId, provider_request, Guid, #remove_acl{},
         fun(_) -> ok end).
