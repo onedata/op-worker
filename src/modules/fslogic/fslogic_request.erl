@@ -27,22 +27,22 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file_context record associated with request. If request does not point to
+%% Get file_ctx record associated with request. If request does not point to
 %% specific file, the function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file(user_context:ctx(), fslogic_worker:request()) ->
-    file_context:ctx() | undefined.
+-spec get_file(user_ctx:ctx(), fslogic_worker:request()) ->
+    file_ctx:ctx() | undefined.
 get_file(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    file_context:new_by_path(Ctx, Path);
+    file_ctx:new_by_path(Ctx, Path);
 get_file(_Ctx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
-    file_context:new_by_guid(FileGuid);
+    file_ctx:new_by_guid(FileGuid);
 get_file(_Ctx, #fuse_request{}) ->
     undefined;
 get_file(_Ctx, #provider_request{context_guid = FileGuid}) ->
-    file_context:new_by_guid(FileGuid);
+    file_ctx:new_by_guid(FileGuid);
 get_file(_Ctx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
-    file_context:new_by_guid(FileGuid);
+    file_ctx:new_by_guid(FileGuid);
 get_file(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -52,7 +52,7 @@ get_file(_Ctx, Req) ->
 %% Get providers capable of handling given request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers(user_context:ctx(), file_context:ctx(), fslogic_worker:request()) ->
+-spec get_target_providers(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:request()) ->
     [oneprovider:id()].
 get_target_providers(_Ctx, undefined, _) ->
     [oneprovider:get_provider_id()];
@@ -72,18 +72,18 @@ get_target_providers(Ctx, File, _Req) ->
 %% by the phantom target.
 %% @end
 %%--------------------------------------------------------------------
--spec update_target_guid_if_file_is_phantom(file_context:ctx(), fslogic_worker:request()) ->
-    {NewFile :: file_context:ctx(), NewRequest :: fslogic_worker:request()}.
+-spec update_target_guid_if_file_is_phantom(file_ctx:ctx(), fslogic_worker:request()) ->
+    {NewFile :: file_ctx:ctx(), NewRequest :: fslogic_worker:request()}.
 update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
 update_target_guid_if_file_is_phantom(File, Request) ->
-    try file_context:get_file_doc(file_context:fill_guid(File)) of
+    try file_ctx:get_file_doc(file_ctx:fill_guid(File)) of
         {{error, {not_found, file_meta}}, File2} ->
             try
-                {uuid, Uuid} = file_context:get_uuid_entry_const(File2),
+                {uuid, Uuid} = file_ctx:get_uuid_entry_const(File2),
                 {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
                 NewRequest = change_target_guid(Request, NewGuid),
-                NewFile = file_context:new_by_guid(NewGuid),
+                NewFile = file_ctx:new_by_guid(NewGuid),
                 {NewFile, NewRequest}
             catch
                 _:_ ->
@@ -106,11 +106,11 @@ update_target_guid_if_file_is_phantom(File, Request) ->
 %% Get providers capable of handling resolve_guid/get_attr request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_attr_req(user_context:ctx(), file_context:ctx()) ->
+-spec get_target_providers_for_attr_req(user_ctx:ctx(), file_ctx:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_attr_req(Ctx, File) ->
     %todo TL handle guids stored in file_force_proxy
-    case file_context:is_space_dir_const(File) of
+    case file_ctx:is_space_dir_const(File) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
@@ -123,17 +123,17 @@ get_target_providers_for_attr_req(Ctx, File) ->
 %% Get providers cappable of handling generic request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_file(user_context:ctx(), file_context:ctx()) ->
+-spec get_target_providers_for_file(user_ctx:ctx(), file_ctx:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_file(Ctx, File) ->
-    case file_context:is_user_root_dir_const(File, Ctx) of
+    case file_ctx:is_user_root_dir_const(File, Ctx) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
-            SpaceId = file_context:get_space_id_const(File),
-            Auth = user_context:get_auth(Ctx),
-            UserId = user_context:get_user_id(Ctx),
-            {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_context
+            SpaceId = file_ctx:get_space_id_const(File),
+            Auth = user_ctx:get_auth(Ctx),
+            UserId = user_ctx:get_user_id(Ctx),
+            {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_ctx
 
             case lists:member(oneprovider:get_provider_id(), ProviderIds) of
                 true ->

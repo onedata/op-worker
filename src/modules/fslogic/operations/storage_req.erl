@@ -67,7 +67,7 @@ get_configuration(SessId) ->
 %% Gets helper params based on given storage ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_params(user_context:ctx(), storage:id(),
+-spec get_helper_params(user_ctx:ctx(), storage:id(),
     ForceCL :: boolean()) -> #fuse_response{}.
 get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
     {ok, StorageDoc} = storage:get(StorageId),
@@ -83,12 +83,12 @@ get_helper_params(_Ctx, _StorageId, false = _ForceProxy) ->
 %% by UUID. File is created on behalf of the user associated with the session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_test_file(user_context:ctx(), fslogic_worker:file_guid(),
+-spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(Ctx, Guid, StorageId) ->
-    File = file_context:new_by_guid(Guid),
-    UserId = user_context:get_user_id(Ctx),
-    SpaceId = case file_context:get_space_id_const(File) of
+    File = file_ctx:new_by_guid(Guid),
+    UserId = user_ctx:get_user_id(Ctx),
+    SpaceId = case file_ctx:get_space_id_const(File) of
         undefined -> throw(?ENOENT);
         <<_/binary>> = Id -> Id
     end,
@@ -103,7 +103,7 @@ create_storage_test_file(Ctx, Guid, StorageId) ->
                 StorageDoc, HelperName),
             HelperParams = helper:get_params(Helper, ClientUserCtx),
 
-            {FileId, _NewFile} = file_context:get_storage_file_id(File),
+            {FileId, _NewFile} = file_ctx:get_storage_file_id(File),
             Dirname = fslogic_path:dirname(FileId),
             TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
@@ -129,10 +129,10 @@ create_storage_test_file(Ctx, Guid, StorageId) ->
 %% its content VERIFY_STORAGE_TEST_FILE_ATTEMPTS times.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_storage_test_file(user_context:ctx(), od_space:id(),
+-spec verify_storage_test_file(user_ctx:ctx(), od_space:id(),
     storage:id(), helpers:file_id(), FileContent :: binary()) -> #fuse_response{}.
 verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent) ->
-    UserId = user_context:get_user_id(Ctx),
+    UserId = user_ctx:get_user_id(Ctx),
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),

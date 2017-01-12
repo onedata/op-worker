@@ -28,7 +28,7 @@
 %% Check given permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(user_context:ctx(), file_context:ctx(), fslogic_worker:open_flag()) ->
+-spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) ->
     fslogic_worker:provider_response().
 check_perms(Ctx, Uuid, read) ->
     check_perms_read(Ctx, Uuid);
@@ -46,7 +46,7 @@ check_perms(Ctx, Uuid, rdwr) ->
 %% Check read permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms_read(user_context:ctx(), file_context:ctx()) ->
+-spec check_perms_read(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
 check_perms_read(_Ctx, _File) ->
@@ -57,7 +57,7 @@ check_perms_read(_Ctx, _File) ->
 %% Check write permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms_write(user_context:ctx(), file_context:ctx()) ->
+-spec check_perms_write(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 check_perms_write(_Ctx, _File) ->
@@ -68,7 +68,7 @@ check_perms_write(_Ctx, _File) ->
 %% Check rdwr permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms_rdwr(user_context:ctx(), file_context:ctx()) ->
+-spec check_perms_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
 check_perms_rdwr(_Ctx, _File) ->

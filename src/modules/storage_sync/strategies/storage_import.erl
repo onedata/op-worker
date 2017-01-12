@@ -151,7 +151,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         {false, undefined};
                     {ok, Uuid} ->
                         Guid = fslogic_uuid:uuid_to_guid(Uuid),
-                        File = file_context:new_by_guid(Guid),
+                        File = file_ctx:new_by_guid(Guid),
                         LogicalAttrsResponse_ = get_attr(File),
                         IsImported_ = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse_),
                         {IsImported_, LogicalAttrsResponse_}
@@ -164,7 +164,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         OldMode ->
                             ok;
                         NewMode ->
-%%                            fslogic_req_generic:chmod(user_context:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo deal with different posix mode for space dirs on storage vs db
+%%                            fslogic_req_generic:chmod(user_ctx:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo deal with different posix mode for space dirs on storage vs db
                             ok
                     end,
 
@@ -328,11 +328,11 @@ file_type(Mode) ->
 %% Get file attr, catching all exceptions and returning always fuse_response
 %% @end
 %%--------------------------------------------------------------------
--spec get_attr(file_context:ctx()) -> fslogic_worker:fuse_response().
+-spec get_attr(file_ctx:ctx()) -> fslogic_worker:fuse_response().
 get_attr(File) ->
     try
         attr_req:get_file_attr_no_permission_check(
-            user_context:new(?ROOT_SESS_ID), File)
+            user_ctx:new(?ROOT_SESS_ID), File)
     catch
         _:Error ->
             #fuse_response{status = fslogic_errors:gen_status_message(Error)}

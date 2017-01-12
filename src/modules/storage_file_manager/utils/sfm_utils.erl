@@ -34,13 +34,13 @@
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_storage_files(user_context:ctx(), file_meta:entry(), file_meta:posix_permissions()) ->
+-spec chmod_storage_files(user_ctx:ctx(), file_meta:entry(), file_meta:posix_permissions()) ->
     ok | no_return().
 chmod_storage_files(Ctx, File, Mode) ->  %todo use file_context
-    SessId = user_context:get_session_id(Ctx),
+    SessId = user_ctx:get_session_id(Ctx),
     case file_meta:get(File) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, user_context:get_user_id(Ctx)),
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, user_ctx:get_user_id(Ctx)),
             Results = lists:map(
                 fun({SID, FID} = Loc) ->
                     {ok, Storage} = storage:get(SID),
@@ -123,9 +123,9 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion
 %% Renames file on storage and all its locations.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_on_storage(user_context:ctx(), binary(), file_meta:entry()) -> ok.
+-spec rename_on_storage(user_ctx:ctx(), binary(), file_meta:entry()) -> ok.
 rename_on_storage(Ctx, TargetSpaceId, SourceEntry) ->
-    SessId = user_context:get_session_id(Ctx),
+    SessId = user_ctx:get_session_id(Ctx),
     {ok, #document{key = SourceUUID, value = #file_meta{mode = Mode}}} = file_meta:get(SourceEntry),
 
     lists:foreach(fun(#document{value = Location}) ->
@@ -135,7 +135,7 @@ rename_on_storage(Ctx, TargetSpaceId, SourceEntry) ->
     end, fslogic_utils:get_local_file_locations(SourceEntry)),
 
     ok = sfm_utils:chmod_storage_files(
-        user_context:new(?ROOT_SESS_ID),
+        user_ctx:new(?ROOT_SESS_ID),
         SourceEntry,
         Mode
     ).

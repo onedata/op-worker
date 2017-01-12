@@ -144,7 +144,7 @@ handle_request_and_process_response(SessId, Request) ->
     end,
 
     try %todo TL move this storage_sync logic out of here
-        Ctx = user_context:new(SessId),
+        Ctx = user_ctx:new(SessId),
         process_response(Ctx, Request, Response)
     catch
         Type2:Error2 ->
@@ -159,14 +159,14 @@ handle_request_and_process_response(SessId, Request) ->
 %%--------------------------------------------------------------------
 -spec handle_request(session:id(), request()) -> response().
 handle_request(SessId, Request) ->
-    Ctx = user_context:new(SessId),
+    Ctx = user_ctx:new(SessId),
     File = fslogic_request:get_file(Ctx, Request),
     {File2, Request2} = fslogic_request:update_target_guid_if_file_is_phantom(File, Request),
     Providers = fslogic_request:get_target_providers(Ctx, File2, Request2),
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            File3 = file_context:fill_guid(File2),
+            File3 = file_ctx:fill_guid(File2),
             handle_request_locally(Ctx, Request2, File3);
         false ->
             handle_request_remotely(Ctx, Request2, Providers)
@@ -178,7 +178,7 @@ handle_request(SessId, Request) ->
 %% Handle request locally, as it operates on locally supported entity.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request_locally(user_context:ctx(), request(), file_context:ctx()) -> response().
+-spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx()) -> response().
 handle_request_locally(Ctx, Req = #fuse_request{}, File)  ->
     handle_fuse_request(Ctx, Req, File);
 handle_request_locally(Ctx, Req = #provider_request{}, File)  ->
@@ -192,7 +192,7 @@ handle_request_locally(Ctx, Req = #proxyio_request{}, File)  ->
 %% Handle request remotely
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request_remotely(user_context:ctx(), request(), [od_provider:id()]) -> response().
+-spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
 handle_request_remotely(Ctx, Req, Providers)  ->
     ProviderId = fslogic_remote:get_provider_to_reroute(Providers),
     fslogic_remote:reroute(Ctx, ProviderId, Req).
@@ -203,7 +203,7 @@ handle_request_remotely(Ctx, Req, Providers)  ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(user_context:ctx(), fuse_request(), file_context:ctx()) ->
+-spec handle_fuse_request(user_ctx:ctx(), fuse_request(), file_ctx:ctx()) ->
     fuse_response().
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #resolve_guid{}}, File) ->
     guid_req:resolve_guid(Ctx, File);
@@ -225,7 +225,7 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #file_request{} = FileRequ
 %% Processes a file request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_file_request(user_context:ctx(), #file_request{}, file_context:ctx()) ->
+-spec handle_file_request(user_ctx:ctx(), #file_request{}, file_ctx:ctx()) ->
     fuse_response().
 handle_file_request(Ctx, #file_request{file_request = #get_file_attr{}}, File) ->
     attr_req:get_file_attr(Ctx, File);
@@ -242,7 +242,7 @@ handle_file_request(Ctx, #file_request{file_request = #create_dir{name = Name, m
 handle_file_request(Ctx, #file_request{file_request = #get_file_children{offset = Offset, size = Size}}, File) ->
     dir_req:read_dir(Ctx, File, Offset, Size);
 handle_file_request(Ctx, #file_request{file_request = #rename{target_parent_uuid = TargetParentGuid, target_name = TargetName}}, SourceFile) ->
-    TargetParentFile = file_context:new_by_guid(TargetParentGuid),
+    TargetParentFile = file_ctx:new_by_guid(TargetParentGuid),
     rename_req:rename(Ctx, SourceFile, TargetParentFile, TargetName);
 handle_file_request(Ctx, #file_request{file_request = #create_file{name = Name, flag = Flag, mode = Mode}}, ParentFile) ->
     file_req:create_file(Ctx, ParentFile, Name, Mode, Flag);
@@ -267,7 +267,7 @@ handle_file_request(Ctx, #file_request{file_request = #synchronize_block_and_com
 %% Processes provider request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_provider_request(user_context:ctx(), provider_request(), file_context:ctx()) ->
+-spec handle_provider_request(user_ctx:ctx(), provider_request(), file_ctx:ctx()) ->
     provider_response().
 handle_provider_request(Ctx, #provider_request{provider_request = #get_file_distribution{}}, File) ->
     synchronization_req:get_file_distribution(Ctx, File);
@@ -325,7 +325,7 @@ handle_provider_request(_Ctx, Req, _File) ->
 %% Processes proxyio request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_proxyio_request(user_context:ctx(), proxyio_request(), file_context:ctx()) ->
+-spec handle_proxyio_request(user_ctx:ctx(), proxyio_request(), file_ctx:ctx()) ->
     proxyio_response().
 handle_proxyio_request(Ctx, #proxyio_request{
     storage_id = SID,
@@ -350,10 +350,10 @@ handle_proxyio_request(Ctx, #proxyio_request{
 %% Do posthook for request response
 %% @end
 %%--------------------------------------------------------------------
--spec process_response(user_context:ctx(), request(), response()) -> response().
+-spec process_response(user_ctx:ctx(), request(), response()) -> response().
 process_response(Context, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
     #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
-    SessId = user_context:get_session_id(Context),
+    SessId = user_ctx:get_session_id(Context),
     {ok, Path0} = fslogic_path:gen_path({uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, SessId),
     {ok, Tokens0} = fslogic_path:tokenize_skipping_dots(Path0),
     Tokens = Tokens0 ++ [FileName],

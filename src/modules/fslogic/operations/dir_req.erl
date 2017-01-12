@@ -28,7 +28,7 @@
 %% Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(user_context:ctx(), ParentFile :: file_context:ctx(),
+-spec mkdir(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
@@ -38,13 +38,13 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
         name = Name,
         type = ?DIRECTORY_TYPE,
         mode = Mode,
-        uid = user_context:get_user_id(Ctx)
+        uid = user_ctx:get_user_id(Ctx)
     }},
-    {ParentDoc = #document{key = ParentUuid}, ParentFile2} = file_context:get_file_doc(ParentFile),
-    SpaceId = file_context:get_space_id_const(ParentFile2),
-    {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_context inside
+    {ParentDoc = #document{key = ParentUuid}, ParentFile2} = file_ctx:get_file_doc(ParentFile),
+    SpaceId = file_ctx:get_space_id_const(ParentFile2),
+    {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_ctx inside
     {ok, _} = times:create(#document{key = DirUuid, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
-    fslogic_times:update_mtime_ctime({uuid, ParentUuid}, user_context:get_user_id(Ctx)), %todo pass file_context
+    fslogic_times:update_mtime_ctime({uuid, ParentUuid}, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #dir{uuid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
     }.
@@ -55,20 +55,20 @@ mkdir(Ctx, ParentFile, Name, Mode) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(user_context:ctx(), file_context:ctx(),
+-spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
 read_dir(Ctx, File, Offset, Limit) ->
-    {FileDoc, File2} = file_context:get_file_doc(File),
-    {Children, _File3} = file_context:get_file_children(File2, Ctx, Offset, Limit),
+    {FileDoc, File2} = file_ctx:get_file_doc(File),
+    {Children, _File3} = file_ctx:get_file_children(File2, Ctx, Offset, Limit),
     ChildrenLinks =
         lists:map(fun(ChildFile) ->
-            ChildGuid = file_context:get_guid_const(ChildFile),
-            {ChildName, _ChildFile3} = file_context:get_aliased_name(ChildFile, Ctx),
+            ChildGuid = file_ctx:get_guid_const(ChildFile),
+            {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, Ctx),
             #child_link{name = ChildName, uuid = ChildGuid}
         end, Children),
-    fslogic_times:update_atime(FileDoc, user_context:get_user_id(Ctx)), %todo pass file_context
+    fslogic_times:update_atime(FileDoc, user_ctx:get_user_id(Ctx)), %todo pass file_ctx
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks

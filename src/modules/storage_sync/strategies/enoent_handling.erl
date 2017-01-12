@@ -94,7 +94,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                     {Response, []};
                 OtherResp ->
                     ProviderIds = ProviderIds0 -- [oneprovider:get_provider_id()],
-                    SessionId = user_context:get_session_id(CTX),
+                    SessionId = user_ctx:get_session_id(CTX),
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
                     NewJobs = case lists:member(ProxyVia, ProviderIds) of
                         true -> [];
@@ -135,7 +135,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
                 true ->
                     {ok, #document{key = Uuid}} = file_meta:get({path, LogicalPath}),
                     Guid = fslogic_uuid:uuid_to_guid(Uuid),
-                    File = file_context:new_by_guid(Guid),
+                    File = file_ctx:new_by_guid(Guid),
                     (catch attr_req:get_file_attr_no_permission_check(CTX, File));
                 _ ->
                     undefined

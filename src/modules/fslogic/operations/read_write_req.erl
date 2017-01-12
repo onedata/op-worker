@@ -32,7 +32,7 @@
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(user_context:ctx(), file_context:ctx(), HandleId :: storage_file_manager:handle_id(),
+-spec read(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
@@ -49,7 +49,7 @@ read(Ctx, File, HandleId, StorageId, FileId, Offset, Size) ->
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec write(user_context:ctx(), file_context:ctx(),
+-spec write(user_ctx:ctx(), file_ctx:ctx(),
     HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
     FileId :: helpers:file(), ByteSequences :: [#byte_sequence{}]) ->
     fslogic_worker:proxyio_response().
@@ -73,20 +73,20 @@ write(Ctx, File, HandleId, StorageId, FileId, ByteSequences) ->
 %% Returns handle by either retrieving it from session or opening file
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(user_context:ctx(), file_context:ctx(), HandleId :: storage_file_manager:handle_id(),
+-spec get_handle(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
     StorageId :: storage:id(), FileId :: helpers:file(), OpenFlag :: helpers:open_flag()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
 get_handle(Ctx, File, undefined, StorageId, FileId, OpenFlag)->
-    SessId = user_context:get_session_id(Ctx),
-    SpaceDirUuid = file_context:get_space_dir_uuid_const(File),
-    {uuid, FileUuid} = file_context:get_uuid_entry_const(File),
+    SessId = user_ctx:get_session_id(Ctx),
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(File),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
     {ok, Storage} = storage:get(StorageId),
-    ShareId = file_context:get_share_id_const(File),
+    ShareId = file_ctx:get_share_id_const(File),
     SFMHandle =
         storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId, ShareId),
     storage_file_manager:open(SFMHandle, OpenFlag);
 get_handle(Ctx, _File, HandleId, _StorageId, _FileId, _OpenFlag)->
-    SessId = user_context:get_session_id(Ctx),
+    SessId = user_ctx:get_session_id(Ctx),
     session:get_handle(SessId, HandleId).
 
 %%--------------------------------------------------------------------

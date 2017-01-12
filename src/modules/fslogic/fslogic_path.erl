@@ -151,10 +151,10 @@ gen_storage_path(Entry) ->
 %% @doc Gets file's full name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry(user_context:ctx(), [file_meta:path()]) ->
+-spec get_canonical_file_entry(user_ctx:ctx(), [file_meta:path()]) ->
     file_meta:entry() | no_return().
 get_canonical_file_entry(Ctx, Tokens) ->
-    case session:is_special(user_context:get_session_id(Ctx)) of
+    case session:is_special(user_ctx:get_session_id(Ctx)) of
         true ->
             {path, fslogic_path:join(Tokens)};
         false ->
@@ -166,12 +166,12 @@ get_canonical_file_entry(Ctx, Tokens) ->
 %% Gets file's full name, checking user defined space names.
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry_for_user(user_context:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
+-spec get_canonical_file_entry_for_user(user_ctx:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
 get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
-    UserId = user_context:get_user_id(Ctx),
+    UserId = user_ctx:get_user_id(Ctx),
     {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
 get_canonical_file_entry_for_user(Ctx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
-    #document{value = #od_user{space_aliases = Spaces}} = user_context:get_user(Ctx),
+    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(Ctx),
     case lists:keyfind(SpaceName, 2, Spaces) of
         false ->
             throw(?ENOENT);
