@@ -364,7 +364,7 @@ space_user_list_record(SpaceId) ->
     [
         {<<"id">>, SpaceId},
         {<<"space">>, SpaceId},
-        {<<"userPermissions">>, UserPermissions}
+        {<<"permissions">>, UserPermissions}
     ].
 
 
@@ -387,7 +387,7 @@ space_group_list_record(SpaceId) ->
     [
         {<<"id">>, SpaceId},
         {<<"space">>, SpaceId},
-        {<<"groupPermissions">>, GroupPermissions}
+        {<<"permissions">>, GroupPermissions}
     ].
 
 
@@ -416,7 +416,7 @@ space_user_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
-        {<<"systemUser">>, UserId}
+        {<<"systemUserId">>, UserId}
     ].
 
 
@@ -446,7 +446,7 @@ space_group_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceId},
-        {<<"systemGroup">>, GroupId}
+        {<<"systemGroupId">>, GroupId}
     ].
 
 
