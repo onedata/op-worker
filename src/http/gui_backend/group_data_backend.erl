@@ -351,7 +351,7 @@ group_user_list_record(GroupId) ->
     [
         {<<"id">>, GroupId},
         {<<"group">>, GroupId},
-        {<<"userPermissions">>, UserPermissions}
+        {<<"permissions">>, UserPermissions}
     ].
 
 
@@ -373,7 +373,7 @@ group_group_list_record(GroupId) ->
     [
         {<<"id">>, GroupId},
         {<<"group">>, GroupId},
-        {<<"groupPermissions">>, GroupPermissions}
+        {<<"permissions">>, GroupPermissions}
     ].
 
 
@@ -400,7 +400,7 @@ group_user_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, GroupId},
-        {<<"systemUser">>, UserId}
+        {<<"systemUserId">>, UserId}
     ].
 
 
@@ -428,7 +428,7 @@ group_group_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"group">>, ParentGroupId},
-        {<<"systemGroup">>, ChildGroupId}
+        {<<"systemGroupId">>, ChildGroupId}
     ].
 
 
