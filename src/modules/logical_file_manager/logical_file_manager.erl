@@ -43,10 +43,10 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3]).
+-export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, write/3, read/3,
-    truncate/3, release/1, get_file_distribution/2, replicate_file/3]).
+    truncate/3, release/1, get_file_distribution/2]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -93,7 +93,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 %%--------------------------------------------------------------------
 -spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
 rm_recursive(SessId, FileKey) ->
-    ?run(fun() -> lfm_utils:rm(SessId, FileKey) end).
+    ?run(fun() -> lfm_files:rm(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -189,6 +189,16 @@ get_file_path(SessId, FileGUID) ->
 unlink(SessId, FileEntry, Silent) ->
     ?run(fun() -> lfm_files:unlink(SessId, FileEntry, Silent) end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Replicates file on given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    ProviderId :: oneprovider:id()) ->
+    ok | error_reply().
+replicate_file(SessId, FileKey, ProviderId) ->
+    ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -282,17 +292,6 @@ release(FileHandle) ->
     {ok, list()} | error_reply().
 get_file_distribution(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_file_distribution(SessId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Replicates file on given provider.
-%% @end
-%%--------------------------------------------------------------------
--spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id()) ->
-    ok | error_reply().
-replicate_file(SessId, FileKey, ProviderId) ->
-    ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
 
 %%--------------------------------------------------------------------
 %% @doc

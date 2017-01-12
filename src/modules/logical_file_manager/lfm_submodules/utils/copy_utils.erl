@@ -9,7 +9,7 @@
 %%% Implementation of copy.
 %%% @end
 %%%--------------------------------------------------------------------
--module(copy).
+-module(copy_utils).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -50,7 +50,12 @@ copy(SessId, SourceEntry, TargetPath) ->
             Error
     end.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Checks permissions and copies directory.
 %% @end
@@ -64,6 +69,7 @@ copy_dir(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) 
     {ok, TargetGuid}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Checks permissions and copies file.
 %% @end
@@ -78,13 +84,10 @@ copy_file(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath)
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
     {ok, TargetGuid}.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Copy file content from source to handle
+%% Copies file content from source to handle
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_file_content(lfm_files:handle(), lfm_files:handle(), non_neg_integer()) ->
@@ -105,8 +108,9 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Copy children of file
+%% Copies children of file
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_children(session:id(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
@@ -125,8 +129,9 @@ copy_children(SessId, ParentGuid, TargetPath, Offset) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Copy metadata of file
+%% Copies metadata of file
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),
