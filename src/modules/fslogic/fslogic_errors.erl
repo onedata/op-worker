@@ -42,7 +42,7 @@ handle_error(Request, _Type, Error) ->
     LogLevel = code_to_loglevel(Code),
     MsgFormat =
         "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace: ~p",
-    FormatArgs = [Request, Error, Code, Stacktrace],
+    FormatArgs = [Request, Error, Code, lager:pr_stacktrace(Stacktrace)],
     case LogLevel of
         debug -> ?debug(MsgFormat, FormatArgs);
         error -> ?error(MsgFormat, FormatArgs)
