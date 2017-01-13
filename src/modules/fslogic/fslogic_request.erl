@@ -78,8 +78,8 @@ get_target_providers(UserCtx, File, _Req) ->
 %% by the phantom target.
 %% @end
 %%--------------------------------------------------------------------
--spec update_target_guid_if_file_is_phantom(file_ctx:ctx(), fslogic_worker:request()) ->
-    {NewFileCtx :: file_ctx:ctx(), NewRequest :: fslogic_worker:request()}.
+-spec update_target_guid_if_file_is_phantom(file_ctx:ctx() | undefined, fslogic_worker:request()) ->
+    {NewFileCtx :: file_ctx:ctx() | undefined, NewRequest :: fslogic_worker:request()}.
 update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
 update_target_guid_if_file_is_phantom(FileCtx, Request) ->

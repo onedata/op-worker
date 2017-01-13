@@ -178,7 +178,7 @@ handle_request(SessId, Request) ->
 %% Handle request locally, as it operates on locally supported entity.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx()) -> response().
+-spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
 handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{file_request = Req}}, FileCtx) ->
     handle_file_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx)  ->
@@ -211,7 +211,7 @@ handle_request_remotely(UserCtx, Req, Providers)  ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(user_ctx:ctx(), fuse_request_type(), file_ctx:ctx()) ->
+-spec handle_fuse_request(user_ctx:ctx(), fuse_request_type(), file_ctx:ctx() | undefined) ->
     fuse_response().
 handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
@@ -355,11 +355,10 @@ handle_provider_request(_UserCtx, Req, _FileCtx) ->
 %% Processes proxyio request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_proxyio_request(user_ctx:ctx(), proxyio_request(), file_ctx:ctx(),
+-spec handle_proxyio_request(user_ctx:ctx(), proxyio_request_type(), file_ctx:ctx(),
     HandleId :: storage_file_manager:handle_id(), StorageId :: storage:id(),
-    FileId :: helpers:file_id()) ->
-    proxyio_response().
-handle_proxyio_request(UserCtx,#remote_write{byte_sequence = ByteSequences}, FileCtx,
+    FileId :: helpers:file_id()) -> proxyio_response().
+handle_proxyio_request(UserCtx, #remote_write{byte_sequence = ByteSequences}, FileCtx,
     HandleId, StorageId, FileId) ->
     read_write_req:write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences);
 handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, FileCtx,

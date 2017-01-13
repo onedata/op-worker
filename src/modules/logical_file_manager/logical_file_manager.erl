@@ -43,7 +43,7 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
+-export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, write/3, read/3,
     truncate/3, release/1, get_file_distribution/2]).
@@ -138,16 +138,6 @@ get_children_count(SessId, FileKey) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 get_parent(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_parent(SessId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if a file or directory exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(FileKey :: file_key()) ->
-    {ok, boolean()} | error_reply().
-exists(FileKey) ->
-    ?run(fun() -> lfm_files:exists(FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

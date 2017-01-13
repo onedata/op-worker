@@ -19,7 +19,7 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2]).
+-export([mv/3, cp/3, get_file_path/2, rm_recursive/2]).
 %% Functions operating on files
 -export([create/3, create/4, open/3, write/3, read/3, truncate/3, unlink/2, fsync/1,
     release/1, get_file_distribution/2, replicate_file/3]).
@@ -122,13 +122,6 @@ get_children_count(Auth, FileKey) ->
         -> ok | error_reply().
 rm_recursive(Auth, FileKey) ->
     logical_file_manager:rm_recursive(Auth, FileKey).
-
-%%--------------------------------------------------------------------
-%% @doc Checks if a file or directory exists.
-%%--------------------------------------------------------------------
--spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
-exists(FileKey) ->
-    logical_file_manager:exists(FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Moves a file or directory to a new location.

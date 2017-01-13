@@ -29,7 +29,7 @@
 -record(file_ctx, {
     canonical_path :: undefined | path(),
     guid :: undefined | guid(),
-    file_doc :: undefined | file_meta:doc() | {error, term()},
+    file_doc :: undefined | file_meta:doc(),
     parent :: undefined | ctx(),
     storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name() | od_space:alias(),
@@ -111,7 +111,11 @@ new_by_guid(Guid) when Guid =/= undefined ->
 %% in function later on, to simplify logic.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_guid(ctx()) -> ctx().
+-spec fill_guid
+    (ctx()) -> ctx();
+    (undefined) -> undefined.
+fill_guid(undefined) ->
+    undefined;
 fill_guid(FileCtx = #file_ctx{guid = undefined, canonical_path = Path}) ->
     {ok, Uuid} = file_meta:to_uuid({path, Path}),
     SpaceId = get_space_id_const(FileCtx),
@@ -395,7 +399,7 @@ get_child(FileCtx, Name, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(), Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
-    {Children :: [ctx()] | {error, term()}, NewFileCtx :: ctx()}.
+    {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
@@ -428,7 +432,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
 %% Returns storage document of file's space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_doc(ctx()) -> {space_storage:doc(), ctx()}.
+-spec get_storage_doc(ctx()) -> {storage:doc(), ctx()}.
 get_storage_doc(FileCtx = #file_ctx{storage_doc = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
     {ok, StorageDoc} = fslogic_storage:select_storage(SpaceId),
