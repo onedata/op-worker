@@ -23,7 +23,7 @@
 
 %% API
 -export([init/0, terminate/0]).
--export([file_record/2, find_all/1, query/2, query_record/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 -export([group_record/1, group_record/2]).
@@ -54,12 +54,12 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback file_record/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec file_record(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-file_record(<<"group">>, GroupId) ->
+find_record(<<"group">>, GroupId) ->
     UserId = gui_session:get_user_id(),
     % Check if the user belongs to this group
     case group_logic:has_effective_user(GroupId, UserId) of
@@ -70,7 +70,7 @@ file_record(<<"group">>, GroupId) ->
     end;
 
 % PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
-file_record(PermissionsRecord, RecordId) ->
+find_record(PermissionsRecord, RecordId) ->
     GroupId = case PermissionsRecord of
         <<"group-user-list">> ->
             RecordId;

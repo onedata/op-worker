@@ -73,9 +73,9 @@ association_to_ids(AssocId) ->
     boolean().
 % TODO For now, always return true - this can be checked when new
 % subscriptions arrive.
-can_view_public_data(_UserId, od_user, _UserId, od_group, _GroupId) ->
+can_view_public_data(_UserId, od_user, _GroupUserId, od_group, _GroupId) ->
     true;
-can_view_public_data(_UserId, od_user, _UserId, od_space, _SpaceId) ->
+can_view_public_data(_UserId, od_user, _SpaceUserId, od_space, _SpaceId) ->
     true;
 can_view_public_data(_UserId, od_group, _GroupId, od_group, _ParentGroupId) ->
     true;
