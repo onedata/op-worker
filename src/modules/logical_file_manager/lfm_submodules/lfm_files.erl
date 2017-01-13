@@ -17,11 +17,11 @@
 
 %% API
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
+-export([unlink/3, rm/2, mv/3, cp/3, get_parent/2, get_file_path/2, replicate_file/3]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, write/3, write_without_events/3,
-    read/3, read_without_events/3, silent_read/3, truncate/3, unlink/3, release/1,
-    get_file_distribution/2, replicate_file/3]).
+    read/3, read_without_events/3, silent_read/3, truncate/3, release/1,
+    get_file_distribution/2]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -31,13 +31,24 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if a file or directory exists.
+%% Removes a file or an empty directory.
+%% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(FileKey :: logical_file_manager:file_key()) ->
-    {ok, boolean()} | logical_file_manager:error_reply().
-exists(_FileKey) ->
-    {ok, false}.
+-spec unlink(session:id(), fslogic_worker:ext_file(), boolean()) ->
+    ok | logical_file_manager:error_reply().
+unlink(SessId, FileEntry, Silent) ->
+    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileEntry),
+    remote_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
+        fun(_) -> ok end).
+
+%%--------------------------------------------------------------------
+%% @equiv remove_utils:rm(SessId, FileKey).
+%%--------------------------------------------------------------------
+-spec rm(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    ok | logical_file_manager:error_reply().
+rm(SessId, FileKey) ->
+    remove_utils:rm(SessId, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,7 +62,7 @@ mv(SessId, FileKey, TargetPath) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
     {guid, TargetDirGuid} = fslogic_uuid:ensure_guid(SessId, {path, TargetDir}),
-    lfm_utils:call_fslogic(SessId, file_request, Guid,
+    remote_utils:call_fslogic(SessId, file_request, Guid,
         #rename{target_parent_uuid = TargetDirGuid, target_name = TargetName},
         fun(#file_renamed{new_uuid = NewGuid}) ->
             {ok, NewGuid}
@@ -66,11 +77,7 @@ mv(SessId, FileKey, TargetPath) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, Guid,
-        #copy{target_path = TargetPath},
-        fun(#file_copied{new_uuid = NewGuid}) ->
-            {ok, NewGuid}
-        end).
+    copy_utils:copy(SessId, {guid, Guid}, TargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -81,7 +88,7 @@ cp(SessId, FileKey, TargetPath) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 get_parent(SessId, FileKey) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_parent{},
         fun(#dir{uuid = ParentGuid}) ->
             {ok, ParentGuid}
@@ -95,7 +102,7 @@ get_parent(SessId, FileKey) ->
 -spec get_file_path(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGuid) ->
-    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_path{},
         fun(#file_path{value = Path}) ->
             {ok, Path}
@@ -103,15 +110,15 @@ get_file_path(SessId, FileGuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes a file or an empty directory.
-%% If parameter Silent is true, file_removed_event will not be emitted.
+%% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(session:id(), fslogic_worker:ext_file(), boolean()) ->
+-spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
     ok | logical_file_manager:error_reply().
-unlink(SessId, FileEntry, Silent) ->
-    {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileEntry),
-    lfm_utils:call_fslogic(SessId, file_request, Guid, #delete_file{silent = Silent},
+replicate_file(SessId, FileKey, ProviderId) ->
+    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+        #replicate_file{provider_id = ProviderId},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
@@ -129,9 +136,9 @@ create(SessId, Path) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    lfm_utils:call_fslogic(SessId, fuse_request,
+    remote_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
-        fun(#file_attr{uuid = ParentGuid}) ->
+        fun(#uuid{uuid = ParentGuid}) ->
             lfm_files:create(SessId, ParentGuid, Name, Mode)
         end).
 
@@ -142,7 +149,7 @@ create(SessId, ParentGuid, Name, undefined) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     create(SessId, ParentGuid, Name, DefaultMode);
 create(SessId, ParentGuid, Name, Mode) ->
-    lfm_utils:call_fslogic(SessId, file_request, ParentGuid,
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid,
         #make_file{name = Name, mode = Mode},
         fun(#file_attr{uuid = Guid}) ->
             {ok, Guid}  %todo consider returning file_attr
@@ -161,11 +168,11 @@ open(SessId, FileKey, Flag) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     ShareId = fslogic_uuid:guid_to_share_id(FileGuid),
 
-    lfm_utils:call_fslogic(SessId, file_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_location{},
         fun(#file_location{provider_id = ProviderId, file_id = FileId,
             storage_id = StorageId} = Location) ->
-            lfm_utils:call_fslogic(SessId, file_request, FileGuid,
+            remote_utils:call_fslogic(SessId, file_request, FileGuid,
                 #open_file{flag = Flag},
                 fun(#file_opened{handle_id = HandleId}) ->
                     {FileUUID, SpaceId} = fslogic_uuid:unpack_guid(FileGuid),
@@ -205,7 +212,7 @@ release(Handle) ->
         HandleId ->
             SessionId = lfm_context:get_session_id(Handle),
             FileGuid = lfm_context:get_guid(Handle),
-            lfm_utils:call_fslogic(SessionId, file_request,
+            remote_utils:call_fslogic(SessionId, file_request,
                 FileGuid, #release{handle_id = HandleId},
                 fun(_) -> ok end)
     end.
@@ -278,7 +285,7 @@ silent_read(FileHandle, Offset, MaxSize) ->
     ok | logical_file_manager:error_reply().
 truncate(SessId, FileKey, Size) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, file_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #truncate{size = Size},
         fun(_) ->
             ok = fslogic_event:emit_file_truncated(FileGuid, Size, SessId)
@@ -293,7 +300,7 @@ truncate(SessId, FileKey, Size) ->
     {ok, list()} | logical_file_manager:error_reply().
 get_file_distribution(SessId, FileKey) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
             Distribution =
@@ -307,29 +314,18 @@ get_file_distribution(SessId, FileKey) ->
             {ok, Distribution}
         end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns block map for a file.
-%% @end
-%%--------------------------------------------------------------------
--spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
-    ok | logical_file_manager:error_reply().
-replicate_file(SessId, FileKey, ProviderId) ->
-    {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #replicate_file{provider_id = ProviderId},
-        fun(_) -> ok end).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% For given file and byte range, returns storage's ID and file's ID (on storage)
-%% that shall be used to store this byte range. Also returns maximum byte count that can be
-%% used for this location. Atom 'default' is returned when location of specific block cannnot be found
-%% and default locations shall be used instead.
+%% For given file and byte range, returns storage's ID and file's ID
+%% (on storage) that shall be used to store this byte range. Also returns
+%% maximum byte count that can be used for this location. Atom 'default' is
+%% returned when location of specific block cannnot be found and default
+%% locations shall be used instead.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_key(OpType :: write | read, lfm_context:handle(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
@@ -354,6 +350,7 @@ get_sfm_handle_key(OpType, Handle, Offset, Size) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Internal impl. of get_sfm_handle_key/3
 %% @end
@@ -376,8 +373,10 @@ get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
     {default, Size}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Helper function for read/write handles caching. Returns given handle or creates new and updates master handle.
+%% Caches read/write handles. Returns given handle or creates new and updates
+%% master handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_n_update_handle(Handle :: logical_file_manager:handle(), Key :: term(),
@@ -413,6 +412,7 @@ get_sfm_handle_n_update_handle(Handle, Key, OpenType) ->
     {{StorageId, FileId}, SFMHandle, NewHandle}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Writes data to a file. Returns number of written bytes.
 %% @end
@@ -441,8 +441,9 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Internal function for writing one portion of data in write/3
+%% Writes one portion of data in write/3
 %% @end
 %%--------------------------------------------------------------------
 -spec write_internal(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
@@ -474,6 +475,7 @@ write_internal(Handle, Offset, Buffer, GenerateEvents) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Reads requested part of a file.
 %% @end
@@ -502,8 +504,9 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Internal function for reading one portion of data in read/3
+%% Reads one portion of data in read/3
 %% @end
 %%--------------------------------------------------------------------
 -spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
@@ -514,7 +517,7 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     Flag = lfm_context:get_open_flag(Handle),
     SessId = lfm_context:get_session_id(Handle),
 
-    ok = lfm_utils:call_fslogic(SessId, file_request, Guid,
+    ok = remote_utils:call_fslogic(SessId, file_request, Guid,
         #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
             prefetch = PrefetchData},
         fun(_) -> ok end),
@@ -536,9 +539,10 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Returns given file_location with updated blocks filled with storage_id and/or file_id using default values if needed.
+%% @doc
+%% Returns given file_location with updated blocks filled with storage_id and/or
+%% file_id using default values if needed.
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_file_location(#file_location{}) -> #file_location{}.
@@ -547,9 +551,10 @@ normalize_file_location(Loc = #file_location{storage_id = SID, file_id = FID, bl
     Loc#file_location{blocks = NewBlocks}.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Returns given block with filled storage_id and/or file_id using provided default values if needed.
+%% @doc
+%% Returns given block with filled storage_id and/or file_id using provided
+%% default values if needed.
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_file_block(storage:id(), helpers:file(), #file_block{}) -> #file_block{}.

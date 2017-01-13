@@ -13,6 +13,7 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
@@ -22,27 +23,30 @@
 %% Resource ID used to sync all operations on this model
 -define(STORAGE_LOCK_ID, <<"storage_res_id">>).
 
-
--type id() :: datastore:uuid().
--type name() :: binary().
-
--export_type([id/0, name/0]).
-
 %% API
--export([id/1, name/1, helpers/1, update_helper/2, get_by_name/1]).
+-export([new/2, get_id/1, get_name/1, get_helpers/1, select_helper/2,
+    update_helper/3, select/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4, list/0]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
+-type id() :: datastore:key().
+-type model() :: #storage{}.
+-type doc() :: #document{value :: model()}.
+-type name() :: binary().
+-type helper() :: helpers:helper().
+
+-export_type([id/0, model/0, doc/0, name/0, helper/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns structure of the record in specified version.
 %% @end
 %%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+-spec record_struct(datastore_json:record_version()) ->
+    datastore_json:record_struct().
 record_struct(1) ->
     {record, [
         {name, binary},
@@ -50,7 +54,32 @@ record_struct(1) ->
             {name, string},
             {args, #{string => string}}
         ]}]}
+    ]};
+record_struct(2) ->
+    {record, [
+        {name, string},
+        {helpers, [{record, 1, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}},
+            {insecure, boolean}
+        ]}]}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, Name, Helpers}) ->
+    {2, #storage{
+        name = Name,
+        helpers = [
+            #helper{name = Name, args = Args} || {_, Name, Args} <- Helpers
+        ]
+    }}.
 
 
 %%%===================================================================
@@ -84,8 +113,6 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(#storage{} = S) ->
-    create(#document{value = S});
 create(#document{value = #storage{name = Name}} = Document) ->
     critical_section:run_on_mnesia([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
         case datastore:fetch_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, Name) of
@@ -93,12 +120,15 @@ create(#document{value = #storage{name = Name}} = Document) ->
                 {error, already_exists};
             {error, link_not_found} ->
                 datastore:run_transaction(fun() ->
-                    _ = datastore:create(?STORE_LEVEL, #document{key = ?ROOT_STORAGE, value = #storage{}}),
+                    datastore:create(?STORE_LEVEL, #document{
+                        key = ?ROOT_STORAGE, value = #storage{name = ?ROOT_STORAGE}
+                    }),
                     case datastore:create(?STORE_LEVEL, Document) of
                         {error, Reason} ->
                             {error, Reason};
                         {ok, Key} ->
-                            ok = datastore:add_links(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
+                            ok = datastore:add_links(?LINK_STORE_LEVEL,
+                                ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
                             {ok, Key}
                     end
                 end)
@@ -139,17 +169,16 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(system_config_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    Config = ?MODEL_CONFIG(system_config_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
+-spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -158,10 +187,8 @@ model_init() ->
 %% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) ->
-    ok | datastore:generic_error().
+-spec before(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -174,7 +201,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 list() ->
     datastore:foreach_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME,
         fun(_LinkName, {_V, [{_, _, Key, storage}]}, AccIn) ->
-            {ok, Doc} = get(Key),
+            {ok, Doc} = storage:get(Key),
             [Doc | AccIn]
         end, []).
 
@@ -184,11 +211,22 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Constructs storage record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(name(), [helper()]) -> doc().
+new(Name, Helpers) ->
+    #document{value = #storage{name = Name, helpers = Helpers}}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns storage ID.
 %% @end
 %%--------------------------------------------------------------------
--spec id(Doc :: #document{}) -> StorageId :: id().
-id(#document{key = StorageId, value = #storage{}}) ->
+-spec get_id(id() | doc()) -> id().
+get_id(<<_/binary>> = StorageId) ->
+    StorageId;
+get_id(#document{key = StorageId, value = #storage{}}) ->
     StorageId.
 
 %%--------------------------------------------------------------------
@@ -196,39 +234,53 @@ id(#document{key = StorageId, value = #storage{}}) ->
 %% Returns storage name.
 %% @end
 %%--------------------------------------------------------------------
--spec name(Storage :: #document{} | #storage{}) -> Name :: name().
-name(#document{value = #storage{} = Storage}) ->
-    name(Storage);
-name(#storage{name = Name}) ->
-    Name.
+-spec get_name(model() | doc()) -> name().
+get_name(#storage{name = Name}) ->
+    Name;
+get_name(#document{value = #storage{} = Value}) ->
+    get_name(Value).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec helpers(Storage :: #document{} | #storage{}) -> Helpers :: [helpers:init()].
-helpers(#document{value = #storage{} = Storage}) ->
-    helpers(Storage);
-helpers(#storage{helpers = Helpers}) ->
-    Helpers.
+-spec get_helpers(model() | doc()) -> [helper()].
+get_helpers(#storage{helpers = Helpers}) ->
+    Helpers;
+get_helpers(#document{value = #storage{} = Value}) ->
+    get_helpers(Value).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Selects storage helper by its name form the list of configured storage helpers.
+%% @end
+%%--------------------------------------------------------------------
+-spec select_helper(model() | doc(), helpers:name()) ->
+    {ok, helper()} | {error, Reason :: term()}.
+select_helper(Storage, HelperName) ->
+    Helpers = lists:filter(fun(Helper) ->
+        helper:get_name(Helper) =:= HelperName
+    end, get_helpers(Storage)),
+    case Helpers of
+        [] -> {error, {not_found, helper}};
+        [Helper] -> {ok, Helper}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates storage helper arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec update_helper(StorageId :: storage:id(), HelperArgs :: helpers:args()) ->
-    {ok, datastore:key()} | datastore:update_error().
-update_helper(StorageId, HelperArgs) ->
+-spec update_helper(storage:id(), helper:name(), helpers:args()) ->
+    ok | datastore:update_error().
+update_helper(StorageId, HelperName, NewArgs) ->
     update(StorageId, fun(#storage{helpers = Helpers} = Storage) ->
-        case fslogic_storage:select_helper(Storage) of
-            {ok, #helper_init{name = Name, args = Args} = Helper} ->
-                {ok, Storage#storage{helpers = lists:keyreplace(
-                    Name, 2, Helpers, Helper#helper_init{
-                        args = maps:merge(Args, HelperArgs)
-                    }
-                )}};
+        case select_helper(Storage, HelperName) of
+            {ok, #helper{args = Args} = Helper} ->
+                Helper2 = Helper#helper{args = maps:merge(Args, NewArgs)},
+                Helpers2 = lists:keyreplace(HelperName, 2, Helpers, Helper2),
+                {ok, Storage#storage{helpers = Helpers2}};
             {error, Reason} ->
                 {error, Reason}
         end
@@ -236,29 +288,18 @@ update_helper(StorageId, HelperArgs) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns storage document by storage name.
+%% Selects storage by its name form the list of configured storages.
 %% @end
 %%--------------------------------------------------------------------
--spec get_by_name(Name :: name()) -> {ok, datastore:document()} | datastore:get_error().
-get_by_name(Name) ->
-    {ok, Docs} = list(),
-    get_by_name(Name, Docs).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns storage document by storage name.
-%% @end
-%%--------------------------------------------------------------------
--spec get_by_name(Name :: name(), Docs :: [#document{}]) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_by_name(_, []) ->
-    {error, {not_found, ?MODULE}};
-get_by_name(Name, [#document{value = #storage{name = Name}} = Doc | _]) ->
-    {ok, Doc};
-get_by_name(Name, [_ | Docs]) ->
-    get_by_name(Name, Docs).
+-spec select(name()) -> {ok, doc()} | datastore:get_error().
+select(Name) ->
+    case storage:list() of
+        {ok, Docs} ->
+            Docs2 = lists:filter(fun(Doc) ->
+                get_name(Doc) =:= Name
+            end, Docs),
+            case Docs2 of
+                [] -> {error, {not_found, ?MODULE}};
+                [Doc] -> {ok, Doc}
+            end
+    end.

@@ -91,7 +91,7 @@ simple_file_export_test(Config) ->
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
 
-init_per_testcase(Case, Config) ->
+init_per_testcase(_Case, Config) ->
     application:start(etls),
     hackney:start(),
     initializer:disable_quota_limit(Config),
@@ -100,7 +100,10 @@ init_per_testcase(Case, Config) ->
     ConfigWithProxy = lfm_proxy:init(ConfigWithSessionInfo),
     enable_storage_sync(ConfigWithProxy).
 
-end_per_testcase(Case, Config) ->
+end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    W1MountPoint = ?config(w1_mount_point, Config),
+    rpc:multicall(Workers, os, cmd, ["rm -rf " ++ binary_to_list(W1MountPoint) ++ "/*"]),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -116,7 +119,7 @@ end_per_testcase(Case, Config) ->
 enable_storage_sync(Config) ->
     case ?config(w1_mount_point, Config) of
         undefined ->
-            [W1, W2] = ?config(op_worker_nodes, Config),
+            [W1 | _] = ?config(op_worker_nodes, Config),
             SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
             {ok, _} = lfm_proxy:create(W1, SessId, <<"/space_name1/test1">>, 8#777),
             {ok, [W1Storage | _]} = rpc:call(W1, storage, list, []),
@@ -125,7 +128,7 @@ enable_storage_sync(Config) ->
             #document{key = W1StorageId, value = #storage{helpers = [W1Helpers]}} = W1Storage,
             {ok, _} = rpc:call(W1, space_strategies, set_strategy, [
                 <<"space1">>, W1StorageId, storage_import, bfs_scan, #{scan_interval => 10}]),
-            #helper_init{args = #{<<"root_path">> := W1MountPoint}} = W1Helpers,
+            #{<<"mountPoint">> := W1MountPoint} = helper:get_args(W1Helpers),
             [{w1_mount_point, W1MountPoint} | Config];
         _ ->
             Config

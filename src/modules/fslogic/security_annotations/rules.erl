@@ -36,7 +36,7 @@ check({_, _, #document{key = ?ROOT_USER_ID}, _, _}) ->
     ok;
 check({root, _, _, _, _}) ->
     throw(?EACCES);
-check({owner, #document{value = #file_meta{uid = OwnerId}}, #document{key = OwnerId}, _, _}) ->
+check({owner, #document{value = #file_meta{owner = OwnerId}}, #document{key = OwnerId}, _, _}) ->
     ok;
 check({owner, _, _, _, _}) ->
     throw(?EACCES);
@@ -49,7 +49,7 @@ check({owner_if_parent_sticky, Doc, UserDoc, ShareId, Acl}) ->
             ok
     end;
 check({{owner, 'or', ?write_attributes}, Doc, #document{key = UserId} = User, ShareId, Acl}) ->
-    case Doc#document.value#file_meta.uid of
+    case Doc#document.value#file_meta.owner of
         UserId ->
             ok;
         _ ->
@@ -197,7 +197,7 @@ check({Perm, File, User, ShareId, Acl}) ->
 validate_posix_access(rdwr, FileDoc, UserId, ShareId) ->
     ok = validate_posix_access(write, FileDoc, UserId, ShareId),
     ok = validate_posix_access(read, FileDoc, UserId, ShareId);
-validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId, ShareId) ->
+validate_posix_access(AccessType, #document{value = #file_meta{owner = OwnerId, mode = Mode}} = FileDoc, UserId, ShareId) ->
     ReqBit =
         case AccessType of
             read -> 8#4;

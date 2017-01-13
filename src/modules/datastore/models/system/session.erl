@@ -29,21 +29,22 @@
 
 %% API
 -export([get_session_supervisor_and_node/1, get_event_manager/1, get_helper/3,
-    get_event_managers/0, get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
+    get_sequencer_manager/1, get_random_connection/1, get_random_connection/2,
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
     get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2,
     is_special/1]).
 
--type doc() :: datastore:document().
 -type id() :: binary().
+-type model() :: #session{}.
+-type doc() :: #document{value :: model()}.
 -type ttl() :: non_neg_integer().
 -type auth() :: #token_auth{} | #basic_auth{}.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 -type status() :: active | inactive.
 -type identity() :: #user_identity{}.
 
--export_type([doc/0, id/0, ttl/0, auth/0, type/0, status/0, identity/0]).
+-export_type([id/0, model/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -121,14 +122,12 @@ list() ->
 delete(Key) ->
     case session:get(Key) of
         {ok, #document{key = SessId, value = #session{open_files = OpenFiles}}} ->
-
             worker_proxy:multicast(?SESSION_MANAGER_WORKER,
                 {apply, fun() -> delete_helpers_on_this_node(SessId) end}),
 
-            lists:foreach(
-                fun(FileUUID) ->
-                    file_handles:invalidate_session_entry(FileUUID, Key)
-                end, sets:to_list(OpenFiles));
+            lists:foreach(fun(FileUUID) ->
+                file_handles:invalidate_session_entry(FileUUID, Key)
+            end, sets:to_list(OpenFiles));
         _ -> ok
     end,
 
@@ -157,9 +156,8 @@ model_init() ->
 %% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
+-spec 'after'(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term(), ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -168,8 +166,8 @@ model_init() ->
 %% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+-spec before(model_behaviour:model_type(), model_behaviour:model_action(),
+    datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -201,23 +199,26 @@ all_with_user() ->
 %% Returns ID of user associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(SessIdOrSession :: id() | #session{}) ->
-    {ok, UserId :: od_user:id()} | {error, Reason :: term()}.
-get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
-    {ok, UserId};
-get_user_id(SessId) ->
+-spec get_user_id
+    (id()) -> {ok, od_user:id()} | {error, Reason :: term()};
+    (model() | doc()) -> od_user:id().
+get_user_id(<<_/binary>> = SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = Session}} -> get_user_id(Session);
+        {ok, Doc} -> {ok, get_user_id(Doc)};
         {error, Reason} -> {error, Reason}
-    end.
+    end;
+get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
+    UserId;
+get_user_id(#document{value = #session{} = Value}) ->
+    get_user_id(Value).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns session supervisor and node on which supervisor is running.
 %% @end
 %%--------------------------------------------------------------------
--spec get_session_supervisor_and_node(SessId :: id()) ->
-    {ok, {SessSup :: pid(), Node :: node()}} | {error, Reason :: term()}.
+-spec get_session_supervisor_and_node(id()) ->
+    {ok, {SessSup :: pid(), node()}} | {error, Reason :: term()}.
 get_session_supervisor_and_node(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{supervisor = undefined}}} ->
@@ -233,8 +234,7 @@ get_session_supervisor_and_node(SessId) ->
 %% Returns event manager associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_event_manager(SessId :: id()) ->
-    {ok, EvtMan :: pid()} | {error, Reason :: term()}.
+-spec get_event_manager(id()) -> {ok, EvtMan :: pid()} | {error, Reason :: term()}.
 get_event_manager(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{event_manager = undefined}}} ->
@@ -247,30 +247,10 @@ get_event_manager(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all event managers associated with any session.
-%% @end
-%%--------------------------------------------------------------------
--spec get_event_managers() -> {ok, [{ok, EvtMan :: pid()} | {error, {not_found,
-    SessId :: id()}}]} | {error, Reason :: term()}.
-get_event_managers() ->
-    case session:list() of
-        {ok, Docs} ->
-            {ok, lists:map(fun
-                (#document{key = SessId, value = #session{event_manager = undefined}}) ->
-                    {error, {not_found, SessId}};
-                (#document{value = #session{event_manager = EvtMan}}) ->
-                    {ok, EvtMan}
-            end, Docs)};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns sequencer manager associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sequencer_manager(SessId :: id()) ->
+-spec get_sequencer_manager(id()) ->
     {ok, SeqMan :: pid()} | {error, Reason :: term()}.
 get_sequencer_manager(SessId) ->
     case session:get(SessId) of
@@ -282,24 +262,22 @@ get_sequencer_manager(SessId) ->
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns random connection associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_random_connection(SessId :: id()) ->
+-spec get_random_connection(id()) ->
     {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId) ->
     get_random_connection(SessId, false).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns random connection associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_random_connection(SessId :: id(), HideOverloaded :: boolean()) ->
+-spec get_random_connection(id(), HideOverloaded :: boolean()) ->
     {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId, HideOverloaded) ->
     case get_connections(SessId, HideOverloaded) of
@@ -308,25 +286,24 @@ get_random_connection(SessId, HideOverloaded) ->
         {error, Reason} -> {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns connections associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_connections(SessId :: id()) ->
+-spec get_connections(id()) ->
     {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId) ->
     get_connections(SessId, false).
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns connections associated with session. If HideOverloaded is set to true, hides connections that
-%% have too long request queue and and removes invalid connections.
+%% Returns connections associated with session. If HideOverloaded is set to true,
+%% hides connections that have too long request queue and and removes invalid
+%% connections.
 %% @end
 %%--------------------------------------------------------------------
--spec get_connections(SessId :: id(), HideOverloaded :: boolean()) ->
+-spec get_connections(id(), HideOverloaded :: boolean()) ->
     {ok, [Comm :: pid()]} | {error, Reason :: term()}.
 get_connections(SessId, HideOverloaded) ->
     case ?MODULE:get(SessId) of
@@ -365,7 +342,7 @@ get_connections(SessId, HideOverloaded) ->
 %% session removal.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_connection(SessId :: id(), Con :: pid()) ->
+-spec remove_connection(id(), Con :: pid()) ->
     ok | datastore:update_error().
 remove_connection(SessId, Con) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
@@ -382,15 +359,19 @@ remove_connection(SessId, Con) ->
 %% Returns #token_auth{} record associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(SessId :: id()) ->
-    {ok, Auth :: #token_auth{}} | {ok, undefined} | {error, Reason :: term()}.
-get_auth(SessId) ->
+-spec get_auth
+    (id()) -> {ok, Auth :: auth()} | {ok, undefined} | {error, Reason :: term()};
+    (model() | doc()) -> auth().
+get_auth(<<_/binary>> = SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{auth = Auth}}} ->
-            {ok, Auth};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+        {ok, #document{value = #session{auth = Auth}}} -> {ok, Auth};
+        {error, Reason} -> {error, Reason}
+    end;
+get_auth(#session{auth = Auth}) ->
+    Auth;
+get_auth(#document{value = Session}) ->
+    get_auth(Session).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -440,9 +421,9 @@ remove_open_file(SessId, FileUUID) ->
 %% Removes open file UUID from session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_transfers(id()) -> {ok, [binary()]} | {error, Reason :: term()}.
-get_transfers(SessionId) ->
-    case session:get(SessionId) of
+-spec get_transfers(id()) -> {ok, [transfer:id()]} | {error, Reason :: term()}.
+get_transfers(SessId) ->
+    case session:get(SessId) of
         {ok, #document{value = #session{transfers = Transfers}}} ->
             {ok, Transfers};
         {error, Reason} ->
@@ -479,7 +460,7 @@ add_transfer(SessionId, TransferId) ->
 %% Add link to handle.
 %% @end
 %%--------------------------------------------------------------------
--spec add_handle(SessionId :: id(), HandleID :: binary(),
+-spec add_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id(),
     Handle :: storage_file_manager:handle()) -> ok | datastore:generic_error().
 add_handle(SessionId, HandleID, Handle) ->
     case sfm_handle:create(#document{value = Handle}) of
@@ -494,15 +475,16 @@ add_handle(SessionId, HandleID, Handle) ->
 %% Remove link to handle.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_handle(SessionId :: id(), HandleID :: binary()) -> ok | datastore:generic_error().
+-spec remove_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
+    ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
     case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
         {ok, {HandleKey, sfm_handle}} ->
             case sfm_handle:delete(HandleKey) of
                 ok ->
                     datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]);
-                {error, Reason2} ->
-                    {error, Reason2}
+                {error, Reason} ->
+                    {error, Reason}
             end;
         {error, link_not_found} ->
             ok;
@@ -515,7 +497,7 @@ remove_handle(SessionId, HandleID) ->
 %% Gets handle.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(SessionId :: id(), HandleID :: binary()) ->
+-spec get_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | datastore:generic_error().
 get_handle(SessionId, HandleID) ->
     case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
@@ -532,11 +514,10 @@ get_handle(SessionId, HandleID) ->
 %% with the session if it doesn't exist.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper(SessionId :: id(), SpaceUuid :: file_meta:uuid(),
-    Storage :: #document{value :: #storage{}} | storage:id()) ->
-    {ok, helpers:handle()} | datastore:generic_error().
-get_helper(SessionId, SpaceUuid, Storage) ->
-    fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, false).
+-spec get_helper(id(), SpaceUuid :: file_meta:uuid(), storage:doc()) ->
+    {ok, helpers:helper_handle()} | datastore:generic_error().
+get_helper(SessionId, SpaceUuid, StorageDoc) ->
+    fetch_lock_fetch_helper(SessionId, SpaceUuid, StorageDoc, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -556,24 +537,23 @@ is_special(_) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Attempts to fetch a helper instance through link API. If fetching
+%% @doc
+%% Attempts to fetch a helper handle through link API. If fetching
 %% fails with enoent, enters the critical section and retries the
-%% request, then inserts a new helper if the helper is still missing.
+%% request, then inserts a new helper handle if the helper is still missing.
 %% The first, out-of-critical-section fetch is an optimization.
 %% The fetch+insert occurs in the critical section to avoid
-%% instantiating unnecessary helper instances.
+%% instantiating unnecessary helper handles.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_lock_fetch_helper(SessionId :: id(), SpaceUuid :: file_meta:uuid(),
-    Storage :: #document{value :: #storage{}} | storage:id(),
+-spec fetch_lock_fetch_helper(id(), SpaceUuid :: file_meta:uuid(), storage:doc(),
     InCriticalSection :: boolean()) ->
-    {ok, helpers:handle()} | datastore:generic_error().
-fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, InCriticalSection) ->
-    StorageId = storage_id(Storage),
+    {ok, helpers:helper_handle()} | datastore:generic_error().
+fetch_lock_fetch_helper(SessionId, SpaceUuid, StorageDoc, InCriticalSection) ->
+    StorageId = storage:get_id(StorageDoc),
     FetchResult = datastore:fetch_link_target(?HELPER_LINK_LEVEL, SessionId,
-                      ?MODEL_NAME, link_key(SpaceUuid, StorageId)),
+        ?MODEL_NAME, link_key(SpaceUuid, StorageId)),
 
     case {FetchResult, InCriticalSection} of
         {{ok, #document{value = Handle}}, _} ->
@@ -581,73 +561,62 @@ fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, InCriticalSection) ->
 
         {{error, link_not_found}, false} ->
             critical_section:run({SessionId, SpaceUuid, StorageId}, fun() ->
-                fetch_lock_fetch_helper(SessionId, SpaceUuid, Storage, true)
+                fetch_lock_fetch_helper(SessionId, SpaceUuid, StorageDoc, true)
             end);
 
         {{error, link_not_found}, true} ->
-            {ok, #helper_instance{handle = Handle}} =
-                add_missing_helper(SessionId, SpaceUuid, Storage),
-            {ok, Handle};
+            add_missing_helper(SessionId, SpaceUuid, StorageDoc);
 
         {{error, Reason}, _} ->
             {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Translates Storage argument used in the module to a storage ID.
-%% @end
-%%--------------------------------------------------------------------
--spec storage_id(Storage :: #document{value :: #storage{}} | storage:id()) -> storage:id().
-storage_id(#document{key = StorageId, value = #storage{}}) -> StorageId;
-storage_id(StorageId) when is_binary(StorageId) -> StorageId.
-
-%%--------------------------------------------------------------------
 %% @doc
-%% @private
-%% Creates a new #helper_instance{} document in the database and links
+%% Creates a new #helper_handle{} document in the database and links
 %% it with current session.
 %% @end
 %%--------------------------------------------------------------------
--spec add_missing_helper(SessionId :: id(), SpaceUuid :: file_meta:uuid(),
-    Storage :: #document{value :: #storage{}} | storage:id()) ->
-    {ok, #helper_instance{}} | datastore:generic_error().
-add_missing_helper(SessionId, SpaceUuid, Storage) ->
-    StorageId = storage_id(Storage),
+-spec add_missing_helper(id(), SpaceUuid :: file_meta:uuid(),
+    storage:doc()) -> {ok, helpers:helper_handle()} | datastore:generic_error().
+add_missing_helper(SessionId, SpaceUuid, StorageDoc) ->
+    StorageId = storage:get_id(StorageDoc),
+    {ok, UserId} = get_user_id(SessionId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
 
-    {ok, #document{key = Key, value = HelperInstance}} =
-        helper_instance:create(SessionId, SpaceUuid, Storage),
+    {ok, #document{key = Key, value = HelperHandle}} =
+        helper_handle:create(UserId, SpaceId, StorageDoc),
 
     case datastore:add_links(?HELPER_LINK_LEVEL, SessionId, ?MODEL_NAME,
-                             [{link_key(StorageId, SpaceUuid),
-                               {Key, helper_instance}}]) of
+        [{link_key(StorageId, SpaceUuid),
+            {Key, helper_handle}}]) of
         ok ->
-            {ok, HelperInstance};
+            {ok, HelperHandle};
 
         {error, Reason} ->
-            helper_instance:delete(Key),
+            helper_handle:delete(Key),
             {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Removes all associated helper_instances present on the node.
+%% @doc
+%% Removes all associated helper handles present on the node.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_helpers_on_this_node(SessId :: id()) ->
     ok | datastore:generic_error().
 delete_helpers_on_this_node(SessId) ->
     datastore:foreach_link(?HELPER_LINK_LEVEL, SessId, ?MODEL_NAME,
-        fun(_LinkName, {_V, [{_, _, HelperKey, helper_instance}]}, _) ->
-            helper_instance:delete(HelperKey)
+        fun(_LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, _) ->
+            helper_handle:delete(HelperKey)
         end, undefined),
     ok.
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
+%% @doc
 %% Returns a key constructed from StorageId and SpaceUuid used for
 %% link targets.
 %% @end

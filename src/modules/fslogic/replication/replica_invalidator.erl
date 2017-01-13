@@ -47,7 +47,7 @@ invalidate_changes(Doc = #document{value = Loc}, [{rename, Rename}], NewSize) ->
             NewDoc;
         {renamed, RenamedDoc, UUID, UserId, TargetSpaceId} ->
             {ok, _} = file_location:save(RenamedDoc),
-            fslogic_file_location:chown_file(UUID, UserId, TargetSpaceId),
+            sfm_utils:chown_file(UUID, UserId, TargetSpaceId),
             RenamedDoc
     end;
 invalidate_changes(Doc = #document{value = Loc = #file_location{blocks = OldBlocks, size = OldSize}}, [{shrink, ShrinkSize} | Rest], Size) when OldSize > ShrinkSize ->

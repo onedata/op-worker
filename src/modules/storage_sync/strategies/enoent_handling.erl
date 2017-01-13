@@ -94,7 +94,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                     {Response, []};
                 OtherResp ->
                     ProviderIds = ProviderIds0 -- [oneprovider:get_provider_id()],
-                    SessionId = fslogic_context:get_session_id(CTX),
+                    SessionId = user_ctx:get_session_id(CTX),
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
                     NewJobs = case lists:member(ProxyVia, ProviderIds) of
                         true -> [];
@@ -133,7 +133,10 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
             Init = space_sync_worker:init(storage_update, SpaceId, StorageId, InitialImportJobData),
             case lists:member(ok, space_sync_worker:run(Init)) of
                 true ->
-                    fslogic_req_generic:get_file_attr(CTX, {path, LogicalPath});
+                    {ok, #document{key = Uuid}} = file_meta:get({path, LogicalPath}),
+                    Guid = fslogic_uuid:uuid_to_guid(Uuid),
+                    File = file_ctx:new_by_guid(Guid),
+                    (catch attr_req:get_file_attr_insecure(CTX, File));
                 _ ->
                     undefined
             end
@@ -170,12 +173,12 @@ strategy_merge_result([_ | JobsR], [_ | R]) ->
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
-    #file_attr{uuid = FileGUID, provider_id = ProviderId} = FResponse,
+    #file_attr{uuid = FileGuid, provider_id = ProviderId} = FResponse,
     case oneprovider:get_provider_id() of
         ProviderId -> ChildrenResult;
         _ ->
-            #file_attr{uuid = FileGUID} = FResponse,
-            file_force_proxy:save(#document{key = FileGUID, value = #file_force_proxy{provider_id = ProviderId}}),
+            #file_attr{uuid = FileGuid} = FResponse,
+            file_force_proxy:save(#document{key = FileGuid, value = #file_force_proxy{provider_id = ProviderId}}),
             ChildrenResult
     end;
 strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->

@@ -224,9 +224,9 @@ translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = Fo
     #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
 translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileUuid}) ->
     #create_storage_test_file{storage_id = Id, file_uuid = FileUuid};
-translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_uuid = SpaceUuid,
+translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_id = SpaceId,
     file_id = FId, file_content = FContent}) ->
-    #verify_storage_test_file{storage_id = SId, space_uuid = SpaceUuid,
+    #verify_storage_test_file{storage_id = SId, space_id = SpaceId,
         file_id = FId, file_content = FContent};
 
 translate_from_protobuf(#'FileRequest'{context_guid = ContextGuid, file_request = {_, Record}}) ->
@@ -338,6 +338,10 @@ translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = Child
     #file_renamed{
         new_uuid = NewUuid,
         child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
+    };
+translate_from_protobuf(#'Uuid'{uuid = Uuid}) ->
+    #uuid{
+        uuid = Uuid
     };
 
 
@@ -458,10 +462,6 @@ translate_from_protobuf(#'RemoveShare'{}) ->
     #remove_share{};
 translate_from_protobuf(#'Share'{share_id = ShareId, share_file_uuid = ShareGuid}) ->
     #share{share_id = ShareId, share_file_uuid = ShareGuid};
-translate_from_protobuf(#'Copy'{target_path = TargetPath}) ->
-    #copy{target_path = TargetPath};
-translate_from_protobuf(#'FileCopied'{new_uuid = NewUuid}) ->
-    #file_copied{new_uuid = NewUuid};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -735,10 +735,10 @@ translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = Hel
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
     #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
-    space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}) ->
+    space_id = SpaceId, file_id = FileId, file_content = FileContent}) ->
     {_, Record} = translate_to_protobuf(HelperParams),
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
-        space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
+        space_id = SpaceId, file_id = FileId, file_content = FileContent}};
 translate_to_protobuf(#sync_response{checksum = Value, file_location = FileLocation}) ->
     {_, ProtoFileLocation} = translate_to_protobuf(FileLocation),
     {sync_response, #'SyncResponse'{checksum = Value, file_location = ProtoFileLocation}};
@@ -759,7 +759,10 @@ translate_to_protobuf(#file_renamed{new_uuid = NewUuid, child_entries = ChildEnt
         new_uuid = NewUuid,
         child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
     }};
-
+translate_to_protobuf(#uuid{uuid = Uuid}) ->
+    {uuid, #'Uuid'{
+        uuid = Uuid
+    }};
 
 %% PROXYIO
 translate_to_protobuf(#proxyio_request{parameters = Parameters,
@@ -878,10 +881,6 @@ translate_to_protobuf(#remove_share{}) ->
     {remove_share, #'RemoveShare'{}};
 translate_to_protobuf(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
     {share, #'Share'{share_id = ShareId, share_file_uuid = ShareGuid}};
-translate_to_protobuf(#copy{target_path = TargetPath}) ->
-    {copy, #'Copy'{target_path = TargetPath}};
-translate_to_protobuf(#file_copied{new_uuid = NewUuid}) ->
-    {file_copied, #'FileCopied'{new_uuid = NewUuid}};
 
 %% DBSYNC
 translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->

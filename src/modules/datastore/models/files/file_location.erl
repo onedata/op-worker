@@ -287,6 +287,6 @@ count_bytes([#file_block{size = Size} | T], TotalSize) ->
 %%--------------------------------------------------------------------
 -spec get_user_id(file_meta:uuid()) -> datastore:id().
 get_user_id(FileUUID) ->
-    {ok, #document{value = #file_meta{uid = UserId}}} =
+    {ok, #document{value = #file_meta{owner = UserId}}} =
         file_meta:get({uuid, FileUUID}),
     UserId.

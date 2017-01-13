@@ -415,7 +415,7 @@ init_per_testcase(_Case, Config) ->
     end),
     NewConfig.
 
-end_per_testcase(subscribe_should_work_for_multiple_sessions = Case, Config) ->
+end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, od_space),
