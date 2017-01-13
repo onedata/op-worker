@@ -626,7 +626,7 @@ changes_stream_file_location_test(Config) ->
 changes_stream_on_multi_provider_test(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    [_, _, {_SpaceId, SpaceName}] = ?config({spaces, <<"user1">>}, Config),
     File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4"])),
     Mode = 8#700,
     % when
@@ -636,7 +636,7 @@ changes_stream_on_multi_provider_test(Config) ->
         {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
         lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>)
     end),
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"changes/metadata/space1?timeout=20000">>,
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"changes/metadata/space3?timeout=20000">>,
         get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 60000}]),
 
     ?assertNotEqual(<<>>, Body),
@@ -650,7 +650,7 @@ changes_stream_on_multi_provider_test(Config) ->
 
     ?assert(lists:any(fun(Change) ->
         <<"file4">> == maps:get(<<"name">>, Change) andalso
-        3 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
+        4 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"mtime">>, maps:get(<<"changes">>, Change))

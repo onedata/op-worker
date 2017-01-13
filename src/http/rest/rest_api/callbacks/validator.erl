@@ -257,7 +257,12 @@ parse_last_seq(Req, State) ->
     {RawLastSeq, NewReq} = cowboy_req:qs_val(<<"last_seq">>, Req, ?DEFAULT_LAST_SEQ),
     case RawLastSeq of
         <<"now">> ->
-            {State#{last_seq => dbsync_worker:state_get(global_resume_seq)}, NewReq};
+            case dbsync_worker:state_get(global_resume_seq) of
+                undefined ->
+                    {State#{last_seq => 0}, NewReq};
+                LastSeq ->
+                    {State#{last_seq => LastSeq}, NewReq}
+            end;
         Number ->
             try binary_to_integer(Number) of
                 LastSeq ->

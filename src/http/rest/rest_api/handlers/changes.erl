@@ -22,7 +22,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("http/rest/rest_api/rest_errors.hrl").
 
-
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
     content_types_provided/2]).
@@ -47,7 +46,7 @@ rest_init(Req, State) ->
 -spec terminate(Reason :: term(), req(), maps:map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
     gen_changes:stop(Stream),
-    Pid ! {Ref, stream_ended};
+    Pid ! {Ref, stream_ended, undefined};
 terminate(_, _, #{changes_stream := Stream}) ->
     gen_changes:stop(Stream);
 terminate(_, _, #{}) ->
