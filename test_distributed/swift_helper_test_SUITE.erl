@@ -225,42 +225,46 @@ new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
     SwiftConfig = ?config(swift, ?config(swift, ?config(storages, Config))),
-    HelperArgs = #{
-        <<"tenant_name">> => atom_to_binary(?config(tenant_name, SwiftConfig), utf8),
-        <<"auth_url">> => <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
+
+    UserCtx = helper:new_swift_user_ctx(
+        atom_to_binary(?config(user_name, SwiftConfig), utf8),
+        atom_to_binary(?config(password, SwiftConfig), utf8)
+    ),
+    Helper = helper:new_swift_helper(
+        <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
             ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v2.0/tokens">>,
-        <<"container_name">> => ?SWIFT_CONTAINER_NAME
-    },
-    UserCtx = #swift_user_ctx{
-        user_name = atom_to_binary(?config(user_name, SwiftConfig), utf8),
-        password = atom_to_binary(?config(password, SwiftConfig), utf8)
-    },
+        ?SWIFT_CONTAINER_NAME,
+        atom_to_binary(?config(tenant_name, SwiftConfig), utf8),
+        #{},
+        UserCtx,
+        false
+    ),
 
     spawn_link(Node, fun() ->
-        helper_loop(?SWIFT_HELPER_NAME, HelperArgs, UserCtx)
+        helper_loop(Helper, UserCtx)
     end).
 
 delete_helper(Helper) ->
     Helper ! exit.
 
-helper_loop(HelperName, HelperArgs, UserCtx) ->
-    Ctx = helpers:new_handle(HelperName, HelperArgs, UserCtx),
-    helper_loop(Ctx).
+helper_loop(Helper, UserCtx) ->
+    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    helper_loop(Handle).
 
-helper_loop(Ctx) ->
+helper_loop(Handle) ->
     receive
         exit ->
             ok;
 
         {Pid, {run_helpers, open, Args}} ->
-            {ok, FileHandle} = apply(helpers, open, [Ctx | Args]),
+            {ok, FileHandle} = apply(helpers, open, [Handle | Args]),
             HandlePid = spawn_link(fun() -> helper_handle_loop(FileHandle) end),
             Pid ! {self(), {ok, HandlePid}},
-            helper_loop(Ctx);
+            helper_loop(Handle);
 
         {Pid, {run_helpers, Method, Args}} ->
-            Pid ! {self(), apply(helpers, Method, [Ctx | Args])},
-            helper_loop(Ctx)
+            Pid ! {self(), apply(helpers, Method, [Handle | Args])},
+            helper_loop(Handle)
     end.
 
 helper_handle_loop(FileHandle) ->

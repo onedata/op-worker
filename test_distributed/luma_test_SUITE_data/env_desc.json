@@ -11,39 +11,9 @@
     },
     "os_configs": {
         "cfg1": {
-            "storages": [
-                {
-                    "type": "posix",
-                    "name": "/mnt/st1"
-                },
-                {
-                    "type": "ceph",
-                    "name": "ceph",
-                    "pool": "onedata:8"
-                },
-                {
-                    "type": "s3",
-                    "name": "s3",
-                    "bucket": "onedata",
-                    "disable_iam_mock": true
-                },
-                {
-                    "type": "swift",
-                    "name": "swift",
-                    "container": "swift"
-                }
-            ],
-            "users": [
-                "u1"
-            ],
-            "groups": {
-                "s1": [
-                    "u1"
-                ],
-                "fuse": [
-                    "u1"
-                ]
-            }
+            "storages": [],
+            "users": [],
+            "groups": {}
         }
     },
     "provider_domains": {
@@ -74,9 +44,7 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ],
-                        "global_registry_domain": "gr",
-                        "verify_gr_cert": false
+                        ]
                     }
                 }
             }

@@ -5,131 +5,47 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Module for storage management.
+%%% @doc This module is responsible for selection of storage and helper
+%%% used during filesystem operations.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_storage).
 -author("Rafal Slota").
 
--include("global_definitions.hrl").
--include("modules/datastore/datastore_specific_models_def.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/logging.hrl").
-
 %% API
--export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2, new_storage/3]).
--export([new_user_ctx/3, get_posix_user_ctx/3]).
+-export([select_storage/1, select_helper/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new user's storage context based on given helper.
+%% Returns first configured storage for given space.
 %% @end
 %%--------------------------------------------------------------------
--spec new_user_ctx(HelperInit :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
-    helpers_user:ctx().
-new_user_ctx(HelperInit, SessionId, SpaceUUID) ->
-    LumaType = luma_type(),
-    LumaType:new_user_ctx(HelperInit, SessionId, SpaceUUID).
-
-
-%%--------------------------------------------------------------------
-%% @doc Retrieves posix user ctx for file attrs
-%% @end
-%%--------------------------------------------------------------------
--spec get_posix_user_ctx(StorageType :: helpers:name(), SessionIdOrIdentity :: session:id() | session:identity(),
-    SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
-get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID) ->
-    LumaType = luma_type(),
-    LumaType:get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns any available storage for given fslogic ctx.
-%% @end
-%%--------------------------------------------------------------------
--spec select_helper(datastore:document() | #storage{}) -> {ok, #helper_init{}} | {error, Reason :: term()}.
-select_helper(#document{value = Storage}) ->
-    select_helper(Storage);
-select_helper(#storage{helpers = []} = Storage) ->
-    {error, {no_helper_available, Storage}};
-select_helper(#storage{helpers = [Helper | _]}) ->
-    {ok, Helper}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns any available storage for given space id.
-%% @end
-%%--------------------------------------------------------------------
--spec select_storage(SpaceId :: binary()) ->
-    {ok, datastore:document()} | {error, Reason :: term()}.
+-spec select_storage(od_space:id()) ->
+    {ok, storage:doc()} | {error, Reason :: term()}.
 select_storage(SpaceId) ->
     case space_storage:get(SpaceId) of
-        {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} ->
-            case storage:get(StorageId) of
-                {ok, #document{} = Storage} -> {ok, Storage};
-                {error, Reason} -> {error, Reason}
+        {ok, Doc} ->
+            case space_storage:get_storage_ids(Doc) of
+                [] -> {error, {no_storage_avaliable, SpaceId}};
+                [StorageId | _] -> storage:get(StorageId)
             end;
         {error, Reason} ->
             {error, Reason}
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new helper_init structure.
+%% Returns first configured helper for given storage.
 %% @end
 %%--------------------------------------------------------------------
--spec new_helper_init(HelperName :: helpers:name(), HelperArgs :: helpers:args()) -> #helper_init{}.
-new_helper_init(HelperName, HelperArgs) ->
-    #helper_init{name = HelperName, args = HelperArgs}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new storage structure with readonly attribute set to false.
-%% @end
-%%--------------------------------------------------------------------
--spec new_storage(Name :: storage:name(), [#helper_init{}]) -> #storage{}.
-new_storage(Name, Helpers) ->
-    new_storage(Name, false, Helpers).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new storage structure.
-%% @end
-%%--------------------------------------------------------------------
--spec new_storage(Name :: storage:name(), ReadOnly :: boolean(),
-    [#helper_init{}]) -> #storage{}.
-new_storage(Name, ReadOnly, Helpers) ->
-    #storage{name = Name, helpers = Helpers, readonly = ReadOnly}.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns luma module to use based on config
-%% @end
-%%--------------------------------------------------------------------
--spec luma_type() -> luma_proxy | luma_provider.
-luma_type() ->
-    case application:get_env(?APP_NAME, enable_luma_proxy) of
-        {ok, true} ->
-            luma_proxy;
-        {ok, false} ->
-            luma_provider
+-spec select_helper(storage:doc()) ->
+    {ok, storage:helper()} | {error, Reason :: term()}.
+select_helper(StorageDoc) ->
+    case storage:get_helpers(StorageDoc) of
+        [] -> {error, {no_helper_available, storage:get_id(StorageDoc)}};
+        [Helper | _] -> {ok, Helper}
     end.

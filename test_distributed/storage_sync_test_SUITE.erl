@@ -418,7 +418,7 @@ enable_storage_sync(Config) ->
             %% Enable import
             #document{value = #storage{helpers = [W1Helpers]}} = W1Storage,
             {ok, _ } = rpc:call(W1, storage_sync, start_storage_import, [?SPACE_ID, 10]),
-            #helper_init{args = #{<<"root_path">> := W1MountPoint}} = W1Helpers,
+            #{<<"mountPoint">> := W1MountPoint} = helper:get_args(W1Helpers),
             [{w1_mount_point, W1MountPoint} | Config];
         _ ->
             Config

@@ -198,7 +198,7 @@ send_change(SendChunk, Change, RequestedSpaceId) ->
 prepare_response(#change{seq = Seq, doc = FileDoc = #document{
     key = Uuid, deleted = Deleted,
     value = #file_meta{
-        is_scope = IsScope, mode = Mode, type = Type, uid = Uid,
+        is_scope = IsScope, mode = Mode, type = Type, owner = Uid,
         version = Version, name = Name}}}, SpaceId) ->
     #times{atime = Atime, ctime = Ctime, mtime = Mtime} =
         try

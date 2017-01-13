@@ -412,7 +412,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                 name = Name,
                 type = Type,
                 mode = 8#775,
-                uid = User,
+                owner = User,
                 scope = SpaceKey
             }
             },
@@ -810,7 +810,7 @@ create_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     Worker1 = ?config(worker1, Config),
 
     File = generator:gen_name(),
-    FilePath = <<SpaceName/binary, "/",  File/binary>>,
+    FilePath = <<"/", SpaceName/binary, "/",  File/binary>>,
 
     lists:foreach(fun(_N) ->
         ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessId(Worker1), FilePath, 8#755)),
@@ -826,7 +826,7 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     Worker1 = ?config(worker1, Config),
 
     File = generator:gen_name(),
-    FilePath = <<SpaceName/binary, "/",  File/binary>>,
+    FilePath = <<"/", SpaceName/binary, "/",  File/binary>>,
     Text = <<"0123456789abcdef">>,
     BufSize = size(Text),
 
