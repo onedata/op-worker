@@ -23,7 +23,7 @@
 
 %% API
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([file_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 -export([group_record/1, group_record/2]).
@@ -54,12 +54,12 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback file_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec file_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"group">>, GroupId) ->
+file_record(<<"group">>, GroupId) ->
     UserId = gui_session:get_user_id(),
     % Check if the user belongs to this group
     case group_logic:has_effective_user(GroupId, UserId) of
@@ -70,7 +70,7 @@ find(<<"group">>, GroupId) ->
     end;
 
 % PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
-find(PermissionsRecord, RecordId) ->
+file_record(PermissionsRecord, RecordId) ->
     GroupId = case PermissionsRecord of
         <<"group-user-list">> ->
             RecordId;
@@ -115,12 +115,23 @@ find_all(<<"group">>) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(<<"group">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"group">>, _Data) ->
+query_record(<<"group">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 

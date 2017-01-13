@@ -31,7 +31,7 @@
 
 %% API
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
@@ -60,18 +60,18 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"system-provider">>, _ProviderId) ->
+find_record(<<"system-provider">>, _ProviderId) ->
     gui_error:report_error(<<"Not implemented">>);
 
-find(<<"system-user">>, _UserId) ->
+find_record(<<"system-user">>, _UserId) ->
     gui_error:report_error(<<"Not implemented">>);
 
-find(<<"system-group">>, _GroupId) ->
+find_record(<<"system-group">>, _GroupId) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -88,12 +88,23 @@ find_all(_ResourceType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(_ResourceType, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"system-provider">>, Data) ->
+query_record(<<"system-provider">>, Data) ->
     ProviderId = proplists:get_value(<<"id">>, Data),
     % Do not check context, provider name can always be fetched
     _Context = proplists:get_value(<<"context">>, Data),
@@ -105,7 +116,7 @@ find_query(<<"system-provider">>, Data) ->
         {<<"name">>, Name}
     ]};
 
-find_query(<<"system-user">>, Data) ->
+query_record(<<"system-user">>, Data) ->
     CurrentUserId = gui_session:get_user_id(),
     UserId = proplists:get_value(<<"id">>, Data),
     Context = proplists:get_value(<<"context">>, Data),
@@ -128,7 +139,7 @@ find_query(<<"system-user">>, Data) ->
             ]}
     end;
 
-find_query(<<"system-group">>, Data) ->
+query_record(<<"system-group">>, Data) ->
     CurrentUserId = gui_session:get_user_id(),
     GroupId = proplists:get_value(<<"id">>, Data),
     Context = proplists:get_value(<<"context">>, Data),
