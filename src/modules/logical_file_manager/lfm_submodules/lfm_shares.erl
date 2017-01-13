@@ -31,7 +31,7 @@
     {ok, {od_share:id(), od_share:share_guid()}} | logical_file_manager:error_reply().
 create_share(SessId, FileKey, Name) ->
     {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    lfm_utils:call_fslogic(SessId, provider_request, GUID,
+    remote_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
         fun(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
             {ok, {ShareId, ShareGuid}} end).
@@ -59,6 +59,6 @@ remove_share(SessId, ShareID) ->
 -spec remove_share_by_guid(session:id(), od_share:share_guid()) ->
     ok | logical_file_manager:error_reply().
 remove_share_by_guid(SessId, ShareGuid) ->
-    lfm_utils:call_fslogic(SessId, provider_request, ShareGuid,
+    remote_utils:call_fslogic(SessId, provider_request, ShareGuid,
         #remove_share{},
         fun(_) -> ok end).

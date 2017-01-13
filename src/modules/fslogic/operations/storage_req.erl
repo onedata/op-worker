@@ -7,9 +7,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Requests related to storage
-%%% This module contains functions used during remote client
-%%% initialization.
+%%% This module is responsible for handing requests related to storage.
+%%% It is used during remote client initialization.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_req).
@@ -20,7 +19,6 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 -define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
@@ -68,28 +66,28 @@ get_configuration(SessId) ->
 %% Gets helper params based on given storage ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_params(fslogic_context:ctx(), storage:id(),
+-spec get_helper_params(user_ctx:ctx(), storage:id(),
     ForceCL :: boolean()) -> #fuse_response{}.
-get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
+get_helper_params(_UserCtx, StorageId, true = _ForceProxy) ->
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperParams = helper:get_proxy_params(Helper, StorageId),
     #fuse_response{status = #status{code = ?OK}, fuse_response = HelperParams};
-get_helper_params(_Ctx, _StorageId, false = _ForceProxy) ->
+get_helper_params(_UserCtx, _StorageId, false = _ForceProxy) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates test file on a given storage in the directory of a file referenced
-%% by UUID. File is created on behalf of the user associated with the session.
+%% by Guid. File is created on behalf of the user associated with the session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_test_file(fslogic_context:ctx(), fslogic_worker:file_guid(),
+-spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
-create_storage_test_file(Ctx, Guid, StorageId) ->
-    File = file_info:new_by_guid(Guid),
-    UserId = fslogic_context:get_user_id(Ctx),
-    SpaceId = case file_info:get_space_id(File) of
+create_storage_test_file(UserCtx, Guid, StorageId) ->
+    File = file_ctx:new_by_guid(Guid),
+    UserId = user_ctx:get_user_id(UserCtx),
+    SpaceId = case file_ctx:get_space_id_const(File) of
         undefined -> throw(?ENOENT);
         <<_/binary>> = Id -> Id
     end,
@@ -99,19 +97,19 @@ create_storage_test_file(Ctx, Guid, StorageId) ->
     HelperName = helper:get_name(Helper),
 
     case luma:get_client_user_ctx(UserId, SpaceId, StorageDoc, HelperName) of
-        {ok, ClientUserCtx} ->
-            {ok, ServerUserCtx} = luma:get_server_user_ctx(UserId, SpaceId,
+        {ok, ClientStorageUserUserCtx} ->
+            {ok, ServerStorageUserUserCtx} = luma:get_server_user_ctx(UserId, SpaceId,
                 StorageDoc, HelperName),
-            HelperParams = helper:get_params(Helper, ClientUserCtx),
+            HelperParams = helper:get_params(Helper, ClientStorageUserUserCtx),
 
-            {FileId, _NewFile} = file_info:get_storage_file_id(File),
+            {FileId, _NewFile} = file_ctx:get_storage_file_id(File),
             Dirname = fslogic_path:dirname(FileId),
             TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
-            FileContent = storage_detector:create_test_file(Helper, ServerUserCtx, TestFileId),
+            FileContent = storage_detector:create_test_file(Helper, ServerStorageUserUserCtx, TestFileId),
 
             spawn(storage_req, remove_storage_test_file, [
-                Helper, ServerUserCtx, TestFileId, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+                Helper, ServerStorageUserUserCtx, TestFileId, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
 
             #fuse_response{
                 status = #status{code = ?OK},
@@ -130,15 +128,15 @@ create_storage_test_file(Ctx, Guid, StorageId) ->
 %% its content VERIFY_STORAGE_TEST_FILE_ATTEMPTS times.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_storage_test_file(fslogic_context:ctx(), od_space:id(),
+-spec verify_storage_test_file(user_ctx:ctx(), od_space:id(),
     storage:id(), helpers:file_id(), FileContent :: binary()) -> #fuse_response{}.
-verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent) ->
-    UserId = fslogic_context:get_user_id(Ctx),
+verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
+    UserId = user_ctx:get_user_id(UserCtx),
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
-    {ok, UserCtx} = luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName),
-    verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent, ?ENOENT,
+    {ok, StorageUserCtx} = luma:get_server_user_ctx(UserId, SpaceId, StorageDoc, HelperName),
+    verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
 %%%===================================================================
@@ -153,9 +151,9 @@ verify_storage_test_file(Ctx, SpaceId, StorageId, FileId, FileContent) ->
 %%--------------------------------------------------------------------
 -spec remove_storage_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
     Delay :: timeout()) -> ok.
-remove_storage_test_file(Helper, UserCtx, FileId, Delay) ->
+remove_storage_test_file(Helper, StorageUserCtx, FileId, Delay) ->
     timer:sleep(Delay),
-    storage_detector:remove_test_file(Helper, UserCtx, FileId).
+    storage_detector:remove_test_file(Helper, StorageUserCtx, FileId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -170,19 +168,18 @@ remove_storage_test_file(Helper, UserCtx, FileId, Delay) ->
     Attempts :: non_neg_integer()) -> #fuse_response{}.
 verify_storage_test_file_loop(_, _, _, _, Code, 0) ->
     #fuse_response{status = #status{code = Code}};
-
-verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent, _, Attempts) ->
-    try storage_detector:read_test_file(Helper, UserCtx, FileId) of
+verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, _, Attempts) ->
+    try storage_detector:read_test_file(Helper, StorageUserCtx, FileId) of
         FileContent ->
-            storage_detector:remove_test_file(Helper, UserCtx, FileId),
+            storage_detector:remove_test_file(Helper, StorageUserCtx, FileId),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent,
+            verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
                 ?EINVAL, Attempts - 1)
     catch
         {_, {error, ?ENOENT}} ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Helper, UserCtx, FileId, FileContent,
+            verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
                 ?ENOENT, Attempts - 1)
     end.

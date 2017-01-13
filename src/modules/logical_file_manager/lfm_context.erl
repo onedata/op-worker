@@ -40,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create new lfm_context record.
+%% Creates new lfm_context record.
 %% @end
 %%--------------------------------------------------------------------
 -spec new(handle_id(), file_location:model_record(), od_provider:id(),
@@ -59,7 +59,7 @@ new(HandleId, FileLocation, ProviderId, SfmHandles, SessionId, FileGuid, OpenFla
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Set file_location in handle
+%% Sets file_location in handle
 %% @end
 %%--------------------------------------------------------------------
 -spec set_file_location(handle(), file_location:model_record()) -> handle().
@@ -68,7 +68,7 @@ set_file_location(Handle, FileLocation) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Set sfm_handles in handle
+%% Sets sfm_handles in handle
 %% @end
 %%--------------------------------------------------------------------
 -spec set_sfm_handles(handle(), sfm_handles_map()) -> handle().
@@ -77,7 +77,7 @@ set_sfm_handles(Handle, FileLocation) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get guid from context.
+%% Getx guid from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_guid(handle()) -> fslogic_worker:file_guid().
@@ -86,7 +86,7 @@ get_guid(#lfm_context{file_guid = Guid}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get session id from context.
+%% Gets session id from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_session_id(handle()) -> session:id().
@@ -95,7 +95,7 @@ get_session_id(#lfm_context{session_id = SessionId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get share_id from context.
+%% Gets share_id from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_share_id(handle()) -> od_share:id() | undefined.
@@ -104,7 +104,7 @@ get_share_id(#lfm_context{file_guid = Guid}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get provider_id from context.
+%% Gets provider_id from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id(handle()) -> od_provider:id().
@@ -113,7 +113,7 @@ get_provider_id(#lfm_context{provider_id = ProviderId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get handle_id from context.
+%% Gets handle_id from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_handle_id(handle()) -> handle_id().
@@ -122,7 +122,7 @@ get_handle_id(#lfm_context{handle_id = HandleId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get sfm_handles from context.
+%% Gets sfm_handles from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handles(handle()) -> sfm_handles_map().
@@ -131,7 +131,7 @@ get_sfm_handles(#lfm_context{sfm_handles = SfmHandles}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file_location from context.
+%% Gets file_location from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location(handle()) -> file_location:model_record().
@@ -140,7 +140,7 @@ get_file_location(#lfm_context{file_location = FileLocation}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get open_flag from context.
+%% Gets open_flag from context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_open_flag(handle()) -> fslogic_worker:open_flag().

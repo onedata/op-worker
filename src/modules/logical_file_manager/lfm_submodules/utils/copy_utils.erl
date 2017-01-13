@@ -9,7 +9,7 @@
 %%% Implementation of copy.
 %%% @end
 %%%--------------------------------------------------------------------
--module(fslogic_copy).
+-module(copy_utils).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -31,61 +31,63 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Checks file type and executes type specific copy function.
+%% @doc
+%% Checks file type and executes type specific copy function.
+%% @end
 %%--------------------------------------------------------------------
--spec copy(Ctx :: fslogic_context:ctx(), SourceEntry :: fslogic_worker:file(),
-    LogicalTargetPath :: file_meta:path()) ->
-    #provider_response{} | no_return().
-copy(Ctx, SourceEntry, LogicalTargetPath) ->
-
-    case file_meta:get(SourceEntry) of
-        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = SourceDoc} ->
-            copy_dir(Ctx, SourceDoc, LogicalTargetPath);
-        {ok, #document{value = #file_meta{type = _}} = SourceDoc} ->
-            copy_file(Ctx, SourceDoc, LogicalTargetPath)
+-spec copy(session:id(), SourceEntry :: {guid, fslogic_worker:file_guid()}, TargetPath :: file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()} | {error, term()}.
+copy(SessId, SourceEntry, TargetPath) ->
+    try
+        case logical_file_manager:stat(SessId, SourceEntry) of
+            {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
+                copy_dir(SessId, Attr, TargetPath);
+            {ok, Attr} ->
+                copy_file(SessId, Attr, TargetPath)
+        end
+    catch
+        _:{badmatch, Error}  ->
+            Error
     end.
-
-%%--------------------------------------------------------------------
-%% @doc Checks permissions and copies directory.
-%%--------------------------------------------------------------------
--spec copy_dir(Ctx :: fslogic_context:ctx(), SourceEntry :: fslogic_worker:file(),
-    LogicalTargetPath :: file_meta:path()) ->
-    #provider_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {?traverse_container, 2},
-    {?list_container, 2}, {?read_metadata, 2}, {?read_attributes, 2}, {?read_acl, 2}]).
-copy_dir(Ctx, #document{key = SourceUuid, value = #file_meta{mode = Mode}}, LogicalTargetPath) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
-    {ok, TargetGuid} = logical_file_manager:mkdir(SessId, LogicalTargetPath),
-    ok = copy_children(Ctx, SourceGuid, LogicalTargetPath, 0),
-    ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
-    #provider_response{status = #status{code = ?OK}, provider_response = #file_copied{new_uuid = TargetGuid}}.
-
-%%--------------------------------------------------------------------
-%% @doc Checks permissions and copies file.
-%%--------------------------------------------------------------------
--spec copy_file(Ctx :: fslogic_context:ctx(), SourceEntry :: fslogic_worker:file(),
-    LogicalTargetPath :: file_meta:path()) ->
-    #provider_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {?read_object, 2},
-    {?read_metadata, 2}, {?read_attributes, 2}, {?read_acl, 2}]).
-copy_file(Ctx, #document{key = SourceUuid, value = #file_meta{mode = Mode}}, LogicalTargetPath) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
-    {ok, TargetGuid} = logical_file_manager:create(SessId, LogicalTargetPath),
-    {ok, SourceHandle} = logical_file_manager:open(SessId, {guid, SourceGuid}, read),
-    {ok, TargetHandle} = logical_file_manager:open(SessId, {guid, TargetGuid}, write),
-    {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(SourceHandle, TargetHandle, 0),
-    ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
-    #provider_response{status = #status{code = ?OK}, provider_response = #file_copied{new_uuid = TargetGuid}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Copy file content from source to handle
+%% Checks permissions and copies directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec copy_dir(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()} | {error, term()}.
+copy_dir(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
+    {ok, TargetGuid} = logical_file_manager:mkdir(SessId, LogicalTargetPath),
+    ok = copy_children(SessId, SourceGuid, LogicalTargetPath, 0),
+    ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
+    {ok, TargetGuid}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks permissions and copies file.
+%% @end
+%%--------------------------------------------------------------------
+-spec copy_file(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()} | {error, term()}.
+copy_file(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
+    {ok, TargetGuid} = logical_file_manager:create(SessId, LogicalTargetPath),
+    {ok, SourceHandle} = logical_file_manager:open(SessId, {guid, SourceGuid}, read),
+    {ok, TargetHandle} = logical_file_manager:open(SessId, {guid, TargetGuid}, write),
+    {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(SourceHandle, TargetHandle, 0),
+    ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
+    {ok, TargetGuid}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Copies file content from source to handle
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_file_content(lfm_files:handle(), lfm_files:handle(), non_neg_integer()) ->
@@ -106,29 +108,30 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Copy children of file
+%% Copies children of file
 %% @end
 %%--------------------------------------------------------------------
--spec copy_children(fslogic_context:ctx(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
+-spec copy_children(session:id(), fslogic_worker:file_guid(), file_meta:path(), non_neg_integer()) ->
     ok | {error, term()}.
-copy_children(Ctx, ParentGuid, TargetPath, Offset) ->
-    SessId = fslogic_context:get_session_id(Ctx),
+copy_children(SessId, ParentGuid, TargetPath, Offset) ->
     case logical_file_manager:ls(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
         {ok, []} ->
             ok;
         {ok, Children} ->
             lists:foreach(fun({ChildGuid, ChildName}) ->
-                #provider_response{status = #status{code = ?OK}} = copy(Ctx,
-                    {uuid, fslogic_uuid:guid_to_uuid(ChildGuid)}, filename:join(TargetPath, ChildName))
-            end, Children);
+                {ok, _} = copy(SessId, {guid, ChildGuid}, filename:join(TargetPath, ChildName))
+            end, Children),
+            ok;
         Error ->
             Error
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Copy metadata of file
+%% Copies metadata of file
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),

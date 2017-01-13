@@ -9,7 +9,7 @@
 %%% This file contains tests of fuse_config_manager API.
 %%% @end
 %%%-------------------------------------------------------------------
--module(fuse_config_manager_test_SUITE).
+-module(storage_req_test_SUITE).
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").

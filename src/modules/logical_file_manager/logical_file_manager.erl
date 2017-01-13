@@ -8,7 +8,8 @@
 %%% @doc This module offers a high level API for operating on logical filesystem.
 %%% When passing a file in arguments, one can use one of the following:
 %%% {guid, FileGuid} - preferred and fast. guids are returned from 'ls' function.
-%%% {path, BinaryFilePath} - slower than by guid (path has to be resolved). Discouraged, but there are cases when this is useful.
+%%% {path, BinaryFilePath} - slower than by guid (path has to be resolved).
+%%%    Discouraged, but there are cases when this is useful.
 %%% Some functions accepts also Handle obtained from open operation.
 %%%
 %%% This module is merely a convenient wrapper that calls functions from lfm_xxx modules.
@@ -42,10 +43,10 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, mkdir/4, ls/4, get_child_attr/3, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3]).
+-export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, write/3, read/3,
-    truncate/3, release/1, get_file_distribution/2, replicate_file/3]).
+    truncate/3, release/1, get_file_distribution/2]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -92,7 +93,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 %%--------------------------------------------------------------------
 -spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
 rm_recursive(SessId, FileKey) ->
-    ?run(fun() -> lfm_utils:rm(SessId, FileKey) end).
+    ?run(fun() -> lfm_files:rm(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -108,7 +109,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get attribute of a child with given name.
+%% Gets attribute of a child with given name.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
@@ -137,16 +138,6 @@ get_children_count(SessId, FileKey) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 get_parent(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_parent(SessId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if a file or directory exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(FileKey :: file_key()) ->
-    {ok, boolean()} | error_reply().
-exists(FileKey) ->
-    ?run(fun() -> lfm_files:exists(FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -188,6 +179,16 @@ get_file_path(SessId, FileGUID) ->
 unlink(SessId, FileEntry, Silent) ->
     ?run(fun() -> lfm_files:unlink(SessId, FileEntry, Silent) end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Replicates file on given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    ProviderId :: oneprovider:id()) ->
+    ok | error_reply().
+replicate_file(SessId, FileKey, ProviderId) ->
+    ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -284,17 +285,6 @@ get_file_distribution(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Replicates file on given provider.
-%% @end
-%%--------------------------------------------------------------------
--spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    ProviderId :: oneprovider:id()) ->
-    ok | error_reply().
-replicate_file(SessId, FileKey, ProviderId) ->
-    ?run(fun() -> lfm_files:replicate_file(SessId, FileKey, ProviderId) end).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Changes the permissions of a file.
 %% @end
 %%--------------------------------------------------------------------
@@ -336,7 +326,7 @@ set_acl(SessId, FileKey, EntityList) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove file's Access Control List.
+%% Removes file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
@@ -403,7 +393,9 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal) end).
 
 %%--------------------------------------------------------------------
-%% @doc Returns encoding suitable for rest transfer.
+%% @doc
+%% Returns encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(session:id(), file_key()) ->
     {ok, xattr:transfer_encoding()} | error_reply().
@@ -411,7 +403,9 @@ get_transfer_encoding(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:get_transfer_encoding(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
-%% @doc Sets encoding suitable for rest transfer.
+%% @doc
+%% Sets encoding suitable for rest transfer.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(session:id(), file_key(), xattr:transfer_encoding()) ->
     ok | error_reply().
@@ -443,7 +437,9 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
         lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
 
 %%--------------------------------------------------------------------
-%% @doc Returns mimetype of file.
+%% @doc
+%% Returns mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), file_key()) ->
     {ok, xattr:mimetype()} | error_reply().
@@ -451,7 +447,9 @@ get_mimetype(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:get_mimetype(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
-%% @doc Sets mimetype of file.
+%% @doc
+%% Sets mimetype of file.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_mimetype(session:id(), file_key(), xattr:mimetype()) ->
     ok | error_reply().

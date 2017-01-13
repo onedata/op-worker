@@ -112,10 +112,6 @@
 -record(remove_share, {
 }).
 
--record(copy, {
-    target_path :: file_meta:path()
-}).
-
 -type provider_request_type() ::
 #get_xattr{} | #set_xattr{} | #remove_xattr{} | #list_xattr{} |
 #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
@@ -123,7 +119,7 @@
 #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} | #fsync{} |
 #get_file_distribution{} | #replicate_file{} | #get_metadata{} | #remove_metadata{} |
-#set_metadata{} | #check_perms{} | #create_share{} | #remove_share{} | #copy{}.
+#set_metadata{} | #check_perms{} | #create_share{} | #remove_share{}.
 
 -record(xattr_list, {
     names :: [xattr:name()]
@@ -164,14 +160,10 @@
     share_file_uuid :: od_share:share_guid()
 }).
 
--record(file_copied, {
-    new_uuid :: fslogic_worker:file_guid()
-}).
-
 -type provider_response_type() ::
     #xattr{} | #xattr_list{} | #transfer_encoding{} | #cdmi_completion_status{} |
     #mimetype{} | #acl{} | #dir{} | #file_path{} | #file_distribution{} |
-    #metadata{} | #share{} |  #file_copied{} | undefined.
+    #metadata{} | #share{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

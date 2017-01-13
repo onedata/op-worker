@@ -210,7 +210,7 @@ chown_pending_files(UserId) ->
 -spec chown_pending_file(file_meta:uuid()) -> ok.
 chown_pending_file(FileUuid) ->
     try
-        {ok, #document{value = #file_meta{uid = UserId}}} = file_meta:get({uuid, FileUuid}),
+        {ok, #document{value = #file_meta{owner = UserId}}} = file_meta:get({uuid, FileUuid}),
         {ok, #document{key = SpaceDirUuid}} = file_meta:get_scope({uuid, FileUuid}),
         SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
         chown_file(FileUuid, UserId, SpaceId)

@@ -269,7 +269,7 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
-    uid :: undefined | od_user:id(), %% Reference to od_user that owns this file
+    owner :: undefined | od_user:id(),
     size = 0 :: undefined | file_meta:size(),
     version = 0, %% Snapshot version
     is_scope = false :: boolean(),

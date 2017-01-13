@@ -35,18 +35,19 @@
 %%--------------------------------------------------------------------
 -spec handle_error(fslogic_worker:request(), Type :: atom(),  Reason :: term()) ->
     fslogic_worker:response().
-handle_error(Request, throw, Reason) ->
-    %% Manually thrown error, normal interrupt case.
-    report_error(Request, Reason, debug, erlang:get_stacktrace());
-handle_error(Request, error, {badmatch, Reason}) ->
-    %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
-    report_error(Request, Reason, warning, erlang:get_stacktrace());
-handle_error(Request, error, {case_clause, Reason}) ->
-    %% Case Clause assertion - something went seriously wrong and we should know about it.
-    report_error(Request, Reason, error, erlang:get_stacktrace());
-handle_error(Request, error, Reason) ->
-    %% Something went horribly wrong. This should not happen.
-    report_error(Request, Reason, error, erlang:get_stacktrace()).
+handle_error(Request, _Type, Error) ->
+    Stacktrace = erlang:get_stacktrace(),
+    Status = #status{code = Code} =
+        fslogic_errors:gen_status_message(Error),
+    LogLevel = code_to_loglevel(Code),
+    MsgFormat =
+        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace: ~p",
+    FormatArgs = [Request, Error, Code, lager:pr_stacktrace(Stacktrace)],
+    case LogLevel of
+        debug -> ?debug(MsgFormat, FormatArgs);
+        error -> ?error(MsgFormat, FormatArgs)
+    end,
+    error_response(Request, Status).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -57,6 +58,10 @@ handle_error(Request, error, Reason) ->
 -spec gen_status_message(Error :: term()) -> #status{}.
 gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
+gen_status_message({badmatch, Error}) ->
+    gen_status_message(Error);
+gen_status_message({case_clause, Error}) ->
+    gen_status_message(Error);
 gen_status_message({not_a_space, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message({not_found, _}) ->
@@ -77,37 +82,24 @@ gen_status_message({ErrorCode, ErrorDescription}) when
         true -> #status{code = ErrorCode, description = ErrorDescription};
         false -> #status{code = ?EAGAIN, description = ErrorDescription}
     end;
-gen_status_message(Reason) ->
-    ?error_stacktrace("Unknown error occured: ~p", [Reason]),
+gen_status_message(_Reason) ->
     #status{code = ?EAGAIN, description = <<"An unknown error occured.">>}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a FUSE response with translated error description.
-%% Logs an error with given log level.
+%% Convert error code to loglevel.
 %% @end
 %%--------------------------------------------------------------------
--spec report_error(Request :: fslogic_worker:request(), Error :: term(),
-    LogLevel :: debug | warning | error, Stacktrace :: term()) ->
-    fslogic_worker:response().
-report_error(Request, Error, LogLevel, Stacktrace) ->
-    Status = #status{code = Code, description = Description} =
-        fslogic_errors:gen_status_message(Error),
-    MsgFormat =
-        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace:~s",
-    FormatArgs = [Request, Description, Code, lager:pr_stacktrace(Stacktrace)],
-    case LogLevel of
-        debug -> ?debug(MsgFormat, FormatArgs);
-        warning -> ?warning(MsgFormat, FormatArgs);
-        error -> ?error(MsgFormat, FormatArgs)
-    end,
-    error_response(Request, Status).
+-spec code_to_loglevel(code()) -> error | debug.
+code_to_loglevel(?EAGAIN) ->
+    error;
+code_to_loglevel(_) ->
+    debug.
 
 %%--------------------------------------------------------------------
 %% @private
