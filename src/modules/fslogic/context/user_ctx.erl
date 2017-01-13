@@ -66,8 +66,8 @@ get_user(UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(ctx()) -> od_user:id().
-get_user_id(#user_ctx{session = #document{value = #session{identity = #user_identity{user_id = UserId}}}}) ->
-    UserId.
+get_user_id(#user_ctx{session = Session}) ->
+    session:get_user_id(Session).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -84,5 +84,5 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(ctx()) -> session:auth().
-get_auth(#user_ctx{session = #document{value = #session{auth = Auth}}}) ->
-    Auth.
+get_auth(#user_ctx{session = Session}) ->
+    session:get_auth(Session).

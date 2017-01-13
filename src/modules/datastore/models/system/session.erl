@@ -359,13 +359,19 @@ remove_connection(SessId, Con) ->
 %% Returns #token_auth{} record associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(id()) ->
-    {ok, Auth :: auth()} | {ok, undefined} | {error, Reason :: term()}.
-get_auth(SessId) ->
+-spec get_auth
+    (id()) -> {ok, Auth :: auth()} | {ok, undefined} | {error, Reason :: term()};
+    (model() | doc()) -> auth().
+get_auth(<<_/binary>> = SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} -> {ok, Auth};
         {error, Reason} -> {error, Reason}
-    end.
+    end;
+get_auth(#session{auth = Auth}) ->
+    Auth;
+get_auth(#document{value = Session}) ->
+    get_auth(Session).
+
 
 %%--------------------------------------------------------------------
 %% @doc
