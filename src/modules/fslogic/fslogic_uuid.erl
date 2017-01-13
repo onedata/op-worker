@@ -25,6 +25,7 @@
 -export([uuid_to_share_guid/3, unpack_share_guid/1]).
 -export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
     guid_to_share_id/1, guid_to_space_id/1]).
+-export([is_root_dir/1]).
 
 %%%===================================================================
 %%% API
@@ -49,6 +50,21 @@ parent_uuid(Entry, UserId) ->
                 {ok, ?ROOT_DIR_UUID} -> UserRootUuid;
                 {ok, ParentUuid} -> ParentUuid
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Checks if uuid represents user's root dir
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root_dir(Uuid :: file_meta:uuid()) -> boolean().
+is_root_dir(?ROOT_DIR_UUID) ->
+    true;
+is_root_dir(Uuid) ->
+    case (catch binary_to_term(http_utils:base64url_decode(Uuid))) of
+        {root_space, _UserId} ->
+            true;
+        _ ->
+            false
     end.
 
 %%--------------------------------------------------------------------
@@ -92,7 +108,7 @@ ensure_guid(Ctx, {path, Path}) when is_tuple(Ctx) -> %todo TL use only sessionId
 ensure_guid(SessionId, {path, Path}) ->
     lfm_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
-        fun(#file_attr{uuid = Guid}) ->
+        fun(#uuid{uuid = Guid}) ->
             {guid, Guid}
         end).
 
@@ -273,7 +289,7 @@ share_guid_to_guid(ShareGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec unpack_share_guid(od_share:share_guid()) ->
-    {file_meta:uuid(), od_space:id(), od_share:id() | undefined} | {error, non_share_guid}.
+    {file_meta:uuid(), undefined | od_space:id(), od_share:id() | undefined}.
 unpack_share_guid(ShareGuid) ->
     try binary_to_term(http_utils:base64url_decode(ShareGuid)) of
         {share_guid, FileUuid, SpaceId, ShareId} ->
@@ -325,10 +341,10 @@ guid_to_space_id(Guid) ->
         {space, SpaceId} ->
             SpaceId;
         _ ->
-            {Guid, undefined, undefined}
+            undefined
     catch
         _:_ ->
-            {Guid, undefined, undefined}
+            undefined
     end.
 
 %%%===================================================================

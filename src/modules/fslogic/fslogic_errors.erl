@@ -59,7 +59,7 @@ gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
 gen_status_message({not_a_space, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
-gen_status_message({not_found, file_meta}) ->
+gen_status_message({not_found, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
     #status{code = ?EEXIST, description = describe_error(?EEXIST)};
@@ -100,12 +100,12 @@ report_error(Request, Error, LogLevel, Stacktrace) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
     MsgFormat =
-        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace: ~p",
-    FormatArgs = [Request, Description, Code, Stacktrace],
+        "Cannot process request ~p due to error: ~p (code: ~p)~nStacktrace:~s",
+    FormatArgs = [Request, Description, Code, lager:pr_stacktrace(Stacktrace)],
     case LogLevel of
-        debug -> ?debug_stacktrace(MsgFormat, FormatArgs);
-        warning -> ?warning_stacktrace(MsgFormat, FormatArgs);
-        error -> ?error_stacktrace(MsgFormat, FormatArgs)
+        debug -> ?debug(MsgFormat, FormatArgs);
+        warning -> ?warning(MsgFormat, FormatArgs);
+        error -> ?error(MsgFormat, FormatArgs)
     end,
     error_response(Request, Status).
 

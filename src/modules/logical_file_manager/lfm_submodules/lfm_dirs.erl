@@ -37,7 +37,7 @@ mkdir(SessId, Path) ->
 mkdir(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     lfm_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = ParentPath},
-        fun(#file_attr{uuid = ParentGuid}) ->
+        fun(#uuid{uuid = ParentGuid}) ->
             mkdir(SessId, ParentGuid, Name, Mode)
         end).
 

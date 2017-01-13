@@ -73,11 +73,11 @@ json_to_updates(Raw) ->
     Value :: subscriptions:record().
 props_to_value(od_user, Props) ->
     #od_user{
-        name = proplists:get_value(<<"name">>, Props),
-        alias = proplists:get_value(<<"alias">>, Props), % TODO currently always empty
-        email_list = proplists:get_value(<<"email_list">>, Props), % TODO currently always empty
+        name = proplists:get_value(<<"name">>, Props, <<"">>),
+        alias = proplists:get_value(<<"alias">>, Props, <<"">>), % TODO currently always empty
+        email_list = proplists:get_value(<<"email_list">>, Props, []), % TODO currently always empty
         connected_accounts = proplists:get_value( % TODO currently always empty
-            <<"connected_accounts">>, Props),
+            <<"connected_accounts">>, Props, []),
         default_space = case proplists:get_value(<<"default_space">>, Props) of
             <<"undefined">> -> undefined;
             Value -> Value
@@ -96,7 +96,7 @@ props_to_value(od_user, Props) ->
         eff_handle_services = proplists:get_value(<<"eff_handle_services">>, Props, []), % TODO currently always empty
         eff_handles = proplists:get_value(<<"eff_handles">>, Props, []), % TODO currently always empty
 
-        public_only = proplists:get_value(<<"public_only">>, Props)
+        public_only = proplists:get_value(<<"public_only">>, Props, false)
     };
 props_to_value(od_group, Props) ->
     #od_group{
@@ -127,7 +127,7 @@ props_to_value(od_group, Props) ->
         eff_handles = proplists:get_value(<<"handles">>, Props, []) % TODO currently always empty
     };
 props_to_value(od_space, Props) ->
-    ProviderSupports = proplists:get_value(<<"providers_supports">>, Props),
+    ProviderSupports = proplists:get_value(<<"providers_supports">>, Props, []),
     {Providers, _} = lists:unzip(ProviderSupports),
     #od_space{
         name = proplists:get_value(<<"name">>, Props),
@@ -139,7 +139,7 @@ props_to_value(od_space, Props) ->
             proplists:get_value(<<"groups">>, Props, [])),
         users = process_ids_with_privileges(
             proplists:get_value(<<"users">>, Props, [])),
-        shares = proplists:get_value(<<"shares">>, Props),
+        shares = proplists:get_value(<<"shares">>, Props, []),
 
         % Effective relations to other entities
         eff_users = process_ids_with_privileges(
@@ -164,18 +164,18 @@ props_to_value(od_share, Props) ->
 props_to_value(od_provider, Props) ->
     #od_provider{
         client_name = proplists:get_value(<<"client_name">>, Props),
-        urls = proplists:get_value(<<"urls">>, Props),
+        urls = proplists:get_value(<<"urls">>, Props, []),
 
         % Direct relations to other entities
-        spaces = proplists:get_value(<<"spaces">>, Props),
+        spaces = proplists:get_value(<<"spaces">>, Props, []),
 
-        public_only = proplists:get_value(<<"public_only">>, Props)
+        public_only = proplists:get_value(<<"public_only">>, Props, false)
     };
 props_to_value(od_handle_service, Props) ->
     #od_handle_service{
         name = proplists:get_value(<<"name">>, Props),
         proxy_endpoint = proplists:get_value(<<"proxy_endpoint">>, Props),
-        service_properties = proplists:get_value(<<"service_properties">>, Props),
+        service_properties = proplists:get_value(<<"service_properties">>, Props, []),
 
         % Direct relations to other entities
         users = process_ids_with_privileges(

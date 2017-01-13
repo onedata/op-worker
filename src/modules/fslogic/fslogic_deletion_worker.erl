@@ -22,6 +22,22 @@
 
 %% API
 -export([init/1, handle/1, cleanup/0]).
+-export([request_deletion/3]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Request deletion of given file
+%% @end
+%%--------------------------------------------------------------------
+-spec request_deletion(fslogic_context:ctx(), file_info:file_info(), Silent :: boolean()) ->
+    ok.
+request_deletion(Ctx, File, Silent) ->
+    ok = worker_proxy:call(fslogic_deletion_worker,
+        {fslogic_deletion_request, Ctx, File, Silent}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -72,16 +88,17 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle({fslogic_deletion_request, Ctx, FileUuid, Silent}) ->
+handle({fslogic_deletion_request, Ctx, File, Silent}) ->
     SessId = fslogic_context:get_session_id(Ctx),
-    SpaceId = fslogic_context:get_space_id(Ctx),
-
-    {ok, #document{key = FileUuid} = FileDoc} = file_meta:get(FileUuid),
-    {ok, ParentDoc} = file_meta:get_parent(FileDoc),
+    {FileGuid, File2} = file_info:get_guid(File),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
     case file_handles:exists(FileUuid) of
-        true ->
-            {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId),
+    true ->
+            UserId = fslogic_context:get_user_id(Ctx),
+            {ParentFile, File3} = file_info:get_parent(File2, UserId),
+            {ParentDoc, _ParentFile2} = file_info:get_file_doc(ParentFile),
+            {ok, ParentPath} = fslogic_path:gen_path(ParentDoc, SessId), %todo do not get parent, simply get path
 
             NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
             Path = <<ParentPath/binary, ?DIRECTORY_SEPARATOR, NewName/binary>>,
@@ -89,9 +106,9 @@ handle({fslogic_deletion_request, Ctx, FileUuid, Silent}) ->
                 Ctx, {uuid, FileUuid}, Path),
 
             ok = file_handles:mark_to_remove(FileUuid),
-            fslogic_event:emit_file_renamed(FileUuid, SpaceId, NewName, SessId);
+            fslogic_event:emit_file_renamed_to_client(File3, NewName, SessId);
         false ->
-            remove_file_and_file_meta(FileUuid, SessId, Silent)
+            remove_file_and_file_meta(FileUuid, SessId, Silent) %todo pass file_info
     end,
     ok;
 handle({open_file_deletion_request, FileUuid}) ->

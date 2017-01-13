@@ -22,7 +22,7 @@
     emit_file_attr_changed/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_perm_changed/1, emit_file_removed/2, emit_file_renamed/3,
-    emit_file_renamed/4, emit_quota_exeeded/0, flush_event_queue/3]).
+    emit_file_renamed_to_client/3, emit_quota_exeeded/0, flush_event_queue/3]).
 -export([handle_file_read_events/2, handle_file_written_events/2]).
 
 %%%===================================================================
@@ -186,17 +186,16 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 %% Sends an event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_renamed(file_meta:uuid(), od_space:id(), file_meta:name(),
+-spec emit_file_renamed_to_client(file_info:file_info(), file_meta:name(),
     session:id()) -> ok | {error, Reason :: term()}.
-emit_file_renamed(FileUUID, SpaceId, NewName, SessionId) ->
+emit_file_renamed_to_client(File, NewName, SessionId) ->
     {ok, UserId} = session:get_user_id(SessionId),
-    ParentUUID = fslogic_uuid:parent_uuid({uuid, FileUUID}, UserId),
-    ParentGUID = fslogic_uuid:uuid_to_guid(ParentUUID, SpaceId),
-    FileGUID = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
+    {Guid, File2} = file_info:get_guid(File),
+    {ParentGuid, _File3} = file_info:get_parent_guid(File2, UserId),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
-        old_uuid = FileGUID,
-        new_uuid = FileGUID,
-        new_parent_uuid = ParentGUID,
+        old_uuid = Guid,
+        new_uuid = Guid,
+        new_parent_uuid = ParentGuid,
         new_name = NewName
     }}, SessionId).
 

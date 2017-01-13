@@ -21,7 +21,7 @@
 
 %% API
 -export([get_file_location/2, open_file/3, create_file/5, make_file/4,
-    truncate/3, get_helper_params/3, release/3]).
+    truncate/3, release/3]).
 -export([get_parent/2, synchronize_block/4, synchronize_block_and_compute_checksum/3,
     get_file_distribution/2]).
 
@@ -72,35 +72,6 @@ truncate(Ctx, Entry, Size) ->
 
     fslogic_times:update_mtime_ctime(FileDoc, fslogic_context:get_user_id(Ctx)),
     #fuse_response{status = #status{code = ?OK}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc Gets helper params based on given storage ID.
-%% @end
-%%--------------------------------------------------------------------
--spec get_helper_params(fslogic_context:ctx(), StorageId :: storage:id(),
-    ForceCL :: boolean()) -> FuseResponse :: #fuse_response{} | no_return().
-get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, #helper_init{args = Args}} = fslogic_storage:select_helper(StorageDoc),
-    Timeout = helpers_utils:get_timeout(Args),
-    {ok, Latency} = application:get_env(?APP_NAME, proxy_helper_latency_milliseconds),
-    #fuse_response{status = #status{code = ?OK}, fuse_response = #helper_params{
-        helper_name = <<"ProxyIO">>,
-        helper_args = [
-            #helper_arg{key = <<"storage_id">>, value = StorageId},
-            #helper_arg{key = <<"timeout">>, value = integer_to_binary(Timeout + Latency)}
-        ]
-    }};
-get_helper_params(Ctx, StorageId, false = _ForceProxy) ->
-    SessId = fslogic_context:get_session_id(Ctx),
-    SpaceId = fslogic_context:get_space_id(Ctx),
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, HelperInit} = fslogic_storage:select_helper(StorageDoc),
-    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    UserCtx = fslogic_storage:new_user_ctx(HelperInit, SessId, SpaceUUID),
-    HelperParams = helpers_utils:get_params(HelperInit, UserCtx),
-    #fuse_response{status = #status{code = ?OK}, fuse_response = HelperParams}.
 
 %%--------------------------------------------------------------------
 %% @doc Returns file location.
@@ -178,8 +149,10 @@ create_file(Ctx, {uuid, ParentUUID}, Name, Mode, _Flag) ->
             {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
             {ok, HandleId} = save_handle(SessId, Handle),
 
+            Guid = fslogic_uuid:uuid_to_guid(FileUUID),
+            FileInfo = file_info:new_by_guid(Guid),
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-                fslogic_req_generic:get_file_attr(Ctx, {uuid, FileUUID}),
+                attr_req:get_file_attr(Ctx, FileInfo),
 
             FileLocation = #file_location{
                 uuid = fslogic_uuid:uuid_to_guid(FileUUID, SpaceId),
@@ -235,7 +208,9 @@ make_file(Ctx, {uuid, ParentUUID}, Name, Mode) ->
     try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         _ ->
             fslogic_times:update_mtime_ctime({uuid, ParentUUID}, fslogic_context:get_user_id(Ctx)),
-            fslogic_req_generic:get_file_attr(Ctx, {uuid, FileUUID})
+            Guid = fslogic_uuid:uuid_to_guid(FileUUID),
+            FileInfo = file_info:new_by_guid(Guid),
+            attr_req:get_file_attr(Ctx, FileInfo)
     catch
         T:M ->
             {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),

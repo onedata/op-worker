@@ -17,10 +17,6 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
--type ceph_user_ctx() :: #{storage:id() => ceph_user:ctx()}.
--type posix_user_ctx() :: #{storage:id() => posix_user:ctx()}.
--type s3_user_ctx() :: #{storage:id() => s3_user:ctx()}.
--type swift_user_ctx() :: #{storage:id() => swift_user:ctx()}.
 -type indexes_value() :: #{indexes:index_id() => indexes:index()}.
 
 %%%===================================================================
@@ -61,7 +57,7 @@
     connected_accounts = [] :: [od_user:connected_account()], % TODO currently always empty
     default_space :: binary() | undefined,
     % List of user's aliases for spaces
-    space_aliases = [] :: [{od_space:id(), SpaceName :: binary()}],
+    space_aliases = [] :: [{od_space:id(), SpaceName :: od_space:alias()}],
 
     % Direct relations to other entities
     groups = [] :: [od_group:id()],
@@ -252,19 +248,14 @@
     transfers = [] :: [transfer:id()]
 }).
 
-%% Datastore model for initialized helper handles.
--record(helper_instance, {
-    handle :: undefined | helpers:handle()
-}).
-
 %% File handle used by the module
 -record(sfm_handle, {
     file_handle :: undefined | helpers:file_handle(),
-    file :: undefined | helpers:file(),
+    file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
     space_uuid :: file_meta:uuid(),
-    storage :: datastore:document() | undefined,
+    storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
@@ -289,16 +280,19 @@
     shares = [] :: [od_share:id()]
 }).
 
-%% Helper name and its arguments
--record(helper_init, {
-    name :: helpers:name(),
-    args :: helpers:args()
+-record(storage, {
+    name = <<>> :: storage:name(),
+    helpers = [] :: [storage:helper()]
 }).
 
-%% Model for storing storage information
--record(storage, {
-    name :: undefined | storage:name(),
-    helpers :: undefined | [helpers:init()]
+%% Model that maps space to storage
+-record(space_storage, {
+    storage_ids = [] :: [storage:id()]
+}).
+
+-record(helper_handle, {
+    handle :: helpers_nif:helper_handle(),
+    timeout = infinity :: timeout()
 }).
 
 %% Model for storing file's location data
@@ -306,7 +300,7 @@
     uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
-    file_id :: undefined | helpers:file(),
+    file_id :: undefined | helpers:file_id(),
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
@@ -316,11 +310,6 @@
         NewChanges :: [fslogic_file_location:change()]
     },
     last_rename :: fslogic_file_location:last_rename()
-}).
-
-%% Model that maps space to storage
--record(space_storage, {
-    storage_ids = [] :: [storage:id()]
 }).
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
@@ -345,27 +334,6 @@
     file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
     file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
     enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
-}).
-
-
-%% Model that maps onedata user to Ceph user
--record(ceph_user, {
-    ctx = #{} :: ceph_user_ctx()
-}).
-
-%% Model that maps onedata user to POSIX user
--record(posix_user, {
-    ctx = #{} :: posix_user_ctx()
-}).
-
-%% Model that maps onedata user to Amazon S3 user
--record(s3_user, {
-    ctx = #{} :: s3_user_ctx()
-}).
-
-%% Model that maps onedata user to Openstack Swift user
--record(swift_user, {
-    ctx = #{} :: swift_user_ctx()
 }).
 
 %% Model that holds state entries for DBSync worker

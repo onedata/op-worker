@@ -419,11 +419,11 @@ fslogic_new_file_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/space_name1">>),
-    RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/space_name2">>),
+    RootUuid1 = get_guid_privileged(Worker, SessId1, <<"/space_name1">>),
+    RootUuid2 = get_guid_privileged(Worker, SessId2, <<"/space_name2">>),
 
-    Resp11 = ?file_req(Worker, SessId1, RootUUID1, #create_file{name = <<"test">>}),
-    Resp21 = ?file_req(Worker, SessId2, RootUUID2, #create_file{name = <<"test">>}),
+    Resp11 = ?file_req(Worker, SessId1, RootUuid1, #create_file{name = <<"test">>}),
+    Resp21 = ?file_req(Worker, SessId2, RootUuid2, #create_file{name = <<"test">>}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp11),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_created{}}, Resp21),
@@ -917,17 +917,18 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-%% Get uuid of given by path file. Possible as root to bypass permissions checks.
-get_uuid_privileged(Worker, SessId, Path) ->
-    get_uuid(Worker, SessId, Path).
+%% Get guid of given by path file. Possible as root to bypass permissions checks.
+get_guid_privileged(Worker, SessId, Path) ->
+    get_guid(Worker, SessId, Path).
 
-get_uuid(Worker, SessId, Path) ->
-    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
-        #fuse_response{status = #status{code = ?OK}},
-        ?req(Worker, SessId, #resolve_guid{path = Path}),
-        30
-    ),
-    UUID.
+get_guid(Worker, SessId, Path) ->
+    #fuse_response{fuse_response = #uuid{uuid = Guid}} =
+        ?assertMatch(
+            #fuse_response{status = #status{code = ?OK}},
+            ?req(Worker, SessId, #resolve_guid{path = Path}),
+            30
+        ),
+    Guid.
 
 for(From, To, Fun) ->
     for(From, To, 1, Fun).
