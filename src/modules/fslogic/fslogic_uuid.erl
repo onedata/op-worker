@@ -25,6 +25,7 @@
 -export([uuid_to_share_guid/3, unpack_share_guid/1]).
 -export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
     guid_to_share_id/1, guid_to_space_id/1]).
+-export([is_root_dir/1]).
 
 %%%===================================================================
 %%% API
@@ -49,6 +50,21 @@ parent_uuid(Entry, UserId) ->
                 {ok, ?ROOT_DIR_UUID} -> UserRootUuid;
                 {ok, ParentUuid} -> ParentUuid
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Checks if uuid represents user's root dir
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root_dir(Uuid :: file_meta:uuid()) -> boolean().
+is_root_dir(?ROOT_DIR_UUID) ->
+    true;
+is_root_dir(Uuid) ->
+    case (catch binary_to_term(http_utils:base64url_decode(Uuid))) of
+        {root_space, _UserId} ->
+            true;
+        _ ->
+            false
     end.
 
 %%--------------------------------------------------------------------
@@ -83,16 +99,16 @@ gen_file_uuid() ->
 %% Converts given file entry to FileGuid.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_guid(fslogic_context:ctx() | session:id(), fslogic_worker:file_guid_or_path()) ->
+-spec ensure_guid(user_ctx:ctx() | session:id(), fslogic_worker:file_guid_or_path()) ->
     {guid, fslogic_worker:file_guid()}.
 ensure_guid(_, {guid, FileGuid}) ->
     {guid, FileGuid};
-ensure_guid(Ctx, {path, Path}) when is_tuple(Ctx) -> %todo TL use only sessionId
-    ensure_guid(fslogic_context:get_session_id(Ctx), {path, Path});
+ensure_guid(UserCtx, {path, Path}) when is_tuple(UserCtx) -> %todo TL use only sessionId
+    ensure_guid(user_ctx:get_session_id(UserCtx), {path, Path});
 ensure_guid(SessionId, {path, Path}) ->
-    lfm_utils:call_fslogic(SessionId, fuse_request,
+    remote_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
-        fun(#file_attr{uuid = Guid}) ->
+        fun(#uuid{uuid = Guid}) ->
             {guid, Guid}
         end).
 
@@ -101,10 +117,10 @@ ensure_guid(SessionId, {path, Path}) ->
 %% Converts given file path to Uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec path_to_uuid(fslogic_context:ctx(), file_meta:path()) -> file_meta:uuid().
-path_to_uuid(Ctx, Path) when is_tuple(Ctx) ->
+-spec path_to_uuid(user_ctx:ctx(), file_meta:path()) -> file_meta:uuid().
+path_to_uuid(UserCtx, Path) when is_tuple(UserCtx) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    Entry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
+    Entry = fslogic_path:get_canonical_file_entry(UserCtx, Tokens),
     {ok, #document{key = Uuid}} = file_meta:get(Entry),
     Uuid.
 
@@ -113,10 +129,10 @@ path_to_uuid(Ctx, Path) when is_tuple(Ctx) ->
 %% Gets full file path.
 %% @end
 %%--------------------------------------------------------------------
--spec uuid_to_path(fslogic_context:ctx() | session:id(), file_meta:uuid()) -> file_meta:path().
-uuid_to_path(Ctx, FileUuid) when is_tuple(Ctx) ->
-    UserId = fslogic_context:get_user_id(Ctx),
-    SessId = fslogic_context:get_session_id(Ctx),
+-spec uuid_to_path(user_ctx:ctx() | session:id(), file_meta:uuid()) -> file_meta:path().
+uuid_to_path(UserCtx, FileUuid) when is_tuple(UserCtx) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    SessId = user_ctx:get_session_id(UserCtx),
     UserRoot = user_root_dir_uuid(UserId),
     case FileUuid of
         UserRoot -> <<"/">>;
@@ -273,7 +289,7 @@ share_guid_to_guid(ShareGuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec unpack_share_guid(od_share:share_guid()) ->
-    {file_meta:uuid(), od_space:id(), od_share:id() | undefined} | {error, non_share_guid}.
+    {file_meta:uuid(), undefined | od_space:id(), od_share:id() | undefined}.
 unpack_share_guid(ShareGuid) ->
     try binary_to_term(http_utils:base64url_decode(ShareGuid)) of
         {share_guid, FileUuid, SpaceId, ShareId} ->
@@ -325,10 +341,10 @@ guid_to_space_id(Guid) ->
         {space, SpaceId} ->
             SpaceId;
         _ ->
-            {Guid, undefined, undefined}
+            undefined
     catch
         _:_ ->
-            {Guid, undefined, undefined}
+            undefined
     end.
 
 %%%===================================================================

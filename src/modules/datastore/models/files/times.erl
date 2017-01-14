@@ -28,12 +28,13 @@
     create_or_update/2, 'after'/5, before/4]).
 -export([record_struct/1]).
 
+-type time() :: non_neg_integer().
 -type a_time() :: time().
 -type c_time() :: time().
 -type m_time() :: time().
--type time() :: non_neg_integer().
+-type times() :: {a_time(), c_time(), m_time()}.
 
--export_type([time/0, a_time/0, c_time/0, m_time/0]).
+-export_type([time/0, a_time/0, c_time/0, m_time/0, times/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -57,7 +58,7 @@ record_struct(1) ->
 %% Get times or return zeroes.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_default(file_meta:uuid()) -> {ok, {a_time(), c_time(), m_time()}} | datastore:get_error().
+-spec get_or_default(file_meta:uuid()) -> {ok, times()} | datastore:get_error().
 get_or_default(FileUuid) ->
     case get(FileUuid) of
         {ok, #document{value = #times{atime = ATime, ctime = CTime, mtime = Mtime}}} ->

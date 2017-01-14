@@ -115,8 +115,7 @@ before_init([]) ->
         ensure_correct_hostname(),
 
         %% Load NIFs
-        ok = helpers_nif:init(),
-        ok = luma_nif:init()
+        ok = helpers_nif:init()
     catch
         _:Error ->
             ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",

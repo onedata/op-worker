@@ -19,8 +19,8 @@
 %% API
 -export([emit_storage_used_updated/3, emit_od_space_updated/1,
     emit_file_read_statistics/4, emit_file_written_statistics/4,
-    emit_rtransfer_statistics/2, emit_rtransfer_statistics/3,
-    aggregate_monitoring_events/2, handle_monitoring_events/2]).
+    emit_rtransfer_statistics/3, aggregate_monitoring_events/2,
+    handle_monitoring_events/2]).
 
 -export_type([type/0]).
 
@@ -127,19 +127,6 @@ emit_rtransfer_statistics(SpaceId, UserId, TransferIn) ->
         _ ->
             emit(#monitoring_event{type = Type#rtransfer_statistics{user_id = UserId}})
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Send event informing subscribed client about rtransfer statistics.
-%% @end
-%%--------------------------------------------------------------------
--spec emit_rtransfer_statistics(fslogic_context:ctx(), non_neg_integer()) ->
-    ok | {error, Reason :: term()}.
-emit_rtransfer_statistics(Ctx, TransferIn) ->
-    UserId = fslogic_context:get_user_id(Ctx),
-    SpaceId = fslogic_context:get_space_id(Ctx),
-    emit_rtransfer_statistics(SpaceId, UserId, TransferIn).
 
 %%--------------------------------------------------------------------
 %% @doc

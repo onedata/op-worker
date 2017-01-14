@@ -412,7 +412,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                 name = Name,
                 type = Type,
                 mode = 8#775,
-                uid = User,
+                owner = User,
                 scope = SpaceKey
             }
             },

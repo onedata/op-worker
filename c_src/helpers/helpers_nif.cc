@@ -29,7 +29,7 @@ nifpp::str_atom error{"error"};
 /** @} */
 
 using helper_ptr = one::helpers::StorageHelperPtr;
-using helper_handle_ptr = one::helpers::FileHandlePtr;
+using file_handle_ptr = one::helpers::FileHandlePtr;
 using reqid_t = std::tuple<int, int, int>;
 using helper_args_t = std::unordered_map<folly::fbstring, folly::fbstring>;
 
@@ -53,8 +53,7 @@ struct HelpersNIF {
     HelpersNIF()
     {
         for (const auto &helperName : {one::helpers::CEPH_HELPER_NAME,
-                 one::helpers::DIRECT_IO_HELPER_NAME,
-                 one::helpers::S3_HELPER_NAME,
+                 one::helpers::POSIX_HELPER_NAME, one::helpers::S3_HELPER_NAME,
                  one::helpers::SWIFT_HELPER_NAME}) {
             helperServices.emplace(
                 helperName, std::make_unique<HelperIOService>());
@@ -62,7 +61,7 @@ struct HelpersNIF {
 
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             helperServices[one::helpers::CEPH_HELPER_NAME]->service,
-            helperServices[one::helpers::DIRECT_IO_HELPER_NAME]->service,
+            helperServices[one::helpers::POSIX_HELPER_NAME]->service,
             helperServices[one::helpers::S3_HELPER_NAME]->service,
             helperServices[one::helpers::SWIFT_HELPER_NAME]->service);
 
@@ -354,32 +353,7 @@ ERL_NIF_TERM noctx_wrap(ERL_NIF_TERM (*fun)(ErlNifEnv *env, Args...),
 }
 
 /**
- * Translates user name to uid.
- */
-uid_t uNameToUID(const folly::fbstring &uname)
-{
-    // Static buffer, do NOT free !
-    struct passwd *ownerInfo = getpwnam(uname.c_str());
-    return ownerInfo ? ownerInfo->pw_uid : -1;
-}
-
-/**
- * Translates group name to gid.
- */
-gid_t gNameToGID(const folly::fbstring &gname,
-    const folly::fbstring &uname = folly::fbstring{})
-{
-    // Static buffer, do NOT free !
-    struct passwd *ownerInfo = getpwnam(uname.c_str());
-    // Static buffer, do NOT free !
-    struct group *groupInfo = getgrnam(gname.c_str());
-
-    const gid_t primary_gid = ownerInfo ? ownerInfo->pw_gid : -1;
-    return groupInfo ? groupInfo->gr_gid : primary_gid;
-}
-
-/**
- * Handle struct stat value from helpers and send it to requesting process.
+ * Handles struct stat value from helpers and sends it to requesting process.
  */
 void handle_value(const NifCTX &ctx, struct stat s)
 {
@@ -391,16 +365,20 @@ void handle_value(const NifCTX &ctx, struct stat s)
     ctx.send(std::make_tuple(ok, std::move(record)));
 }
 
-void handle_value(const NifCTX &ctx, helper_handle_ptr handle)
+/**
+ * Constructs a resource from open file handle and sends it to requesting
+ * process.
+ */
+void handle_value(const NifCTX &ctx, file_handle_ptr handle)
 {
     auto resource =
-        nifpp::construct_resource<helper_handle_ptr>(std::move(handle));
+        nifpp::construct_resource<file_handle_ptr>(std::move(handle));
 
     ctx.send(std::make_tuple(ok, std::move(resource)));
 }
 
 /**
- * Handle generic result from helpers and send it to requesting process.
+ * Handles generic result from helpers and sends it to requesting process.
  */
 template <class T> void handle_value(const NifCTX &ctx, T &&response)
 {
@@ -408,12 +386,12 @@ template <class T> void handle_value(const NifCTX &ctx, T &&response)
 }
 
 /**
- * Handle void value from helpers and send it to requesting process.
+ * Handles void value from helpers and send it to requesting process.
  */
 void handle_value(const NifCTX &ctx, folly::Unit) { ctx.send(ok); }
 
 /**
- * Handles result from helpers callback either process return value or error.
+ * Handles helpers callback result.
  */
 template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
 {
@@ -444,8 +422,7 @@ ERL_NIF_TERM set_threads_number(
 {
     return handle_errors(env, [&]() {
         for (const auto &name : {one::helpers::CEPH_HELPER_NAME,
-                 one::helpers::DIRECT_IO_HELPER_NAME,
-                 one::helpers::S3_HELPER_NAME,
+                 one::helpers::POSIX_HELPER_NAME, one::helpers::S3_HELPER_NAME,
                  one::helpers::SWIFT_HELPER_NAME}) {
 
             auto result = args.find(name);
@@ -467,41 +444,14 @@ ERL_NIF_TERM set_threads_number(
     });
 }
 
-ERL_NIF_TERM new_helper_obj(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-    auto helperName = nifpp::get<folly::fbstring>(env, argv[0]);
-    auto helperArgs = nifpp::get<helper_args_t>(env, argv[1]);
-    auto helperObj =
-        application.SHCreator->getStorageHelper(helperName, helperArgs);
-    if (!helperObj)
-        return nifpp::make(
-            env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
-
-    auto resource = nifpp::construct_resource<helper_ptr>(helperObj);
+    auto name = nifpp::get<folly::fbstring>(env, argv[0]);
+    auto params = nifpp::get<helper_args_t>(env, argv[1]);
+    auto helper = application.SHCreator->getStorageHelper(name, params);
+    auto resource = nifpp::construct_resource<helper_ptr>(helper);
 
     return nifpp::make(env, std::make_tuple(ok, resource));
-}
-
-ERL_NIF_TERM username_to_uid(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    auto uid = uNameToUID(nifpp::get<folly::fbstring>(env, argv[0]));
-    if (uid != static_cast<uid_t>(-1))
-        return nifpp::make(env, std::make_tuple(ok, uid));
-
-    auto einval = make_sys_error_code(std::errc::invalid_argument);
-    return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
-}
-
-ERL_NIF_TERM groupname_to_gid(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    auto gid = gNameToGID(nifpp::get<folly::fbstring>(env, argv[0]));
-    if (gid != static_cast<gid_t>(-1))
-        return nifpp::make(env, std::make_tuple(ok, gid));
-
-    auto einval = make_sys_error_code(std::errc::invalid_argument);
-    return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
 }
 
 ERL_NIF_TERM getattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
@@ -602,33 +552,32 @@ ERL_NIF_TERM open(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM read(
-    NifCTX ctx, helper_handle_ptr handle, off_t offset, size_t size)
+ERL_NIF_TERM read(NifCTX ctx, file_handle_ptr handle, off_t offset, size_t size)
 {
     handle_result(ctx, handle->read(offset, size));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM write(NifCTX ctx, helper_handle_ptr handle, const off_t offset,
+ERL_NIF_TERM write(NifCTX ctx, file_handle_ptr handle, const off_t offset,
     folly::IOBufQueue buf)
 {
     handle_result(ctx, handle->write(offset, std::move(buf)));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM release(NifCTX ctx, helper_handle_ptr handle)
+ERL_NIF_TERM release(NifCTX ctx, file_handle_ptr handle)
 {
     handle_result(ctx, handle->release());
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM flush(NifCTX ctx, helper_handle_ptr handle)
+ERL_NIF_TERM flush(NifCTX ctx, file_handle_ptr handle)
 {
     handle_result(ctx, handle->flush());
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM fsync(NifCTX ctx, helper_handle_ptr handle, const int isdatasync)
+ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
 {
     handle_result(ctx, handle->fsync(isdatasync));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -641,8 +590,8 @@ extern "C" {
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
-        nifpp::register_resource<helper_handle_ptr>(
-            env, nullptr, "helper_handle_ptr"));
+        nifpp::register_resource<file_handle_ptr>(
+            env, nullptr, "file_handle_ptr"));
 }
 
 static ERL_NIF_TERM sh_set_threads_number(
@@ -762,7 +711,7 @@ static ERL_NIF_TERM sh_fsync(
     return wrap(fsync, env, argv);
 }
 
-static ErlNifFunc nif_funcs[] = {
+static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"set_threads_number", 1, sh_set_threads_number},
     {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
     {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
@@ -771,9 +720,7 @@ static ErlNifFunc nif_funcs[] = {
     {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
     {"truncate", 3, sh_truncate}, {"open", 3, sh_open}, {"read", 3, sh_read},
     {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
-    {"fsync", 2, sh_fsync}, {"username_to_uid", 1, username_to_uid},
-    {"groupname_to_gid", 1, groupname_to_gid},
-    {"new_helper_obj", 2, new_helper_obj}};
+    {"fsync", 2, sh_fsync}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 

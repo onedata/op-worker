@@ -48,7 +48,7 @@
 -export([hidden_file_name/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_uuid/1]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -88,8 +88,33 @@ record_struct(1) ->
         {provider_id, string},
         {link_value, string},
         {shares, [string]}
+    ]};
+record_struct(2) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {owner, string},
+        {size, integer},
+        {version, integer},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {link_value, string},
+        {shares, [string]}
     ]}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, Name, Type, Mode, Uid, Size, Version, IsScope, Scope, ProviderId, LinkValue, Shares}) ->
+    {2, #file_meta{name = Name, type = Type, mode = Mode, owner = Uid, size = Size,
+        version = Version, is_scope = IsScope, scope = Scope,
+        provider_id = ProviderId, link_value = LinkValue, shares = Shares}}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -275,7 +300,7 @@ get({path, Path}) ->
     end);
 get(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
-    #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, uid = ?ROOT_USER_ID}}};
+    #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, owner = ?ROOT_USER_ID}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -635,7 +660,7 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                                 Err
                         end;
                     {error, link_not_found} -> %% Map links errors to document errors
-                        {error, {not_found, ?MODEL_NAME}};
+                        {error, {not_found, ?MODEL_NAME}}; %todo fails when resolving guid of /space1, due to race with od_user:fetch
                     {error, Reason} ->
                         {error, Reason}
                 end;
@@ -735,7 +760,7 @@ setup_onedata_user(_Client, UserId) ->
             #document{key = FileUuid,
                 value = #file_meta{
                     name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                   uid = ?ROOT_USER_ID, is_scope = true
+                   owner = ?ROOT_USER_ID, is_scope = true
                 }
             }) of
             {ok, _RootUUID} ->
@@ -849,9 +874,10 @@ get_guid_from_phantom_file(OldUUID) ->
 %% Add shareId to file meta
 %% @end
 %%--------------------------------------------------------------------
--spec add_share(uuid(), od_share:id()) -> {ok, uuid()}  | datastore:generic_error().
-add_share(FileUuid, ShareId) ->
-    update({uuid, FileUuid},
+-spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | datastore:generic_error().
+add_share(File, ShareId) ->
+    FileEntry = file_ctx:get_uuid_entry_const(File),
+    update(FileEntry,
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
         end).
@@ -861,9 +887,10 @@ add_share(FileUuid, ShareId) ->
 %% Remove shareId from file meta
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(uuid(), od_share:id()) -> {ok, uuid()} | datastore:generic_error().
-remove_share(FileUuid, ShareId) ->
-    update({uuid, FileUuid},
+-spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | datastore:generic_error().
+remove_share(File, ShareId) ->
+    FileEntry = file_ctx:get_uuid_entry_const(File),
+    update(FileEntry,
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = Shares -- [ShareId]}}
         end).

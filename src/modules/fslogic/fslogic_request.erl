@@ -19,8 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2,
-    update_share_info_in_context/2]).
+-export([get_file_ctx/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
 
 %%%===================================================================
 %%% API
@@ -28,27 +27,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file_info record associated with request. If request does not point to
+%% Get file_ctx record associated with request. If request does not point to
 %% specific file, the function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file(fslogic_context:ctx(), fslogic_worker:request()) ->
-    {file_info:file_info() | undefined, fslogic_context:ctx()}.
-get_file(Ctx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    {Ctx2, FileInfo} = file_info:new_by_path(Ctx, Path),
-    {FileInfo, Ctx2};
-get_file(Ctx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
-    FileInfo = file_info:new_by_guid(FileGuid),
-    {FileInfo, Ctx};
-get_file(Ctx, #fuse_request{}) ->
-    {undefined, Ctx};
-get_file(Ctx, #provider_request{context_guid = FileGuid}) ->
-    FileInfo = file_info:new_by_guid(FileGuid),
-    {FileInfo, Ctx};
-get_file(Ctx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
-    FileInfo = file_info:new_by_guid(FileGuid),
-    {FileInfo, Ctx};
-get_file(_Ctx, Req) ->
+-spec get_file_ctx(user_ctx:ctx(), fslogic_worker:request()) ->
+    file_ctx:ctx() | undefined.
+get_file_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
+    file_ctx:new_by_path(UserCtx, Path);
+get_file_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
+    file_ctx:new_by_guid(FileGuid);
+get_file_ctx(_UserCtx, #fuse_request{}) ->
+    undefined;
+get_file_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->
+    file_ctx:new_by_guid(FileGuid);
+get_file_ctx(_UserCtx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
+    file_ctx:new_by_guid(FileGuid);
+get_file_ctx(_UserCtx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
@@ -57,18 +52,24 @@ get_file(_Ctx, Req) ->
 %% Get providers capable of handling given request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers(fslogic_context:ctx(), file_info:file_info(), fslogic_worker:request()) ->
-    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
-get_target_providers(Ctx, undefined, _) ->
-    {[oneprovider:get_provider_id()], Ctx};
-get_target_providers(Ctx, File, #fuse_request{fuse_request = #resolve_guid{}}) ->
-    get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(Ctx, File, #fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) ->
-    get_target_providers_for_attr_req(Ctx, File);
-get_target_providers(Ctx, _File, #provider_request{provider_request = #replicate_file{provider_id = ProviderId}}) ->
-    {[ProviderId], Ctx};
-get_target_providers(Ctx, File, _Req) ->
-    get_target_providers_for_file(Ctx, File).
+-spec get_target_providers(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:request()) ->
+    [oneprovider:id()].
+get_target_providers(_UserCtx, undefined, _) ->
+    [oneprovider:get_provider_id()];
+get_target_providers(UserCtx, File, #fuse_request{
+    fuse_request = #resolve_guid{}
+}) ->
+    get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
+    file_request = #get_file_attr{}
+}}) ->
+    get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(_UserCtx, _File, #provider_request{provider_request = #replicate_file{
+    provider_id = ProviderId
+}}) ->
+    [ProviderId];
+get_target_providers(UserCtx, File, _Req) ->
+    get_target_providers_for_file(UserCtx, File).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,45 +78,29 @@ get_target_providers(Ctx, File, _Req) ->
 %% by the phantom target.
 %% @end
 %%--------------------------------------------------------------------
--spec update_target_guid_if_file_is_phantom(file_info:file_info(), fslogic_worker:request()) ->
-    {NewFile :: file_info:file_info(), NewRequest :: fslogic_worker:request()}.
+-spec update_target_guid_if_file_is_phantom(file_ctx:ctx() | undefined, fslogic_worker:request()) ->
+    {NewFileCtx :: file_ctx:ctx() | undefined, NewRequest :: fslogic_worker:request()}.
 update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
-update_target_guid_if_file_is_phantom(File, Request) ->
-    try file_info:get_file_doc(File) of
-        {{error, {not_found, file_meta}}, File2} ->
+update_target_guid_if_file_is_phantom(FileCtx, Request) ->
+    try
+        {_, NewFileCtx} = file_ctx:get_file_doc(file_ctx:fill_guid(FileCtx)),
+        {NewFileCtx, Request}
+    catch
+        _:{badmatch, {error, {not_found, file_meta}}} ->
             try
-                {Guid, _File3} = file_info:get_guid(File2),
-                Uuid = fslogic_uuid:guid_to_uuid(Guid),
+                {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx),
                 {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
                 NewRequest = change_target_guid(Request, NewGuid),
-                NewFile = file_info:new_by_guid(NewGuid),
-                {NewFile, NewRequest}
+                NewFileCtx_ = file_ctx:new_by_guid(NewGuid),
+                {NewFileCtx_, NewRequest}
             catch
                 _:_ ->
-                    {File2, Request}
+                    {FileCtx, Request}
             end;
-        {_, NewFile} ->
-            {NewFile, Request}
-    catch
         _:_ ->
-            {File, Request}
+            {FileCtx, Request}
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Update SpaceId in the fslogic_context (efectivelly updating also ShareId).
-%% @todo delete this function when ShareId will be stored in file_info
-%% @end
-%%--------------------------------------------------------------------
--spec update_share_info_in_context(fslogic_context:ctx(), file_info:file_info()) ->
-    {NewCtx :: fslogic_context:ctx(), NewFileInfo :: file_info:file_info()}.
-update_share_info_in_context(Ctx, undefined) ->
-    {Ctx, undefined};
-update_share_info_in_context(Ctx, File) ->
-    {Guid, NewFile} = file_info:get_guid(File),
-    NewCtx = fslogic_context:set_space_id(Ctx, {guid, Guid}),
-    {NewCtx, NewFile}.
 
 %%%===================================================================
 %%% Internal functions
@@ -127,15 +112,15 @@ update_share_info_in_context(Ctx, File) ->
 %% Get providers capable of handling resolve_guid/get_attr request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_attr_req(fslogic_context:ctx(), file_info:file_info()) ->
-    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
-get_target_providers_for_attr_req(Ctx, File) ->
+-spec get_target_providers_for_attr_req(user_ctx:ctx(), file_ctx:ctx()) ->
+    [oneprovider:id()].
+get_target_providers_for_attr_req(UserCtx, FileCtx) ->
     %todo TL handle guids stored in file_force_proxy
-    case file_info:is_space_dir(File) of
+    case file_ctx:is_space_dir_const(FileCtx) of
         true ->
-            {[oneprovider:get_provider_id()], Ctx};
+            [oneprovider:get_provider_id()];
         false ->
-            get_target_providers_for_file(Ctx, File)
+            get_target_providers_for_file(UserCtx, FileCtx)
     end.
 
 %%--------------------------------------------------------------------
@@ -144,25 +129,24 @@ get_target_providers_for_attr_req(Ctx, File) ->
 %% Get providers cappable of handling generic request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_file(fslogic_context:ctx(), file_info:file_info()) ->
-    {[oneprovider:id()], NewCtx :: fslogic_context:ctx()}.
-get_target_providers_for_file(Ctx, File) ->
-    {IsUserRootDir, NewCtx} = file_info:is_user_root_dir(File, Ctx),
-
-    case IsUserRootDir of
+-spec get_target_providers_for_file(user_ctx:ctx(), file_ctx:ctx()) ->
+    [oneprovider:id()].
+get_target_providers_for_file(UserCtx, FileCtx) ->
+    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {[oneprovider:get_provider_id()], NewCtx};
+            [oneprovider:get_provider_id()];
         false ->
-            SpaceId = file_info:get_space_id(File),
-            Auth = fslogic_context:get_auth(Ctx),
-            UserId = fslogic_context:get_user_id(Ctx),
-            {ok, #document{value = #od_space{providers = ProviderIds}}} = od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_info
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            Auth = user_ctx:get_auth(UserCtx),
+            UserId = user_ctx:get_user_id(UserCtx),
+            {ok, #document{value = #od_space{providers = ProviderIds}}} =
+                od_space:get_or_fetch(Auth, SpaceId, UserId), %todo consider caching it in file_ctx
 
             case lists:member(oneprovider:get_provider_id(), ProviderIds) of
                 true ->
-                    {[oneprovider:get_provider_id()], NewCtx};
+                    [oneprovider:get_provider_id()];
                 false ->
-                    {ProviderIds, NewCtx}
+                    ProviderIds
             end
     end.
 
@@ -179,7 +163,11 @@ change_target_guid(#file_request{} = Request, Guid) ->
     Request#file_request{context_guid = Guid};
 change_target_guid(#provider_request{} = Request, Guid) ->
     Request#provider_request{context_guid = Guid};
-change_target_guid(#proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := _} = Parameters} = Request, Guid) ->
-    Request#proxyio_request{parameters = Parameters#{?PROXYIO_PARAMETER_FILE_GUID => Guid}};
+change_target_guid(#proxyio_request{
+    parameters = #{?PROXYIO_PARAMETER_FILE_GUID := _} = Parameters
+} = Request, Guid) ->
+    Request#proxyio_request{
+        parameters = Parameters#{?PROXYIO_PARAMETER_FILE_GUID => Guid}
+    };
 change_target_guid(Request, _) ->
     Request.
