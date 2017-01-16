@@ -28,17 +28,17 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec clean_replica_files(file_meta:uuid()) -> ok.
-clean_replica_files(FileUUID) ->
+clean_replica_files(FileUuid) ->
     LocalProviderId = oneprovider:get_provider_id(),
-    {ok, Locations} = file_meta:get_locations({uuid, FileUUID}),
+    {ok, Locations} = file_meta:get_locations({uuid, FileUuid}),
     RemoveLocation =
         fun(LocationId) ->
             case file_location:get(LocationId) of
                 {ok, #document{value = #file_location{storage_id = StorageId, file_id = FileId,
                     provider_id = LocalProviderId, space_id = SpaceId}}} ->
                     {ok, Storage} = storage:get(StorageId),
-                    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUUID, Storage, FileId),
+                    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUuid, FileUuid, Storage, FileId),
                     storage_file_manager:unlink(SFMHandle),
                     file_location:delete(LocationId);
                 {ok, _} ->

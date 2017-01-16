@@ -39,12 +39,12 @@
 chmod_storage_files(UserCtx, File, Mode) ->  %todo use file_context
     SessId = user_ctx:get_session_id(UserCtx),
     case file_meta:get(File) of
-        {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, user_ctx:get_user_id(UserCtx)),
+        {ok, #document{key = FileUuid, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
+            {ok, #document{key = SpaceUuid}} = fslogic_spaces:get_space(FileDoc, user_ctx:get_user_id(UserCtx)),
             Results = lists:map(
                 fun({SID, FID} = Loc) ->
                     {ok, Storage} = storage:get(SID),
-                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
+                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUuid, FileUuid, Storage, FID),
                     {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
                 end, fslogic_utils:get_local_storage_file_locations(File)),
 
@@ -70,18 +70,18 @@ chmod_storage_files(UserCtx, File, Mode) ->  %todo use file_context
     TargetFileId :: helpers:file(), TargetSpaceId :: binary(), FileIdVersion :: non_neg_integer()) -> {ok, helpers:file()}.
 rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion) ->
     {ok, UserId} = session:get_user_id(SessId),
-    #file_location{uuid = FileUUID, space_id = SourceSpaceId,
+    #file_location{uuid = FileUuid, space_id = SourceSpaceId,
         storage_id = SourceStorageId, file_id = SourceFileId} = Location,
-    {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get(FileUUID),
+    {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get(FileUuid),
 
     {ok, TargetStorage} = fslogic_storage:select_storage(TargetSpaceId),
-    SourceSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SourceSpaceId),
-    TargetSpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),
+    SourceSpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SourceSpaceId),
+    TargetSpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),
 
     {ok, SourceStorage} = storage:get(SourceStorageId),
 
     TargetDir = fslogic_path:dirname(TargetFileId),
-    TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUUID, undefined, TargetStorage, TargetDir),
+    TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUuid, undefined, TargetStorage, TargetDir),
     case storage_file_manager:mkdir(TargetDirHandle, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok ->
             ok;
@@ -89,9 +89,9 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion
             ok
     end,
 
-    NextFileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}, TargetFileId, FileIdVersion),
+    NextFileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, TargetFileId, FileIdVersion),
 
-    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUUID, FileUUID, SourceStorage, SourceFileId),
+    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUuid, FileUuid, SourceStorage, SourceFileId),
     case storage_file_manager:link(SourceHandle, TargetFileId) of
         ok ->
             ok = storage_file_manager:unlink(SourceHandle),
@@ -99,18 +99,18 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion
         {error, eexist} ->
             rename_storage_file(SessId, Location, NextFileId, TargetSpaceId, FileIdVersion + 1);
         Error ->
-            TargetHandleTest = storage_file_manager:new_handle(SessId, TargetSpaceUUID, FileUUID, TargetStorage, TargetFileId),
+            TargetHandleTest = storage_file_manager:new_handle(SessId, TargetSpaceUuid, FileUuid, TargetStorage, TargetFileId),
             case storage_file_manager:create(TargetHandleTest, Mode, true) of
                 {error, eexist} ->
                     rename_storage_file(SessId, Location, NextFileId, TargetSpaceId, FileIdVersion + 1);
                 _ ->
-                    SourceRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SourceSpaceUUID, FileUUID, SourceStorage, SourceFileId),
+                    SourceRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SourceSpaceUuid, FileUuid, SourceStorage, SourceFileId),
                     case storage_file_manager:mv(SourceRootHandle, TargetFileId) of
                         ok ->
-                            TargetRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUUID, FileUUID, TargetStorage, TargetFileId),
+                            TargetRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUuid, FileUuid, TargetStorage, TargetFileId),
                             ok = storage_file_manager:chown(TargetRootHandle, UserId, TargetSpaceId);
                         Error ->
-                            TargetHandle = storage_file_manager:new_handle(SessId, TargetSpaceUUID, FileUUID, TargetStorage, TargetFileId),
+                            TargetHandle = storage_file_manager:new_handle(SessId, TargetSpaceUuid, FileUuid, TargetStorage, TargetFileId),
                             ok = copy_file_contents_sfm(SourceHandle, TargetHandle),
                             ok = storage_file_manager:unlink(SourceHandle)
                     end,
@@ -126,12 +126,12 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion
 -spec rename_on_storage(user_ctx:ctx(), binary(), file_meta:entry()) -> ok.
 rename_on_storage(UserCtx, TargetSpaceId, SourceEntry) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    {ok, #document{key = SourceUUID, value = #file_meta{mode = Mode}}} = file_meta:get(SourceEntry),
+    {ok, #document{key = SourceUuid, value = #file_meta{mode = Mode}}} = file_meta:get(SourceEntry),
 
     lists:foreach(fun(#document{value = Location}) ->
-        TempFileId = fslogic_utils:gen_storage_file_id({uuid, SourceUUID}),
+        TempFileId = fslogic_utils:gen_storage_file_id({uuid, SourceUuid}),
         {ok, TargetFileId} = sfm_utils:rename_storage_file(SessId, Location, TempFileId, TargetSpaceId, 0),
-        ok = replica_updater:rename(SourceUUID, TargetFileId, TargetSpaceId)
+        ok = replica_updater:rename(SourceUuid, TargetFileId, TargetSpaceId)
     end, fslogic_utils:get_local_file_locations(SourceEntry)),
 
     ok = sfm_utils:chmod_storage_files(
