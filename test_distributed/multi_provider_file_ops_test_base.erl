@@ -755,10 +755,11 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
     end, [], Workers),
 
     lists:foreach(fun({Dir, Level2Dir, _Level2File, W, SN}) ->
-        ct:print("Verify dirs, node ~p, space ~p", [W, SN]),
+        ct:print("Verify dirs, node ~p, space ~p ~p", [W, SN, Dir]),
 
         Config = proplists:get_value(SN, SpaceConfigs),
         verify_stats(Config, Dir, true),
+        ct:print("Verify dirs, node ~p, space ~p ~p", [W, SN, Level2Dir]),
         verify_stats(Config, Level2Dir, true)
     end, CreateLog),
 
@@ -772,7 +773,7 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
     end, [], CreateLog),
 
     lists:foreach(fun({Level2File, FileBeg, W, SN}) ->
-        ct:print("Verify file, node ~p, space ~p", [W, SN]),
+        ct:print("Verify file, node ~p, space ~p ~p", [W, SN, Level2File]),
 
         Config = proplists:get_value(SN, SpaceConfigs),
         verify_file(Config, FileBeg, {2, Level2File})
@@ -975,9 +976,39 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
 
 verify(Config, TestFun) ->
     Workers = ?config(op_worker_nodes, Config),
-    lists:foldl(fun(W, Acc) ->
-        [TestFun(W) | Acc]
-    end, [], Workers).
+
+    process_flag(trap_exit, true),
+    TestAns = verify_helper(Workers, TestFun),
+
+    Error = lists:any(fun
+        ({_W, error, _Reason}) -> true;
+        (_) -> false
+    end, TestAns),
+    case Error of
+        true -> ?assert(TestAns);
+        _ -> ok
+    end,
+
+    lists:map(fun({_W, Ans}) -> Ans end, TestAns).
+
+verify_helper([], _TestFun) ->
+    [];
+verify_helper([W | Workers], TestFun) ->
+    Master = self(),
+    Pid = spawn_link(fun() ->
+        Ans = TestFun(W),
+        Master ! {verify_ans, Ans}
+    end),
+    TmpAns = verify_helper(Workers, TestFun),
+    receive
+        {verify_ans, TestAns} ->
+            [{W, TestAns} | TmpAns];
+        {'EXIT', Pid , Error} when Error /= normal ->
+            [{W, error, Error} | TmpAns]
+    after
+        timer:minutes(5) ->
+            [{W, error, timeout} | TmpAns]
+    end.
 
 verify_stats(Config, File, IsDir) ->
     SessId = ?config(session, Config),
