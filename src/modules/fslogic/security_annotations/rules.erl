@@ -18,11 +18,24 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([check/1]).
+-export([check/1, check/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given access_definition is granted to given user.
+%% @end
+%%--------------------------------------------------------------------
+-spec check(term(),  user_ctx:user_ctx(), file_ctx:ctx()) -> ok | no_return().
+check(Type, UserCtx, FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    UserDoc = user_ctx:get_user(UserCtx),
+    ShareId = file_ctx:get_share_id_const(FileCtx2),
+    {Acl, _} = file_ctx:get_acl(FileCtx2),
+    check({Type, FileDoc, UserDoc, ShareId, Acl}).
 
 %%--------------------------------------------------------------------
 %% @doc

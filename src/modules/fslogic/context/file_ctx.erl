@@ -22,6 +22,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -38,7 +39,8 @@
     file_name :: undefined | file_meta:name(),
     storage_doc :: undefined | storage:doc(),
     local_file_location_doc :: undefined | file_location:doc(),
-    location_ids :: undefined | [file_location:id()]
+    location_ids :: undefined | [file_location:id()],
+    acl :: undefined | acl:acl()
 }).
 
 -type path() :: file_meta:path().
@@ -53,13 +55,13 @@
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_entry_const/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1]).
+    is_root_dir_const/1, has_acl_const/1]).
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
-    get_storage_doc/1, get_local_file_location_doc/1, get_file_location_ids/1]).
+    get_storage_doc/1, get_local_file_location_doc/1, get_file_location_ids/1, get_acl/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -456,7 +458,7 @@ get_local_file_location_doc(FileCtx = #file_ctx{local_file_location_doc = Doc}) 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get file location IDs
+%% Returns file location IDs
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location_ids(ctx()) ->
@@ -467,6 +469,19 @@ get_file_location_ids(FileCtx = #file_ctx{location_ids = undefined}) ->
     {Locations, FileCtx2#file_ctx{location_ids = Locations}};
 get_file_location_ids(FileCtx = #file_ctx{location_ids = Locations}) ->
     {Locations, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file Access Control List
+%% @end
+%%--------------------------------------------------------------------
+-spec get_acl(ctx()) -> {undefined | acl:acl(), ctx()}.
+get_acl(FileCtx = #file_ctx{acl = undefined}) ->
+    {uuid, FileUuid} = get_uuid_entry_const(FileCtx),
+    Acl = acl:get(FileUuid),
+    {Acl, FileCtx#file_ctx{acl = Acl}};
+get_acl(FileCtx = #file_ctx{acl = Acl}) ->
+    {Acl, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -524,6 +539,18 @@ is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
     fslogic_uuid:is_root_dir(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file has Access Control List defined
+%% @end
+%%--------------------------------------------------------------------
+-spec has_acl_const(ctx()) -> boolean().
+has_acl_const(FileCtx = #file_ctx{acl = undefined}) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    acl:exists(FileUuid);
+has_acl_const(_) ->
+    true.
 
 %%--------------------------------------------------------------------
 %% @doc
