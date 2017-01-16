@@ -155,7 +155,7 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #od_space{name = Name}) of
                 {ok, SpaceId} ->
-                    spawn(fun() ->
+                    gui_async:spawn(true, fun() ->
                         timer:sleep(5000),
                         user_data_backend:push_modified_user(
                             UserAuth, UserId, <<"spaces">>, add, SpaceId
