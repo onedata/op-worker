@@ -233,11 +233,16 @@ handle(<<"getTokenProviderSupportSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     end;
 
 handle(<<"createFileShare">>, Props) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     SessionId = gui_session:get_session_id(),
     FileId = proplists:get_value(<<"fileId">>, Props),
     Name = proplists:get_value(<<"shareName">>, Props),
     case logical_file_manager:create_share(SessionId, {guid, FileId}, Name) of
         {ok, {ShareId, _}} ->
+            user_data_backend:push_modified_user(
+                UserAuth, UserId, <<"shares">>, add, ShareId
+            ),
             % Push file data so GUI knows that is is shared
             {ok, FileData} = file_data_backend:file_record(SessionId, FileId),
             gui_async:push_created(<<"file">>, FileData),
