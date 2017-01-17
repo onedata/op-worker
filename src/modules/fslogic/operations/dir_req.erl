@@ -31,7 +31,7 @@
 -spec mkdir(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
+-check_permissions([traverse_ancestors, ?traverse_container, ?add_subcontainer]).
 mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
@@ -57,7 +57,7 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
 -spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
+-check_permissions([traverse_ancestors, ?list_container]).
 read_dir(UserCtx, FileCtx, Offset, Limit) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {Children, _FileCtx3} = file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Limit),

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([check/1, check/3]).
+-export([check/3]).
 
 %%%===================================================================
 %%% API
@@ -30,12 +30,50 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec check(term(),  user_ctx:user_ctx(), file_ctx:ctx()) -> ok | no_return().
-check(Type, UserCtx, FileCtx) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+check({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
+    case file_ctx:is_root_dir_const(SubjectCtx) of
+        true ->
+            throw(?EAGAIN);
+        false ->
+            {#document{value = #file_meta{shares = Shares}}, SubjectCtx2} =
+                file_ctx:get_file_doc(SubjectCtx),
+            ShareId = file_ctx:get_share_id_const(DefaultFileCtx),
+
+            case lists:member(ShareId, Shares) of
+                true ->
+                    ok;
+                false ->
+                    {ParentCtx, SubjectCtx2} = file_ctx:get_parent(SubjectCtx, user_ctx:get_user_id(UserCtx)),
+                    ok = check({share, ParentCtx}, UserCtx, DefaultFileCtx)
+            end
+    end;
+check({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
+    case file_ctx:is_root_dir_const(SubjectCtx) of
+        true ->
+            ok;
+        false ->
+            case file_ctx:is_space_dir_const(SubjectCtx) of
+                true ->
+                    ok = check({?traverse_container, SubjectCtx}, UserCtx, _DefaultFileCtx);
+                false ->
+                    ok
+            end,
+            {ParentCtx, _SubjectCtx2} = file_ctx:get_parent(SubjectCtx, user_ctx:get_user_id(UserCtx)),
+            ok = check({?traverse_container, ParentCtx}, UserCtx, _DefaultFileCtx),
+            ok = check({traverse_ancestors, ParentCtx}, UserCtx, _DefaultFileCtx)
+    end;
+check({Type, SubjectCtx}, UserCtx, _FileCtx) ->
+    {FileDoc, SubjectCtx2} = file_ctx:get_file_doc(SubjectCtx),
     UserDoc = user_ctx:get_user(UserCtx),
-    ShareId = file_ctx:get_share_id_const(FileCtx2),
-    {Acl, _} = file_ctx:get_acl(FileCtx2),
-    check({Type, FileDoc, UserDoc, ShareId, Acl}).
+    ShareId = file_ctx:get_share_id_const(SubjectCtx2),
+    {Acl, _} = file_ctx:get_acl(SubjectCtx2),
+    check({Type, FileDoc, UserDoc, ShareId, Acl});
+check(Type, UserCtx, FileCtx) ->
+    check({Type, FileCtx}, UserCtx, FileCtx).
+
+%%%===================================================================
+%%% Internal Functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc

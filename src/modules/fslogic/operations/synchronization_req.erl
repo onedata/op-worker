@@ -109,7 +109,7 @@ replicate_file(UserCtx, FileCtx, Block) ->
 -spec replicate_file(user_ctx:ctx(), file_ctx:ctx(),
     fslogic_blocks:block(), non_neg_integer()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
+-check_permissions([traverse_ancestors, ?write_object]).
 replicate_file(UserCtx, FileCtx, Block, Offset) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_ctx:is_dir(FileCtx) of

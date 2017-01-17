@@ -49,7 +49,7 @@ check_perms(UserCtx, FileCtx, rdwr) ->
 %%--------------------------------------------------------------------
 -spec check_perms_read(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
+-check_permissions([traverse_ancestors, ?read_object]).
 check_perms_read(_UserCtx, _FileCtx) ->
     #provider_response{status = #status{code = ?OK}}.
 
@@ -61,7 +61,7 @@ check_perms_read(_UserCtx, _FileCtx) ->
 %%--------------------------------------------------------------------
 -spec check_perms_write(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
+-check_permissions([traverse_ancestors, ?write_object]).
 check_perms_write(_UserCtx, _FileCtx) ->
     #provider_response{status = #status{code = ?OK}}.
 
@@ -73,6 +73,6 @@ check_perms_write(_UserCtx, _FileCtx) ->
 %%--------------------------------------------------------------------
 -spec check_perms_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
+-check_permissions([traverse_ancestors, ?read_object, ?write_object]).
 check_perms_rdwr(_UserCtx, _FileCtx) ->
     #provider_response{status = #status{code = ?OK}}.

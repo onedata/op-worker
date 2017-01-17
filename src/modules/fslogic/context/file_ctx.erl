@@ -48,7 +48,7 @@
 -type ctx() :: #file_ctx{}.
 
 %% Functions creating context and filling its data
--export([new_by_path/2, new_by_guid/1]).
+-export([new_by_logical_path/2, new_by_canonical_path/2, new_by_guid/1]).
 -export([fill_guid/1]).
 
 %% Functions that do not modify context
@@ -70,11 +70,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new file context using file's path
+%% Creates new file context using file logical path
 %% @end
 %%--------------------------------------------------------------------
--spec new_by_path(user_ctx:ctx(), path()) -> ctx().
-new_by_path(UserCtx, Path) ->
+-spec new_by_logical_path(user_ctx:ctx(), path()) -> ctx().
+new_by_logical_path(UserCtx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     case session:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
@@ -94,6 +94,29 @@ new_by_path(UserCtx, Path) ->
                         {SpaceId, SpaceName} ->
                             #file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}
                     end
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new file context using file canonical path
+%% @end
+%%--------------------------------------------------------------------
+-spec new_by_canonical_path(user_ctx:ctx(), path()) -> ctx().
+new_by_canonical_path(UserCtx, Path) ->
+    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
+    case session:is_special(user_ctx:get_session_id(UserCtx)) of
+        true ->
+            throw({invalid_request, <<"Path resolution requested in the context of special session."
+            " You may only operate on guids in this context.">>});
+        false ->
+            case Tokens of
+                [<<"/">>] ->
+                    UserId = user_ctx:get_user_id(UserCtx),
+                    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
+                    #file_ctx{canonical_path = filename:join(Tokens), guid = UserRootDirGuid};
+                [<<"/">>, SpaceId | Rest] ->
+                    fill_guid(#file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest])})
             end
     end.
 

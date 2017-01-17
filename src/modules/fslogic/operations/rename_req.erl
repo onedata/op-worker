@@ -66,7 +66,7 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 -spec rename(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}, {?delete, 2}]).
+-check_permissions([traverse_ancestors, ?delete]).
 rename(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
     case file_ctx:is_dir(SourceFileCtx) of
         {true, SourceFileCtx2} ->
@@ -84,7 +84,7 @@ rename(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetN
 -spec rename_dir(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
--check_permissions([{?delete_subcontainer, {parent, 2}}]).
+-check_permissions([{?delete_subcontainer, parent}]).
 rename_dir(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
     case check_dir_preconditions(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) of
         ok ->
@@ -102,7 +102,7 @@ rename_dir(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, Tar
 -spec rename_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
--check_permissions([{?delete_object, {parent, 2}}]).
+-check_permissions([{?delete_object, parent}]).
 rename_file(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
     case check_reg_preconditions(UserCtx, TargetParentFileCtx, TargetName) of
         ok ->
@@ -187,8 +187,6 @@ rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, 
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
     {LogicalTargetPath, _} = get_logical_and_canonical_path_of_remote_file(UserCtx, TargetParentFileCtx, TargetName),
 
-
-
     case SourceSpaceId =:= TargetSpaceId of
         true ->
             case FileType of
@@ -225,7 +223,8 @@ rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, 
 %%--------------------------------------------------------------------
 -spec rename_file_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
+-check_permissions([{traverse_ancestors, {parent, {path, 3}}},
+    {?traverse_container, {parent, {path, 3}}}, {?add_object, {parent, {path, 3}}}]).
 rename_file_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
     rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
@@ -237,7 +236,8 @@ rename_file_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPa
 %%--------------------------------------------------------------------
 -spec rename_dir_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
+-check_permissions([{traverse_ancestors, {parent, {path, 3}}},
+    {?traverse_container, {parent, {path, 3}}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
     rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
@@ -260,7 +260,8 @@ rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) -
 %%--------------------------------------------------------------------
 -spec rename_file_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {path, 3}}, {?add_object, {parent, {path, 3}}}]).
+-check_permissions([{traverse_ancestors, {parent, {path, 3}}},
+    {?traverse_container, {parent, {path, 3}}}, {?add_object, {parent, {path, 3}}}]).
 rename_file_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
     rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 
@@ -272,7 +273,7 @@ rename_file_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTarge
 %%--------------------------------------------------------------------
 -spec rename_dir_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {path, 3}}, {?add_subcontainer, {parent, {path, 3}}}]).
+-check_permissions([{traverse_ancestors, {parent, {path, 3}}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
     rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
 

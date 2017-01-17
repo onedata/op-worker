@@ -29,7 +29,7 @@
 %% API
 -export([new/1]).
 -export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
--export([is_root_context/1]).
+-export([is_root_context/1, is_guest_context/1]).
 
 %%%===================================================================
 %%% API functions
@@ -96,3 +96,12 @@ get_auth(#user_ctx{session = Session}) ->
 -spec is_root_context(ctx()) -> boolean().
 is_root_context(#user_ctx{session = #document{key = SessId}}) ->
     session:is_root(SessId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if context represents guest user
+%% @end
+%%--------------------------------------------------------------------
+-spec is_guest_context(ctx()) -> boolean().
+is_guest_context(#user_ctx{session = #document{key = SessId}}) ->
+    session:is_guest(SessId).

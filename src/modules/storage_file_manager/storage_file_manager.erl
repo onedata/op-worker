@@ -409,7 +409,7 @@ fsync(#sfm_handle{file_handle = FileHandle}) ->
 %%--------------------------------------------------------------------
 -spec open_for_read(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
--check_permissions([{?read_object, 1}]).
+-check_permissions([?read_object]).
 open_for_read(SFMHandle) ->
     open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read).
 
@@ -421,7 +421,7 @@ open_for_read(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_for_write(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
--check_permissions([{?write_object, 1}]).
+-check_permissions([?write_object]).
 open_for_write(SFMHandle) ->
     open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write).
 
@@ -433,7 +433,7 @@ open_for_write(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_for_rdwr(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
--check_permissions([{?read_object, 1}, {?write_object, 1}]).
+-check_permissions([?read_object, ?write_object]).
 open_for_rdwr(SFMHandle) ->
     open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
 

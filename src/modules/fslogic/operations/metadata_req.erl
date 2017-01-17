@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec get_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
     custom_metadata:filter(), Inherited :: boolean()) -> fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
+-check_permissions([traverse_ancestors, ?read_metadata]).
 get_metadata(_UserCtx, FileCtx, json, Names, Inherited) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of %todo pass file_ctx
@@ -56,7 +56,7 @@ get_metadata(_UserCtx, FileCtx, rdf, _, _) ->
 %%--------------------------------------------------------------------
 -spec set_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
     custom_metadata:value(), custom_metadata:filter()) -> fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
+-check_permissions([traverse_ancestors, ?write_metadata]).
 set_metadata(_UserCtx, FileCtx, json, Value, Names) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names), %todo pass file_ctx
@@ -73,7 +73,7 @@ set_metadata(_UserCtx, FileCtx, rdf, Value, _) ->
 %%--------------------------------------------------------------------
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
+-check_permissions([traverse_ancestors, ?write_metadata]).
 remove_metadata(_UserCtx, FileCtx, json) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     ok = custom_metadata:remove_json_metadata(FileUuid), %todo pass file_ctx
