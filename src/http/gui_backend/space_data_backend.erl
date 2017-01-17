@@ -155,22 +155,9 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #od_space{name = Name}) of
                 {ok, SpaceId} ->
-                    WSProcess = get(ws_process),
-                    gui_async:spawn(true, fun() ->
-                        try
-                            put(ws_process, WSProcess),
-                            ?dump(czeslaw),
-                            timer:sleep(5000),
-                            ?dump(czeslaw2),
-                            user_data_backend:push_modified_user(
-                                UserAuth, UserId, <<"spaces">>, add, SpaceId
-                            ),
-                            ?dump(czeslaw3)
-                        catch
-                            T:M ->
-                                ?error_stacktrace("~p", [{T, M}])
-                        end
-                    end),
+                    user_data_backend:push_modified_user(
+                        UserAuth, UserId, <<"spaces">>, add, SpaceId
+                    ),
                     SpaceRecord = space_record(SpaceId, true),
                     {ok, SpaceRecord};
                 _ ->
