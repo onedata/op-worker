@@ -166,6 +166,7 @@ delete_record(_, _Id) ->
 -spec handle_record(ModelType :: binary(), Auth :: term(),
     HandleId :: binary()) -> {ok, proplists:proplist()}.
 handle_record(ModelType, Auth, HandleId) ->
+    UserId = gui_session:get_user_id(),
     {ok, #document{value = #od_handle{
         handle_service = HandleServiceId,
         public_handle = PublicHandle,
@@ -184,5 +185,6 @@ handle_record(ModelType, Auth, HandleId) ->
         {<<"handleService">>, HandleService},
         {<<"share">>, Share},
         {<<"metadataString">>, Metadata},
-        {<<"publicHandle">>, PublicHandle}
+        {<<"publicHandle">>, PublicHandle},
+        {<<"user">>, UserId}
     ]}.

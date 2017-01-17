@@ -317,6 +317,7 @@ group_record(GroupId) ->
     proplists:proplist().
 group_record(GroupId, HasViewPrivs) ->
     UserAuth = op_gui_utils:get_user_auth(),
+    UserId = gui_session:get_user_id(),
     {ok, #document{
         value = #od_group{
             name = Name,
@@ -339,7 +340,8 @@ group_record(GroupId, HasViewPrivs) ->
         {<<"userList">>, GroupUserList},
         {<<"groupList">>, GroupGroupList},
         {<<"parentGroups">>, Parents},
-        {<<"childGroups">>, Children}
+        {<<"childGroups">>, Children},
+        {<<"user">>, UserId}
     ].
 
 
