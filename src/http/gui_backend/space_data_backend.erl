@@ -155,8 +155,10 @@ create_record(<<"space">>, Data) ->
         _ ->
             case space_logic:create_user_space(UserAuth, #od_space{name = Name}) of
                 {ok, SpaceId} ->
+                    WSProcess = get(ws_process),
                     gui_async:spawn(true, fun() ->
                         try
+                            put(ws_process, WSProcess),
                             ?dump(czeslaw),
                             timer:sleep(5000),
                             ?dump(czeslaw2),
