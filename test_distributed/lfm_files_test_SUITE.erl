@@ -87,7 +87,7 @@ all() ->
     ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(REPEATS, 5).
+-define(REPEATS, 1).
 -define(SUCCESS_RATE, 100).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
@@ -120,7 +120,9 @@ echo_loop_test(Config) ->
 echo_loop_test_base(Config) ->
     WritesNum = ?config(writes_num, Config),
 
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    wait_for_cache_dump(Workers),
+
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
@@ -221,7 +223,9 @@ ls_with_stats_test_base(Config) ->
     ProcNum = ?config(proc_num, Config),
     DirsNumPerProc = ?config(dirs_num_per_proc, Config),
 
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    wait_for_cache_dump(Workers),
+
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     Master = self(),
@@ -343,7 +347,9 @@ ls_test(Config) ->
 ls_test_base(Config) ->
     DSM = ?config(dir_size_multiplier, Config),
 
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    wait_for_cache_dump(Workers),
+
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
@@ -956,3 +962,8 @@ check_run_parallel_ans(Num) ->
 
 report_success(Master) ->
     Master ! run_parallel_ok.
+
+wait_for_cache_dump(Workers) ->
+    lists:foreach(fun(W) ->
+        rpc:call(W, caches_controller, wait_for_cache_dump, [])
+    end, Workers).
