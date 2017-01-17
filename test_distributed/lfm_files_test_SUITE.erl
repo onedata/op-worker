@@ -87,7 +87,7 @@ all() ->
     ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
 
 -define(TIMEOUT, timer:seconds(10)).
--define(REPEATS, 1).
+-define(REPEATS, 3).
 -define(SUCCESS_RATE, 100).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
