@@ -15,7 +15,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([check_and_cache_result/3]).
+-export([check_and_cache_result/3, check_and_cache_results/3]).
 
 %%%===================================================================
 %%% API
@@ -23,28 +23,50 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check rule using cache, or compute it and cache result.n
+%% Check rules list using cache. Returns updated file context.
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_cache_result(check_permissions:raw_access_definition(), user_ctx:ctx(), file_ctx:ctx()) -> ok.
+-spec check_and_cache_results(check_permissions:access_definition(),
+    user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+check_and_cache_results([], _UserCtx, DefaultFileCtx) ->
+    {ok, DefaultFileCtx};
+check_and_cache_results([Def | Rest], UserCtx, DefaultFileCtx) ->
+    {ok, DefaultFileCtx2} = check_and_cache_result(Def, UserCtx, DefaultFileCtx),
+    check_and_cache_results(Rest, UserCtx, DefaultFileCtx2).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check rule using cache, or compute it and cache result. Returns updated file
+%% context.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_and_cache_result(check_permissions:access_definition(),
+    user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 check_and_cache_result(Definition, UserCtx, DefaultFileCtx) ->
     try
-        case Definition of
+        case Definition of %todo refactor duplicate code
             {Type, SubjectCtx} ->
                 case permission_in_cache(Type, UserCtx, SubjectCtx) of
                     true ->
-                        ok;
+                        {ok, DefaultFileCtx};
                     false ->
-                        ok = rules:check(Definition, UserCtx, DefaultFileCtx),
-                        cache_permission(Type, UserCtx, SubjectCtx, ok)
+                        {ok, DefaultFileCtx2} = rules:check_normal_or_default_def(Definition, UserCtx, DefaultFileCtx),
+                        cache_permission(Type, UserCtx, SubjectCtx, ok),
+                        {ok, DefaultFileCtx2}
                 end;
             Type ->
                 case permission_in_cache(Type, UserCtx, DefaultFileCtx) of
                     true ->
-                        ok;
+                        {ok, DefaultFileCtx};
                     false ->
-                        ok = rules:check(Definition, UserCtx, DefaultFileCtx),
-                        cache_permission(Type, UserCtx, DefaultFileCtx, ok)
+                        {ok, DefaultFileCtx2} = rules:check_normal_or_default_def(Definition, UserCtx, DefaultFileCtx),
+                        cache_permission(Type, UserCtx, DefaultFileCtx, ok),
+                        {ok, DefaultFileCtx2}
                 end
         end
     catch
@@ -59,6 +81,7 @@ check_and_cache_result(Definition, UserCtx, DefaultFileCtx) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns cached permission for given definition.
 %% @end
@@ -78,6 +101,7 @@ permission_in_cache(CheckType, UserCtx, FileCtx) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Caches result for given definition
 %% @end
@@ -88,7 +112,3 @@ cache_permission(CheckType, UserCtx, FileCtx, Value) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx),
     permissions_cache:cache_permission({CheckType, UserId, Guid}, Value).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

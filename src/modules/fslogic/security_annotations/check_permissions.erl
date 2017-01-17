@@ -64,7 +64,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{
     DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
     {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
     lists:foreach(fun(Def) ->
-        rules:check(Def, UserCtx, DefaultFileCtx2) end, ExpandedAccessDefinitions),
+        rules:check_normal_or_default_def(Def, UserCtx, DefaultFileCtx2) end, ExpandedAccessDefinitions),
     set_root_context_if_file_has_acl(Args);
 before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     Args = [UserCtx, DefaultFileCtx | OtherArgs]
@@ -76,7 +76,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     end, ExpandedAccessDefinitions),
     case user_ctx:is_guest_context(UserCtx) of
         true ->
-            rules:check(share, UserCtx, DefaultFileCtx2);
+            rules_cache:check_and_cache_result(share, UserCtx, DefaultFileCtx2);
         false ->
             ok
     end,

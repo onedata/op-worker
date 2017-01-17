@@ -18,7 +18,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([check/3]).
+-export([check_normal_or_default_def/3]).
 
 %%%===================================================================
 %%% API
@@ -26,11 +26,29 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if given access_definition is granted to given user.
+%% Checks if given access_definition is granted to given user.
+%% Accepts default defs (that use default file context).
+%% Returns updated default file context record.
 %% @end
 %%--------------------------------------------------------------------
--spec check(term(),  user_ctx:user_ctx(), file_ctx:ctx()) -> ok | no_return().
-check({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
+-spec check_normal_or_default_def(check_permissions:check_type(), user_ctx:ctx(),
+    file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+check_normal_or_default_def({Type, SubjectCtx}, UserCtx, FileCtx) ->
+    {ok, _} = check_normal_def({Type, SubjectCtx}, UserCtx, FileCtx),
+    {ok, FileCtx};
+check_normal_or_default_def(Type, UserCtx, FileCtx) ->
+    {ok, _FileCtx2} = check_normal_def({Type, FileCtx}, UserCtx, FileCtx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given access_definition is granted to given user. Accepts only full
+%% definitions with file context. Return updated file context. The functions
+%% gets as an argument also DefaultFileCtx, 'share' check depends on its 'share_id'
+%% @end
+%%--------------------------------------------------------------------
+-spec check_normal_def(check_permissions:check_type(),  user_ctx:user_ctx(),
+    file_ctx:ctx()) -> ok | no_return().
+check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
     case file_ctx:is_root_dir_const(SubjectCtx) of
         true ->
             throw(?EAGAIN);
@@ -41,35 +59,36 @@ check({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
 
             case lists:member(ShareId, Shares) of
                 true ->
-                    ok;
+                    {ok, SubjectCtx2};
                 false ->
-                    {ParentCtx, SubjectCtx2} = file_ctx:get_parent(SubjectCtx, user_ctx:get_user_id(UserCtx)),
-                    ok = check({share, ParentCtx}, UserCtx, DefaultFileCtx)
+                    {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, user_ctx:get_user_id(UserCtx)),
+                    check_normal_def({share, ParentCtx}, UserCtx, DefaultFileCtx),
+                    {ok, SubjectCtx3}
             end
     end;
-check({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
+check_normal_def({traverse_ancestors, SubjectCtx}, UserCtx, _DefaultFileCtx) ->
     case file_ctx:is_root_dir_const(SubjectCtx) of
         true ->
-            ok;
+            {ok, SubjectCtx};
         false ->
-            case file_ctx:is_space_dir_const(SubjectCtx) of
+            SubjectCtx2 = case file_ctx:is_space_dir_const(SubjectCtx) of
                 true ->
-                    ok = check({?traverse_container, SubjectCtx}, UserCtx, _DefaultFileCtx);
+                    {ok, SubjectCtx2_} = check_normal_def({?traverse_container, SubjectCtx}, UserCtx, _DefaultFileCtx),
+                    SubjectCtx2_;
                 false ->
-                    ok
+                    SubjectCtx
             end,
-            {ParentCtx, _SubjectCtx2} = file_ctx:get_parent(SubjectCtx, user_ctx:get_user_id(UserCtx)),
-            ok = check({?traverse_container, ParentCtx}, UserCtx, _DefaultFileCtx),
-            ok = check({traverse_ancestors, ParentCtx}, UserCtx, _DefaultFileCtx)
+            {ParentCtx, SubjectCtx3} = file_ctx:get_parent(SubjectCtx2, user_ctx:get_user_id(UserCtx)),
+            check_normal_def({?traverse_container, ParentCtx}, UserCtx, _DefaultFileCtx),
+            check_normal_def({traverse_ancestors, ParentCtx}, UserCtx, _DefaultFileCtx),
+            {ok, SubjectCtx3}
     end;
-check({Type, SubjectCtx}, UserCtx, _FileCtx) ->
+check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
     {FileDoc, SubjectCtx2} = file_ctx:get_file_doc(SubjectCtx),
     UserDoc = user_ctx:get_user(UserCtx),
     ShareId = file_ctx:get_share_id_const(SubjectCtx2),
     {Acl, _} = file_ctx:get_acl(SubjectCtx2),
-    check({Type, FileDoc, UserDoc, ShareId, Acl});
-check(Type, UserCtx, FileCtx) ->
-    check({Type, FileCtx}, UserCtx, FileCtx).
+    check(Type, FileDoc, UserDoc, ShareId, Acl, SubjectCtx).
 
 %%%===================================================================
 %%% Internal Functions
@@ -80,160 +99,165 @@ check(Type, UserCtx, FileCtx) ->
 %% Check if given access_definition is granted to given user.
 %% @end
 %%--------------------------------------------------------------------
--spec check({term(), FileDoc :: datastore:document() | undefined, UserDoc :: datastore:document(),
-    od_share:id() | undefined, Acl :: [#accesscontrolentity{}] | undefined}) -> ok | no_return().
+-spec check(check_permissions:check_type(), file_meta:doc(), od_user:doc(),
+    od_share:id() | undefined, acl:acl() | undefined, file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
 % standard posix checks
-check({_, _, #document{key = ?ROOT_USER_ID}, _, _}) ->
-    ok;
-check({root, _, _, _, _}) ->
+check(root, _, _, _, _, _) ->
     throw(?EACCES);
-check({owner, #document{value = #file_meta{owner = OwnerId}}, #document{key = OwnerId}, _, _}) ->
-    ok;
-check({owner, _, _, _, _}) ->
+check(owner, #document{value = #file_meta{owner = OwnerId}}, #document{key = OwnerId}, _, _, FileCtx) ->
+    {ok, FileCtx};
+check(owner, _, _, _, _, _) ->
     throw(?EACCES);
-check({owner_if_parent_sticky, Doc, UserDoc, ShareId, Acl}) ->
-    #document{value = #file_meta{mode = Mode}} = fslogic_utils:get_parent(Doc),
+check(owner_if_parent_sticky, Doc, UserDoc, ShareId, Acl, FileCtx) ->
+    {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserDoc#document.key),
+    {#document{value = #file_meta{mode = Mode}}, _ParentCtx2} =
+        file_ctx:get_file_doc(ParentCtx),
     case (Mode band (8#1 bsl 9)) > 0 of
         true ->
-            ok = check({owner, Doc, UserDoc, ShareId, Acl});
+            check(owner, Doc, UserDoc, ShareId, Acl, FileCtx2);
         false ->
-            ok
+            {ok, FileCtx2}
     end;
-check({{owner, 'or', ?write_attributes}, Doc, #document{key = UserId} = User, ShareId, Acl}) ->
-    case Doc#document.value#file_meta.owner of
-        UserId ->
-            ok;
-        _ ->
-            check({?write_attributes, Doc, User, ShareId, Acl})
-    end;
-check({{AccessType1, 'or', AccessType2}, Doc, User, ShareId, Acl}) ->
+check({AccessType1, 'or', AccessType2}, Doc, User, ShareId, Acl, FileCtx) ->
     case
         {
-                catch check({AccessType1, Doc, User, ShareId, Acl}),
-                catch check({AccessType2, Doc, User, ShareId, Acl})
+                catch check(AccessType1, Doc, User, ShareId, Acl, FileCtx),
+                catch check(AccessType2, Doc, User, ShareId, Acl, FileCtx)
         }
     of
-        {ok, _} -> ok;
-        {_, ok} -> ok;
+        {{ok, Ctx}, _} -> {ok, Ctx};
+        {_, {ok, Ctx}} -> {ok, Ctx};
         _ -> throw(?EACCES)
     end;
-check({AccessType, #document{value = #file_meta{is_scope = true}} = Doc, #document{key = UserId} = UserDoc, ShareId, undefined}) when
+check(AccessType, #document{value = #file_meta{is_scope = true}},
+    UserDoc, ShareId, undefined, FileCtx) when
+    AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr
+    ->
+    {ok, FileCtx2} = validate_scope_access(FileCtx, UserDoc, ShareId),
+    {ok, FileCtx3} = validate_posix_access(AccessType, FileCtx2, UserDoc, ShareId),
+    validate_scope_privs(AccessType, FileCtx3, UserDoc, ShareId);
+check(AccessType, _Doc, UserDoc, ShareId, undefined, FileCtx) when
     AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
-    ok = validate_scope_access(Doc, UserId, ShareId),
-    ok = validate_posix_access(AccessType, Doc, UserId, ShareId),
-    ok = validate_scope_privs(AccessType, Doc, UserDoc, ShareId);
-check({AccessType, Doc, #document{key = UserId} = UserDoc, ShareId, undefined}) when
-    AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
-    ok = validate_posix_access(AccessType, Doc, UserId, ShareId),
-    ok = validate_scope_privs(AccessType, Doc, UserDoc, ShareId);
-
+    {ok, FileCtx2} = validate_posix_access(AccessType, FileCtx, UserDoc, ShareId),
+    validate_scope_privs(AccessType, FileCtx2, UserDoc, ShareId);
 
 % if no acl specified, map access masks checks to posix checks
-check({?read_object, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({read, Doc, UserDoc, ShareId, undefined});
-check({?list_container, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({read, Doc, UserDoc, ShareId, undefined});
-check({?write_object, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined});
-check({?add_object, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined}),
-    ok = check({exec, Doc, UserDoc, ShareId, undefined});
-check({?append_data, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined});
-check({?add_subcontainer, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined});
-check({?read_metadata, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({read, Doc, UserDoc, ShareId, undefined});
-check({?write_metadata, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined});
-check({?execute, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({exec, Doc, UserDoc, ShareId, undefined});
-check({?traverse_container, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({exec, Doc, UserDoc, ShareId, undefined});
-check({?delete_object, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined}),
-    ok = check({exec, Doc, UserDoc, ShareId, undefined});
-check({?delete_subcontainer, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined}),
-    ok = check({exec, Doc, UserDoc, ShareId, undefined});
-check({?read_attributes, _Doc, _UserDoc, _ShareId, undefined}) ->
-    ok;
-check({?write_attributes, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({write, Doc, UserDoc, ShareId, undefined});
-check({?delete, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({owner_if_parent_sticky, Doc, UserDoc, ShareId, undefined});
-check({?read_acl, _Doc, _UserDoc, _ShareId, undefined}) ->
-    ok;
-check({?write_acl, Doc, UserDoc, ShareId, undefined}) ->
-    ok = check({owner, Doc, UserDoc, ShareId, undefined});
-check({?write_owner, _, UserDoc, ShareId, undefined}) ->
-    ok = check({root, undefined, UserDoc, ShareId, undefined});
+check(?read_object, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(read, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?list_container, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(read, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?write_object, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(write, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?add_object, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    {ok, FileCtx2} = check(write, Doc, UserDoc, ShareId, undefined, FileCtx),
+    check(exec, Doc, UserDoc, ShareId, undefined, FileCtx2);
+check(?append_data, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(write, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?add_subcontainer, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(write, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?read_metadata, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(read, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?write_metadata, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(write, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?execute, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(exec, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?traverse_container, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(exec, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?delete_object, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    {ok, FileCtx2} = check(write, Doc, UserDoc, ShareId, undefined, FileCtx),
+    check(exec, Doc, UserDoc, ShareId, undefined, FileCtx2);
+check(?delete_subcontainer, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    {ok, FileCtx2} = check(write, Doc, UserDoc, ShareId, undefined, FileCtx),
+    check(exec, Doc, UserDoc, ShareId, undefined, FileCtx2);
+check(?read_attributes, _Doc, _UserDoc, _ShareId, undefined, FileCtx) ->
+    {ok, FileCtx};
+check(?write_attributes, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(write, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?delete, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(owner_if_parent_sticky, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?read_acl, _Doc, _UserDoc, _ShareId, undefined, FileCtx) ->
+    {ok, FileCtx};
+check(?write_acl, Doc, UserDoc, ShareId, undefined, FileCtx) ->
+    check(owner, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?write_owner, _, UserDoc, ShareId, undefined, FileCtx) ->
+    check(root, undefined, UserDoc, ShareId, undefined, FileCtx);
 
 % acl is specified but the request is for shared file, check posix perms
-check({?read_object, _, Doc, UserDoc, ShareId, _}) when is_binary(ShareId) ->
-    ok = check({?read_object, Doc, UserDoc, ShareId, undefined});
-check({?list_container, Doc, UserDoc, ShareId, _}) when is_binary(ShareId) ->
-    ok = check({?list_container, Doc, UserDoc, ShareId, undefined});
-check({?read_metadata, Doc, UserDoc, ShareId, _}) when is_binary(ShareId) ->
-    ok = check({?read_metadata, Doc, UserDoc, ShareId, undefined});
-check({?execute, Doc, UserDoc, ShareId, _}) when is_binary(ShareId) ->
-    ok = check({?execute, Doc, UserDoc, ShareId, undefined});
-check({?traverse_container, Doc, UserDoc, ShareId, _}) when is_binary(ShareId) ->
-    ok = check({?traverse_container, Doc, UserDoc, ShareId, undefined});
-check({?read_attributes, Doc, UserDoc, ShareId, _}) when is_binary(ShareId) ->
-    ok = check({?read_attributes, Doc, UserDoc, ShareId, undefined});
-check({?read_acl, Doc, UserDoc, ShareId, _}) when is_binary(ShareId) ->
-    ok = check({?read_acl, Doc, UserDoc, ShareId, undefined});
+check(?read_object, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
+    check(?read_object, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?list_container, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
+    check(?list_container, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?read_metadata, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
+    check(?read_metadata, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?execute, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
+    check(?execute, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?traverse_container, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
+    check(?traverse_container, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?read_attributes, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
+    check(?read_attributes, Doc, UserDoc, ShareId, undefined, FileCtx);
+check(?read_acl, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
+    check(?read_acl, Doc, UserDoc, ShareId, undefined, FileCtx);
 
 % acl is specified, check access masks
-check({?read_object, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?read_object_mask);
-check({?list_container, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?list_container_mask);
-check({?write_object, Doc, UserDoc, ShareId, Acl}) ->
+check(?read_object, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_object_mask),
+    {ok, FileCtx};
+check(?list_container, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?list_container_mask),
+    {ok, FileCtx};
+check(?write_object, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?write_object_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({?add_object, Doc, UserDoc, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(?add_object, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?add_object_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({?append_data, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?append_data_mask);
-check({?add_subcontainer, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?add_subcontainer_mask);
-check({?read_metadata, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?read_metadata_mask);
-check({?write_metadata, Doc, UserDoc, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(?append_data, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?append_data_mask),
+    {ok, FileCtx};
+check(?add_subcontainer, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?add_subcontainer_mask),
+    {ok, FileCtx};
+check(?read_metadata, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_metadata_mask),
+    {ok, FileCtx};
+check(?write_metadata, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?write_metadata_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({?execute, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?execute_mask);
-check({?traverse_container, #document{value = #file_meta{is_scope = true}} = FileDoc, #document{key = UserId} = UserDoc, ShareId, Acl}) ->
-    ok = validate_scope_access(FileDoc, UserId, ShareId),
-    fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
-check({?traverse_container, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
-check({?delete_object, Doc, UserDoc, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(?execute, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?execute_mask),
+    {ok, FileCtx};
+check(?traverse_container, #document{value = #file_meta{is_scope = true}}, UserDoc, ShareId, Acl, FileCtx) ->
+    validate_scope_access(FileCtx, UserDoc, ShareId),
+    fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask),
+    {ok, FileCtx};
+check(?traverse_container, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask),
+    {ok, FileCtx};
+check(?delete_object, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?delete_object_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({?delete_subcontainer, Doc, UserDoc, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(?delete_subcontainer, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?delete_subcontainer_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({?read_attributes, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?read_attributes_mask);
-check({?write_attributes, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?write_attributes_mask);
-check({?delete, Doc, UserDoc, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(?read_attributes, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_attributes_mask),
+    {ok, FileCtx};
+check(?write_attributes, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_attributes_mask),
+    {ok, FileCtx};
+check(?delete, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?delete_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({?read_acl, _, UserDoc, _, Acl}) ->
-    fslogic_acl:check_permission(Acl, UserDoc, ?read_acl_mask);
-check({?write_acl, Doc, UserDoc, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(?read_acl, _, UserDoc, _, Acl, FileCtx) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_acl_mask),
+    {ok, FileCtx};
+check(?write_acl, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?write_acl_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({?write_owner, Doc, UserDoc, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(?write_owner, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?write_owner_mask),
-    ok = validate_scope_privs(write, Doc, UserDoc, ShareId);
-check({Perm, File, User, ShareId, Acl}) ->
+    validate_scope_privs(write, FileCtx, UserDoc, ShareId);
+check(Perm, File, User, ShareId, Acl, _FileCtx) ->
     ?error_stacktrace("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)", [Perm, File, User, ShareId, Acl]),
     throw(?EACCES).
 
@@ -244,11 +268,15 @@ check({Perm, File, User, ShareId, Acl}) ->
 %%--------------------------------------------------------------------
 %% @doc Checks whether given user has given permission on given file (POSIX permission check).
 %%--------------------------------------------------------------------
--spec validate_posix_access(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(), UserId :: od_user:id(), ShareId :: od_share:id() | undefined) -> ok | no_return().
-validate_posix_access(rdwr, FileDoc, UserId, ShareId) ->
-    ok = validate_posix_access(write, FileDoc, UserId, ShareId),
-    ok = validate_posix_access(read, FileDoc, UserId, ShareId);
-validate_posix_access(AccessType, #document{value = #file_meta{owner = OwnerId, mode = Mode}} = FileDoc, UserId, ShareId) ->
+-spec validate_posix_access(check_permissions:check_type(), file_ctx:ctx(),
+    od_user:doc(), od_share:id() | undefined) ->
+    {ok, file_ctx:ctx()} | no_return().
+validate_posix_access(rdwr, FileCtx, UserDoc, ShareId) ->
+    {ok, FileCtx2} = validate_posix_access(write, FileCtx, UserDoc, ShareId),
+    validate_posix_access(read, FileCtx2, UserDoc, ShareId);
+validate_posix_access(AccessType, FileCtx, UserDoc, _ShareId) ->
+    {#document{value = #file_meta{owner = OwnerId, mode = Mode}}, FileCtx2} =
+        file_ctx:get_file_doc(FileCtx),
     ReqBit =
         case AccessType of
             read -> 8#4;
@@ -257,21 +285,19 @@ validate_posix_access(AccessType, #document{value = #file_meta{owner = OwnerId, 
         end,
 
     CheckType =
-        case UserId of
+        case UserDoc#document.key of
             OwnerId ->
                 owner;
             _ ->
-                {ok, #document{value = #od_user{space_aliases = Spaces}}} = od_user:get(UserId),
-                {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
-                case catch lists:keymember(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), 1, Spaces) of
+                #document{value = #od_user{space_aliases = Spaces}} = UserDoc,
+                SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
+                case catch lists:keymember(fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid), 1, Spaces) of
                     true ->
                         group;
                     _ ->
                         other
                 end
         end,
-    ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as ~p.", [UserId, ReqBit, FileDoc, Mode, CheckType]),
-
     IsAccessible =
         case CheckType of
             owner ->
@@ -283,48 +309,59 @@ validate_posix_access(AccessType, #document{value = #file_meta{owner = OwnerId, 
         end,
 
     case IsAccessible of
-        true -> ok;
+        true -> {ok, FileCtx2};
         false -> throw(?EACCES)
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks whether given user has permission to see given scope file.
-%%      This function is always called before validate_posix_access/3 and shall handle all special cases.
+%% @doc
+%% Checks whether given user has permission to see given scope file.
+%% This function is always called before validate_posix_access/3 and shall
+%% handle all special cases.
+%% @end
 %%--------------------------------------------------------------------
--spec validate_scope_access(FileDoc :: datastore:document(), UserId :: od_user:id(), ShareId :: od_share:id() | undefined) -> ok | no_return().
-validate_scope_access(_FileDoc, ?GUEST_USER_ID, undefined) ->
+-spec validate_scope_access(file_ctx:ctx(), od_user:doc(), od_share:id() | undefined) ->
+    {ok, file_ctx:ctx()} | no_return().
+validate_scope_access(_FileCtx, #document{key = ?GUEST_USER_ID}, undefined) ->
     throw(?ENOENT);
-validate_scope_access(FileDoc, UserId, undefined) ->
-    RootDirUUID = fslogic_uuid:user_root_dir_uuid(UserId),
-    case file_meta:is_root_dir(FileDoc)
-        orelse RootDirUUID =:= FileDoc#document.key of
-        true -> ok;
+validate_scope_access(FileCtx, UserDoc, undefined) ->
+    RootDirUUID = fslogic_uuid:user_root_dir_uuid(UserDoc#document.key),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    case file_ctx:is_root_dir_const(FileCtx)
+        orelse RootDirUUID =:= FileUuid of
+        true ->
+            {ok, FileCtx};
         false ->
-            try fslogic_spaces:get_space(FileDoc, UserId) of
-                _ -> ok
-            catch
-                {not_a_space, _} -> throw(?ENOENT)
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            UserSpaces = UserDoc#document.value#od_user.space_aliases,
+            case (is_list(UserSpaces) andalso lists:keymember(SpaceId, 1, UserSpaces)) of
+                true ->
+                    {ok, FileCtx};
+                false ->
+                    throw(?ENOENT)
             end
     end;
-validate_scope_access(_FileDoc, _UserId, _ShareId) ->
-    ok.
-
+validate_scope_access(FileCtx, _UserDoc, _ShareId) ->
+    {ok, FileCtx}.
 
 %%--------------------------------------------------------------------
-%% @doc Checks whether given user has permission to access given file with respect to scope settings.
+%% @doc
+%% Checks whether given user has permission to access given file with
+%% respect to scope settings.
+%% @end
 %%--------------------------------------------------------------------
--spec validate_scope_privs(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(),
-    UserDoc :: datastore:document(), ShareId :: od_share:id() | undefined) -> ok | no_return().
-validate_scope_privs(write, FileDoc, #document{key = UserId, value = #od_user{eff_groups = UserGroups}}, _ShareId) ->
-    {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
+-spec validate_scope_privs(check_permissions:check_type(), file_ctx:ctx(),
+    od_user:doc(), od_share:id() | undefined) ->
+    {ok, file_ctx:ctx()} | no_return().
+validate_scope_privs(write, FileCtx, #document{key = UserId, value = #od_user{eff_groups = UserGroups}}, _ShareId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, #document{value = #od_space{users = Users, groups = Groups}}} =
-        od_space:get(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), UserId),
-
+        od_space:get(SpaceId, UserId),
     SpeceWritePriv = space_write_files,
 
     UserPrivs = proplists:get_value(UserId, Users, []),
     case lists:member(SpeceWritePriv, UserPrivs) of
-        true -> ok;
+        true -> {ok, FileCtx};
         false ->
             SpaceGroupsSet = sets:from_list(proplists:get_keys(Groups)),
             UserGroupsSet = sets:from_list(UserGroups),
@@ -341,8 +378,8 @@ validate_scope_privs(write, FileDoc, #document{key = UserId, value = #od_user{ef
             end, [], CommonGroups),
             case ValidGroups of
                 [] -> throw(?EACCES);
-                _ -> ok
+                _ -> {ok, FileCtx}
             end
     end;
-validate_scope_privs(_, _, _, _) ->
-    ok.
+validate_scope_privs(_, FileCtx, _, _) ->
+    {ok, FileCtx}.
