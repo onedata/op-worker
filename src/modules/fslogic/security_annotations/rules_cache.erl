@@ -15,7 +15,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([check_and_cache_result/3, permission_in_cache/3]).
+-export([check_and_cache_result/3]).
 
 %%%===================================================================
 %%% API
@@ -23,18 +23,29 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check rule and cache result
+%% Check rule using cache, or compute it and cache result.n
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_cache_result(check_permissions:access_definition(), user_ctx:ctx(), file_ctx:ctx()) -> ok.
+-spec check_and_cache_result(check_permissions:raw_access_definition(), user_ctx:ctx(), file_ctx:ctx()) -> ok.
 check_and_cache_result(Definition, UserCtx, DefaultFileCtx) ->
     try
-        ok = rules:check(Definition, UserCtx, DefaultFileCtx),
         case Definition of
             {Type, SubjectCtx} ->
-                cache_permission(Type, UserCtx, SubjectCtx, ok);
+                case permission_in_cache(Type, UserCtx, SubjectCtx) of
+                    true ->
+                        ok;
+                    false ->
+                        ok = rules:check(Definition, UserCtx, DefaultFileCtx),
+                        cache_permission(Type, UserCtx, SubjectCtx, ok)
+                end;
             Type ->
-                cache_permission(Type, UserCtx, DefaultFileCtx, ok)
+                case permission_in_cache(Type, UserCtx, DefaultFileCtx) of
+                    true ->
+                        ok;
+                    false ->
+                        ok = rules:check(Definition, UserCtx, DefaultFileCtx),
+                        cache_permission(Type, UserCtx, DefaultFileCtx, ok)
+                end
         end
     catch
         _:?EACCES ->

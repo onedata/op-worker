@@ -1,5 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -14,6 +15,7 @@
 -module(check_permissions).
 -annotation('function').
 -author("Rafal Slota").
+-author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -32,10 +34,11 @@
 | write | read | exec | rdwr
 | acl_access_mask().
 -type acl_access_mask() :: binary().
--type access_definition() :: root | check_type() | {check_type(), item_definition()}.
--type item() :: file_ctx:ctx().
 
--export_type([check_type/0, item_definition/0, access_definition/0]).
+-type raw_access_definition() :: root | check_type() | {check_type(), item_definition()}.
+-type access_definition() :: root | check_type() | {check_type(), file_ctx:ctx()}.
+
+-export_type([check_type/0, item_definition/0, raw_access_definition/0]).
 
 %%%===================================================================
 %%% API
@@ -47,34 +50,37 @@
 %% #annotation.data type is [access_definition()] | access_definition()
 %% @end
 %%--------------------------------------------------------------------
--spec before_advice(#annotation{data :: [access_definition()]}, module(), atom(), [term()]) ->
+-spec before_advice(#annotation{data :: [raw_access_definition()]}, module(), atom(), [term()]) ->
     [term()].
-before_advice(#annotation{data = AccessDefinitions}, _M, _F,
-    [#sfm_handle{session_id = SessionId, space_uuid = SpaceDirUuid, file_uuid = FileUuid} | _] = Args
+before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{
+    session_id = SessionId,
+    space_uuid = SpaceDirUuid,
+    file_uuid = FileUuid
+} | _] = Args
 ) ->
     UserCtx = user_ctx:new(SessionId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
-    DefaultFileCtx = file_ctx:new_by_guid(FileGuid),
-    ExpandedAccessDefinitions = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
-    lists:foreach(fun(Def) -> rules:check(Def, UserCtx, DefaultFileCtx) end, ExpandedAccessDefinitions),
+    DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
+    {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
+    lists:foreach(fun(Def) ->
+        rules:check(Def, UserCtx, DefaultFileCtx2) end, ExpandedAccessDefinitions),
     set_root_context_if_file_has_acl(Args);
-before_advice(#annotation{data = AccessDefinitions}, _M, _F, Args = [UserCtx, DefaultFileCtx | _]) ->
-    ExpandedAccessDefinitions = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
-    NotCachedDefs = lists:filter(fun
-        ({CheckType, SubjectFileCtx}) ->
-            not rules_cache:permission_in_cache(CheckType, UserCtx, SubjectFileCtx);
-        (CheckType) ->
-            not rules_cache:permission_in_cache(CheckType, UserCtx, DefaultFileCtx)
+before_advice(#annotation{data = AccessDefinitions}, _M, _F,
+    Args = [UserCtx, DefaultFileCtx | OtherArgs]
+) ->
+    {ExpandedAccessDefinitions, DefaultFileCtx2} =
+        expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
+    lists:foreach(fun(Def) ->
+        rules_cache:check_and_cache_result(Def, UserCtx, DefaultFileCtx2)
     end, ExpandedAccessDefinitions),
-    lists:foreach(fun(Def) -> rules_cache:check_and_cache_result(Def, UserCtx, DefaultFileCtx) end, NotCachedDefs),
     case user_ctx:is_guest_context(UserCtx) of
         true ->
-            rules:check(share, UserCtx, DefaultFileCtx);
+            rules:check(share, UserCtx, DefaultFileCtx2);
         false ->
             ok
     end,
-    Args.
+    [UserCtx, DefaultFileCtx2 | OtherArgs].
 
 %%--------------------------------------------------------------------
 %% @doc annotation's after_advice implementation.
@@ -88,39 +94,47 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Expand access definition to form allowing it to be verified by rules module.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_access_defs([access_definition()], user_ctx:ctx(),
-    DefaultFileCtx :: file_ctx:ctx(), list()) ->
-    [{check_type(), user_ctx:ctx(), file_ctx:ctx()}].
+-spec expand_access_defs([raw_access_definition()], user_ctx:ctx(),
+    file_ctx:ctx(), list()) -> {[access_definition()], file_ctx:ctx()}.
 expand_access_defs(Defs, UserCtx, DefaultFileCtx, Args) ->
     case user_ctx:is_root_context(UserCtx) of
         true ->
-            [];
+            {[], DefaultFileCtx};
         false ->
             expand_access_defs_for_user(Defs, UserCtx, DefaultFileCtx, Args)
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Expand access definition to form allowing it to be verified by rules module.
+%% Function returns also updated DefaultFileCtx record.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_access_defs_for_user([access_definition()], user_ctx:ctx(), file_ctx:ctx(), list()) ->
-    [{check_type(), file_ctx:ctx()} | check_type()].
-expand_access_defs_for_user([], _UserCtx, _DefaultFileCtx, _Inputs) ->
-    [];
+-spec expand_access_defs_for_user([raw_access_definition()], user_ctx:ctx(),
+    file_ctx:ctx(), list()) -> {[access_definition()], file_ctx:ctx()}.
+expand_access_defs_for_user([], _UserCtx, DefaultFileCtx, _Inputs) ->
+    {[], DefaultFileCtx};
 expand_access_defs_for_user([root | _Rest], _UserCtx, _DefaultFileCtx, _Inputs) ->
     throw(?EACCES);
 expand_access_defs_for_user([{CheckType, ItemDefinition} | Rest], UserCtx, DefaultFileCtx, Inputs) ->
-    {FileCtx, NewDefaultFileCtx} = resolve_file_entry(UserCtx, DefaultFileCtx, ItemDefinition, Inputs),
-    [{CheckType, FileCtx} | expand_access_defs_for_user(Rest, UserCtx, NewDefaultFileCtx, Inputs)];
+    {FileCtx, DefaultFileCtx2} =
+        resolve_file_entry(UserCtx, DefaultFileCtx, ItemDefinition, Inputs),
+    {OtherAccesDefs, DefaultFileCtx3} =
+        expand_access_defs_for_user(Rest, UserCtx, DefaultFileCtx2, Inputs),
+    {[{CheckType, FileCtx} | OtherAccesDefs], DefaultFileCtx3};
 expand_access_defs_for_user([CheckType | Rest], UserCtx, DefaultFileCtx, Inputs) ->
-    [CheckType | expand_access_defs_for_user(Rest, UserCtx, DefaultFileCtx, Inputs)].
+    {OtherAccesDefs, DefaultFileCtx2} =
+        expand_access_defs_for_user(Rest, UserCtx, DefaultFileCtx, Inputs),
+    {[CheckType | OtherAccesDefs], DefaultFileCtx2}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Extracts file() from argument list (Inputs) based on Item description.
 %% @end
@@ -145,6 +159,7 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
     {ParentCtx, DefaultFileCtx2}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Checks if file associated with handle has acl defined. If so, function
 %% updates storage handle context to ROOT in provided arguments.
