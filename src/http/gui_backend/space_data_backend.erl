@@ -360,7 +360,8 @@ space_record(SpaceId, HasViewPrivileges) ->
         {<<"rootDir">>, RootDir},
         {<<"hasViewPrivilege">>, HasViewPrivileges},
         {<<"userList">>, SpaceUserList},
-        {<<"groupList">>, SpaceGroupList}
+        {<<"groupList">>, SpaceGroupList},
+        {<<"user">>, UserId}
     ].
 
 
