@@ -41,44 +41,52 @@ check_and_cache_results([Def | Rest], UserCtx, DefaultFileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Check rule using cache, or compute it and cache result. Returns updated file
-%% context.
+%% Check rule using cache, or compute it and cache result. Returns updated
+%% default file context.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_and_cache_result(check_permissions:access_definition(),
     user_ctx:ctx(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 check_and_cache_result(Definition, UserCtx, DefaultFileCtx) ->
+    Type = get_type(Definition),
+    SubjectCtx = get_subject(Definition, DefaultFileCtx),
     try
-        case Definition of %todo refactor duplicate code
-            {Type, SubjectCtx} ->
-                case permission_in_cache(Type, UserCtx, SubjectCtx) of
-                    true ->
-                        {ok, DefaultFileCtx};
-                    false ->
-                        {ok, DefaultFileCtx2} = rules:check_normal_or_default_def(Definition, UserCtx, DefaultFileCtx),
-                        cache_permission(Type, UserCtx, SubjectCtx, ok),
-                        {ok, DefaultFileCtx2}
-                end;
-            Type ->
-                case permission_in_cache(Type, UserCtx, DefaultFileCtx) of
-                    true ->
-                        {ok, DefaultFileCtx};
-                    false ->
-                        {ok, DefaultFileCtx2} = rules:check_normal_or_default_def(Definition, UserCtx, DefaultFileCtx),
-                        cache_permission(Type, UserCtx, DefaultFileCtx, ok),
-                        {ok, DefaultFileCtx2}
-                end
+        case permission_in_cache(Type, UserCtx, SubjectCtx) of
+            true ->
+                {ok, DefaultFileCtx};
+            false ->
+                {ok, DefaultFileCtx2} = rules:check_normal_or_default_def(Definition, UserCtx, DefaultFileCtx),
+                cache_permission(Type, UserCtx, SubjectCtx, ok),
+                {ok, DefaultFileCtx2}
         end
     catch
         _:?EACCES ->
-            case Definition of
-                {Type_, SubjectCtx_} ->
-                    cache_permission(Type_, UserCtx, SubjectCtx_, ?EACCES);
-                Type_ ->
-                    cache_permission(Type_, UserCtx, DefaultFileCtx, ?EACCES)
-            end,
+            cache_permission(Type, UserCtx, SubjectCtx, ?EACCES),
             throw(?EACCES)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns type of permission check from its definition
+%% @end
+%%--------------------------------------------------------------------
+-spec get_type(check_permissions:access_definition()) -> check_permissions:check_type().
+get_type({Type, _}) ->
+    Type;
+get_type(Type) ->
+    Type.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file context related to given access definition
+%% @end
+%%--------------------------------------------------------------------
+-spec get_subject(check_permissions:access_definition(), file_ctx:ctx()) ->
+    file_ctx:ctx().
+get_subject({_Type, FileCtx}, _) ->
+    FileCtx;
+get_subject(_, DefaultFileCtx) ->
+    DefaultFileCtx.
 
 %%--------------------------------------------------------------------
 %% @private
