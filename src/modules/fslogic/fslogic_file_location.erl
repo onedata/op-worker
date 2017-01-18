@@ -17,9 +17,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_change/2, get_changes/2, create_storage_file_if_not_exists/2,
-    create_storage_file/4, get_merged_changes/2, set_last_rename/3,
-    rename_or_delete/2, chown_file/3, prepare_location_for_client/2]).
+-export([add_change/2, get_changes/2, get_merged_changes/2, set_last_rename/3,
+    rename_or_delete/2, prepare_location_for_client/2]).
 
 -define(MAX_CHANGES, 20).
 
@@ -114,79 +113,6 @@ set_last_rename(#document{value = #file_location{uuid = UUID} = Loc} = Doc,
         ok
     end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Create storage file and file_location if there is no file_location defined
-%% @end
-%%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(od_space:id(), datastore:document()) ->
-    ok | {error, term()}.
-create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
-    value = #file_meta{mode = Mode, uid = UserId}}) ->
-    file_location:critical_section(FileUuid,
-        fun() ->
-            case fslogic_utils:get_local_file_locations(FileDoc) of
-                [] ->
-                    create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
-                    chown_file(FileUuid, UserId, SpaceId),
-                    ok;
-                _ ->
-                    ok
-            end
-        end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Create file_location and storage file
-%% @end
-%%--------------------------------------------------------------------
--spec create_storage_file(binary(), file_meta:uuid(), session:id(), file_meta:posix_permissions()) ->
-    {FileId :: binary(), StorageId :: storage:id()}.
-create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-
-    {ok, Path} = fslogic_path:gen_storage_path({uuid, FileUuid}),
-    FileId0 = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, Path, 0),
-    LeafLess = fslogic_path:dirname(FileId0),
-
-    ?debug("create_storage_file (dirs) ~p ~p", [Storage, LeafLess]),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok -> ok;
-        {error, eexist} ->
-            ok
-    end,
-
-    FileCreatorFun = fun FileCreator(ToCreate, Version) ->
-        ?debug("create_storage_file (file) ~p ~p", [Storage, ToCreate]),
-        SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, ToCreate),
-        case storage_file_manager:create(SFMHandle1, Mode) of
-            ok -> {ok, ToCreate};
-            {error, eexist} ->
-                NextVersion = Version + 1,
-                NextFileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, Path, NextVersion),
-                case NextFileId of
-                    ToCreate ->
-                        ?error("Unable to generate different conflicted fileId: ~p vs ~p",
-                            [{ToCreate, Version}, {NextFileId, NextVersion}]),
-                        {error, create_loop_detected};
-                    _ ->
-                        FileCreator(NextFileId, NextVersion)
-                end
-        end
-    end,
-
-    {ok, FileId} = FileCreatorFun(FileId0, 0),
-
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
-        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
-        space_id = SpaceId},
-    {ok, LocId} = file_location:create(#document{value = Location}),
-    file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
-
-    {StorageId, FileId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -212,7 +138,7 @@ rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
     TargetSpaceProviders = ordsets:from_list(Providers),
     case ordsets:is_element(oneprovider:get_provider_id(), TargetSpaceProviders) of
         true ->
-            {ok, TargetFileId} = fslogic_rename:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId, 0),
+            {ok, TargetFileId} = sfm_utils:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId, 0),
 
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
             NewBlocks = lists:map(fun(Block) ->
@@ -229,7 +155,7 @@ rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
                 blocks = NewBlocks,
                 last_rename = LastRename
             }},
-            {ok, #document{value = #file_meta{uid = UserId}}} = file_meta:get(UUID),
+            {ok, #document{value = #file_meta{owner = UserId}}} = file_meta:get(UUID),
             {renamed, RenamedDoc, UUID, UserId, TargetSpaceId};
         false ->
             %% TODO: VFS-2299 delete file locally without triggering deletion
@@ -237,27 +163,6 @@ rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
             %% are synced to other providers that still support target space
             deleted
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% If given UserId is present in provider, then file owner is changes.
-%% Otherwise, file is added to files awaiting owner change.
-%% @end
-%%--------------------------------------------------------------------
--spec chown_file(file_meta:uuid(), od_user:id(), od_space:id()) -> ok.
-chown_file(FileUuid, UserId, SpaceId) ->
-    case od_user:exists(UserId) of
-        true ->
-            files_to_chown:chown_file(FileUuid, UserId, SpaceId);
-        false ->
-            case files_to_chown:add(UserId, FileUuid) of
-                {ok, _} ->
-                    ok;
-                AddAns ->
-                    AddAns
-            end
-    end.
-
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -29,8 +29,9 @@
 -export([open_at_creation/1]).
 
 -type handle() :: #sfm_handle{}.
+-type handle_id() :: binary().
 
--export_type([handle/0]).
+-export_type([handle/0, handle_id/0]).
 
 %%%===================================================================
 %%% API

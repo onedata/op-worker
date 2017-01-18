@@ -184,7 +184,7 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
             notify_size_change_if_necessary(LocalDoc, NewDoc2);
         {renamed, RenamedDoc, UUID, UserId, TargetSpaceId} ->
             {ok, _} = file_location:save(RenamedDoc),
-            fslogic_file_location:chown_file(UUID, UserId, TargetSpaceId),
+            sfm_utils:chown_file(UUID, UserId, TargetSpaceId),
             notify_block_change_if_necessary(LocalDoc, RenamedDoc),
             notify_size_change_if_necessary(LocalDoc, RenamedDoc)
     end.

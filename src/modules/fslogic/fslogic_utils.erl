@@ -57,7 +57,7 @@ get_parent(File) ->
 
 -spec gen_storage_file_id(Entry :: fslogic_worker:file()) ->
     helpers:file() | no_return().
-gen_storage_file_id(Entry) ->
+gen_storage_file_id(Entry) -> %todo refactor
     {ok, Path} = fslogic_path:gen_storage_path(Entry),
     gen_storage_file_id(Entry, Path).
 

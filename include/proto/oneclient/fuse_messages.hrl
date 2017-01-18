@@ -127,12 +127,12 @@
     file_content :: binary()
 }).
 
--type fuse_request_value() ::
+-type fuse_request_type() ::
     #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{}.
 
 -record(fuse_request, {
-    fuse_request :: fuse_request_value()
+    fuse_request :: fuse_request_type()
 }).
 
 -record(file_children, {

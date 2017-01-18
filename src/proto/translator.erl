@@ -462,10 +462,6 @@ translate_from_protobuf(#'RemoveShare'{}) ->
     #remove_share{};
 translate_from_protobuf(#'Share'{share_id = ShareId, share_file_uuid = ShareGuid}) ->
     #share{share_id = ShareId, share_file_uuid = ShareGuid};
-translate_from_protobuf(#'Copy'{target_path = TargetPath}) ->
-    #copy{target_path = TargetPath};
-translate_from_protobuf(#'FileCopied'{new_uuid = NewUuid}) ->
-    #file_copied{new_uuid = NewUuid};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -885,10 +881,6 @@ translate_to_protobuf(#remove_share{}) ->
     {remove_share, #'RemoveShare'{}};
 translate_to_protobuf(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
     {share, #'Share'{share_id = ShareId, share_file_uuid = ShareGuid}};
-translate_to_protobuf(#copy{target_path = TargetPath}) ->
-    {copy, #'Copy'{target_path = TargetPath}};
-translate_to_protobuf(#file_copied{new_uuid = NewUuid}) ->
-    {file_copied, #'FileCopied'{new_uuid = NewUuid}};
 
 %% DBSYNC
 translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->
