@@ -14,7 +14,8 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st1"
+                    "name": "/mnt/st1",
+                    "readonly": true
                 }
             ],
             "users": [],
@@ -24,7 +25,8 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st2"
+                    "name": "/mnt/st2",
+                    "readonly": true
                 }
             ],
             "users": [],
