@@ -27,7 +27,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file acl, or undefined if the acl is not defined
+%% Returns file acl, or undefined if the acl is not defined.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(file_meta:uuid()) -> [#accesscontrolentity{}].
@@ -47,7 +47,3 @@ get(FileUuid) ->
 -spec exists(file_meta:uuid()) -> boolean().
 exists(FileUuid) ->
     xattr:exists_by_name(FileUuid, ?ACL_XATTR_NAME).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

@@ -134,7 +134,7 @@ get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Decides if xattr is normal or internal, and routes request to specific function
+%% Decides if xattr is normal or internal, and routes request to specific function.
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->

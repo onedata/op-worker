@@ -46,7 +46,7 @@ delete(UserCtx, FileCtx, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check
+%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
@@ -57,7 +57,7 @@ delete_dir(UserCtx, FileCtx, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check
+%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
@@ -85,7 +85,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Deletes file or directory
+%% Deletes file or directory.
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------

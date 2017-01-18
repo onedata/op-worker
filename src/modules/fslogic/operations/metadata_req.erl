@@ -26,7 +26,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets metadata linked with file
+%% Gets metadata linked with file.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
@@ -51,7 +51,7 @@ get_metadata(_UserCtx, FileCtx, rdf, _, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets metadata linked with file
+%% Sets metadata linked with file.
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
@@ -68,7 +68,7 @@ set_metadata(_UserCtx, FileCtx, rdf, Value, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes metadata linked with file
+%% Removes metadata linked with file.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->

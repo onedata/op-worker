@@ -39,7 +39,7 @@ resolve_guid(_UserCtx, FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets parent of file
+%% Gets parent of file.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(user_ctx:ctx(), file_ctx:ctx()) ->

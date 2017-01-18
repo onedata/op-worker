@@ -119,7 +119,7 @@ get_file_location(_UserCtx, FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @equiv open_file(UserCtx, FileCtx, CreateHandle) with permission check
-%% depending on the open flag
+%% depending on the open flag.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
@@ -178,7 +178,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Saves file handle in user's session, returns id of saved handle
+%% Saves file handle in user's session, returns id of saved handle.
 %% @end
 %%--------------------------------------------------------------------
 -spec save_handle(session:id(), storage_file_manager:handle()) ->
@@ -193,7 +193,8 @@ save_handle(SessId, Handle) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, read, CreateHandle) with permission check
+%% @equiv open_file_insecure(UserCtx, FileCtx, read, CreateHandle)
+%% with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_read(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -204,7 +205,8 @@ open_file_for_read(UserCtx, FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, write, CreateHandle) with permission check
+%% @equiv open_file_insecure(UserCtx, FileCtx, write, CreateHandle)
+%% with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_write(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -215,7 +217,8 @@ open_file_for_write(UserCtx, FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, rdwr, CreateHandle) with permission check
+%% @equiv open_file_insecure(UserCtx, FileCtx, rdwr, CreateHandle)
+%% with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->

@@ -130,7 +130,7 @@ replicate_file(UserCtx, FileCtx, Block, Offset) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Replicates children list
+%% Replicates children list.
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()], fslogic_blocks:block()) -> ok.

@@ -66,8 +66,9 @@ check_and_cache_result(Definition, UserCtx, DefaultFileCtx) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Returns type of permission check from its definition
+%% Returns type of permission check from its definition.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_type(check_permissions:access_definition()) -> check_permissions:check_type().
@@ -77,8 +78,9 @@ get_type(Type) ->
     Type.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Returns file context related to given access definition
+%% Returns file context related to given access definition.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_subject(check_permissions:access_definition(), file_ctx:ctx()) ->
@@ -111,7 +113,7 @@ permission_in_cache(CheckType, UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Caches result for given definition
+%% Caches result for given definition.
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_permission(check_permissions:check_type(), user_ctx:ctx(), file_ctx:ctx(), ok | ?EACCES) ->

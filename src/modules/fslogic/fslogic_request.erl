@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for obtaining and modifying things related to any fslogic request.
+%%% Module responsible for obtaining and modifying things related to any
+%%% fslogic request.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_request).

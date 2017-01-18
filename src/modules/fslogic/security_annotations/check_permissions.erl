@@ -47,8 +47,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% annotation's before_advice implementation.
-%% #annotation.data type is [access_definition()] | access_definition()
+%% Annotation's before_advice implementation.
+%% #annotation.data informs about permissions that should be checked.
 %% @end
 %%--------------------------------------------------------------------
 -spec before_advice(#annotation{data :: [raw_access_definition()]}, module(), atom(), [term()]) ->
@@ -76,7 +76,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     [UserCtx, DefaultFileCtx2 | OtherArgs].
 
 %%--------------------------------------------------------------------
-%% @doc annotation's after_advice implementation.
+%% @doc Annotation's after_advice implementation. Currently does nothing.
 %%--------------------------------------------------------------------
 -spec after_advice(#annotation{}, atom(), atom(), [term()], term()) -> term().
 after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
@@ -95,11 +95,11 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 -spec expand_access_defs([raw_access_definition()], user_ctx:ctx(),
     file_ctx:ctx(), list()) -> {[access_definition()], file_ctx:ctx()}.
 expand_access_defs(Defs, UserCtx, DefaultFileCtx, Args) ->
-    case user_ctx:is_root_context(UserCtx) of
+    case user_ctx:is_root(UserCtx) of
         true ->
             {[], DefaultFileCtx};
         false ->
-            case user_ctx:is_guest_context(UserCtx) of
+            case user_ctx:is_guest(UserCtx) of
                 true ->
                     {ExpandedDefs, DefaultFileCtx2} =
                         expand_access_defs_for_user(Defs, UserCtx, DefaultFileCtx, Args),
@@ -168,7 +168,7 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
 -spec set_root_context_if_file_has_acl([#sfm_handle{} | term()]) ->
     [#sfm_handle{} | term()].
 set_root_context_if_file_has_acl(Args = [Handle = #sfm_handle{file_uuid = FileUuid} | RestOfArgs]) ->
-    case (catch acl:exists(FileUuid)) of
+    case acl:exists(FileUuid) of
         true ->
             [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
         _ ->

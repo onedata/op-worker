@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Shares a given file
+%% Shares a given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
@@ -50,7 +50,7 @@ create_share(UserCtx, FileCtx, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Stops sharing a given file
+%% Stops sharing a given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->

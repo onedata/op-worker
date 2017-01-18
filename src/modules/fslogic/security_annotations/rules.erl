@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Security rules
+%%% Security rules.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(rules).
@@ -43,7 +43,8 @@ check_normal_or_default_def(Type, UserCtx, FileCtx) ->
 %% @doc
 %% Check if given access_definition is granted to given user. Accepts only full
 %% definitions with file context. Return updated file context. The functions
-%% gets as an argument also DefaultFileCtx, 'share' check depends on its 'share_id'
+%% gets as an argument also DefaultFileCtx, 'share' check depends on its
+%% 'share_id'.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_normal_def(check_permissions:check_type(),  user_ctx:user_ctx(),
@@ -258,7 +259,7 @@ check(?write_owner, _Doc, UserDoc, ShareId, Acl, FileCtx) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?write_owner_mask),
     validate_scope_privs(write, FileCtx, UserDoc, ShareId);
 check(Perm, File, User, ShareId, Acl, _FileCtx) ->
-    ?error_stacktrace("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)", [Perm, File, User, ShareId, Acl]),
+    ?error("Unknown permission check rule: (~p, ~p, ~p, ~p, ~p)", [Perm, File, User, ShareId, Acl]),
     throw(?EACCES).
 
 %%%===================================================================
@@ -266,7 +267,11 @@ check(Perm, File, User, ShareId, Acl, _FileCtx) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Checks whether given user has given permission on given file (POSIX permission check).
+%% @private
+%% @doc
+%% Checks whether given user has given permission on given file
+%% (POSIX permission check).
+%% @end
 %%--------------------------------------------------------------------
 -spec validate_posix_access(check_permissions:check_type(), file_ctx:ctx(),
     od_user:doc(), od_share:id() | undefined) ->
@@ -314,6 +319,7 @@ validate_posix_access(AccessType, FileCtx, UserDoc, _ShareId) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Checks whether given user has permission to see given scope file.
 %% This function is always called before validate_posix_access/3 and shall
@@ -345,6 +351,7 @@ validate_scope_access(FileCtx, _UserDoc, _ShareId) ->
     {ok, FileCtx}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Checks whether given user has permission to access given file with
 %% respect to scope settings.

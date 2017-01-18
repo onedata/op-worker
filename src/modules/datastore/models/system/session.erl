@@ -521,10 +521,10 @@ get_helper(SessionId, SpaceUuid, StorageDoc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if session is of special type: root or guest
+%% Check if session is of special type: root or guest.
 %% @end
 %%--------------------------------------------------------------------
--spec is_special(session:id()) -> boolean().
+-spec is_special(id()) -> boolean().
 is_special(?ROOT_SESS_ID) ->
     true;
 is_special(?GUEST_SESS_ID) ->
@@ -534,10 +534,10 @@ is_special(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if session is of root type
+%% Check if session is of root type.
 %% @end
 %%--------------------------------------------------------------------
--spec is_root(session:id()) -> boolean().
+-spec is_root(id()) -> boolean().
 is_root(?ROOT_SESS_ID) ->
     true;
 is_root(_) ->
@@ -545,10 +545,10 @@ is_root(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if session is of guest type
+%% Check if session is of guest type.
 %% @end
 %%--------------------------------------------------------------------
--spec is_guest(session:id()) -> boolean().
+-spec is_guest(id()) -> boolean().
 is_guest(?GUEST_SESS_ID) ->
     true;
 is_guest(_) ->

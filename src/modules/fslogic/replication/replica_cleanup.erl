@@ -24,7 +24,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% List all file_locations, remove them with associated storage files
+%% List all file_locations, remove them with associated storage files.
 %% @end
 %%--------------------------------------------------------------------
 -spec clean_replica_files(file_meta:uuid()) -> ok.
