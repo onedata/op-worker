@@ -272,7 +272,11 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserId) -> %todo use user_ct
     ParentGuid =
         case fslogic_uuid:is_root_dir(ParentUuid) of
             true ->
-                case ParentUuid =:= ?ROOT_DIR_UUID andalso UserId =/= undefined of
+                case ParentUuid =:= ?ROOT_DIR_UUID %todo use user_ctx:is_root/guest
+                    andalso UserId =/= undefined
+                    andalso UserId =/= ?ROOT_USER_ID
+                    andalso UserId =/= ?GUEST_USER_ID
+                of
                     true ->
                         fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId));
                     _ ->

@@ -51,7 +51,7 @@ check_normal_or_default_def(Type, UserCtx, FileCtx) ->
 check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
     case file_ctx:is_root_dir_const(SubjectCtx) of
         true ->
-            throw(?EAGAIN);
+            throw(?EACCES);
         false ->
             {#document{value = #file_meta{shares = Shares}}, SubjectCtx2} =
                 file_ctx:get_file_doc(SubjectCtx),
@@ -322,8 +322,8 @@ validate_posix_access(AccessType, FileCtx, UserDoc, _ShareId) ->
 %%--------------------------------------------------------------------
 -spec validate_scope_access(file_ctx:ctx(), od_user:doc(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
-validate_scope_access(_FileCtx, #document{key = ?GUEST_USER_ID}, undefined) ->
-    throw(?ENOENT);
+validate_scope_access(FileCtx, #document{key = ?GUEST_USER_ID}, undefined) ->
+    {ok, FileCtx};
 validate_scope_access(FileCtx, UserDoc, undefined) ->
     RootDirUUID = fslogic_uuid:user_root_dir_uuid(UserDoc#document.key),
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),

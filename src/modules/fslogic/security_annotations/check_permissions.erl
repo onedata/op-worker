@@ -31,6 +31,7 @@
 -type check_type() :: owner % Check whether user owns the item
 | traverse_ancestors % validates ancestors' exec permission.
 | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
+| share % Check if the file (or its ancestor) is shared
 | write | read | exec | rdwr
 | acl_access_mask().
 -type acl_access_mask() :: binary().
@@ -55,31 +56,23 @@
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{
     session_id = SessionId,
     space_uuid = SpaceDirUuid,
-    file_uuid = FileUuid
+    file_uuid = FileUuid,
+    share_id = ShareId
 } | _] = Args
 ) ->
     UserCtx = user_ctx:new(SessionId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
-    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    FileGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
     DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
     {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
-    lists:foreach(fun(Def) ->
-        rules:check_normal_or_default_def(Def, UserCtx, DefaultFileCtx2) end, ExpandedAccessDefinitions),
+    rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
     set_root_context_if_file_has_acl(Args);
 before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     Args = [UserCtx, DefaultFileCtx | OtherArgs]
 ) ->
     {ExpandedAccessDefinitions, DefaultFileCtx2} =
         expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
-    lists:foreach(fun(Def) ->
-        rules_cache:check_and_cache_result(Def, UserCtx, DefaultFileCtx2)
-    end, ExpandedAccessDefinitions),
-    case user_ctx:is_guest_context(UserCtx) of
-        true ->
-            rules_cache:check_and_cache_result(share, UserCtx, DefaultFileCtx2);
-        false ->
-            ok
-    end,
+    rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
     [UserCtx, DefaultFileCtx2 | OtherArgs].
 
 %%--------------------------------------------------------------------
@@ -106,7 +99,14 @@ expand_access_defs(Defs, UserCtx, DefaultFileCtx, Args) ->
         true ->
             {[], DefaultFileCtx};
         false ->
-            expand_access_defs_for_user(Defs, UserCtx, DefaultFileCtx, Args)
+            case user_ctx:is_guest_context(UserCtx) of
+                true ->
+                    {ExpandedDefs, DefaultFileCtx2} =
+                        expand_access_defs_for_user(Defs, UserCtx, DefaultFileCtx, Args),
+                    {[share | ExpandedDefs], DefaultFileCtx2};
+                false ->
+                    expand_access_defs_for_user(Defs, UserCtx, DefaultFileCtx, Args)
+            end
     end.
 
 %%--------------------------------------------------------------------

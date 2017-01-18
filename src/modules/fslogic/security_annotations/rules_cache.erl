@@ -15,7 +15,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([check_and_cache_result/3, check_and_cache_results/3]).
+-export([check_and_cache_results/3]).
 
 %%%===================================================================
 %%% API
