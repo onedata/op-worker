@@ -12,6 +12,8 @@ import argparse
 import os
 import platform
 import sys
+
+from environment.common import HOST_STORAGE_PATH
 from environment import docker
 import glob
 import xml.etree.ElementTree as ElementTree
@@ -134,7 +136,8 @@ ret = docker.run(tty=True,
                  interactive=True,
                  workdir=script_dir,
                  reflect=[(script_dir, 'rw'),
-                          ('/var/run/docker.sock', 'rw')],
+                          ('/var/run/docker.sock', 'rw'),
+                          (HOST_STORAGE_PATH, 'rw')],
                  image=args.image,
                  command=['python', '-c', command],
                  run_params=run_params)
