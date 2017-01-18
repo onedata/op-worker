@@ -21,6 +21,8 @@
     model_init/0, 'after'/5, before/4]).
 -export([record_struct/1]).
 
+-export([verify_and_del_key/2]).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns structure of the record in specified version.
@@ -143,12 +145,7 @@ before(change_propagation_controller = ModelName, delete, ?GLOBAL_ONLY_LEVEL, [K
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Verifies if key may be deleted and deletes it.
 %% @end
@@ -157,10 +154,16 @@ before(_ModelName, _Method, _Level, _Context) ->
 verify_and_del_key(Key, change_propagation_controller = ModelName) ->
     Checks = [{change_propagation_controller, foreach_link}],
     verify_and_del_key(Key, ModelName, Checks);
-verify_and_del_key(Key, ModelName) ->
+verify_and_del_key(Key, file_meta = ModelName) ->
     Checks = [{file_meta, foreach_link}, {times, exists},
         {custom_metadata, exists}, {file_location, exists}],
-    verify_and_del_key(Key, ModelName, Checks).
+    verify_and_del_key(Key, ModelName, Checks);
+verify_and_del_key(_Key, _ModelName) ->
+    ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private

@@ -547,7 +547,7 @@ rev_to_num(Rev) ->
 apply_changes(SpaceId, Changes) ->
     apply_changes(SpaceId, Changes, []).
 apply_changes(SpaceId,
-    [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T], Done) ->
+    [#change{doc = #document{key = Key, value = Value, rev = Rev, deleted = Deleted} = Doc, model = ModelName} = Change | T], Done) ->
     try
         ModelConfig = ModelName:model_init(),
 
@@ -590,6 +590,12 @@ apply_changes(SpaceId,
                     ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
                     maps:keys(AddedMap) ++ maps:keys(DeletedMap);
                 _ ->
+                    case Deleted of
+                        true ->
+                            dbsync_state:verify_and_del_key(Key, ModelName);
+                        _ ->
+                            ok
+                    end,
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     []
             end,

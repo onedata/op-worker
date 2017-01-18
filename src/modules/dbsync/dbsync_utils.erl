@@ -43,7 +43,6 @@ validate_space_access(ProviderId, SpaceId) ->
     case IsMember of
         true -> ok;
         false ->
-
             {error, space_not_supported_locally}
     end.
 
