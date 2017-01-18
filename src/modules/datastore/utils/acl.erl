@@ -14,7 +14,7 @@
 
 -include("modules/fslogic/metadata.hrl").
 
--type acl() :: [#accesscontrolentity{}].
+-type acl() :: [#access_control_entity{}].
 
 -export_type([acl/0]).
 
@@ -30,7 +30,7 @@
 %% Returns file acl, or undefined if the acl is not defined.
 %% @end
 %%--------------------------------------------------------------------
--spec get(file_meta:uuid()) -> [#accesscontrolentity{}].
+-spec get(file_meta:uuid()) -> [#access_control_entity{}].
 get(FileUuid) ->
     case xattr:get_by_name(FileUuid, ?ACL_KEY) of
         {ok, Val} ->
