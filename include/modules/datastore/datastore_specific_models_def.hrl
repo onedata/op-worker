@@ -288,7 +288,8 @@
 
 %% Model that maps space to storage
 -record(space_storage, {
-    storage_ids = [] :: [storage:id()]
+    storage_ids = [] :: [storage:id()],
+    mounted_in_root = [] :: [storage:id()]
 }).
 
 -record(helper_handle, {

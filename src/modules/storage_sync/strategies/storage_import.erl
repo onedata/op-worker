@@ -129,20 +129,23 @@ strategy_merge_result(_Job, {error, Reason1}, {error, Reason2}) ->
 %%--------------------------------------------------------------------
 -spec run_bfs_scan(space_strategy:job()) ->
     {space_strategy:job_result(), [space_strategy:job()]}.
-run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
+run_bfs_scan(#space_strategy_job{data = Data0} = Job0) ->
     #{
         storage_file_id := FileId,
         space_id := SpaceId,
         storage_id := StorageId
-    } = Data,
-    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-        undefined, StorageId, FileId, undefined, oneprovider:get_provider_id()),
+    } = Data0,
+    StorageFilePath = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
+    Data =  maps:update(storage_file_id, StorageFilePath, Data0),
+    Job = Job0#space_strategy_job{data = Data},
+    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
+        fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+        undefined, StorageId, StorageFilePath, undefined,
+        oneprovider:get_provider_id()),
     case storage_file_manager:stat(SFMHandle) of
         {ok, #statbuf{st_mode = Mode, st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime} = FileStats} ->
             FileType = file_type(Mode),
-            ConvertFilePath = space_sync_worker:init(filename_mapping, SpaceId, StorageId, #{storage_path => FileId}),
-            LogicalPath = space_sync_worker:run(ConvertFilePath),
-
+            LogicalPath = filename_mapping:to_logical_path(SpaceId, StorageId, FileId),
             [<<"/">>, _SpaceName | Rest] = fslogic_path:split(LogicalPath),
             CanonicalPath = fslogic_path:join([<<"/">>, SpaceId | Rest]),
             {IsImported, LogicalAttrsResponse} =
@@ -156,7 +159,6 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         IsImported_ = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse_),
                         {IsImported_, LogicalAttrsResponse_}
                 end,
-
             LocalResult = case IsImported of
                 true ->
                     #fuse_response{fuse_response = #file_attr{mode = OldMode, uuid = FileUUID}} = LogicalAttrsResponse,
@@ -195,7 +197,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                     import_file(StorageId, SpaceId, FileStats, Job, LogicalPath)
             end,
 
-            SubJobs = import_children(SFMHandle, FileType, Job, maps:get(dir_offset, Data, 0), ?DIR_BATCH),
+            SubJobs = import_children(SFMHandle, FileType, Job0, maps:get(dir_offset, Data0, 0), ?DIR_BATCH),
 
             {LocalResult, SubJobs}
     end.

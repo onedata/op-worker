@@ -14,7 +14,8 @@
 
 
 %% API
--export([start_storage_import/2, start_storage_import/3, start_storage_import/4]).
+-export([start_storage_import/2, start_storage_import/3, start_storage_import/4,
+    stop_storage_import/2, stop_storage_import/1]).
 
 -define(DEFAULT_STRATEGY_NAME, bfs_scan).
 
@@ -37,8 +38,8 @@ start_storage_import(SpaceId, ScanInterval) ->
 -spec start_storage_import(od_space:id(), non_neg_integer(), space_strategy:name()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 start_storage_import(SpaceId, ScanInterval, StrategyName) ->
-    {ok, #document{value=#space_storage{storage_ids=StorageIds}}} = space_storage:get(SpaceId),
-    start_storage_import(SpaceId, ScanInterval, StrategyName, hd(StorageIds)).
+    StorageId = get_supporting_storage(SpaceId),
+    start_storage_import(SpaceId, ScanInterval, StrategyName, StorageId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,3 +52,39 @@ start_storage_import(SpaceId, ScanInterval, StrategyName, StorageId) ->
     fslogic_spaces:make_space_exist(SpaceId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import,
         StrategyName, #{scan_interval => ScanInterval}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Wrapper for stopping storage import.
+%% @end
+%%--------------------------------------------------------------------
+-spec stop_storage_import(od_space:id()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+stop_storage_import(SpaceId) ->
+    StorageId = get_supporting_storage(SpaceId),
+    stop_storage_import(SpaceId, StorageId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Wrapper for stopping storage import.
+%% @end
+%%--------------------------------------------------------------------
+-spec stop_storage_import(od_space:id(), storage:id()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+stop_storage_import(SpaceId, StorageId) ->
+    space_strategies:set_strategy(SpaceId, StorageId, storage_import, no_import, #{}).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns head of list of storages supporting given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_supporting_storage(od_space:id()) -> storage:id().
+get_supporting_storage(SpaceId) ->
+    {ok, #document{value=#space_storage{storage_ids=StorageIds}}} = space_storage:get(SpaceId),
+    hd(StorageIds).

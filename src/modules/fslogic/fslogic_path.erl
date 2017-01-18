@@ -141,10 +141,17 @@ check_path(Uuid) ->
 -spec gen_storage_path(file_meta:entry()) ->
     {ok, file_meta:path()} | datastore:generic_error().
 gen_storage_path({path, Path}) when is_binary(Path) ->
-    {ok, Path};
+    {ok, Uuid} = file_meta:to_uuid({path, Path}),
+    SpaceId = fslogic_spaces:get_space_id({uuid, Uuid}),
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId), %todo use file_ctx
+    {ok, filename_mapping:to_storage_path(SpaceId, StorageId, Path)};
 gen_storage_path(Entry) ->
     ?run(begin
-        gen_storage_path(Entry, [])
+        {ok, Path} = gen_storage_path(Entry, []),
+        {ok, Uuid} = file_meta:to_uuid({path, Path}),
+        SpaceId = fslogic_spaces:get_space_id({uuid, Uuid}),
+        {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId), %todo use file_ctx
+        {ok, filename_mapping:to_storage_path(SpaceId, StorageId, Path)}
     end).
 
 %%--------------------------------------------------------------------

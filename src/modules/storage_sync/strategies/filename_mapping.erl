@@ -58,9 +58,9 @@ available_strategies() ->
 %%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
-strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
+strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
     [
-        #space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}
+        #space_strategy_job{strategy_name = StrategyName, strategy_args = StrategyArgs, data = InitData}
     ].
 
 %%--------------------------------------------------------------------
@@ -71,8 +71,13 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
 -spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
 strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{storage_path := FilePath}}) ->
     {FilePath, []};
-strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{logical_path := FilePath}}) ->
-    {FilePath, []}.
+strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{logical_path := FilePath,
+     space_id := SpaceId, storage_id := StorageId}}) ->
+    case is_mounted_in_root(SpaceId, StorageId) of
+        true -> {filter_space_id(SpaceId, FilePath), []};
+        _ -> {FilePath, []}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,7 +112,11 @@ strategy_merge_result(#space_strategy_job{strategy_name = simple}, LocalResult, 
 %%--------------------------------------------------------------------
 -spec to_storage_path(od_space:id(), storage:id(), file_meta:path()) -> file_meta:path().
 to_storage_path(SpaceId, StorageId, FilePath) ->
-    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{logical_path => FilePath}),
+    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{
+        logical_path => FilePath,
+        space_id => SpaceId,
+        storage_id => StorageId
+    }),
     space_sync_worker:run(Init).
 
 %%--------------------------------------------------------------------
@@ -117,9 +126,28 @@ to_storage_path(SpaceId, StorageId, FilePath) ->
 %%--------------------------------------------------------------------
 -spec to_logical_path(od_space:id(), storage:id(), file_meta:path()) -> file_meta:path().
 to_logical_path(SpaceId, StorageId, FilePath) ->
-    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{storage_path => FilePath}),
+    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{
+        storage_path => FilePath,
+        space_id => SpaceId,
+        storage_id => StorageId
+    }),
     space_sync_worker:run(Init).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if space is mounted in root on given storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_mounted_in_root(od_space:id(), storage:id()) -> boolean().
+is_mounted_in_root(SpaceId, StorageId) ->
+    {ok, #document{value = #space_storage{mounted_in_root = MountedInRoot}}} = space_storage:get(SpaceId),
+    lists:member(StorageId, MountedInRoot).
+
+filter_space_id(SpaceId, FilePath) ->
+    [Sep, SpaceId | Path] = fslogic_path:split(FilePath),
+    fslogic_path:join([Sep | Path]).

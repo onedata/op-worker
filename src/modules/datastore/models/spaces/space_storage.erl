@@ -17,12 +17,12 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([add/2, get_storage_ids/1]).
+-export([add/2, get_storage_ids/1, add/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 -type id() :: od_space:id().
 -type model() :: #space_storage{}.
@@ -40,7 +40,23 @@
 record_struct(1) ->
     {record, [
         {storage_ids, [string]}
+    ]};
+record_struct(2) ->
+    {record, [
+        {storage_ids, [string]},
+        {mounted_in_root, [string]}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, StorageIds}) ->
+    {2, #space_storage{storage_ids =  StorageIds}}.
+
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -110,7 +126,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_storage_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    Config = ?MODEL_CONFIG(space_storage_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -144,15 +161,31 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec add(od_space:id(), storage:id()) ->
     {ok, od_space:id()} | {error, Reason :: term()}.
 add(SpaceId, StorageId) ->
-    Doc = #document{
-        key = SpaceId, value = #space_storage{storage_ids = [StorageId]}
-    },
+    add(SpaceId, StorageId, false).
 
-    Diff = fun(#space_storage{storage_ids = StorageIds} = Model) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds storage to the space.
+%% @end
+%%--------------------------------------------------------------------
+-spec add(od_space:id(), storage:id(), boolean()) ->
+    {ok, od_space:id()} | {error, Reason :: term()}.
+add(SpaceId, StorageId, MountInRoot) ->
+
+    Doc = new(SpaceId, StorageId, MountInRoot),
+    Diff = fun(#space_storage{storage_ids = StorageIds, mounted_in_root = MountedInRoot} = Model) ->
         case lists:member(StorageId, StorageIds) of
             true -> {error, already_exists};
             false ->
-                {ok, Model#space_storage{storage_ids = [StorageId | StorageIds]}}
+                case  MountInRoot of
+                    true ->
+                        {ok, Model#space_storage{
+                            storage_ids = [StorageId | StorageIds],
+                            mounted_in_root = [StorageId | MountedInRoot]}};
+                    _ ->
+                        {ok, Model#space_storage{storage_ids = [StorageId | StorageId]}}
+                end
         end
     end,
 
@@ -174,3 +207,22 @@ get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
     StorageIds;
 get_storage_ids(#document{value = #space_storage{} = Value}) ->
     get_storage_ids(Value).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space_storage document.
+%% @end
+%%--------------------------------------------------------------------
+-spec(new(od_space:id(),storage:id(), boolean()) -> doc()).
+new(SpaceId, StorageId, true) ->
+    #document{key = SpaceId, value = #space_storage{
+        storage_ids = [StorageId],
+        mounted_in_root = [StorageId]}};
+new(SpaceId, StorageId, _) ->
+    #document{key = SpaceId, value = #space_storage{storage_ids = [StorageId]}}.
+
+

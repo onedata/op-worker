@@ -530,7 +530,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                                 storage, select, [StorageName])),
                             StorageId = rpc:call(Worker, storage, get_id, [Storage]),
                             {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                space_storage, add, [SpaceId, StorageId]));
+                                space_storage, add, [SpaceId, StorageId, maybe_mount_in_root(ProviderConfig)]));
                         _ -> ok
                     end
             end
@@ -809,3 +809,17 @@ file_meta_mock_setup(Workers, Config) ->
             meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
             Self ! onedata_user_after
     end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns true if space configured by ProviderConfig should be mounted
+%% in root.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_mount_in_root(proplists:proplist()) -> boolean().
+maybe_mount_in_root(ProviderConfig) ->
+    case proplists:get_value(<<"mounted_in_root">>, ProviderConfig) of
+        <<"true">> -> true;
+        _ ->  false
+    end.
