@@ -24,6 +24,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -626,7 +627,7 @@ changes_stream_file_location_test(Config) ->
 changes_stream_on_multi_provider_test(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    [_, _, {_SpaceId, SpaceName}] = ?config({spaces, <<"user1">>}, Config),
     File =  list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file4"])),
     Mode = 8#700,
     % when
@@ -636,7 +637,7 @@ changes_stream_on_multi_provider_test(Config) ->
         {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
         lfm_proxy:write(WorkerP1, Handle, 0, <<"data">>)
     end),
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"changes/metadata/space1?timeout=20000">>,
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"changes/metadata/space3?timeout=20000">>,
         get, [user_1_token_header(Config)], [], [insecure, {recv_timeout, 60000}]),
 
     ?assertNotEqual(<<>>, Body),
@@ -650,7 +651,7 @@ changes_stream_on_multi_provider_test(Config) ->
 
     ?assert(lists:any(fun(Change) ->
         <<"file4">> == maps:get(<<"name">>, Change) andalso
-        3 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
+        4 == maps:get(<<"size">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"atime">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"ctime">>, maps:get(<<"changes">>, Change)) andalso
         0 < maps:get(<<"mtime">>, maps:get(<<"changes">>, Change))
@@ -1032,7 +1033,12 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(metric_get, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = Workers = ?config(op_worker_nodes, Config),
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1))
+    end, Workers),
+
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
         {ok, <<"{\"test\":\"rrd\"}">>}
@@ -1040,6 +1046,12 @@ init_per_testcase(metric_get, Config) ->
     init_per_testcase(all, Config);
 
 init_per_testcase(_Case, Config) ->
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2))
+    end, ?config(op_worker_nodes, Config)),
+
     application:start(etls),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
