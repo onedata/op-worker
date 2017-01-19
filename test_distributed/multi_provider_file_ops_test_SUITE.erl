@@ -295,7 +295,7 @@ multi_space_test(Config) ->
 
 mkdir_and_rmdir_loop_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 5},
+        {repeats, 3},
         {success_rate, 100},
         {parameters, [
             [{name, iterations}, {value, 100}, {description, "Number of times sequence mkdir, rmdir will be repeated"}]
@@ -314,7 +314,7 @@ mkdir_and_rmdir_loop_test_base(Config) ->
 
 create_and_delete_file_loop_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 5},
+        {repeats, 3},
         {success_rate, 100},
         {parameters, [
             [{name, iterations}, {value, 100}, {description, "Number of times sequence create, remove file will be repeated"}]
@@ -333,7 +333,7 @@ create_and_delete_file_loop_test_base(Config) ->
 
 echo_and_delete_file_loop_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 5},
+        {repeats, 3},
         {success_rate, 100},
         {parameters, [
             [{name, iterations}, {value, 100}, {description, "Number of times sequence echo, remove file will be repeated"}]
