@@ -68,7 +68,7 @@ file_meta_basic_operations_test(Config) ->
       ]
     ).
 file_meta_basic_operations_test_base(Config) ->
-  model_file_meta_test_SUITE:basic_operations_test_core(Config, 50).
+    model_file_meta_test_base:basic_operations_test_core(Config, 50).
 
 %%%===================================================================
 
@@ -201,7 +201,7 @@ init_per_suite(Config) ->
             fun(_) -> [] end),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_SUITE]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
 
 
 end_per_suite(Config) ->
