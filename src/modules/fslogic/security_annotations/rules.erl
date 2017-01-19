@@ -31,7 +31,7 @@
 %% Returns updated default file context record.
 %% @end
 %%--------------------------------------------------------------------
--spec check_normal_or_default_def(check_permissions:check_type(), user_ctx:ctx(),
+-spec check_normal_or_default_def(check_permissions:access_definition(), user_ctx:ctx(),
     file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 check_normal_or_default_def({Type, SubjectCtx}, UserCtx, FileCtx) ->
     {ok, _} = check_normal_def({Type, SubjectCtx}, UserCtx, FileCtx),
@@ -47,8 +47,8 @@ check_normal_or_default_def(Type, UserCtx, FileCtx) ->
 %% 'share_id'.
 %% @end
 %%--------------------------------------------------------------------
--spec check_normal_def(check_permissions:check_type(),  user_ctx:user_ctx(),
-    file_ctx:ctx()) -> ok | no_return().
+-spec check_normal_def(check_permissions:access_definition(),  user_ctx:user_ctx(),
+    file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
 check_normal_def({share, SubjectCtx}, UserCtx, DefaultFileCtx) ->
     case file_ctx:is_root_dir_const(SubjectCtx) of
         true ->
@@ -100,7 +100,7 @@ check_normal_def({Type, SubjectCtx}, UserCtx, _FileCtx) ->
 %% Check if given access_definition is granted to given user.
 %% @end
 %%--------------------------------------------------------------------
--spec check(check_permissions:check_type(), file_meta:doc(), od_user:doc(),
+-spec check(check_permissions:access_definition(), file_meta:doc(), od_user:doc(),
     od_share:id() | undefined, acl:acl() | undefined, file_ctx:ctx()) -> {ok, file_ctx:ctx()} | no_return().
 % standard posix checks
 check(root, _, _, _, _, _) ->
@@ -180,8 +180,8 @@ check(?read_acl, _Doc, _UserDoc, _ShareId, undefined, FileCtx) ->
     {ok, FileCtx};
 check(?write_acl, Doc, UserDoc, ShareId, undefined, FileCtx) ->
     check(owner, Doc, UserDoc, ShareId, undefined, FileCtx);
-check(?write_owner, _, UserDoc, ShareId, undefined, FileCtx) ->
-    check(root, undefined, UserDoc, ShareId, undefined, FileCtx);
+check(?write_owner, _Doc, _UserDoc, _ShareId, undefined, _FileCtx) ->
+    throw(?EACCES);
 
 % acl is specified but the request is for shared file, check posix perms
 check(?read_object, Doc, UserDoc, ShareId, _, FileCtx) when is_binary(ShareId) ->
@@ -273,7 +273,7 @@ check(Perm, File, User, ShareId, Acl, _FileCtx) ->
 %% (POSIX permission check).
 %% @end
 %%--------------------------------------------------------------------
--spec validate_posix_access(check_permissions:check_type(), file_ctx:ctx(),
+-spec validate_posix_access(check_permissions:access_definition(), file_ctx:ctx(),
     od_user:doc(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
 validate_posix_access(rdwr, FileCtx, UserDoc, ShareId) ->
@@ -357,7 +357,7 @@ validate_scope_access(FileCtx, _UserDoc, _ShareId) ->
 %% respect to scope settings.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_scope_privs(check_permissions:check_type(), file_ctx:ctx(),
+-spec validate_scope_privs(check_permissions:access_definition(), file_ctx:ctx(),
     od_user:doc(), od_share:id() | undefined) ->
     {ok, file_ctx:ctx()} | no_return().
 validate_scope_privs(write, FileCtx, #document{key = UserId, value = #od_user{eff_groups = UserGroups}}, _ShareId) ->

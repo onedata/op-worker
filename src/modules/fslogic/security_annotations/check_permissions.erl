@@ -27,7 +27,8 @@
 -export([before_advice/4, after_advice/5]).
 
 %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
--type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {parent, item_definition()}.
+-type item_definition() :: non_neg_integer() | parent | {path, non_neg_integer()}
+| {parent, item_definition()}.
 -type check_type() :: owner % Check whether user owns the item
 | traverse_ancestors % validates ancestors' exec permission.
 | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
