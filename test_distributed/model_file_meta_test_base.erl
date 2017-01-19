@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -9,7 +9,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(model_file_meta_test_base).
--author("Rafal Slota").
+-author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").

@@ -23,7 +23,7 @@
 -define(call(N, M, F, A), rpc:call(N, M, F, A)).
 
 %% export for ct
--export([all/0]).
+-export([all/0, init_per_suite/1]).
 %% tests
 -export([basic_operations_test/1, rename_test/1]).
 %% test_bases
@@ -41,19 +41,19 @@ all() ->
 
 basic_operations_test(Config) ->
     ?PERFORMANCE(Config, [
-            {repeats, ?REPEATS},
-            {success_rate, ?SUCCESS_RATE},
+        {repeats, ?REPEATS},
+        {success_rate, ?SUCCESS_RATE},
+        {parameters, [
+            [{name, last_level}, {value, 10}, {description, "Depth of last level"}]
+        ]},
+        {description, "Performs operations on file meta model"},
+        {config, [{name, basic_config},
             {parameters, [
-                [{name, last_level}, {value, 10}, {description, "Depth of last level"}]
+                [{name, last_level}, {value, 50}]
             ]},
-            {description, "Performs operations on file meta model"},
-            {config, [{name, basic_config},
-                {parameters, [
-                    [{name, last_level}, {value, 50}]
-                ]},
-                {description, "Basic config for test"}
-            ]}
-        ]
+            {description, "Basic config for test"}
+        ]}
+    ]
     ).
 basic_operations_test_base(Config) ->
     LastLevel = ?config(last_level, Config),
@@ -142,3 +142,10 @@ rename_test(Config) ->
     ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/Space 2/d1/dd2/f2">>}])),
 
     ok.
+
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_per_suite(Config) ->
+    [{?LOAD_MODULES, [model_file_meta_test_base]} | Config].
