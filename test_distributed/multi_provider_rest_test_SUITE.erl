@@ -1079,10 +1079,16 @@ do_request(Node, URL, Method, Headers, Body) ->
     do_request(Node, URL, Method, Headers, Body, [insecure, {recv_timeout, 15000}]).
 
 do_request(Node, URL, Method, Headers, Body, Opts) ->
-    http_client:request(
+    Result = http_client:request(
         Method, <<(rest_endpoint(Node))/binary,  URL/binary>>,
         maps:from_list(Headers), Body, Opts
-    ).
+    ),
+    case Result of
+        {ok, Code, HeadersList, Body} ->
+            {ok, Code, maps:to_list(HeadersList), Body};
+        Other ->
+            Other
+    end.
 
 rest_endpoint(Node) ->
     Port =

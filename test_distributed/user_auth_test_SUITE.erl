@@ -175,7 +175,7 @@ mock_oz_certificates(Config) ->
                     <<"macaroon">> => SrlzdMacaroon}, Body, [SSLOpts, insecure | Options]);
             (_, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, OzRestApiUrl ++ URN,
-                    Headers#{<<"content-type">>, <<"application/json">>},
+                    Headers#{<<"content-type">> => <<"application/json">>},
                     Body, [SSLOpts, insecure | Options])
         end
     ).
