@@ -182,9 +182,9 @@ reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, vers
             {ok, _} = file_location:save(NewDoc2),
             notify_block_change_if_necessary(LocalDoc, NewDoc2),
             notify_size_change_if_necessary(LocalDoc, NewDoc2);
-        {renamed, RenamedDoc, UUID, UserId, TargetSpaceId} ->
+        {renamed, RenamedDoc, Uuid, UserId, TargetSpaceId} ->
             {ok, _} = file_location:save(RenamedDoc),
-            sfm_utils:chown_file(UUID, UserId, TargetSpaceId),
+            sfm_utils:chown_file(Uuid, UserId, TargetSpaceId),
             notify_block_change_if_necessary(LocalDoc, RenamedDoc),
             notify_size_change_if_necessary(LocalDoc, RenamedDoc)
     end.
