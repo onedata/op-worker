@@ -55,7 +55,7 @@
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_entry_const/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, has_acl_const/1]).
+    is_root_dir_const/1, has_acl_const/1, file_exists_const/1]).
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
@@ -577,6 +577,18 @@ has_acl_const(FileCtx = #file_ctx{acl = undefined}) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     acl:exists(FileUuid);
 has_acl_const(_) ->
+    true.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_exists_const(ctx()) -> boolean().
+file_exists_const(FileCtx = #file_ctx{file_doc = undefined}) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    file_meta:exists(FileUuid);
+file_exists_const(_) ->
     true.
 
 %%--------------------------------------------------------------------

@@ -134,7 +134,7 @@ get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Decides if xattr is normal or internal, and routes request to specific function.
+%% Decides if xattr is normal or internal, and routes request to specific function
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
@@ -186,9 +186,10 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
     ShowInternal :: boolean()) -> fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors]).
 list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:list(FileUuid, Inherited) of
-        {ok, XattrList} ->
+    case file_ctx:file_exists_const(FileCtx) of
+        true ->
+            {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+            {ok, XattrList} = xattr:list(FileUuid, Inherited),
             FilteredXattrList = case ShowInternal of
                 true ->
                     XattrList;
@@ -204,7 +205,7 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
                 status = #status{code = ?OK},
                 provider_response = #xattr_list{names = FilteredXattrList}
             };
-        {error, {not_found, custom_metadata}} ->
+        false ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
