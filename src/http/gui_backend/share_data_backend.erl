@@ -199,7 +199,6 @@ delete_record(<<"share">>, ShareId) ->
 -spec share_record(ModelType :: binary(), ShareId :: od_share:id(),
     ShareRecord :: od_share:info()) -> {ok, proplists:proplist()}.
 share_record(ModelType, ShareId, ShareRecord) ->
-    UserId = gui_session:get_user_id(),
     #od_share{
         name = Name,
         root_file = RootFileId,
@@ -218,6 +217,12 @@ share_record(ModelType, ShareId, ShareRecord) ->
         <<"share-public">> ->
             RootFileId
     end,
+    UserEntry = case ModelType of
+        <<"share">> ->
+            [{<<"user">>, gui_session:get_user_id()}];
+        <<"share-public">> ->
+            []
+    end,
     {ok, [
         {<<"id">>, ShareId},
         {<<"name">>, Name},
@@ -225,6 +230,5 @@ share_record(ModelType, ShareId, ShareRecord) ->
         {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
         {<<"dataSpace">>, SpaceId},
         {<<"publicUrl">>, PublicURL},
-        {<<"handle">>, HandleVal},
-        {<<"user">>, UserId}
-    ]}.
+        {<<"handle">>, HandleVal}
+    ] ++ UserEntry}.
