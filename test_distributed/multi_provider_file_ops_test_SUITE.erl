@@ -47,7 +47,7 @@
 
 -define(PERFORMANCE_TEST_CASES, [
     db_sync_many_ops_test, proxy_many_ops_test1, proxy_many_ops_test2,
-    file_consistency_test, mkdir_and_rmdir_loop_test,
+    mkdir_and_rmdir_loop_test, file_consistency_test,
     create_and_delete_file_loop_test, echo_and_delete_file_loop_test
 ]).
 
@@ -303,7 +303,7 @@ mkdir_and_rmdir_loop_test(Config) ->
         {description, "Simulates loop of sequence mkdir and rmdir operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 10000}]
+                [{name, iterations}, {value, 5000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
@@ -322,7 +322,7 @@ create_and_delete_file_loop_test(Config) ->
         {description, "Simulates loop of sequence create and remove file operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 10000}]
+                [{name, iterations}, {value, 5000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
@@ -341,7 +341,7 @@ echo_and_delete_file_loop_test(Config) ->
         {description, "Simulates loop of sequence echo and remove file operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 10000}]
+                [{name, iterations}, {value, 5000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
