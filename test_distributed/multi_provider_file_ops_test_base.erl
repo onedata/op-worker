@@ -48,7 +48,7 @@
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
 -define(deny_user(UserId),
-    #accesscontrolentity{
+    #access_control_entity{
         acetype = ?deny_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,

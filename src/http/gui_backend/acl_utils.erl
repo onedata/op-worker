@@ -25,10 +25,10 @@
 %%--------------------------------------------------------------------
 %% @doc Convert acl to gui compatible json.
 %%--------------------------------------------------------------------
--spec acl_to_json([#accesscontrolentity{}]) -> list().
+-spec acl_to_json([#access_control_entity{}]) -> list().
 acl_to_json(Acl) ->
     lists:map(
-        fun(#accesscontrolentity{aceflags = Flag, acemask = Mask,
+        fun(#access_control_entity{aceflags = Flag, acemask = Mask,
             acetype = Type, identifier = Identifier}) ->
             [
                 {<<"type">>, type_enum(Type)},
@@ -39,7 +39,7 @@ acl_to_json(Acl) ->
 %%--------------------------------------------------------------------
 %% @doc Convert gui compatible json to acl.
 %%--------------------------------------------------------------------
--spec json_to_acl(list()) -> [#accesscontrolentity{}].
+-spec json_to_acl(list()) -> [#access_control_entity{}].
 json_to_acl(AclJson) ->
     lists:map(fun(Ace) ->
         Type = proplists:get_value(<<"type">>, Ace),
@@ -49,7 +49,7 @@ json_to_acl(AclJson) ->
         Group = proplists:get_value(<<"group">>, Ace),
 
         {AceFlags, Identifier} = who(Subject, User, Group),
-        #accesscontrolentity{
+        #access_control_entity{
             acetype = type_mask(Type),
             acemask = Mask,
             aceflags = AceFlags,

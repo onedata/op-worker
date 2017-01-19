@@ -688,8 +688,8 @@ lfm_acl_test(Config) ->
 
     % test setting and getting acl
     Acl = [
-        #accesscontrolentity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #access_control_entity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ],
     Ans1 = lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl),
     ?assertEqual(ok, Ans1),

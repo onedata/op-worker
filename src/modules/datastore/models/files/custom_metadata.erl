@@ -226,7 +226,7 @@ get_xattr_metadata(FileUuid, Name, false) ->
 %%--------------------------------------------------------------------
 %% @doc List extended attribute metadata names
 %%--------------------------------------------------------------------
--spec list_xattr_metadata(file_meta:uuid(), boolean()) ->
+-spec list_xattr_metadata(file_meta:uuid(), Inherited :: boolean()) ->
     {ok, [xattr:name()]} | datastore:generic_error().
 list_xattr_metadata(FileUuid, true) ->
     case file_meta:get_ancestors(FileUuid) of

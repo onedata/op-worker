@@ -29,6 +29,7 @@
 %% API
 -export([new/1]).
 -export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
+-export([is_root/1, is_guest/1]).
 
 %%%===================================================================
 %%% API functions
@@ -36,7 +37,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns newly created user context for given session ID
+%% Returns newly created user context for given session ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> ctx() | no_return().
@@ -50,7 +51,7 @@ new(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets user from request's context
+%% Gets user from request's context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
@@ -86,3 +87,21 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 -spec get_auth(ctx()) -> session:auth().
 get_auth(#user_ctx{session = Session}) ->
     session:get_auth(Session).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if context represents root user.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root(ctx()) -> boolean().
+is_root(#user_ctx{session = #document{key = SessId}}) ->
+    session:is_root(SessId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if context represents guest user.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_guest(ctx()) -> boolean().
+is_guest(#user_ctx{session = #document{key = SessId}}) ->
+    session:is_guest(SessId).

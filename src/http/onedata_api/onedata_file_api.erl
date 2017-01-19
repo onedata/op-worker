@@ -54,7 +54,7 @@
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
 -type file_attributes() :: #file_attr{}.
 -type xattr_name() :: binary().
--type access_control_entity() :: #accesscontrolentity{}.
+-type access_control_entity() :: #access_control_entity{}.
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
