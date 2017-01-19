@@ -191,7 +191,7 @@ do_request(Method, URL, Headers) ->
 do_request(Method, URL, Headers, Body) ->
     do_request(Method, URL, Headers, Body, []).
 do_request(Method, URL, Headers, Body, Opts) ->
-    http_client:request(Method, URL, Headers, Body, [insecure | Opts]).
+    http_client:request(Method, URL, maps:from_list(Headers), Body, [insecure | Opts]).
 
 
 rest_endpoint(Node) ->

@@ -1782,7 +1782,7 @@ do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
     http_client:request(
         Method,
         cdmi_endpoint(Node) ++ RestSubpath,
-        Headers,
+        maps:from_list(Headers),
         Body,
         [insecure, {connect_timeout, timer:minutes(1)}, {recv_timeout, timer:minutes(1)}]
     ).

@@ -167,16 +167,15 @@ mock_oz_certificates(Config) ->
     test_utils:mock_new(Workers, oz_endpoint),
     test_utils:mock_expect(Workers, oz_endpoint, provider_request,
         fun
-            % @todo for now, in rest we only use the root macaroon
+        % @todo for now, in rest we only use the root macaroon
             (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
                 {ok, SrlzdMacaroon} = token_utils:serialize62(Macaroon),
-                http_client:request(Method, OzRestApiUrl ++ URN, [
-                    {<<"content-type">>, <<"application/json">>},
-                    {<<"macaroon">>, SrlzdMacaroon} | Headers
-                ], Body, [SSLOpts, insecure | Options]);
+                http_client:request(Method, OzRestApiUrl ++ URN, Headers#{
+                    <<"content-type">> => <<"application/json">>,
+                    <<"macaroon">> => SrlzdMacaroon}, Body, [SSLOpts, insecure | Options]);
             (_, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, OzRestApiUrl ++ URN,
-                    [{<<"content-type">>, <<"application/json">>} | Headers],
+                    Headers#{<<"content-type">>, <<"application/json">>},
                     Body, [SSLOpts, insecure | Options])
         end
     ).
