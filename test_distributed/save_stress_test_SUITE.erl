@@ -56,7 +56,7 @@ stress_test_base(Config) ->
 single_dir_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, files_num}, {value, 10000}, {description, "Numer of files in dir"}]
+            [{name, files_num}, {value, 3000}, {description, "Numer of files in dir"}]
         ]},
         {description, "Creates files in dir using single process"}
     ]).

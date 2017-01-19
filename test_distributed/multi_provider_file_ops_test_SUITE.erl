@@ -303,7 +303,7 @@ mkdir_and_rmdir_loop_test(Config) ->
         {description, "Simulates loop of sequence mkdir and rmdir operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 5000}]
+                [{name, iterations}, {value, 3000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
@@ -322,7 +322,7 @@ create_and_delete_file_loop_test(Config) ->
         {description, "Simulates loop of sequence create and remove file operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 5000}]
+                [{name, iterations}, {value, 3000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
@@ -341,7 +341,7 @@ echo_and_delete_file_loop_test(Config) ->
         {description, "Simulates loop of sequence echo and remove file operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 5000}]
+                [{name, iterations}, {value, 3000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
