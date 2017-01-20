@@ -211,8 +211,8 @@ user_record(Auth, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec push_modified_user(Auth :: #token_auth{}, UserId :: od_user:id(),
-    AddOrRemove :: add | remove, RelationType :: binary(),
-    Ids :: binary() | [binary()]) ->    proplists:proplist().
+    RelationType :: binary(), AddOrRemove :: add | remove,
+    Ids :: binary() | [binary()]) -> ok.
 push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Id) when is_binary(Id) ->
     push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, [Id]);
 push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Ids) ->
