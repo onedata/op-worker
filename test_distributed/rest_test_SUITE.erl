@@ -193,8 +193,8 @@ do_request(Method, URL, Headers, Body) ->
 do_request(Method, URL, Headers, Body, Opts) ->
     Result = http_client:request(Method, URL, maps:from_list(Headers), Body, [insecure | Opts]),
     case Result of
-        {ok, Code, HeadersMap, Body} ->
-            {ok, Code, maps:to_list(HeadersMap), Body};
+        {ok, RespCode, RespHeaders, RespBody} ->
+            {ok, RespCode, maps:to_list(RespHeaders), RespBody};
         Other ->
             Other
     end.

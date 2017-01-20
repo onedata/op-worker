@@ -1084,8 +1084,8 @@ do_request(Node, URL, Method, Headers, Body, Opts) ->
         maps:from_list(Headers), Body, Opts
     ),
     case Result of
-        {ok, Code, HeadersList, Body} ->
-            {ok, Code, maps:to_list(HeadersList), Body};
+        {ok, RespCode, RespHeaders, RespBody} ->
+            {ok, RespCode, maps:to_list(RespHeaders), RespBody};
         Other ->
             Other
     end.
