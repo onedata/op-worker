@@ -544,10 +544,10 @@ rev_to_num(Rev) ->
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, Changes) ->
-    apply_changes(SpaceId, Changes, []).
+apply_changes(_SpaceId, []) ->
+    ok;
 apply_changes(SpaceId,
-    [#change{doc = #document{key = Key, value = Value, rev = Rev, deleted = Deleted} = Doc, model = ModelName} = Change | T], Done) ->
+    [#change{doc = #document{key = Key, value = Value, rev = Rev, deleted = Deleted} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
 
@@ -613,36 +613,18 @@ apply_changes(SpaceId,
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
-        apply_changes(SpaceId, T, [Change | Done])
+        try
+            dbsync_events:change_replicated(SpaceId, Change)
+        catch
+            E1:E2 ->
+                ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
+        end,
+        apply_changes(SpaceId, T)
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p", [Change, Reason]),
             {error, Reason}
-    end;
-apply_changes(SpaceId, [], Done) ->
-    run_posthooks(SpaceId, lists:reverse(Done)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Apply posthooks for list of changes from remote provider.
-%% @end
-%%--------------------------------------------------------------------
--spec run_posthooks(SpaceId :: binary(), [change()]) -> ok.
-run_posthooks(_, []) ->
-    ok;
-run_posthooks(SpaceId, [Change | Done]) ->
-    spawn(
-        fun() ->
-            try
-                dbsync_events:change_replicated(SpaceId, Change)
-            catch
-                E1:E2 ->
-                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
-            end,
-            ok
-        end),
-
-    run_posthooks(SpaceId, Done).
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

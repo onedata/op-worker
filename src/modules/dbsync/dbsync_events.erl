@@ -51,8 +51,13 @@ change_replicated(SpaceId, Change) ->
     any() | no_return().
 change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document{key = FileUUID,
     value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}) ->
-    ok = replica_cleanup:clean_replica_files(FileUUID),
-    file_consistency:delete(FileUUID);
+    case couchdb_datastore_driver:exists(file_meta:model_init(), FileUUID) of
+        {ok, false} ->
+            ok = replica_cleanup:clean_replica_files(FileUUID),
+            file_consistency:delete(FileUUID);
+        _ ->
+            ok
+    end;
 change_replicated_internal(SpaceId, Change = #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUUID]),
