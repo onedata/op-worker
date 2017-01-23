@@ -65,8 +65,8 @@ bitmask_acl_conversion_test() ->
 
     % then
     ?assertEqual(Acl, [
-        #accesscontrolentity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #access_control_entity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #access_control_entity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ]),
     meck:validate(od_user),
     meck:validate(od_group),
@@ -118,8 +118,8 @@ binary_acl_conversion_test() ->
 
     % then
     ?assertEqual(Acl, [
-        #accesscontrolentity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+        #access_control_entity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #access_control_entity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ]),
     meck:validate(od_user),
     meck:validate(od_group),
@@ -128,8 +128,8 @@ binary_acl_conversion_test() ->
 check_permission_test() ->
     Id1 = <<"id1">>,
     User1 = #document{key = Id1, value = #od_user{}},
-    Ace1 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?read_mask},
-    Ace2 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?write_mask},
+    Ace1 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?read_mask},
+    Ace2 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?write_mask},
     % read permission
     ?assertEqual(ok, fslogic_acl:check_permission([Ace1, Ace2], User1, ?read_mask)),
     % rdwr permission on different ACEs
@@ -141,8 +141,8 @@ check_permission_test() ->
 
     Id2 = <<"id2">>,
     User2 = #document{key = Id2, value = #od_user{}},
-    Ace3 = #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Id2, acemask = ?read_mask},
-    Ace4 = #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?read_mask},
+    Ace3 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Id2, acemask = ?read_mask},
+    Ace4 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Id1, acemask = ?read_mask},
     % read permission, with denying someone's else read
     ?assertEqual(ok, fslogic_acl:check_permission([Ace3, Ace1, Ace2], User1, ?read_mask)),
     % read permission, with denying read
@@ -156,9 +156,9 @@ check_group_permission_test() ->
     Groups1 = [GId1, GId2],
     User1 = #document{key = Id1, value = #od_user{eff_groups = Groups1}},
 
-    Ace1 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId1, acemask = ?read_mask},
-    Ace2 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId2, acemask = ?write_mask},
-    Ace3 = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId3, acemask = ?execute_mask},
+    Ace1 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId1, acemask = ?read_mask},
+    Ace2 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId2, acemask = ?write_mask},
+    Ace3 = #access_control_entity{acetype = ?allow_mask, aceflags = ?identifier_group_mask, identifier = GId3, acemask = ?execute_mask},
 
     % read permission
     ?assertEqual(ok, fslogic_acl:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask)),
@@ -173,7 +173,7 @@ check_group_permission_test() ->
 
     Id2 = <<"id2">>,
     User2 = #document{key = Id2, value = #od_user{}},
-    Ace4 = #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = GId1, acemask = ?read_mask},
+    Ace4 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = GId1, acemask = ?read_mask},
 
     % user allow, group deny
     ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace2, Ace4], User1, ?read_mask bor ?write_mask)),

@@ -165,7 +165,7 @@ set_xattr(UserCtx, FileCtx, Xattr) ->
 %%--------------------------------------------------------------------
 -spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
+-check_permissions([traverse_ancestors, ?write_metadata]).
 remove_xattr(UserCtx, FileCtx, XattrName) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_ctx
@@ -184,11 +184,12 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
     ShowInternal :: boolean()) -> fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors]).
 list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:list(FileUuid, Inherited) of
-        {ok, XattrList} ->
+    case file_ctx:file_exists_const(FileCtx) of
+        true ->
+            {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+            {ok, XattrList} = xattr:list(FileUuid, Inherited),
             FilteredXattrList = case ShowInternal of
                 true ->
                     XattrList;
@@ -204,7 +205,7 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
                 status = #status{code = ?OK},
                 provider_response = #xattr_list{names = FilteredXattrList}
             };
-        {error, {not_found, custom_metadata}} ->
+        false ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
@@ -220,7 +221,7 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %%--------------------------------------------------------------------
 -spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
     Inherited :: boolean()) -> fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
+-check_permissions([traverse_ancestors, ?read_metadata]).
 get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, XattrName, Inherited) of %todo pass file_ctx
@@ -241,7 +242,7 @@ get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
 %%--------------------------------------------------------------------
 -spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
+-check_permissions([traverse_ancestors, ?write_metadata]).
 set_custom_xattr(UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_ctx

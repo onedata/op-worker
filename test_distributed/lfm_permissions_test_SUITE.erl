@@ -17,7 +17,7 @@
 %%% Macros used in acl tests
 %%%-------------------------------------------------------------------
 -define(acl_all(UserId),
-    #accesscontrolentity{
+    #access_control_entity{
         acetype = ?allow_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,
@@ -25,7 +25,7 @@
     }).
 
 -define(allow_user(UserId, Mask),
-    #accesscontrolentity{
+    #access_control_entity{
         acetype = ?allow_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,
@@ -33,7 +33,7 @@
     }).
 
 -define(deny_user(UserId, Mask),
-    #accesscontrolentity{
+    #access_control_entity{
         acetype = ?deny_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,
@@ -41,7 +41,7 @@
     }).
 
 -define(allow_group(GroupId, Mask),
-    #accesscontrolentity{
+    #access_control_entity{
         acetype = ?allow_mask,
         aceflags = ?identifier_group_mask,
         identifier = GroupId,
@@ -49,7 +49,7 @@
     }).
 
 -define(deny_group(GroupId, Mask),
-    #accesscontrolentity{
+    #access_control_entity{
         acetype = ?deny_mask,
         aceflags = ?identifier_group_mask,
         identifier = GroupId,

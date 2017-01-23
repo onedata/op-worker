@@ -25,12 +25,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Shares a given file
+%% Shares a given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors]).
 create_share(UserCtx, FileCtx, Name) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     ShareId = datastore_utils:gen_uuid(),
@@ -50,12 +50,12 @@ create_share(UserCtx, FileCtx, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Stops sharing a given file
+%% Stops sharing a given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors]).
 remove_share(UserCtx, FileCtx) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
     Auth = user_ctx:get_auth(UserCtx),

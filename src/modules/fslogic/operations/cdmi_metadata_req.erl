@@ -34,7 +34,7 @@
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
+-check_permissions([traverse_ancestors, ?read_attributes]).
 get_transfer_encoding(_UserCtx, FileCtx) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_KEY) of %todo pass file_ctx
@@ -51,7 +51,7 @@ get_transfer_encoding(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(user_ctx:ctx(), file_ctx:ctx(),
     xattr:transfer_encoding()) -> fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
+-check_permissions([traverse_ancestors, ?write_attributes]).
 set_transfer_encoding(UserCtx, FileCtx, Encoding) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, ?TRANSFER_ENCODING_KEY, Encoding) of %todo pass file_ctx
@@ -70,7 +70,7 @@ set_transfer_encoding(UserCtx, FileCtx, Encoding) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
+-check_permissions([traverse_ancestors, ?read_attributes]).
 get_cdmi_completion_status(_UserCtx, FileCtx) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_KEY) of %todo pass file_ctx
@@ -88,7 +88,7 @@ get_cdmi_completion_status(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx(),
     xattr:cdmi_completion_status()) -> fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
+-check_permissions([traverse_ancestors, ?write_attributes]).
 set_cdmi_completion_status(_UserCtx, FileCtx, CompletionStatus) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus) of %todo pass file_ctx
@@ -105,7 +105,7 @@ set_cdmi_completion_status(_UserCtx, FileCtx, CompletionStatus) ->
 %%--------------------------------------------------------------------
 -spec get_mimetype(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
+-check_permissions([traverse_ancestors, ?read_attributes]).
 get_mimetype(_UserCtx, FileCtx) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, ?MIMETYPE_KEY) of %todo pass file_ctx
@@ -122,7 +122,7 @@ get_mimetype(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec set_mimetype(user_ctx:ctx(), file_ctx:ctx(),
     xattr:mimetype()) -> fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
+-check_permissions([traverse_ancestors, ?write_attributes]).
 set_mimetype(UserCtx, FileCtx, Mimetype) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, ?MIMETYPE_KEY, Mimetype) of
