@@ -38,7 +38,7 @@
 }).
 
 -record(acl, {
-    value :: [#accesscontrolentity{}]
+    value :: [#access_control_entity{}]
 }).
 
 -record(get_acl, {

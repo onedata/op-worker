@@ -33,7 +33,7 @@
     get_connections/1, get_connections/2, get_auth/1, remove_connection/2, get_rest_session_id/1,
     all_with_user/0, get_user_id/1, add_open_file/2, remove_open_file/2,
     get_transfers/1, remove_transfer/2, add_transfer/2, add_handle/3, remove_handle/2, get_handle/2,
-    is_special/1]).
+    is_special/1, is_root/1, is_guest/1]).
 
 -type id() :: binary().
 -type model() :: #session{}.
@@ -521,15 +521,37 @@ get_helper(SessionId, SpaceUuid, StorageDoc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if session is of special type: root or guest
+%% Check if session is of special type: root or guest.
 %% @end
 %%--------------------------------------------------------------------
--spec is_special(session:id()) -> boolean().
+-spec is_special(id()) -> boolean().
 is_special(?ROOT_SESS_ID) ->
     true;
 is_special(?GUEST_SESS_ID) ->
     true;
 is_special(_) ->
+    false.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if session is of root type.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root(id()) -> boolean().
+is_root(?ROOT_SESS_ID) ->
+    true;
+is_root(_) ->
+    false.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if session is of guest type.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_guest(id()) -> boolean().
+is_guest(?GUEST_SESS_ID) ->
+    true;
+is_guest(_) ->
     false.
 
 %%%===================================================================
