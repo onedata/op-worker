@@ -145,8 +145,7 @@ run_bfs_scan(#space_strategy_job{data = Data0} = Job0) ->
     case storage_file_manager:stat(SFMHandle) of
         {ok, #statbuf{st_mode = Mode, st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime} = FileStats} ->
             FileType = file_type(Mode),
-            LogicalPath = filename_mapping:to_logical_path(SpaceId, StorageId, FileId),
-            [<<"/">>, _SpaceName | Rest] = fslogic_path:split(LogicalPath),
+            [<<"/">>, _SpaceName | Rest] = fslogic_path:split(FileId),
             CanonicalPath = fslogic_path:join([<<"/">>, SpaceId | Rest]),
             {IsImported, LogicalAttrsResponse} =
                 case file_meta:to_uuid({path, CanonicalPath}) of
@@ -156,12 +155,13 @@ run_bfs_scan(#space_strategy_job{data = Data0} = Job0) ->
                         Guid = fslogic_uuid:uuid_to_guid(Uuid),
                         File = file_ctx:new_by_guid(Guid),
                         LogicalAttrsResponse_ = get_attr(File),
-                        IsImported_ = is_imported(StorageId, FileId, FileType, LogicalAttrsResponse_),
+                        IsImported_ = is_imported(StorageId, StorageFilePath, FileType, LogicalAttrsResponse_),
                         {IsImported_, LogicalAttrsResponse_}
                 end,
             LocalResult = case IsImported of
                 true ->
-                    #fuse_response{fuse_response = #file_attr{mode = OldMode, uuid = FileUUID}} = LogicalAttrsResponse,
+                    #fuse_response{fuse_response = #file_attr{mode = OldMode, uuid = FileGUID}} = LogicalAttrsResponse,
+                    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
                     case Mode band 8#1777 of
                         OldMode ->
                             ok;
@@ -194,7 +194,7 @@ run_bfs_scan(#space_strategy_job{data = Data0} = Job0) ->
                             ok
                     end;
                 false ->
-                    import_file(StorageId, SpaceId, FileStats, Job, LogicalPath)
+                    import_file(StorageId, SpaceId, FileStats, Job, FileId)
             end,
 
             SubJobs = import_children(SFMHandle, FileType, Job0, maps:get(dir_offset, Data0, 0), ?DIR_BATCH),

@@ -384,7 +384,9 @@ space_storage_mock(Workers, StorageId) ->
     test_utils:mock_new(Workers, space_storage),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
-    end).
+    end),
+    test_utils:mock_expect(Workers, space_storage, get_storage_ids,
+        fun(_) -> [StorageId] end).
 
 %%--------------------------------------------------------------------
 %% @doc Mocks communicator module, so that it ignores all messages.
@@ -520,19 +522,30 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     lists:foreach(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
         lists:foreach(fun({PID, ProviderConfig}) ->
-            case proplists:get_value(<<"storage">>, ProviderConfig) of
-                undefined -> ok; %% Skip if not configured
-                StorageName ->
-                    Domain = proplists:get_value(PID, DomainMappings),
-                    case get_same_domain_workers(Config, Domain) of
-                        [Worker | _] ->
-                            {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                storage, select, [StorageName])),
-                            StorageId = rpc:call(Worker, storage, get_id, [Storage]),
+            Domain = proplists:get_value(PID, DomainMappings),
+            case get_same_domain_workers(Config, Domain) of
+                [Worker | _] ->
+                    case proplists:get_value(<<"storage">>, ProviderConfig) of
+                        undefined ->
+                            case ?config({storage_id, Domain}, Config) of
+                                undefined ->
+                                    ok;
+                                StorageId ->
+                                    {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
+                                    space_storage, add, [SpaceId, StorageId, maybe_mount_in_root(ProviderConfig)]))
+                            end;
+                        StorageName ->
+                            {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker, storage, select, [StorageName])),
+                            StorageId = case ?config({storage_id, Domain}, Config) of
+                                undefined ->
+                                    rpc:call(Worker, storage, get_id, [Storage]);
+                                 StId->
+                                     StId
+                            end,
                             {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                space_storage, add, [SpaceId, StorageId, maybe_mount_in_root(ProviderConfig)]));
-                        _ -> ok
-                    end
+                                space_storage, add, [SpaceId, StorageId, maybe_mount_in_root(ProviderConfig)]))
+                    end;
+                _ -> ok
             end
         end, Providers0)
     end, SpacesSetup),
