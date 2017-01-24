@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([wait/4, add_components_and_notify/2, check_and_add_components/3,
+-export([wait/4, wait/5, add_components_and_notify/2, check_and_add_components/3,
     check_missing_components/2, check_missing_components/3]).
 
 %% model_behaviour callbacks
@@ -61,6 +61,17 @@ record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec wait(file_meta:uuid(), od_space:id(), [file_consistency:component()], restart_posthook()) -> ok.
 wait(FileUuid, SpaceId, WaitFor, RestartPosthookData) ->
+    wait(FileUuid, SpaceId, WaitFor, RestartPosthookData, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Wait for file metadata to become consistent, the arguments for
+%% dbsync_events:change_replicated call are passed to be able to re trigger
+%% the change after system restart
+%% @end
+%%--------------------------------------------------------------------
+-spec wait(file_meta:uuid(), od_space:id(), [file_consistency:component()], restart_posthook(), pid() | undefined) -> ok.
+wait(FileUuid, SpaceId, WaitFor, RestartPosthookData, PidToNotice) ->
     {NeedsToWait, WaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
             Doc = case get(FileUuid) of
@@ -105,6 +116,10 @@ wait(FileUuid, SpaceId, WaitFor, RestartPosthookData) ->
 
     case NeedsToWait of
         true ->
+            case PidToNotice of
+                P when is_pid(P) -> P ! file_consistency_wait;
+                _ -> ok
+            end,
             receive
                 file_is_now_consistent ->
                     ok
