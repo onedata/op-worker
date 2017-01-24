@@ -34,12 +34,13 @@
     any().
 change_replicated(SpaceId, Change) ->
     change_replicated(SpaceId, Change, undefined).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Wrapper for change_replicated_internal, ignoring unsupported spaces.
 %% @end
 %%--------------------------------------------------------------------
--spec change_replicated(SpaceId :: binary(), dbsync_worker:change(), pid()) ->
+-spec change_replicated(SpaceId :: binary(), dbsync_worker:change(), undefined | pid()) ->
     any().
 change_replicated(SpaceId, Change, Master) ->
     case is_supported(SpaceId) of
@@ -56,7 +57,7 @@ change_replicated(SpaceId, Change, Master) ->
 %% Return value and any errors are ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec change_replicated_internal(SpaceId :: binary(), dbsync_worker:change(), pid()) ->
+-spec change_replicated_internal(SpaceId :: binary(), dbsync_worker:change(), undefined | pid()) ->
     any() | no_return().
 change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document{key = FileUUID,
     value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}, _Master) ->
