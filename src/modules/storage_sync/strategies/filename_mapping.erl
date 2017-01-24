@@ -172,4 +172,4 @@ filter_space_id(SpaceId, FilePath) ->
 -spec add_space_id(od_space:id(), file_meta:path()) -> file_meta:path().
 add_space_id(SpaceId, FilePath) ->
     [Sep | Path] = fslogic_path:split(FilePath),
-    fslogic_path:join([Sep, SpaceId, Path]).
+    fslogic_path:join([Sep, SpaceId | Path]).

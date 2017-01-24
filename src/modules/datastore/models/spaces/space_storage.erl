@@ -178,13 +178,12 @@ add(SpaceId, StorageId, MountInRoot) ->
         case lists:member(StorageId, StorageIds) of
             true -> {error, already_exists};
             false ->
+                SpaceStorage = Model#space_storage{storage_ids = [StorageId | StorageIds]},
                 case  MountInRoot of
                     true ->
-                        {ok, Model#space_storage{
-                            storage_ids = [StorageId | StorageIds],
-                            mounted_in_root = [StorageId | MountedInRoot]}};
+                        {ok, SpaceStorage#space_storage{mounted_in_root = [StorageId | MountedInRoot]}};
                     _ ->
-                        {ok, Model#space_storage{storage_ids = [StorageId | StorageId]}}
+                        {ok, SpaceStorage}
                 end
         end
     end,
