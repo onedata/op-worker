@@ -382,11 +382,15 @@ teardown_storage(Config) ->
 -spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
 space_storage_mock(Workers, StorageId) ->
     test_utils:mock_new(Workers, space_storage),
+    test_utils:mock_new(Workers, space_strategies),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
     end),
     test_utils:mock_expect(Workers, space_storage, get_storage_ids,
-        fun(_) -> [StorageId] end).
+        fun(_) -> [StorageId] end),
+    test_utils:mock_expect(Workers, space_strategies, get, fun(_) ->
+        {ok, #document{value = #space_strategies{storage_strategies = maps:put(StorageId, #storage_strategies{}, #{})}}}
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc Mocks communicator module, so that it ignores all messages.
@@ -531,13 +535,14 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                                 undefined ->
                                     ok;
                                 StorageId ->
-                                    {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                    space_storage, add, [SpaceId, StorageId, maybe_mount_in_root(ProviderConfig)]))
+                                    {ok, _} = ?assertMatch({ok, _},
+                                        rpc:call(Worker, space_storage, add,
+                                            [SpaceId, StorageId, maybe_mount_in_root(ProviderConfig)]))
                             end;
                         StorageName ->
-                            {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker, storage, select, [StorageName])),
                             StorageId = case ?config({storage_id, Domain}, Config) of
                                 undefined ->
+                                    {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker, storage, select, [StorageName])),
                                     rpc:call(Worker, storage, get_id, [Storage]);
                                  StId->
                                      StId
