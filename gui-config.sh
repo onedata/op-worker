@@ -23,4 +23,4 @@ TARGET_DIR='_build/default/lib/gui_static'
 # be resolved, the script will fall back to secondary.
 PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-2921'
 # Image which will be used if primary image is not resolved.
-SECONDARY_IMAGE='onedata/op-gui-default:VFS-2921'
+SECONDARY_IMAGE='onedata/op-gui-default:VFS-2661'
