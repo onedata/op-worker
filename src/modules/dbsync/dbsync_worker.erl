@@ -617,15 +617,15 @@ apply_changes(SpaceId,
         spawn(fun() ->
             try
                 dbsync_events:change_replicated(SpaceId, Change, Master),
-                Master ! change_replicated_ok
+                Master ! {change_replicated_ok, Key}
             catch
                 E1:E2 ->
                     ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
             end
         end),
         receive
-            change_replicated_ok -> ok;
-            file_consistency_wait -> ok
+            {change_replicated_ok, Key} -> ok;
+            {file_consistency_wait, Key} -> ok
         after
             500 -> ok
         end,

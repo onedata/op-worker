@@ -70,8 +70,8 @@ wait(FileUuid, SpaceId, WaitFor, RestartPosthookData) ->
 %% the change after system restart
 %% @end
 %%--------------------------------------------------------------------
--spec wait(file_meta:uuid(), od_space:id(), [file_consistency:component()], restart_posthook(), pid() | undefined) -> ok.
-wait(FileUuid, SpaceId, WaitFor, RestartPosthookData, PidToNotice) ->
+-spec wait(file_meta:uuid(), od_space:id(), [file_consistency:component()], restart_posthook(), {pid(), term()} | undefined) -> ok.
+wait(FileUuid, SpaceId, WaitFor, RestartPosthookData, ToNotice) ->
     {NeedsToWait, WaitForParent} = critical_section:run([?MODEL_NAME, <<"consistency_", FileUuid/binary>>],
         fun() ->
             Doc = case get(FileUuid) of
@@ -116,8 +116,8 @@ wait(FileUuid, SpaceId, WaitFor, RestartPosthookData, PidToNotice) ->
 
     case NeedsToWait of
         true ->
-            case PidToNotice of
-                P when is_pid(P) -> P ! file_consistency_wait;
+            case ToNotice of
+                {P, NoticeKey} when is_pid(P) -> P ! {file_consistency_wait, NoticeKey};
                 _ -> ok
             end,
             receive

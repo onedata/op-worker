@@ -70,7 +70,7 @@ change_replicated_internal(_SpaceId, #change{model = file_meta, doc =  #document
 change_replicated_internal(SpaceId, Change = #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-    ok = file_consistency:wait(FileUUID, SpaceId, [times, link_to_parent, parent_links], [SpaceId, Change], Master),
+    ok = file_consistency:wait(FileUUID, SpaceId, [times, link_to_parent, parent_links], [SpaceId, Change], {Master, FileUUID}),
     ok = sfm_utils:create_storage_file_if_not_exists(SpaceId, FileDoc),
     ok = fslogic_event:emit_file_attr_changed({uuid, FileUUID}, []),
     ok = file_consistency:add_components_and_notify(FileUUID, [file_meta, local_file_location]),
@@ -78,14 +78,14 @@ change_replicated_internal(SpaceId, Change = #change{model = file_meta, doc = Fi
 change_replicated_internal(SpaceId,
     Change = #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUUID]),
-    ok = file_consistency:wait(FileUUID, SpaceId, [times, link_to_parent], [SpaceId, Change], Master),
+    ok = file_consistency:wait(FileUUID, SpaceId, [times, link_to_parent], [SpaceId, Change], {Master, FileUUID}),
     ok = fslogic_event:emit_file_attr_changed({uuid, FileUUID}, []),
     ok = file_consistency:add_components_and_notify(FileUUID, [file_meta]),
     ok = file_consistency:check_and_add_components(FileUUID, SpaceId, [parent_links]);
-change_replicated_internal(SpaceId,
-    Change = #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}, Master) ->
+change_replicated_internal(SpaceId, Change = #change{model = file_location,
+    doc = Doc = #document{key = ChangeUUID, value = #file_location{uuid = FileUUID}}}, Master) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUUID]),
-    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, times, local_file_location], [SpaceId, Change], Master),
+    ok = file_consistency:wait(FileUUID, SpaceId, [file_meta, times, local_file_location], [SpaceId, Change], {Master, ChangeUUID}),
     ok = replica_dbsync_hook:on_file_location_change(SpaceId, Doc);
 change_replicated_internal(SpaceId,
     #change{model = file_meta, doc = #document{value = #links{model = file_meta, doc_key = FileUUID}}}, _Master) ->
