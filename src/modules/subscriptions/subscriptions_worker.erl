@@ -24,6 +24,11 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_runner.hrl").
 
+% Definitions of reconnect intervals for subscriptions websocket client.
+-define(INITIAL_RECONNECT_INTERVAL, 500).
+-define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
+-define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
+
 -export([init/1, handle/1, cleanup/0]).
 -export([refresh_subscription/0]).
 
@@ -176,16 +181,63 @@ ensure_connection_running() ->
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Attempts to start the connection.
+%% Attempts to start the connection. The procedure is wrapped in a global lock
+%% and reattempted in increasing intervals to prevent the provider from
+%% flooding OneZone with connection requests.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_provider_connection() -> ok.
 start_provider_connection() ->
-    try
-        case subscription_wss:start_link() of
-            {ok, Pid} -> ?info("Connection started ~p", [Pid]);
-            {error, Reason} -> ?error("Connection failed to start: ~p", [Reason])
+    critical_section:run(subscriptions_wss, fun() ->
+        Result = try
+            case subscription_wss:start_link() of
+                {ok, Pid} ->
+                    ?info("Connection started ~p", [Pid]),
+                    ok;
+                {error, Reason} ->
+                    ?error("Connection failed to start: ~p", [Reason]),
+                    error
+            end
+        catch
+            E:R -> ?error("Connection not started: ~p:~p", [E, R]),
+                error
+        end,
+        case Result of
+            ok ->
+                reset_reconnect_interval();
+            error ->
+                Interval = increase_reconnect_interval(),
+                % Sleep, blocking the lock for some time - this ensures that
+                % next attempt will occur after intended interval.
+                timer:sleep(Interval)
         end
-    catch
-        E:R -> ?error("Connection not started: ~p:~p", [E, R])
-    end.
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Increases the reconnect interval according to RECONNECT_INTERVAL_INCREASE_RATE,
+%% saves the new value to worker host state and returns the old interval.
+%% @end
+%%--------------------------------------------------------------------
+-spec increase_reconnect_interval() -> integer().
+increase_reconnect_interval() ->
+    Interval = case worker_host:state_get(?MODULE, reconnect_interval) of
+        undefined -> ?INITIAL_RECONNECT_INTERVAL;
+        Value -> Value
+    end,
+    worker_host:state_put(?MODULE, reconnect_interval, min(
+        Interval * ?RECONNECT_INTERVAL_INCREASE_RATE,
+        ?MAX_RECONNECT_INTERVAL
+    )),
+    Interval.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Resets the reconnect interval to its initial value.
+%% @end
+%%--------------------------------------------------------------------
+-spec reset_reconnect_interval() -> ok.
+reset_reconnect_interval() ->
+    worker_host:state_put(?MODULE, reconnect_interval, ?INITIAL_RECONNECT_INTERVAL).
