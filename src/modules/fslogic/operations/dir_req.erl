@@ -40,11 +40,11 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
         mode = Mode,
         owner = user_ctx:get_user_id(UserCtx)
     }},
-    {ParentDoc = #document{key = ParentUuid}, ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
+    {ParentDoc, ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
     {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_ctx inside
     {ok, _} = times:create(#document{key = DirUuid, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
-    fslogic_times:update_mtime_ctime({uuid, ParentUuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+    fslogic_times:update_mtime_ctime(ParentFileCtx2, user_ctx:get_user_id(UserCtx)),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #dir{uuid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
     }.
@@ -59,15 +59,14 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
     fslogic_worker:fuse_response().
 -check_permissions([traverse_ancestors, ?list_container]).
 read_dir(UserCtx, FileCtx, Offset, Limit) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {Children, _FileCtx3} = file_ctx:get_file_children(FileCtx2, UserCtx, Offset, Limit),
+    {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit),
     ChildrenLinks =
         lists:map(fun(ChildFile) ->
             ChildGuid = file_ctx:get_guid_const(ChildFile),
             {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
             #child_link{name = ChildName, uuid = ChildGuid}
         end, Children),
-    fslogic_times:update_atime(FileDoc, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+    fslogic_times:update_atime(FileCtx2, user_ctx:get_user_id(UserCtx)),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks

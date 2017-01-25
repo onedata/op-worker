@@ -38,8 +38,8 @@
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage_doc :: undefined | storage:doc(),
-    local_file_location_doc :: undefined | file_location:doc(),
-    location_ids :: undefined | [file_location:id()],
+    file_location_docs :: undefined | file_location:doc(),
+    file_location_ids :: undefined | [file_location:id()],
     acl :: undefined | acl:acl()
 }).
 
@@ -48,8 +48,9 @@
 -type ctx() :: #file_ctx{}.
 
 %% Functions creating context and filling its data
--export([new_by_logical_path/2, new_by_canonical_path/2, new_by_guid/1]).
--export([fill_guid/1]).
+-export([new_partial_context_by_logical_path/2, new_partial_context_by_canonical_path/2,
+    new_by_canonical_path/2, new_by_guid/1, new_by_doc/3]).
+-export([reset/1, fill_guid/1, add_file_location/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -61,7 +62,8 @@
 -export([get_canonical_path/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
-    get_storage_doc/1, get_local_file_location_doc/1, get_file_location_ids/1, get_acl/1]).
+    get_storage_doc/1, get_local_file_location_docs/1, get_file_location_docs/1,
+    get_file_location_ids/1, get_acl/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -73,8 +75,8 @@
 %% Creates new file context using file logical path.
 %% @end
 %%--------------------------------------------------------------------
--spec new_by_logical_path(user_ctx:ctx(), path()) -> ctx().
-new_by_logical_path(UserCtx, Path) ->
+-spec new_partial_context_by_logical_path(user_ctx:ctx(), path()) -> ctx().
+new_partial_context_by_logical_path(UserCtx, Path) ->
     {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
     case session:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
@@ -92,7 +94,12 @@ new_by_logical_path(UserCtx, Path) ->
                         false ->
                             throw(?ENOENT);
                         {SpaceId, SpaceName} ->
-                            #file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName}
+                            case lists:reverse(Rest) of
+                                [FileName | _] ->
+                                    #file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName, file_name = FileName};
+                                [] ->
+                                    #file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest]), space_name = SpaceName, file_name = SpaceName}
+                            end
                     end
             end
     end.
@@ -102,23 +109,32 @@ new_by_logical_path(UserCtx, Path) ->
 %% Creates new file context using file canonical path.
 %% @end
 %%--------------------------------------------------------------------
+-spec new_partial_context_by_canonical_path(user_ctx:ctx() | od_user:id(), path()) -> ctx().
+new_partial_context_by_canonical_path(<<_/binary>> = UserId, Path) -> %todo use user_ctx only
+    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
+    case Tokens of
+        [<<"/">>] ->
+            UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
+            #file_ctx{canonical_path = filename:join(Tokens), guid = UserRootDirGuid};
+        [<<"/">>, SpaceId | Rest] ->
+            case lists:reverse(Rest) of
+                [FileName | _] ->
+                    #file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest]), file_name = FileName};
+                [] ->
+                    #file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest])}
+            end
+    end;
+new_partial_context_by_canonical_path(UserCtx, Path) ->
+    new_partial_context_by_canonical_path(user_ctx:get_user_id(UserCtx), Path).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new file context using file canonical path.
+%% @end
+%%--------------------------------------------------------------------
 -spec new_by_canonical_path(user_ctx:ctx(), path()) -> ctx().
 new_by_canonical_path(UserCtx, Path) ->
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    case session:is_special(user_ctx:get_session_id(UserCtx)) of
-        true ->
-            throw({invalid_request, <<"Path resolution requested in the context of special session."
-            " You may only operate on guids in this context.">>});
-        false ->
-            case Tokens of
-                [<<"/">>] ->
-                    UserId = user_ctx:get_user_id(UserCtx),
-                    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
-                    #file_ctx{canonical_path = filename:join(Tokens), guid = UserRootDirGuid};
-                [<<"/">>, SpaceId | Rest] ->
-                    fill_guid(#file_ctx{canonical_path = filename:join([<<"/">>, SpaceId | Rest])})
-            end
-    end.
+    fill_guid(new_partial_context_by_canonical_path(UserCtx, Path)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,6 +144,25 @@ new_by_canonical_path(UserCtx, Path) ->
 -spec new_by_guid(guid()) -> ctx().
 new_by_guid(Guid) when Guid =/= undefined ->
     #file_ctx{guid = Guid}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new file context using file's GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> ctx().
+new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) ->
+    Guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+    #file_ctx{file_doc = Doc, guid = Guid}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reset all cached data besides GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec reset(ctx()) -> ctx().
+reset(FileCtx) ->
+    new_by_guid(get_guid_const(FileCtx)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -148,6 +183,20 @@ fill_guid(FileCtx = #file_ctx{guid = undefined, canonical_path = Path}) ->
     FileCtx#file_ctx{guid = Guid};
 fill_guid(FileCtx) ->
     FileCtx.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add file location to context record
+%% @end
+%%--------------------------------------------------------------------
+-spec add_file_location(ctx(), file_location:id()) -> ctx().
+add_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationId) ->
+    FileCtx;
+add_file_location(FileCtx = #file_ctx{file_location_ids = Locations}, LocationId) ->
+    FileCtx#file_ctx{
+        file_location_ids = [LocationId | Locations],
+        file_location_docs = undefined
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -266,6 +315,13 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(ctx(), undefined | od_user:id()) -> {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
+get_parent(FileCtx = #file_ctx{
+    parent = undefined,
+    canonical_path = CanonicalPath,
+    guid = undefined
+}, UserId) ->
+    ParentCtx = new_partial_context_by_canonical_path(UserId, filename:dirname(CanonicalPath)),
+    {ParentCtx, FileCtx};
 get_parent(FileCtx = #file_ctx{parent = undefined}, UserId) -> %todo use user_ctx
     {Doc, FileCtx2} = get_file_doc(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
@@ -415,7 +471,7 @@ get_child(FileCtx, Name, UserId) ->
             case file_meta:resolve_path(FileDoc, <<"/", Name/binary>>) of
                 {ok, {ChildDoc, _}} ->
                     ShareId = get_share_id_const(FileCtx2),
-                    Child = new_child_by_doc(ChildDoc, SpaceId, ShareId),
+                    Child = new_by_doc(ChildDoc, SpaceId, ShareId),
                     {Child, FileCtx2};
                 {error, {not_found, _}} ->
                     throw(?ENOENT)
@@ -474,14 +530,34 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
 %% Returns local file location for file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_doc(ctx()) ->
-    {file_location:doc(), ctx()}.
-get_local_file_location_doc(FileCtx = #file_ctx{local_file_location_doc = undefined}) ->
-    FileEntry = get_uuid_entry_const(FileCtx),
-    LocalLocation = fslogic_utils:get_local_file_location(FileEntry),
-    {LocalLocation, FileCtx#file_ctx{local_file_location_doc = LocalLocation}};
-get_local_file_location_doc(FileCtx = #file_ctx{local_file_location_doc = Doc}) ->
-    {Doc, FileCtx}.
+-spec get_local_file_location_docs(ctx()) ->
+    {[file_location:doc()], ctx()}.
+get_local_file_location_docs(FileCtx) ->
+    LocalProviderId = oneprovider:get_provider_id(),
+    {FileLocationDocs, FileCtx2} = get_file_location_docs(FileCtx),
+    LocalFileLocationDocs = lists:filter(fun(#document{
+        value = #file_location{provider_id = ProviderId}
+    }) ->
+        ProviderId =:= LocalProviderId
+    end, FileLocationDocs),
+    {LocalFileLocationDocs, FileCtx2}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns local file location for file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_docs(ctx()) ->
+    {[file_location:doc()], ctx()}.
+get_file_location_docs(FileCtx = #file_ctx{file_location_docs = undefined}) ->
+    {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
+    LocationDocs = lists:map(fun(LocId) ->
+        {ok, Location} = file_location:get(LocId),
+        Location
+    end, LocationIds),
+    {LocationDocs, FileCtx2#file_ctx{file_location_docs = LocationDocs}};
+get_file_location_docs(FileCtx = #file_ctx{file_location_docs = LocationDocs}) ->
+    {LocationDocs, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -490,11 +566,11 @@ get_local_file_location_doc(FileCtx = #file_ctx{local_file_location_doc = Doc}) 
 %%--------------------------------------------------------------------
 -spec get_file_location_ids(ctx()) ->
     {[file_location:id()], ctx()}.
-get_file_location_ids(FileCtx = #file_ctx{location_ids = undefined}) ->
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = undefined}) ->
     {FileDoc, FileCtx2} = get_file_doc(FileCtx),
     {ok, Locations} = file_meta:get_locations(FileDoc),
-    {Locations, FileCtx2#file_ctx{location_ids = Locations}};
-get_file_location_ids(FileCtx = #file_ctx{location_ids = Locations}) ->
+    {Locations, FileCtx2#file_ctx{file_location_ids = Locations}};
+get_file_location_ids(FileCtx = #file_ctx{file_location_ids = Locations}) ->
     {Locations, FileCtx}.
 
 %%--------------------------------------------------------------------
@@ -614,14 +690,3 @@ is_dir(FileCtx) ->
 -spec new_child_by_uuid(file_meta:uuid(), file_meta:name(), od_space:id(), undefined | od_share:id()) -> ctx().
 new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
     #file_ctx{guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new file context using file's guid.
-%% @end
-%%--------------------------------------------------------------------
--spec new_child_by_doc(file_meta:doc(), od_space:id(), undefined | od_share:id()) -> ctx().
-new_child_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) ->
-    Guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
-    #file_ctx{file_doc = Doc, guid = Guid}.

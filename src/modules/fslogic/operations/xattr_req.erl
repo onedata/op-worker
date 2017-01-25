@@ -170,8 +170,7 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_ctx
         ok ->
-            fslogic_times:update_ctime({uuid, FileUuid},
-                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -247,8 +246,7 @@ set_custom_xattr(UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue})
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_ctx
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid},
-                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

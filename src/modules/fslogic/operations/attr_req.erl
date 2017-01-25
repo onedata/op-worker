@@ -89,15 +89,15 @@ get_child_attr(UserCtx, ParentFileCtx, Name) ->
 -check_permissions([traverse_ancestors, owner]).
 chmod(UserCtx, FileCtx, Mode) ->
     {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    sfm_utils:chmod_storage_files(UserCtx, {uuid, Uuid}, Mode), %todo pass file_ctx
+    ok = sfm_utils:chmod_storage_files(UserCtx, FileCtx, Mode),
 
     % remove acl
     xattr:delete_by_name(Uuid, ?ACL_KEY),
     {ok, _} = file_meta:update({uuid, Uuid}, #{mode => Mode}),
     ok = permissions_cache:invalidate(file_meta, Uuid),
 
-    fslogic_times:update_ctime({uuid, Uuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
-    fslogic_event:emit_file_perm_changed(Uuid), %todo pass file_ctx
+    fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+    fslogic_event:emit_file_perm_changed(FileCtx),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -115,8 +115,6 @@ update_times(UserCtx, FileCtx, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:filter(fun(_Key, Value) ->
         is_integer(Value) end, UpdateMap),
-
-    FileEntry = file_ctx:get_uuid_entry_const(FileCtx),
-    fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
-
+    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1,
+        user_ctx:get_user_id(UserCtx)),
     #fuse_response{status = #status{code = ?OK}}.

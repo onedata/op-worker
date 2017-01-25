@@ -55,7 +55,8 @@ check_and_cache_result(Definition, UserCtx, DefaultFileCtx) ->
             true ->
                 {ok, DefaultFileCtx};
             false ->
-                {ok, DefaultFileCtx2} = rules:check_normal_or_default_def(Definition, UserCtx, DefaultFileCtx),
+                {ok, DefaultFileCtx2} =
+                    rules:check_normal_or_default_def(Definition, UserCtx, DefaultFileCtx),
                 cache_permission(Type, UserCtx, SubjectCtx, ok),
                 {ok, DefaultFileCtx2}
         end
@@ -96,8 +97,8 @@ get_subject(_, DefaultFileCtx) ->
 %% Returns cached permission for given definition.
 %% @end
 %%--------------------------------------------------------------------
--spec permission_in_cache(check_permissions:check_type(), user_ctx:ctx(), file_ctx:ctx()) ->
-    boolean() | no_return().
+-spec permission_in_cache(check_permissions:check_type(), user_ctx:ctx(),
+    file_ctx:ctx()) -> boolean() | no_return().
 permission_in_cache(CheckType, UserCtx, FileCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx),
@@ -116,8 +117,8 @@ permission_in_cache(CheckType, UserCtx, FileCtx) ->
 %% Caches result for given definition.
 %% @end
 %%--------------------------------------------------------------------
--spec cache_permission(check_permissions:check_type(), user_ctx:ctx(), file_ctx:ctx(), ok | ?EACCES) ->
-    {ok, term()} | calculate | no_return().
+-spec cache_permission(check_permissions:check_type(), user_ctx:ctx(),
+    file_ctx:ctx(), ok | ?EACCES) -> {ok, term()} | calculate | no_return().
 cache_permission(CheckType, UserCtx, FileCtx, Value) ->
     UserId = user_ctx:get_user_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx),

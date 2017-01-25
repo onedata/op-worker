@@ -27,27 +27,24 @@
 %% List all file_locations, remove them with associated storage files.
 %% @end
 %%--------------------------------------------------------------------
--spec clean_replica_files(file_meta:uuid()) -> ok.
-clean_replica_files(FileUuid) ->
-    LocalProviderId = oneprovider:get_provider_id(),
-    {ok, Locations} = file_meta:get_locations({uuid, FileUuid}),
+-spec clean_replica_files(file_ctx:ctx()) -> ok.
+clean_replica_files(FileCtx) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx),
+    {LocalLocations, _FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
     RemoveLocation =
-        fun(LocationId) ->
-            case file_location:get(LocationId) of
-                {ok, #document{value = #file_location{storage_id = StorageId, file_id = FileId,
-                    provider_id = LocalProviderId, space_id = SpaceId}}} ->
-                    {ok, Storage} = storage:get(StorageId),
-                    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUuid, FileUuid, Storage, FileId),
-                    storage_file_manager:unlink(SFMHandle),
-                    file_location:delete(LocationId);
-                {ok, _} ->
-                    ok;
-                Error ->
-                    ?error("Cannot get file_location ~p, due to ~p", [LocationId, Error])
-            end
+        fun(#document{
+            key = LocationId,
+            value = #file_location{
+                storage_id = StorageId,
+                file_id = FileId
+        }}) ->
+            {ok, Storage} = storage:get(StorageId), %todo possible duplicate with fslogic_deletion_worker:delete_file_on_storage
+            SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
+            storage_file_manager:unlink(SFMHandle),
+            file_location:delete(LocationId)
         end,
-    lists:foreach(RemoveLocation, Locations).
+    lists:foreach(RemoveLocation, LocalLocations).
 
 %%%===================================================================
 %%% Internal functions

@@ -467,7 +467,7 @@ write_internal(Handle, Offset, Buffer, GenerateEvents) ->
                 file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
             }],
             NewBlocks = fslogic_blocks:merge(WrittenBlocks, CBlocks),
-            ok = fslogic_event:maybe_emit_file_written(GenerateEvents, Guid, WrittenBlocks, SessId),
+            ok = fslogic_event:maybe_emit_file_written(Guid, WrittenBlocks, SessId, GenerateEvents),
             NewLocationHandle = lfm_context:set_file_location(NewHandle, Location#file_location{blocks = NewBlocks}),
             {ok, NewLocationHandle, Written};
         {error, Reason2} ->
@@ -531,7 +531,7 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
                 file_id = FileId, storage_id = StorageId, offset = Offset,
                 size = size(Data)
             }],
-            ok = fslogic_event:maybe_emit_file_read(GenerateEvents, Guid, ReadBlocks, SessId),
+            ok = fslogic_event:maybe_emit_file_read(Guid, ReadBlocks, SessId, GenerateEvents),
 
             {ok, NewHandle, Data};
         {error, Reason2} ->

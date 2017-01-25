@@ -56,12 +56,16 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
     {ok, Handle} = lfm_files:open(SessId, {guid, FileGuid}, read), %todo do not use lfm, operate on fslogic directly
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
 
-    FileEntry = file_ctx:get_uuid_entry_const(FileCtx),
     Checksum = crypto:hash(md4, Data),
     LocationToSend =
-        fslogic_file_location:prepare_location_for_client(FileEntry, Range), %todo pass file_ctx
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #sync_response{checksum = Checksum, file_location = LocationToSend}}.
+        fslogic_file_location:prepare_location_for_client(FileCtx, Range),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #sync_response{
+            checksum = Checksum,
+            file_location = LocationToSend
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,8 +87,12 @@ get_file_distribution(_UserCtx, FileCtx) ->
             blocks = Blocks
         }
     end, Locations),
-    #provider_response{status = #status{code = ?OK}, provider_response =
-    #file_distribution{provider_file_distributions = ProviderDistributions}}.
+    #provider_response{
+        status = #status{code = ?OK},
+        provider_response = #file_distribution{
+            provider_file_distributions = ProviderDistributions
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @equiv replicate_file(UserCtx, {uuid, Uuid}, Block, 0)
@@ -123,7 +131,8 @@ replicate_file(UserCtx, FileCtx, Block, Offset) ->
                     replicate_file(UserCtx, FileCtx3, Block, Offset + Chunk)
             end;
         {false, FileCtx2} ->
-            #fuse_response{status = Status} = synchronize_block(UserCtx, FileCtx2, Block, false),
+            #fuse_response{status = Status} =
+                synchronize_block(UserCtx, FileCtx2, Block, false),
             #provider_response{status = Status}
     end.
 
@@ -133,7 +142,8 @@ replicate_file(UserCtx, FileCtx, Block, Offset) ->
 %% Replicates children list.
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()], fslogic_blocks:block()) -> ok.
+-spec replicate_children(user_ctx:ctx(), [file_ctx:ctx()],
+    fslogic_blocks:block()) -> ok.
 replicate_children(UserCtx, Children, Block) ->
     utils:pforeach(fun(ChildCtx) ->
         replicate_file(UserCtx, ChildCtx, Block)

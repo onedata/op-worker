@@ -37,17 +37,20 @@ truncate(UserCtx, FileCtx, Size) ->
     SessId = user_ctx:get_session_id(UserCtx),
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
+    {LocalLocations, FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
     lists:foreach(
-        fun({SID, FID}) ->
-            {ok, Storage} = storage:get(SID),
+        fun(#document{value = #file_location{
+            storage_id = StorageId,
+            file_id = FileId
+        }}) ->
+            {ok, Storage} = storage:get(StorageId),
             SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid,
-                FileUuid, Storage, FID),
+                FileUuid, Storage, FileId),
             {ok, Handle} = storage_file_manager:open(SFMHandle, write),
             ok = storage_file_manager:truncate(Handle, Size)
-        end, fslogic_utils:get_local_storage_file_locations({uuid, FileUuid})), %todo consider caching in file_ctx
+        end, LocalLocations),
 
-    {FileDoc, _FileCtx3} = file_ctx:get_file_doc(FileCtx2),
-    fslogic_times:update_mtime_ctime(FileDoc, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+    fslogic_times:update_mtime_ctime(FileCtx3, user_ctx:get_user_id(UserCtx)),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================

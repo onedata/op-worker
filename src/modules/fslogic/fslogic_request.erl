@@ -35,7 +35,7 @@
 -spec get_file_ctx(user_ctx:ctx(), fslogic_worker:request()) ->
     file_ctx:ctx() | undefined.
 get_file_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    file_ctx:new_by_logical_path(UserCtx, Path);
+    file_ctx:new_partial_context_by_logical_path(UserCtx, Path);
 get_file_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     file_ctx:new_by_guid(FileGuid);
 get_file_ctx(_UserCtx, #fuse_request{}) ->

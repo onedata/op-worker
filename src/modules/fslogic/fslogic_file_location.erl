@@ -131,10 +131,18 @@ rename_or_delete(_, undefined) ->
 rename_or_delete(#document{value = #file_location{last_rename = {_, LocalNum}}},
     {_, ExternalNum}) when LocalNum >= ExternalNum ->
     skipped;
-rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
-    blocks = OldBlocks}}, {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename) ->
+rename_or_delete(
+    Doc = #document{
+        value = Loc = #file_location{
+            uuid = UUID,
+            blocks = OldBlocks
+        }},
+    {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename
+) ->
     {ok, Auth} = session:get_auth(?ROOT_SESS_ID),
-    {ok, #document{value = #od_space{providers = Providers}}} = od_space:get_or_fetch(Auth, TargetSpaceId, ?ROOT_USER_ID),
+    {ok, #document{
+        value = #od_space{providers = Providers}
+    }} = od_space:get_or_fetch(Auth, TargetSpaceId, ?ROOT_USER_ID),
     TargetSpaceProviders = ordsets:from_list(Providers),
     case ordsets:is_element(oneprovider:get_provider_id(), TargetSpaceProviders) of
         true ->
@@ -169,26 +177,23 @@ rename_or_delete(Doc = #document{value = Loc = #file_location{uuid = UUID,
 %% Prepare location that can be understood by client.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_location_for_client(file_meta:entry(), fslogic_blocks:block() | undefined) -> #file_location{}.
-prepare_location_for_client(FileEntry, ReqRange) ->
+-spec prepare_location_for_client(file_ctx:ctx(), fslogic_blocks:block() | undefined) ->
+    #file_location{}.
+prepare_location_for_client(FileCtx, ReqRange) ->
     % get locations
-    {ok, #document{} = File} = file_meta:get(FileEntry),
-    {ok, LocationIds} = file_meta:get_locations(File),
-    Locations = lists:map(
-        fun(LocId) ->
-            {ok, Location} = file_location:get(LocId),
-            Location
-        end, LocationIds),
-    [FileLocationDoc = #document{value = FileLocation = #file_location{blocks = Blocks, uuid = FileUuid, size = Size}}] = %todo VFS-2813 support multi location
-        lists:filter(
-            fun(#document{value = #file_location{provider_id = ProviderId}}) ->
-                ProviderId =:= oneprovider:get_provider_id()
-            end, Locations),
+    {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    {[FileLocationDoc = #document{
+        value = FileLocation = #file_location{
+            blocks = Blocks,
+            uuid = FileUuid,
+            size = Size
+        }
+    }], _FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
 
     % find gaps
     AllRanges = lists:foldl(
-        fun(#document{value = #file_location{blocks = Blocks}}, Acc) ->
-            fslogic_blocks:merge(Acc, Blocks)
+        fun(#document{value = #file_location{blocks = _Blocks}}, Acc) ->
+            fslogic_blocks:merge(Acc, _Blocks)
         end, [], Locations),
     RequestedRange = utils:ensure_defined(ReqRange, undefined, #file_block{offset = 0, size = Size}),
     ExtendedRequestedRange = case RequestedRange of

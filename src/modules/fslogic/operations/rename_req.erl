@@ -232,7 +232,7 @@ rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx,
                                 CanonicalTargetPath, LogicalTargetPath)
                     end;
                 false ->
-                    rename_interprovider(UserCtx, SourceFileCtx, LogicalTargetPath)
+                    rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath)
             end
     end.
 
@@ -308,24 +308,22 @@ rename_dir_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTarget
 -spec rename_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
 rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
-    SourceEntry = file_ctx:get_uuid_entry_const(SourceFileCtx), %todo pass file_ctx
     SessId = user_ctx:get_session_id(UserCtx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
-    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
-    {ok, SourceParent} = file_meta:get_parent(SourceEntry),
-    {_, CanonicalTargetParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
-    {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
-    {ok, #document{key = SourceUUID} = SourceDoc} = file_meta:get(SourceEntry),
-    UserId = user_ctx:get_user_id(UserCtx),
-    SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
-    TargetSpaceId = fslogic_spaces:get_space_id(UserCtx, TargetParentPath),
-    RenamedEntries = case SourceDoc of
-        #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
-            %todo VFS-2813 support multi location , get all snapshots: VFS-1966
-            SourceDirSnapshots = [SourceEntry],
 
-            %% Quota
-            Size = for_each_child_file(SourceEntry,
+    UserId = user_ctx:get_user_id(UserCtx),
+    TargetFilePartialCtx = file_ctx:new_partial_context_by_canonical_path(UserCtx, CanonicalTargetPath),
+    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
+    TargetSpaceId = file_ctx:get_space_id_const(TargetFilePartialCtx),
+    {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserId),
+    {TargetParentFilePartialCtx, _TargetFilePartialCtx2} = file_ctx:get_parent(TargetFilePartialCtx, UserId),
+
+    RenamedEntries = case file_ctx:is_dir(SourceFileCtx2) of
+        {true, SourceFileCtx3} ->
+            %todo VFS-2813 support multi location , get all snapshots: VFS-1966
+
+            %% quota
+            Size = for_each_child_file(SourceFileCtx3,
                 fun
                     (#document{
                         value = #file_meta{type = ?REGULAR_FILE_TYPE}
@@ -340,24 +338,22 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
                 end, 0),
             ok = space_quota:assert_write(TargetSpaceId, Size),
 
-            lists:foreach(
-                fun(Snapshot) ->
-                    ok = file_meta:rename(Snapshot, {path, CanonicalTargetPath})
-                end, SourceDirSnapshots),
+            % do rename
+            {uuid, SourceFileUuid} = file_ctx:get_uuid_entry_const(SourceFileCtx3),
+            ok = file_meta:rename({uuid, SourceFileUuid}, {path, CanonicalTargetPath}), %todo pass file_info
 
-            {ok, UserId} = session:get_user_id(SessId),
-            {ok, UpdatedSourceEntry} = file_meta:get(SourceUUID),
+            SourceFileCtx4 = file_ctx:reset(SourceFileCtx3),
 
-            for_each_child_file(UpdatedSourceEntry,
+            for_each_child_file(SourceFileCtx4,
                 fun
                     (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File, Acc) ->
                         %todo VFS-2813 support multi location , get all snapshots: VFS-1966
-                        FileSnapshots = [File],
-                        lists:foreach(
-                            fun(Snapshot) ->
-                                maybe_sync_file(SessId, Snapshot, SourceSpaceId, TargetSpaceId),
-                                ok = sfm_utils:rename_on_storage(UserCtx, TargetSpaceId, Snapshot)
-                            end, FileSnapshots),
+                        maybe_sync_file(SessId, File, SourceSpaceId, TargetSpaceId),
+                        ok = sfm_utils:rename_on_storage(
+                            UserCtx,
+                            file_ctx:new_by_doc(File, SourceSpaceId, undefined),
+                            TargetSpaceId
+                        ),
                         {Acc, undefined};
                     (_Dir, Acc) ->
                         {Acc, undefined}
@@ -371,30 +367,22 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
                       NewName} | Acc]
                 end, []);
 
-        #document{key = Uuid} = File ->
-            SourcePathTokens = filename:split(SourcePath),
-            TargetPathTokens = filename:split(CanonicalTargetPath),
-            {ok, OldPath} = fslogic_path:gen_path(File, SessId),
-            OldTokens = filename:split(OldPath),
-            NewTokens = TargetPathTokens ++ lists:sublist(OldTokens,
-                length(SourcePathTokens) + 1, length(OldTokens)),
-            NewPath = fslogic_path:join(NewTokens),
-            Size = fslogic_blocks:get_file_size(File),
+        {false, SourceFileCtx3} ->
+            {LocalLocations, SourceFileCtx4} =
+                file_ctx:get_local_file_location_docs(SourceFileCtx3),
+            Size = fslogic_blocks:get_file_size(LocalLocations),
             space_quota:assert_write(TargetSpaceId, Size),
 
             %todo VFS-2813 support multi location , get all snapshots: VFS-1966
-            FileSnapshots = [File],
-            lists:foreach(
-                fun(Snapshot) ->
-                    maybe_sync_file(SessId, Snapshot, SourceSpaceId, TargetSpaceId),
-                    ok = file_meta:rename(Snapshot, {path, NewPath}),
-                    ok = sfm_utils:rename_on_storage(UserCtx, TargetSpaceId, Snapshot)
-                end, FileSnapshots),
+            maybe_sync_file(SessId, SourceFileCtx4, SourceSpaceId, TargetSpaceId),
+            {uuid, SourceFileUuid} = file_ctx:get_uuid_entry_const(SourceFileCtx4),
+            ok = file_meta:rename({uuid, SourceFileUuid}, {path, CanonicalTargetPath}),
+            ok = sfm_utils:rename_on_storage(UserCtx, SourceFileCtx4, TargetSpaceId),
 
-            {ok, NewName} = file_meta:get_name({uuid, Uuid}),
-            NewParentUuid = fslogic_uuid:parent_uuid({uuid, Uuid}, UserId),
-            [{fslogic_uuid:uuid_to_guid(Uuid, SourceSpaceId),
-              fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId),
+            {NewName, _TargetFilePartialCtx2} = file_ctx:get_aliased_name(TargetFilePartialCtx, UserCtx),
+            NewParentUuid = fslogic_uuid:parent_uuid({uuid, SourceFileUuid}, UserId),
+            [{fslogic_uuid:uuid_to_guid(SourceFileUuid, SourceSpaceId),
+              fslogic_uuid:uuid_to_guid(SourceFileUuid, TargetSpaceId),
               fslogic_uuid:uuid_to_guid(NewParentUuid, TargetSpaceId),
               NewName}]
     end,
@@ -402,16 +390,22 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
     ok = create_phantom_files(RenamedEntries, SourceSpaceId, TargetSpaceId),
 
     CurrTime = erlang:system_time(seconds),
-    ok = fslogic_times:update_mtime_ctime(SourceParent, UserId, CurrTime),
-    ok = fslogic_times:update_ctime({path, CanonicalTargetPath}, UserId, CurrTime),
-    ok = fslogic_times:update_mtime_ctime({path, CanonicalTargetParentPath}, UserId, CurrTime),
+    TargetFileCtx = file_ctx:fill_guid(TargetFilePartialCtx),
+    TargetParentFileCtx = file_ctx:fill_guid(TargetParentFilePartialCtx),
+    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, UserId, CurrTime),
+    ok = fslogic_times:update_ctime(TargetFileCtx, UserId, CurrTime),
+    ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, UserId, CurrTime),
 
     {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} =
         parse_renamed_entries(RenamedEntries),
     spawn(fun() ->
         fslogic_event:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_renamed{new_uuid = NewGuid, child_entries = ChildEntries}
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_renamed{
+            new_uuid = NewGuid,
+            child_entries = ChildEntries
+        }
     }.
 
 %%--------------------------------------------------------------------
@@ -420,32 +414,32 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
 %% Renames file moving it to another space supported by another provider.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_interprovider(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) ->
+-spec rename_interprovider(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), file_meta:path()) ->
     fslogic_worker:fuse_response().
-rename_interprovider(UserCtx, SourceFileCtx, LogicalTargetPath) ->
-    SourceEntry = file_ctx:get_uuid_entry_const(SourceFileCtx), %todo remove and use file_ctx
+rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
-    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
-    {ok, SourceParent} = file_meta:get_parent(SourceEntry),
-    {_, TargetParentPath} = fslogic_path:basename_and_parent(LogicalTargetPath),
-    SourcePathTokens = filename:split(SourcePath),
-    TargetPathTokens = filename:split(LogicalTargetPath),
-    {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
+    TargetFilePartialCtx = file_ctx:new_partial_context_by_canonical_path(UserCtx, CanonicalTargetPath),
+    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
+    TargetSpaceId = file_ctx:get_space_id_const(TargetFilePartialCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
+    {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserId),
+    {TargetParentFilePartialCtx, TargetFilePartialCtx2} = file_ctx:get_parent(TargetFilePartialCtx, UserId),
 
-    SourceSpaceId = fslogic_spaces:get_space_id({uuid, SourceUUID}),
-    TargetSpaceId = fslogic_spaces:get_space_id(UserCtx, TargetParentPath),
-
-    RenamedEntries = for_each_child_file(SourceEntry,
+    RenamedEntries = for_each_child_file(SourceFileCtx2,
         fun(#document{key = SourceUuid} = Doc, Acc) ->
-            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
-            {ok, OldPath} = fslogic_path:gen_path(Doc, SessId),
+            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid, SourceSpaceId),
+            FileCtx = file_ctx:new_by_guid(SourceGuid),
+            {OldPath, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
             OldTokens = filename:split(OldPath),
+            {SourcePathTokens, SourceFileCtx3} = file_ctx:get_canonical_path(SourceFileCtx2),
+            TargetPathTokens = filename:split(CanonicalTargetPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens,
                 length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
-            {ok, {ATime, CTime, MTime}} = times:get_or_default(SourceUUID),
+            {uuid, SourceFileUuid} = file_ctx:get_uuid_entry_const(SourceFileCtx3),
+            {ok, {ATime, CTime, MTime}} = times:get_or_default(SourceFileUuid),
 
             case Doc of
                 #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} ->
@@ -461,7 +455,7 @@ rename_interprovider(UserCtx, SourceFileCtx, LogicalTargetPath) ->
             key = SourceUuid,
             value = #file_meta{mode = Mode}
         }, Acc, {TargetGuid, NewPath, {ATime, CTime, MTime}}) ->
-            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid),
+            SourceGuid = fslogic_uuid:uuid_to_guid(SourceUuid, SourceSpaceId),
             ok = logical_file_manager:set_perms(SessId, {guid, TargetGuid}, Mode),
             ok = copy_file_attributes(SessId, {guid, SourceGuid}, {guid, TargetGuid}),
             ok = logical_file_manager:update_times(SessId, {guid, TargetGuid},
@@ -475,11 +469,13 @@ rename_interprovider(UserCtx, SourceFileCtx, LogicalTargetPath) ->
     ok = create_phantom_files(RenamedEntries, SourceSpaceId, TargetSpaceId),
 
     CurrTime = erlang:system_time(seconds),
-    ok = fslogic_times:update_mtime_ctime(SourceParent,
+    TargetFileCtx = file_ctx:fill_guid(TargetFilePartialCtx2),
+    TargetParentFileCtx = file_ctx:fill_guid(TargetParentFilePartialCtx),
+    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx,
         user_ctx:get_user_id(UserCtx), CurrTime),
-    ok = logical_file_manager:update_times(SessId, {path, LogicalTargetPath},
+    ok = logical_file_manager:update_times(SessId, TargetFileCtx,
         undefined, undefined, CurrTime),
-    ok = logical_file_manager:update_times(SessId, {path, TargetParentPath},
+    ok = logical_file_manager:update_times(SessId, TargetParentFileCtx,
         undefined, CurrTime, CurrTime),
 
     {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} =
@@ -526,21 +522,24 @@ ensure_deleted(SessId, LogicalTargetPath) ->
 %% - Output Accumulator is returned
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_child_file(Entry :: fslogic_worker:file(),
+-spec for_each_child_file(file_ctx:ctx(),
     PreFun :: fun((fslogic_worker:file(), AccIn :: term()) ->
         {AccInt1 :: term(), Mem :: term()}),
     PostFun :: fun((fslogic_worker:file(), AccInt2 :: term(), Mem :: term()) ->
         AccOut :: term()),
     AccIn :: term()) -> AccOut :: term().
-for_each_child_file(Entry, PreFun, PostFun, AccIn) ->
-    {ok, Doc} = file_meta:get(Entry),
+for_each_child_file(FileCtx, PreFun, PostFun, AccIn) ->
+    {Doc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {AccInt1, Mem} = PreFun(Doc, AccIn),
     AccInt2 = case Doc of
         #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
-            {ok, ChildrenLinks} = list_all_children(Doc),
+            {ok, ChildrenLinks} = list_all_children(Doc), %todo use file_ctx:get_file_children
             lists:foldl(
                 fun(#child_link{uuid = ChildUUID}, AccIn0) ->
-                    for_each_child_file({uuid, ChildUUID}, PreFun, PostFun, AccIn0)
+                    SpaceId = file_ctx:get_space_id_const(FileCtx),
+                    ChildGuid = fslogic_uuid:uuid_to_guid(ChildUUID, SpaceId),
+                    ChildCtx = file_ctx:new_by_guid(ChildGuid),
+                    for_each_child_file(ChildCtx, PreFun, PostFun, AccIn0)
                 end, AccInt1, ChildrenLinks);
         _ ->
             AccInt1
@@ -729,16 +728,15 @@ create_phantom_files(Entries, OldSpaceId, NewSpaceId) ->
 %% than OldSpaceId.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_sync_file(SessId :: session:id(), Entry :: file_meta:entry(),
+-spec maybe_sync_file(SessId :: session:id(), file_ctx:ctx(),
     OldSpaceId :: binary(), NewSpaceId :: binary()) ->
     ok.
-maybe_sync_file(SessId, Entry, OldSpaceId, NewSpaceId) ->
+maybe_sync_file(SessId, FileCtx, OldSpaceId, NewSpaceId) ->
     case OldSpaceId =:= NewSpaceId of
         false ->
-            {ok, Uuid} = file_meta:to_uuid(Entry),
             logical_file_manager:replicate_file(
                 SessId,
-                {guid, fslogic_uuid:uuid_to_guid(Uuid, OldSpaceId)},
+                {guid, file_ctx:get_guid_const(FileCtx)},
                 oneprovider:get_provider_id()
             );
         true ->

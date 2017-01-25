@@ -20,12 +20,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/2, chown_file/3]).
+-export([chown_or_schedule_chowning/1, chown_file/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 -export_type([id/0]).
 
@@ -40,7 +40,22 @@
 record_struct(1) ->
     {record, [
         {file_uuids, [string]}
+    ]};
+record_struct(2) ->
+    {record, [
+        {file_guids, [string]}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, Uuids}) ->
+    Guids = lists:map(fun fslogic_uuid:uuid_to_guid/1, Uuids),
+    {2, #files_to_chown{file_guids = Guids}}.
 
 %%%===================================================================
 %%% API
@@ -48,22 +63,20 @@ record_struct(1) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add file that need to be chowned in future.
+%% If given UserId is present in provider, then file owner is changes.
+%% Otherwise, file is added to files awaiting owner change.
 %% @end
 %%--------------------------------------------------------------------
--spec add(od_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
-add(UserId, FileUuid) ->
-    %todo add create_or_update operation to datastore
-    UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
-        {ok, Val#files_to_chown{file_uuids = lists:usort([FileUuid | Uuids])}}
-    end,
-    case update(UserId, UpdateFun) of
-        {ok, Key} ->
-            {ok, Key};
-        {error, {not_found, files_to_chown}} ->
-            create(#document{key = UserId, value = #files_to_chown{file_uuids = [FileUuid]}});
-        Other ->
-            Other
+-spec chown_or_schedule_chowning(file_ctx:ctx()) -> file_ctx:ctx().
+chown_or_schedule_chowning(FileCtx) ->
+    {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx2} =
+        file_ctx:get_file_doc(FileCtx),
+    case od_user:exists(OwnerUserId) of
+        true ->
+            chown_file(FileCtx2);
+        false ->
+            {ok, _} = add(FileCtx2, OwnerUserId),
+            FileCtx2
     end.
 
 %%--------------------------------------------------------------------
@@ -71,21 +84,18 @@ add(UserId, FileUuid) ->
 %% Chown specific file according to given UserId and SpaceId
 %% @end
 %%--------------------------------------------------------------------
--spec chown_file(file_meta:uuid(), od_user:id(), od_space:id()) -> ok.
-chown_file(FileUuid, UserId, SpaceId) ->
-    LocalLocations = fslogic_utils:get_local_storage_file_locations({uuid, FileUuid}),
-    lists:foreach(fun({StorageId, FileId}) ->
-        try
-            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            {ok, Storage} = storage:get(StorageId),
-            SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUuid, Storage, FileId),
-
-            ok = storage_file_manager:chown(SFMHandle, UserId, SpaceId)
-        catch
-            _:Error ->
-                ?error_stacktrace("Cannot chown file ~p, due to error ~p", [FileUuid, Error])
-        end
-    end, LocalLocations).
+-spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().
+chown_file(FileCtx) ->
+    {Storage, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx3),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx3),
+    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
+    {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx4} =
+        file_ctx:get_file_doc(FileCtx3),
+    SpaceId = file_ctx:get_space_id_const(FileCtx4),
+    ok = storage_file_manager:chown(SFMHandle, OwnerUserId, SpaceId),
+    FileCtx4.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -164,12 +174,12 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(od_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
-    chown_pending_files(UUID);
-'after'(od_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
-    chown_pending_files(UUID);
-'after'(od_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
-    chown_pending_files(UUID);
+'after'(od_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
+    chown_pending_files(Uuid);
+'after'(od_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
+    chown_pending_files(Uuid);
+'after'(od_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
+    chown_pending_files(Uuid);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -188,6 +198,32 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add file that need to be chowned in future.
+%% @end
+%%--------------------------------------------------------------------
+-spec add(file_ctx:ctx(), od_user:id()) -> {ok, datastore:key()} | datastore:generic_error().
+add(FileCtx, UserId) ->
+    %todo add create_or_update operation to datastore
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    UpdateFun = fun(Val = #files_to_chown{file_guids = Guids}) ->
+        {ok, Val#files_to_chown{file_guids = lists:usort([FileGuid | Guids])}}
+    end,
+    case update(UserId, UpdateFun) of
+        {ok, Key} ->
+            {ok, Key};
+        {error, {not_found, files_to_chown}} ->
+            create(#document{
+                key = UserId,
+                value = #files_to_chown{file_guids = [FileGuid]}
+            });
+        Other ->
+            Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Chown all pending files of given user
 %% @end
@@ -195,28 +231,25 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec chown_pending_files(od_user:id()) -> ok.
 chown_pending_files(UserId) ->
     case files_to_chown:get(UserId) of
-        {ok, #document{value = #files_to_chown{file_uuids = FileUuids}}} ->
-            lists:foreach(fun chown_pending_file/1, FileUuids),
+        {ok, #document{value = #files_to_chown{file_guids = FileGuids}}} ->
+            lists:foreach(fun chown_pending_file/1, FileGuids),
             delete(UserId);
         {error,{not_found,files_to_chown}} ->
             ok
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Chown given file to its owner
 %% @end
 %%--------------------------------------------------------------------
--spec chown_pending_file(file_meta:uuid()) -> ok.
-chown_pending_file(FileUuid) ->
+-spec chown_pending_file(fslogic_worker:file_guid()) -> file_ctx:ctx().
+chown_pending_file(FileGuid) ->
     try
-        {ok, #document{value = #file_meta{owner = UserId}}} = file_meta:get({uuid, FileUuid}),
-        {ok, #document{key = SpaceDirUuid}} = file_meta:get_scope({uuid, FileUuid}),
-        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
-        chown_file(FileUuid, UserId, SpaceId)
+        FileCtx = file_ctx:new_by_guid(FileGuid),
+        chown_file(FileCtx)
     catch
         _:Error ->
-            ?error_stacktrace("Cannot chown pending file ~p due to error ~p", [FileUuid, Error])
+            ?error_stacktrace("Cannot chown pending file ~p due to error ~p", [FileGuid, Error])
     end.
-
-

@@ -630,8 +630,10 @@ run_posthooks(SpaceId, [Change | Done]) ->
             try
                 dbsync_events:change_replicated(SpaceId, Change)
             catch
-                E1:E2 ->
-                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
+                Class:Reason ->
+                    ?error("Change ~p post-processing failed~nStacktrace: ~s",
+                        [lager:pr(Change,?MODULE),
+                            lager:pr_stacktrace(erlang:get_stacktrace(), {Class, Reason})])
             end,
             ok
         end),
@@ -1063,7 +1065,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
 %%--------------------------------------------------------------------
 -spec is_valid_stream(term()) -> boolean().
 is_valid_stream(Stream) when is_pid(Stream) ->
-    try erlang:process_info(Stream) =/= undefined
+    try is_process_alive(Stream)
     catch _:_ -> node(Stream) =/= node() end;
 is_valid_stream(_) ->
     false.

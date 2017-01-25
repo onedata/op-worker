@@ -43,7 +43,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), SpaceUuid :: file_meta:uuid(),
-    file_meta:uuid() | undefined, Storage :: datastore:document(),
+    file_meta:uuid() | undefined, Storage :: storage:doc(),
     FileId :: helpers:file()) -> handle().
 new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId) ->
     new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).

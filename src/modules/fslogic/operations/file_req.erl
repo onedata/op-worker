@@ -36,20 +36,19 @@
     fslogic_worker:fuse_response().
 -check_permissions([traverse_ancestors, ?traverse_container, ?add_object]).
 create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-    File = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     SessId = user_ctx:get_session_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
-    {StorageId, FileId} = sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_ctx
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
-    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    {{StorageId, FileId}, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
+    fslogic_times:update_mtime_ctime(ParentFileCtx, user_ctx:get_user_id(UserCtx)),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(ParentFileCtx),
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
     {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
     {ok, HandleId} = save_handle(SessId, Handle),
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, File),
-    FileGuid = file_ctx:get_guid_const(File),
+    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx2),
+    FileGuid = file_ctx:get_guid_const(FileCtx2),
     FileLocation = #file_location{
         uuid = FileGuid,
         provider_id = oneprovider:get_provider_id(),
@@ -78,16 +77,9 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
 -check_permissions([traverse_ancestors, ?traverse_container, ?add_object]).
 make_file(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-
-    SessId = user_ctx:get_session_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_ctx
-
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
-    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
-
-    attr_req:get_file_attr_insecure(UserCtx, FileCtx).
+    {_, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
+    fslogic_times:update_mtime_ctime(ParentFileCtx, user_ctx:get_user_id(UserCtx)),
+    attr_req:get_file_attr_insecure(UserCtx, FileCtx2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -99,9 +91,9 @@ make_file(UserCtx, ParentFileCtx, Name, Mode) ->
 -check_permissions([traverse_ancestors]).
 get_file_location(_UserCtx, FileCtx) ->
     {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {#document{value = #file_location{
+    {[#document{value = #file_location{
         blocks = Blocks, file_id = FileId
-    }}, File3} = file_ctx:get_local_file_location_doc(FileCtx2),
+    }}], File3} = file_ctx:get_local_file_location_docs(FileCtx2),
     FileGuid = file_ctx:get_guid_const(File3),
     SpaceId = file_ctx:get_space_id_const(File3),
 
@@ -238,9 +230,9 @@ open_file_for_rdwr(UserCtx, FileCtx) ->
 open_file_insecure(UserCtx, FileCtx, Flag) ->
     {StorageDoc, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
-    {#document{value = #file_location{
+    {[#document{value = #file_location{
         file_id = FileId}
-    }, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2),
+    }], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx3),
     SessId = user_ctx:get_session_id(UserCtx),
     ShareId = file_ctx:get_share_id_const(FileCtx3),

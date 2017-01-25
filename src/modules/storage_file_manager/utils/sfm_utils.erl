@@ -23,7 +23,7 @@
 
 %% API
 -export([chmod_storage_files/3, rename_storage_file/5, rename_on_storage/3,
-    create_storage_file_if_not_exists/2, create_storage_file/4, chown_file/3]).
+    create_storage_file_if_not_exists/1, create_storage_file/2]).
 
 %%%===================================================================
 %%% API
@@ -34,35 +34,21 @@
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_storage_files(user_ctx:ctx(), file_meta:entry(),
+-spec chmod_storage_files(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:posix_permissions()) -> ok | no_return().
-chmod_storage_files(UserCtx, File, Mode) ->  %todo use file_context
+chmod_storage_files(UserCtx, FileCtx, Mode) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    case file_meta:get(File) of
-        {ok, #document{
-            key = FileUuid,
-            value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc
-        } ->
-            {ok, #document{key = SpaceUuid}} =
-                fslogic_spaces:get_space(FileDoc, user_ctx:get_user_id(UserCtx)),
-            Results = lists:map(
-                fun({SID, FID} = Loc) ->
-                    {ok, Storage} = storage:get(SID),
-                    SFMHandle = storage_file_manager:new_handle(SessId,
-                        SpaceUuid, FileUuid, Storage, FID),
-                    {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
-                end, fslogic_utils:get_local_storage_file_locations(File)),
-
-            case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
-                [] -> ok;
-                Errors ->
-                    [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p",
-                        [FID, SID, Mode, Reason])
-                        || {{SID, FID}, {error, Reason}} <- Errors],
-
-                    throw(?EAGAIN)
-            end;
-        _ -> ok
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            ok;
+        {false, FileCtx2} ->
+            {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
+            {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
+            {FileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
+            SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx4),
+            SFMHandle = storage_file_manager:new_handle(SessId,
+                SpaceDirUuid, FileUuid, Storage, FileId),
+            ok = storage_file_manager:chmod(SFMHandle, Mode)
     end.
 
 %%--------------------------------------------------------------------
@@ -74,8 +60,8 @@ chmod_storage_files(UserCtx, File, Mode) ->  %todo use file_context
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_storage_file(session:id(), Location :: #file_location{},
-    TargetFileId :: helpers:file(), TargetSpaceId :: binary(),
-    FileIdVersion :: non_neg_integer()) -> {ok, helpers:file()}.
+    TargetFileId :: helpers:file_id(), TargetSpaceId :: od_space:id(),
+    FileIdVersion :: non_neg_integer()) -> {ok, {helpers:file_id(), storage:id()}}.
 rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion) ->
     {ok, UserId} = session:get_user_id(SessId),
     #file_location{uuid = FileUuid, space_id = SourceSpaceId,
@@ -149,22 +135,20 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, FileIdVersion
 %% Renames file on storage and all its locations.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_on_storage(user_ctx:ctx(), binary(), file_meta:entry()) -> ok.
-rename_on_storage(UserCtx, TargetSpaceId, SourceEntry) ->
+-spec rename_on_storage(user_ctx:ctx(), file_ctx:ctx(), od_space:id()) -> ok.
+rename_on_storage(UserCtx, SourceFileCtx, TargetSpaceId) ->
+    {#document{value = #file_meta{mode = Mode}}, SourceFileCtx2} =
+        file_ctx:get_file_doc(SourceFileCtx),
+    {[#document{value = LocalLocation}], SourceFileCtx3} =
+        file_ctx:get_local_file_location_docs(SourceFileCtx2),
+    {FileId, SourceFileCtx4} = file_ctx:get_storage_file_id(SourceFileCtx3),
     SessId = user_ctx:get_session_id(UserCtx),
-    {ok, #document{key = SourceUuid, value = #file_meta{mode = Mode}}} =
-        file_meta:get(SourceEntry),
-
-    lists:foreach(fun(#document{value = Location}) ->
-        TempFileId = fslogic_utils:gen_storage_file_id({uuid, SourceUuid}),
-        {ok, TargetFileId} = sfm_utils:rename_storage_file(SessId, Location,
-            TempFileId, TargetSpaceId, 0),
-        ok = replica_updater:rename(SourceUuid, TargetFileId, TargetSpaceId)
-    end, fslogic_utils:get_local_file_locations(SourceEntry)),
-
+    {ok, TargetFileId} =
+        sfm_utils:rename_storage_file(SessId, LocalLocation, FileId, TargetSpaceId, 0),
+    ok = replica_updater:rename(SourceFileCtx4, TargetFileId, TargetSpaceId),
     ok = sfm_utils:chmod_storage_files(
         user_ctx:new(?ROOT_SESS_ID),
-        SourceEntry,
+        SourceFileCtx4,
         Mode
     ).
 
@@ -173,16 +157,15 @@ rename_on_storage(UserCtx, TargetSpaceId, SourceEntry) ->
 %% Create storage file and file_location if there is no file_location defined.
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(od_space:id(), datastore:document()) ->
-    ok | {error, term()}.
-create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
-    value = #file_meta{mode = Mode, owner = UserId}}) ->
+-spec create_storage_file_if_not_exists(file_ctx:ctx()) -> ok | {error, term()}.
+create_storage_file_if_not_exists(FileCtx) ->
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            case fslogic_utils:get_local_file_locations(FileDoc) of
-                [] ->
-                    create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
-                    chown_file(FileUuid, UserId, SpaceId),
+            case file_ctx:get_local_file_location_docs(FileCtx) of
+                {[], _} ->
+                    {_, FileCtx2} = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx),
+                    files_to_chown:chown_or_schedule_chowning(FileCtx2),
                     ok;
                 _ ->
                     ok
@@ -194,47 +177,27 @@ create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
 %% Create file_location and storage file.
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file(binary(), file_meta:uuid(), session:id(),
-    file_meta:posix_permissions()) ->
-    {FileId :: binary(), StorageId :: storage:id()}.
-create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
+-spec create_storage_file(user_ctx:ctx(), file_ctx:ctx()) ->
+    {{helpers:file_id(), storage:id()}, file_ctx:ctx()}.
+create_storage_file(UserCtx, FileCtx) ->
+    FileCtx2 = create_parent_dirs(FileCtx),
 
-    {ok, Path} = fslogic_path:gen_storage_path({uuid, FileUuid}),
-    FileId0 = fslogic_utils:gen_storage_file_id({uuid, FileUuid}, Path, 0),
-    LeafLess = fslogic_path:dirname(FileId0),
+    %create file on storage
+    SessId = user_ctx:get_session_id(UserCtx),
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
+    {Storage = #document{key = StorageId}, FileCtx3} =
+        file_ctx:get_storage_doc(FileCtx2),
+    {#document{value = #file_meta{mode = Mode}}, FileCtx4} =
+        file_ctx:get_file_doc(FileCtx3),
+    {FileId, FileCtx5} = file_ctx:get_storage_file_id(FileCtx4),
+    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid,
+        FileUuid, Storage, FileId),
+    storage_file_manager:unlink(SFMHandle1),
+    ok = storage_file_manager:create(SFMHandle1, Mode),
 
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid,
-        FileUuid, Storage, LeafLess),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok -> ok;
-        {error, eexist} ->
-            ok
-    end,
-
-    FileCreatorFun = fun FileCreator(ToCreate, Version) ->
-        SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid,
-            FileUuid, Storage, ToCreate),
-        case storage_file_manager:create(SFMHandle1, Mode) of
-            ok -> {ok, ToCreate};
-            {error, eexist} ->
-                NextVersion = Version + 1,
-                NextFileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid},
-                    Path, NextVersion),
-                case NextFileId of
-                    ToCreate ->
-                        ?error("Unable to generate different conflicted fileId: ~p vs ~p",
-                            [{ToCreate, Version}, {NextFileId, NextVersion}]),
-                        {error, create_loop_detected};
-                    _ ->
-                        FileCreator(NextFileId, NextVersion)
-                end
-        end
-    end,
-
-    {ok, FileId} = FileCreatorFun(FileId0, 0),
-
+    %create its location in db
+    SpaceId = file_ctx:get_space_id_const(FileCtx5),
     Location = #file_location{
         blocks = [
             #file_block{
@@ -252,28 +215,9 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
     },
     {ok, LocId} = file_location:create(#document{value = Location}),
     file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
+    FileCtx6 = file_ctx:add_file_location(FileCtx5, LocId),
 
-    {StorageId, FileId}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% If given UserId is present in provider, then file owner is changes.
-%% Otherwise, file is added to files awaiting owner change.
-%% @end
-%%--------------------------------------------------------------------
--spec chown_file(file_meta:uuid(), od_user:id(), od_space:id()) -> ok.
-chown_file(FileUuid, UserId, SpaceId) ->
-    case od_user:exists(UserId) of
-        true ->
-            files_to_chown:chown_file(FileUuid, UserId, SpaceId);
-        false ->
-            case files_to_chown:add(UserId, FileUuid) of
-                {ok, _} ->
-                    ok;
-                AddAns ->
-                    AddAns
-            end
-    end.
+    {{StorageId, FileId}, FileCtx6}.
 
 %%%===================================================================
 %%% Internal functions
@@ -304,4 +248,26 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
             ok;
         _ ->
             copy_file_contents_sfm(FromHandle, ToHandle, Offset + DataSize, Size)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates parent dirs on storage
+%% @end
+%%--------------------------------------------------------------------
+-spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
+create_parent_dirs(FileCtx) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
+    {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
+
+    LeafLess = fslogic_path:dirname(StorageFileId),
+    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid,
+        FileUuid, Storage, LeafLess),
+    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok ->
+            FileCtx3;
+        {error, eexist} ->
+            FileCtx3
     end.
