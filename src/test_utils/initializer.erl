@@ -298,8 +298,6 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
-    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
-    ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
         {{groups, UserId}, Groups},
@@ -808,4 +806,12 @@ file_meta_mock_setup(Workers, Config) ->
         (ModelName, Method, Level, Context, ReturnValue) ->
             meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
             Self ! onedata_user_after
-    end).
+    end),
+
+    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
+    ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
+    test_utils:mock_expect(Workers, file_meta, 'after', fun
+        (ModelName, Method, Level, Context, ReturnValue) ->
+            meck:passthrough([ModelName, Method, Level, Context, ReturnValue])
+    end),
+    test_utils:mock_unload(Workers, [od_user]).
