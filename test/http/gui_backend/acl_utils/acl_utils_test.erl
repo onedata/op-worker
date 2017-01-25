@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 -define(ACE(Type_, Mask_, Flag_, Id_),
-    #accesscontrolentity{acetype = Type_,
+    #access_control_entity{acetype = Type_,
         acemask = Mask_,
         aceflags = Flag_,
         identifier = Id_}

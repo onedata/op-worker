@@ -487,7 +487,7 @@ attributes_retaining_test(Config) ->
 
     PreRenameGuids = [Dir1Guid, File1Guid, Dir2Guid, File2Guid, Dir3Guid, File3Guid],
 
-    Ace = #accesscontrolentity{
+    Ace = #access_control_entity{
         acetype = ?allow_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,

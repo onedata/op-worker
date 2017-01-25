@@ -24,7 +24,7 @@
 
 %% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
@@ -53,12 +53,12 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file-distribution">>, _Id) ->
+find_record(<<"file-distribution">>, _Id) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -75,12 +75,12 @@ find_all(<<"file-distribution">>) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     SessionId = gui_session:get_session_id(),
     {ok, Distributions} = logical_file_manager:get_file_distribution(
         SessionId, {guid, FileId}
@@ -105,6 +105,17 @@ find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
             ]
         end, Distributions),
     {ok, Res}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, proplists:proplist()} | gui_error:error_result().
+query_record(<<"file-distribution">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------

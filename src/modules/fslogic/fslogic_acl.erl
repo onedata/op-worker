@@ -31,10 +31,10 @@
 %% has permissions specified in 'OperationMask' (according to this ACL)
 %% @end
 %%--------------------------------------------------------------------
--spec check_permission(ACL :: [#accesscontrolentity{}], User :: od_user:doc(), OperationMask :: non_neg_integer()) -> ok | no_return().
+-spec check_permission(ACL :: [#access_control_entity{}], User :: od_user:doc(), OperationMask :: non_neg_integer()) -> ok | no_return().
 check_permission([], _User, ?no_flags_mask) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?EACCES);
-check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
+check_permission([#access_control_entity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
     #document{value = #od_user{eff_groups = Groups}} = User, Operation)
     when ?has_flag(Flags, ?identifier_group_mask) ->
     case is_list(Groups) andalso lists:member(GroupId, Groups) of
@@ -55,18 +55,18 @@ check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, ace
                 end
         end
     end;
-check_permission([#accesscontrolentity{acetype = ?allow_mask, identifier = SameUserId, acemask = AceMask} | Rest], #document{key = SameUserId} = User, Operation) ->
+check_permission([#access_control_entity{acetype = ?allow_mask, identifier = SameUserId, acemask = AceMask} | Rest], #document{key = SameUserId} = User, Operation) ->
     case (Operation band AceMask) of
         Operation -> ok;
         OtherAllowedBits ->
             check_permission(Rest, User, Operation bxor OtherAllowedBits)
     end;
-check_permission([#accesscontrolentity{acetype = ?deny_mask, identifier = SameUserId, acemask = AceMask} | Rest], #document{key = SameUserId} = User, Operation) ->
+check_permission([#access_control_entity{acetype = ?deny_mask, identifier = SameUserId, acemask = AceMask} | Rest], #document{key = SameUserId} = User, Operation) ->
     case (Operation band AceMask) of
         ?no_flags_mask -> check_permission(Rest, User, Operation);
         _ -> throw(?EACCES)
     end;
-check_permission([#accesscontrolentity{} | Rest], User = #document{}, Operation) ->
+check_permission([#access_control_entity{} | Rest], User = #document{}, Operation) ->
     check_permission(Rest, User, Operation).
 
 %%--------------------------------------------------------------------
@@ -74,7 +74,7 @@ check_permission([#accesscontrolentity{} | Rest], User = #document{}, Operation)
 %% Parses list of access control entities to format suitable for jiffy:encode
 %% @end
 %%--------------------------------------------------------------------
--spec from_acl_to_json_format(Acl :: [#accesscontrolentity{}]) ->
+-spec from_acl_to_json_format(Acl :: [#access_control_entity{}]) ->
     custom_metadata:json_array().
 from_acl_to_json_format(Acl) ->
     [ace_to_map(Ace) || Ace <- Acl].
@@ -84,15 +84,15 @@ from_acl_to_json_format(Acl) ->
 %% list of access control entities
 %% @end
 %%--------------------------------------------------------------------
--spec from_json_format_to_acl(custom_metadata:json_array()) -> [#accesscontrolentity{}].
+-spec from_json_format_to_acl(custom_metadata:json_array()) -> [#access_control_entity{}].
 from_json_format_to_acl(JsonAcl) ->
     [map_to_ace(AceProplist) || AceProplist <- JsonAcl].
 
 %%--------------------------------------------------------------------
 %% @doc Parses access control entity to format suitable for jiffy:encode
 %%--------------------------------------------------------------------
--spec ace_to_map(#accesscontrolentity{}) -> custom_metadata:json_object().
-ace_to_map(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
+-spec ace_to_map(#access_control_entity{}) -> custom_metadata:json_object().
+ace_to_map(#access_control_entity{acetype = Type, aceflags = Flags, identifier = Who, acemask = AccessMask}) ->
     #{
         <<"acetype">> => bitmask_to_binary(Type),
         <<"identifier">> =>
@@ -109,7 +109,7 @@ ace_to_map(#accesscontrolentity{acetype = Type, aceflags = Flags, identifier = W
 %% access control entity
 %% @end
 %%--------------------------------------------------------------------
--spec map_to_ace(custom_metadata:json_object()) -> #accesscontrolentity{}.
+-spec map_to_ace(custom_metadata:json_object()) -> #access_control_entity{}.
 map_to_ace(Map) ->
     Type = maps:get(<<"acetype">>, Map, undefined),
     Flags = maps:get(<<"aceflags">>, Map, undefined),
@@ -124,7 +124,7 @@ map_to_ace(Map) ->
         false -> ace_name_to_uid(Name)
     end,
 
-    #accesscontrolentity{acetype = Acetype, aceflags = Aceflags, acemask = Acemask, identifier = Identifier}.
+    #access_control_entity{acetype = Acetype, aceflags = Aceflags, acemask = Acemask, identifier = Identifier}.
 
 %%--------------------------------------------------------------------
 %% @doc Transforms global id to acl name representation (name and hash suffix)

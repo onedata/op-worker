@@ -31,7 +31,7 @@
 
 %% API
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
@@ -60,37 +60,19 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"system-provider">>, ProviderId) ->
-    {ok, #provider_details{
-        name = Name
-    }} = oz_providers:get_details(provider, ProviderId),
-    {ok, [
-        {<<"id">>, ProviderId},
-        {<<"name">>, Name}
-    ]};
+find_record(<<"system-provider">>, _ProviderId) ->
+    gui_error:report_error(<<"Not implemented">>);
 
-find(<<"system-user">>, UserId) ->
-    CurrentUserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{value = #od_user{name = UserName}}} =
-        user_logic:get(CurrentUserAuth, UserId),
-    {ok, [
-        {<<"id">>, UserId},
-        {<<"name">>, UserName}
-    ]};
+find_record(<<"system-user">>, _UserId) ->
+    gui_error:report_error(<<"Not implemented">>);
 
-find(<<"system-group">>, GroupId) ->
-    CurrentUserAuth = op_gui_utils:get_user_auth(),
-    {ok, #document{value = #od_group{name = GroupName}}} =
-        group_logic:get(CurrentUserAuth, GroupId),
-    {ok, [
-        {<<"id">>, GroupId},
-        {<<"name">>, GroupName}
-    ]}.
+find_record(<<"system-group">>, _GroupId) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -106,13 +88,79 @@ find_all(_ResourceType) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, proplists:proplist()} | gui_error:error_result().
-find_query(_ResourceType, _Data) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(_ResourceType, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, proplists:proplist()} | gui_error:error_result().
+query_record(<<"system-provider">>, Data) ->
+    ProviderId = proplists:get_value(<<"id">>, Data),
+    % Do not check context, provider name can always be fetched
+    _Context = proplists:get_value(<<"context">>, Data),
+    {ok, #provider_details{
+        name = Name
+    }} = oz_providers:get_details(provider, ProviderId),
+    {ok, [
+        {<<"id">>, ProviderId},
+        {<<"name">>, Name}
+    ]};
+
+query_record(<<"system-user">>, Data) ->
+    CurrentUserId = gui_session:get_user_id(),
+    UserId = proplists:get_value(<<"id">>, Data),
+    Context = proplists:get_value(<<"context">>, Data),
+    [{EntityType, EntityId}] = Context,
+    Authorized = op_gui_utils:can_view_public_data(
+        CurrentUserId,
+        od_user, UserId,
+        binary_to_existing_atom(EntityType, utf8), EntityId
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            CurrentUserAuth = op_gui_utils:get_user_auth(),
+            {ok, #document{value = #od_user{name = UserName}}} =
+                user_logic:get(CurrentUserAuth, UserId),
+            {ok, [
+                {<<"id">>, UserId},
+                {<<"name">>, UserName}
+            ]}
+    end;
+
+query_record(<<"system-group">>, Data) ->
+    CurrentUserId = gui_session:get_user_id(),
+    GroupId = proplists:get_value(<<"id">>, Data),
+    Context = proplists:get_value(<<"context">>, Data),
+    [{EntityType, EntityId}] = Context,
+    Authorized = op_gui_utils:can_view_public_data(
+        CurrentUserId,
+        od_group, GroupId,
+        binary_to_existing_atom(EntityType, utf8), EntityId
+    ),
+    case Authorized of
+        false ->
+            gui_error:unauthorized();
+        true ->
+            CurrentUserAuth = op_gui_utils:get_user_auth(),
+            {ok, #document{value = #od_group{name = GroupName}}} =
+                group_logic:get(CurrentUserAuth, GroupId),
+            {ok, [
+                {<<"id">>, GroupId},
+                {<<"name">>, GroupName}
+            ]}
+    end.
 
 
 %%--------------------------------------------------------------------

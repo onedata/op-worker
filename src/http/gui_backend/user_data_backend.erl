@@ -1,32 +1,29 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the share model used in Ember application.
+%%% the data-space model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(share_data_backend).
+-module(user_data_backend).
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
--author("Jakub Liput").
 
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
-
-%% API
 -export([init/0, terminate/0]).
 -export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([user_record/2, push_modified_user/5]).
 
 %%%===================================================================
 %%% data_backend_behaviour callbacks
@@ -59,27 +56,13 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_record(ModelType, ShareId) ->
-    {ok, #document{
-        value = #od_share{
-            space = SpaceId
-        } = ShareRecord}} = share_logic:get(provider, ShareId),
-    % Make sure that user is allowed to view requested share - he must have
-    % view privileges in this space, or view the share in public view.
-    Authorized = case ModelType of
-        <<"share">> ->
-            UserId = gui_session:get_user_id(),
-            space_logic:has_effective_privilege(
-                SpaceId, UserId, space_view_data
-            );
-        <<"share-public">> ->
-            true
-    end,
-    case Authorized of
-        false ->
-            gui_error:unauthorized();
-        true ->
-            share_record(ModelType, ShareId, ShareRecord)
+find_record(<<"user">>, UserId) ->
+    UserAuth = op_gui_utils:get_user_auth(),
+    case gui_session:get_user_id() of
+        UserId ->
+            {ok, user_record(UserAuth, UserId)};
+        _ ->
+            gui_error:unauthorized()
     end.
 
 
@@ -90,9 +73,7 @@ find_record(ModelType, ShareId) ->
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-find_all(<<"share-public">>) ->
-    gui_error:report_error(<<"Not implemented">>);
-find_all(<<"share">>) ->
+find_all(<<"user">>) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -103,7 +84,7 @@ find_all(<<"share">>) ->
 %%--------------------------------------------------------------------
 -spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
-query(_, _Data) ->
+query(<<"user">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -114,7 +95,7 @@ query(_, _Data) ->
 %%--------------------------------------------------------------------
 -spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-query_record(_, _Data) ->
+query_record(<<"user">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -125,7 +106,7 @@ query_record(_, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(_, _Data) ->
+create_record(<<"user">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -137,36 +118,22 @@ create_record(_, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"share-public">>, _ShareId, _Data) ->
-    gui_error:report_error(<<"Not implemented">>);
-update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
-    UserAuth = op_gui_utils:get_user_auth(),
-    case Name of
-        undefined ->
-            ok;
-        <<"">> ->
-            gui_error:report_warning(
-                <<"Cannot set share name to empty string.">>);
-        NewName ->
-            case share_logic:set_name(UserAuth, ShareId, NewName) of
+update_record(<<"user">>, UserId, [{<<"defaultSpaceId">>, DefaultSpace}]) ->
+    case gui_session:get_user_id() of
+        UserId ->
+            UserAuth = op_gui_utils:get_user_auth(),
+            case user_logic:set_default_space(UserAuth, DefaultSpace) of
                 ok ->
-                    % Push container dir as its name has also changed.
-                    {ok, FileData} = file_data_backend:find_record(
-                        <<"file-shared">>, <<"containerDir.", ShareId/binary>>
-                    ),
-                    FileDataNewName = lists:keyreplace(
-                        <<"name">>, 1, FileData, {<<"name">>, NewName}
-                    ),
-                    gui_async:push_updated(<<"file-shared">>, FileDataNewName),
                     ok;
-                {error, {403, <<>>, <<>>}} ->
-                    gui_error:report_warning(<<"You do not have permissions to "
-                    "manage shares in this space.">>);
-                _ ->
+                {error, _} ->
                     gui_error:report_warning(
-                        <<"Cannot change share name due to unknown error.">>)
-            end
-    end.
+                        <<"Cannot change default space due to unknown error.">>)
+            end;
+        _ ->
+            gui_error:unauthorized()
+    end;
+update_record(<<"user">>, _UserId, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
@@ -176,59 +143,89 @@ update_record(<<"share">>, ShareId, [{<<"name">>, Name}]) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"share-public">>, _ShareId) ->
-    gui_error:report_error(<<"Not implemented">>);
-delete_record(<<"share">>, ShareId) ->
-    SessionId = gui_session:get_session_id(),
-    case logical_file_manager:remove_share(SessionId, ShareId) of
-        ok ->
-            ok;
-        {error, ?EACCES} ->
-            gui_error:report_warning(<<"You do not have permissions to "
-            "manage shares in this space.">>);
-        _ ->
-            gui_error:report_warning(
-                <<"Cannot remove share due to unknown error.">>)
-    end.
+delete_record(<<"user">>, _Id) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs a share record for given ShareId.
+%% Returns a client-compliant user record based on space id.
 %% @end
 %%--------------------------------------------------------------------
--spec share_record(ModelType :: binary(), ShareId :: od_share:id(),
-    ShareRecord :: od_share:info()) -> {ok, proplists:proplist()}.
-share_record(ModelType, ShareId, ShareRecord) ->
-    #od_share{
+-spec user_record(Auth :: #token_auth{}, UserId :: od_user:id()) ->
+    proplists:proplist().
+user_record(Auth, UserId) ->
+    {ok, #document{value = #od_user{
         name = Name,
-        root_file = RootFileId,
-        space = SpaceId,
-        public_url = PublicURL,
-        handle = Handle
-    } = ShareRecord,
-    HandleVal = case Handle of
+        default_space = DefaultSpaceValue
+    }}} = od_user:get(UserId),
+    DefaultSpace = case DefaultSpaceValue of
         undefined -> null;
-        <<"undefined">> -> null;
-        _ -> Handle
+        _ -> DefaultSpaceValue
     end,
-    FileId = case ModelType of
-        <<"share">> ->
-            fslogic_uuid:share_guid_to_guid(RootFileId);
-        <<"share-public">> ->
-            RootFileId
-    end,
-    UserEntry = case ModelType of
-        <<"share">> ->
-            [{<<"user">>, gui_session:get_user_id()}];
-        <<"share-public">> ->
-            []
-    end,
-    {ok, [
-        {<<"id">>, ShareId},
+    Groups = op_gui_utils:find_all_groups(Auth, UserId),
+    Spaces = op_gui_utils:find_all_spaces(Auth, UserId),
+    Shares = lists:foldl(
+        fun(SpaceId, Acc) ->
+            % Make sure that user is allowed to view shares in this space
+            Authorized = space_logic:has_effective_privilege(
+                SpaceId, UserId, space_view_data
+            ),
+            case Authorized of
+                true ->
+                    {ok, #document{value = #od_space{
+                        shares = ShareIds
+                    }}} = od_space:get(SpaceId),
+                    ShareIds ++ Acc;
+                false ->
+                    Acc
+            end
+        end, [], Spaces),
+    {ok, HandleServices} = user_logic:get_effective_handle_services(
+        Auth, UserId
+    ),
+    [
+        {<<"id">>, UserId},
         {<<"name">>, Name},
-        {<<"file">>, FileId},
-        {<<"containerDir">>, <<"containerDir.", ShareId/binary>>},
-        {<<"dataSpace">>, SpaceId},
-        {<<"publicUrl">>, PublicURL},
-        {<<"handle">>, HandleVal}
-    ] ++ UserEntry}.
+        {<<"defaultSpaceId">>, DefaultSpace},
+        {<<"groups">>, Groups},
+        {<<"spaces">>, Spaces},
+        {<<"shares">>, Shares},
+        {<<"handleServices">>, HandleServices}
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Modifies user record by changing one of its relations (adds or removes
+%% relations of given type).
+%% RelationType can be:
+%%      <<"groups">>
+%%      <<"spaces">>
+%%      <<"shares">>
+%%      <<"handleServices">>
+%% @end
+%%--------------------------------------------------------------------
+-spec push_modified_user(Auth :: #token_auth{}, UserId :: od_user:id(),
+    RelationType :: binary(), AddOrRemove :: add | remove,
+    Ids :: binary() | [binary()]) -> ok.
+push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Id) when is_binary(Id) ->
+    push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, [Id]);
+push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Ids) ->
+    UserRecord = user_record(UserAuth, UserId),
+    Relations = proplists:get_value(RelationType, UserRecord),
+    NewRelations = case AddOrRemove of
+        add ->
+            % Make sure that the Ids are not duplicated.
+            Ids ++ (Relations -- Ids);
+        remove ->
+            Relations -- Ids
+    end,
+    UserRecordWithNewRelations = lists:keystore(
+        RelationType, 1, UserRecord, {RelationType, NewRelations}
+    ),
+    gui_async:push_updated(<<"user">>, UserRecordWithNewRelations).

@@ -21,7 +21,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
@@ -50,12 +50,13 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"handle-service">>, HandleServiceId) ->
+find_record(<<"handle-service">>, HandleServiceId) ->
+    UserId = gui_session:get_user_id(),
     Auth = op_gui_utils:get_user_auth(),
     {ok, #document{
         value = #od_handle_service{
@@ -63,7 +64,8 @@ find(<<"handle-service">>, HandleServiceId) ->
         }}} = handle_service_logic:get(Auth, HandleServiceId),
     {ok, [
         {<<"id">>, HandleServiceId},
-        {<<"name">>, Name}
+        {<<"name">>, Name},
+        {<<"user">>, UserId}
     ]}.
 
 
@@ -75,27 +77,28 @@ find(<<"handle-service">>, HandleServiceId) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"handle-service">>) ->
-    Auth = op_gui_utils:get_user_auth(),
-    UserId = gui_session:get_user_id(),
-    {ok, HandleServiceIds} = user_logic:get_effective_handle_services(
-        Auth, UserId
-    ),
-    Res = lists:map(
-        fun(HandleServiceId) ->
-            {ok, Data} = find(<<"handle-service">>, HandleServiceId),
-            Data
-        end, HandleServiceIds),
-    {ok, Res}.
+    gui_error:report_error(<<"Not implemented">>).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(<<"handle-service">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"handle-service">>, _Data) ->
+query_record(<<"handle-service">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 

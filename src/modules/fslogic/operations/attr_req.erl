@@ -33,7 +33,7 @@
 %%--------------------------------------------------------------------
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors]).
 get_file_attr(UserCtx, FileCtx) ->
     get_file_attr_insecure(UserCtx, FileCtx).
 
@@ -73,7 +73,7 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors, ?traverse_container]).
 get_child_attr(UserCtx, ParentFileCtx, Name) ->
     UserId = user_ctx:get_user_id(UserCtx),
     {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserId),
@@ -86,7 +86,7 @@ get_child_attr(UserCtx, ParentFileCtx, Name) ->
 %%--------------------------------------------------------------------
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
+-check_permissions([traverse_ancestors, owner]).
 chmod(UserCtx, FileCtx, Mode) ->
     {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx),
     sfm_utils:chmod_storage_files(UserCtx, {uuid, Uuid}, Mode), %todo pass file_ctx
@@ -110,7 +110,7 @@ chmod(UserCtx, FileCtx, Mode) ->
     ATime :: file_meta:time() | undefined,
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}, {{owner, 'or', ?write_attributes}, 2}]).
+-check_permissions([traverse_ancestors, {owner, 'or', ?write_attributes}]).
 update_times(UserCtx, FileCtx, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:filter(fun(_Key, Value) ->

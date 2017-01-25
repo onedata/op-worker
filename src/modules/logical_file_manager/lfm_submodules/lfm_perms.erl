@@ -13,7 +13,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
--type access_control_entity() :: #accesscontrolentity{}.
+-type access_control_entity() :: #access_control_entity{}.
 
 -export_type([access_control_entity/0]).
 

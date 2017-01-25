@@ -33,7 +33,7 @@
 %%--------------------------------------------------------------------
 -spec get_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
+-check_permissions([traverse_ancestors, ?read_acl]).
 get_acl(_UserCtx, FileCtx) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:get_by_name(FileUuid, ?ACL_KEY) of %todo pass file_ctx
@@ -55,7 +55,7 @@ get_acl(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
+-check_permissions([traverse_ancestors, ?write_acl]).
 set_acl(UserCtx, FileCtx, #acl{value = Val}) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:save(FileUuid, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of %todo pass file_ctx
@@ -79,7 +79,7 @@ set_acl(UserCtx, FileCtx, #acl{value = Val}) ->
 %%--------------------------------------------------------------------
 -spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
+-check_permissions([traverse_ancestors, ?write_acl]).
 remove_acl(UserCtx, FileCtx) ->
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
     case xattr:delete_by_name(FileUuid, ?ACL_KEY) of
