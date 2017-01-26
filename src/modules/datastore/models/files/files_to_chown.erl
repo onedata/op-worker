@@ -163,8 +163,9 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files_to_chown_bucket, [{od_user, create}, {od_user, save},
-        {od_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL).
+    Config = ?MODEL_CONFIG(files_to_chown_bucket, [{od_user, create},
+        {od_user, save}, {od_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
