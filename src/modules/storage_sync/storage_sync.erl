@@ -3,6 +3,7 @@
 %%% @copyright (C) 2017 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% Main API for storage_sync.
 %%% @end
@@ -21,7 +22,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Wrapper for starting storage import. By default uses ?DEFAULT_STRATEGY_NAME.
+%% @equiv start_storage_import(SpaceId, ScanInterval, ?DEFAULT_STRATEGY_NAME).
 %% @end
 %%--------------------------------------------------------------------
 -spec start_storage_import(od_space:id(), non_neg_integer()) ->

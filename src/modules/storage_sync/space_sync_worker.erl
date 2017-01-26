@@ -100,7 +100,7 @@ handle({check_strategies, SpaceId, StorageId} = Request) ->
                     last_import_time => LastImportTime,
                     space_id => SpaceId,
                     storage_id => StorageId,
-                    storage_file_id => <<"/", SpaceId/binary>>,
+                    storage_logical_file_id => <<"/", SpaceId/binary>>,
                     max_depth => ?INFINITY
                 },
 

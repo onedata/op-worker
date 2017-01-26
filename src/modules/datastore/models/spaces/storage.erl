@@ -212,12 +212,12 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs storage record.
+%% @equiv new(Name, Helpers, false).
 %% @end
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()]) -> doc().
 new(Name, Helpers) ->
-    #document{value = #storage{name = Name, helpers = Helpers}}.
+    new(Name, Helpers, false).
 
 %%--------------------------------------------------------------------
 %% @doc

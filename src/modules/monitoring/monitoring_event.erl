@@ -192,19 +192,23 @@ handle_monitoring_events(Evts, Ctx) ->
 %% storages is NOT read-only.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_handle_monitoring_event(Evts :: event:type()) ->
+-spec maybe_handle_monitoring_event(Evt :: event:type()) ->
     ok | {error, Reason :: term()}.
-maybe_handle_monitoring_event(#monitoring_event{type =
-    #storage_used_updated{space_id = SpaceId}} = Evt) ->
+maybe_handle_monitoring_event(Evt = #monitoring_event{
+    type = #storage_used_updated{space_id = SpaceId}
+}) ->
     maybe_handle_monitoring_event(SpaceId, Evt);
-maybe_handle_monitoring_event(#monitoring_event{type =
-    #od_space_updated{space_id = SpaceId}} = Evt) ->
+maybe_handle_monitoring_event(Evt = #monitoring_event{
+    type = #od_space_updated{space_id = SpaceId}
+}) ->
     maybe_handle_monitoring_event(SpaceId, Evt);
-maybe_handle_monitoring_event(#monitoring_event{type =
-    #file_operations_statistics{space_id = SpaceId}} = Evt) ->
+maybe_handle_monitoring_event(Evt = #monitoring_event{
+    type = #file_operations_statistics{space_id = SpaceId}
+}) ->
     maybe_handle_monitoring_event(SpaceId, Evt);
-maybe_handle_monitoring_event(#monitoring_event{type =
-    #rtransfer_statistics{space_id = SpaceId}} = Evt) ->
+maybe_handle_monitoring_event(Evt = #monitoring_event{
+    type = #rtransfer_statistics{space_id = SpaceId}
+}) ->
     maybe_handle_monitoring_event(SpaceId, Evt).
 
 
@@ -215,8 +219,8 @@ maybe_handle_monitoring_event(#monitoring_event{type =
 %% storages is NOT read-only.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_handle_monitoring_event(SpaceId :: od_space:id(),
-    Evts :: event:type()) -> ok | {error, Reason :: term()}.
+-spec maybe_handle_monitoring_event(od_space:id(), Evt :: event:type()) ->
+    ok | {error, Reason :: term()}.
 maybe_handle_monitoring_event(SpaceId, Evt) ->
     case all_supporting_storages_are_readonly(SpaceId) of
         true -> ok;
@@ -343,21 +347,8 @@ all_supporting_storages_are_readonly(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec all_storages_are_readonly([storage:id()]) -> boolean().
 all_storages_are_readonly(StorageIds) ->
-    all_storages_are_readonly_tail(StorageIds, true).
+    lists:all(fun is_storage_readonly/1, StorageIds).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Tail recursive helper function for all_storages_are_readonly function.
-%% @end
-%%--------------------------------------------------------------------
--spec all_storages_are_readonly_tail([storage:id()], AccIn :: boolean()) -> boolean().
-all_storages_are_readonly_tail(_, false) -> false;
-all_storages_are_readonly_tail([StorageId], AccIn) ->
-    is_storage_readonly(StorageId) and AccIn;
-all_storages_are_readonly_tail([StorageId | RestStorageIds], AccIn) ->
-    all_storages_are_readonly_tail(RestStorageIds,
-        is_storage_readonly(StorageId) and AccIn).
 
 %%--------------------------------------------------------------------
 %% @private

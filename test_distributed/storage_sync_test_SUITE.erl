@@ -6,7 +6,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests file deletion.
+%%% @doc This module tests storage_sync
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_sync_test_SUITE).

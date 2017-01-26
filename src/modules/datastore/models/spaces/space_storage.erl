@@ -172,16 +172,22 @@ add(SpaceId, StorageId) ->
 -spec add(od_space:id(), storage:id(), boolean()) ->
     {ok, od_space:id()} | {error, Reason :: term()}.
 add(SpaceId, StorageId, MountInRoot) ->
-
     Doc = new(SpaceId, StorageId, MountInRoot),
-    Diff = fun(#space_storage{storage_ids = StorageIds, mounted_in_root = MountedInRoot} = Model) ->
+    Diff = fun(#space_storage{
+        storage_ids = StorageIds,
+        mounted_in_root = MountedInRoot
+    } = Model) ->
         case lists:member(StorageId, StorageIds) of
             true -> {error, already_exists};
             false ->
-                SpaceStorage = Model#space_storage{storage_ids = [StorageId | StorageIds]},
-                case  MountInRoot of
+                SpaceStorage = Model#space_storage{
+                    storage_ids = [StorageId | StorageIds]
+                },
+                case MountInRoot of
                     true ->
-                        {ok, SpaceStorage#space_storage{mounted_in_root = [StorageId | MountedInRoot]}};
+                        {ok, SpaceStorage#space_storage{
+                            mounted_in_root = [StorageId | MountedInRoot]
+                        }};
                     _ ->
                         {ok, SpaceStorage}
                 end
@@ -190,7 +196,7 @@ add(SpaceId, StorageId, MountInRoot) ->
 
     case datastore:create_or_update(?STORE_LEVEL, Doc, Diff) of
         {ok, SpaceId} ->
-            ok = space_strategies:add_storage(SpaceId, StorageId),
+            ok = space_strategies:add_storage(SpaceId, StorageId, MountInRoot),
             {ok, SpaceId};
         {error, Reason} ->
             {error, Reason}
@@ -198,7 +204,7 @@ add(SpaceId, StorageId, MountInRoot) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of storage IDs attached to the space.
+%% Returns list of storage IkDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_ids(model() | doc()) -> [storage:id()].
@@ -212,6 +218,7 @@ get_storage_ids(#document{value = #space_storage{} = Value}) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns space_storage document.
 %% @end

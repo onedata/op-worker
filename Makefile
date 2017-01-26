@@ -102,7 +102,7 @@ eunit:
 
 coverage:
 ## Set on_bamboo=true so that coverage.escript will collect coverdata from all ct_logs directories
-	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR) ${on_bamboo}
+	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR) $(on_bamboo)
 
 ##
 ## Dialyzer targets local

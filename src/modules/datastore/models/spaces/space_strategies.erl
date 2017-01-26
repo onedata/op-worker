@@ -16,9 +16,10 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([new/1, add_storage/2]).
+-export([new/1, add_storage/2, add_storage/3]).
 -export([set_strategy/4, set_strategy/5]).
 
 %% model_behaviour callbacks
@@ -150,21 +151,36 @@ new(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds default strategies for new storage in this space.
+%% @equiv add_storage(SpaceId, StorageId, false).
 %% @end
 %%--------------------------------------------------------------------
 -spec add_storage(od_space:id(), storage:id()) -> ok | no_return().
 add_storage(SpaceId, StorageId) ->
-    #document{value = Value = #space_strategies{storage_strategies = StorageStrategies}} = Doc =
-        case get(SpaceId) of
+    add_storage(SpaceId, StorageId, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds default strategies for new storage in this space.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_storage(od_space:id(), storage:id(), boolean()) -> ok | no_return().
+add_storage(SpaceId, StorageId, MountInRoot) ->
+    #document{value = Value = #space_strategies{
+            storage_strategies = StorageStrategies
+        }} = Doc = case get(SpaceId) of
             {error, {not_found, _}} ->
                 new(SpaceId);
             {ok, Doc0} ->
                 Doc0
         end,
-
-    StorageStrategie = #storage_strategies{},
-    {ok, _} = save(Doc#document{value = Value#space_strategies{storage_strategies = maps:put(StorageId, StorageStrategie, StorageStrategies)}}),
+    StorageStrategy = case MountInRoot of
+        true -> #storage_strategies{filename_mapping = {root, #{}}};
+        _ -> #storage_strategies{}
+    end,
+    {ok, _} = save(Doc#document{
+        value = Value#space_strategies{
+            storage_strategies = maps:put(StorageId, StorageStrategy, StorageStrategies)
+        }}),
     ok.
 
 
@@ -173,8 +189,8 @@ add_storage(SpaceId, StorageId) ->
 %% Sets strategy of given type in this space.
 %% @end
 %%--------------------------------------------------------------------
--spec set_strategy(od_space:id(), space_strategy:type(), space_strategy:name(), space_strategy:arguments()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec set_strategy(od_space:id(), space_strategy:type(), space_strategy:name(),
+    space_strategy:arguments()) -> {ok, datastore:ext_key()} | datastore:update_error().
 set_strategy(SpaceId, StrategyType, StrategyName, StrategyArgs) ->
     update(SpaceId, #{StrategyType => {StrategyName, StrategyArgs}}).
 
@@ -183,7 +199,8 @@ set_strategy(SpaceId, StrategyType, StrategyName, StrategyArgs) ->
 %% Sets strategy of given type for the storage in this space.
 %% @end
 %%--------------------------------------------------------------------
--spec set_strategy(od_space:id(), storage:id(), space_strategy:type(), space_strategy:name(), space_strategy:arguments()) ->
+-spec set_strategy(od_space:id(), storage:id(), space_strategy:type(),
+    space_strategy:name(), space_strategy:arguments()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
     update(SpaceId, fun(#space_strategies{storage_strategies = Strategies} = OldValue) ->

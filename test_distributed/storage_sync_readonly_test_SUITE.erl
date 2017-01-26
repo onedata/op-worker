@@ -6,7 +6,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests file deletion.
+%%% @doc This module tests storage_sync with readonly storage.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(storage_sync_readonly_test_SUITE).
@@ -91,8 +91,7 @@ create_directory_import_test(Config) ->
     ok = file:make_dir(StorageTestDirPath),
     %% Check if dir was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    tracer:stop().
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 create_file_import_test(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
