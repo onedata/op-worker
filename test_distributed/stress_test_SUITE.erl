@@ -53,7 +53,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 95},
+            {success_rate, 90}, % Allow errors because of throttling
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -68,7 +68,15 @@ file_meta_basic_operations_test(Config) ->
       ]
     ).
 file_meta_basic_operations_test_base(Config) ->
-  model_file_meta_test_SUITE:basic_operations_test_core(Config, 50).
+    LastFails = ?config(last_fails, Config),
+    case LastFails of
+        0 ->
+            ok;
+        _ ->
+            ct:print("file_meta_basic_operations_test_base: Sleep because of failures: 1 min"),
+            timer:sleep(timer:minutes(1))
+    end,
+    model_file_meta_test_base:basic_operations_test_core(Config, 50).
 
 %%%===================================================================
 
@@ -94,8 +102,8 @@ many_files_creation_test_base(Config) ->
         0 ->
             ok;
         _ ->
-            ct:print("many_files_creation_test_base: Sleep because of failures: ~p sek", [2 * LastFails]),
-            timer:sleep(timer:seconds(2 * LastFails))
+            ct:print("many_files_creation_test_base: Sleep because of failures: 1 min"),
+            timer:sleep(timer:minutes(1))
     end,
 
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
@@ -201,7 +209,7 @@ init_per_suite(Config) ->
             fun(_) -> [] end),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_SUITE]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [model_file_meta_test_base]} | Config].
 
 
 end_per_suite(Config) ->
