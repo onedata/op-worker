@@ -142,7 +142,7 @@ many_files_creation_tree_test_base(Config) ->
         N2 = integer_to_binary(N),
         NewDir = <<H/binary, "/", N2/binary>>,
         [{NewDir, C} | Acc]
-    end, [{<<"/", SpaceName>>, false}], Levels),
+    end, [{<<"/", SpaceName/binary>>, false}], Levels),
     [_ | BaseDirs] = lists:reverse(BaseDirsReversed),
 
     BaseCreationAns = lists:foldl(fun
