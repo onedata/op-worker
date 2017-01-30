@@ -44,7 +44,7 @@
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), SpaceUuid :: file_meta:uuid(),
     file_meta:uuid() | undefined, Storage :: storage:doc(),
-    FileId :: helpers:file()) -> handle().
+    FileId :: helpers:file_id()) -> handle().
 new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId) ->
     new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
 
@@ -57,7 +57,7 @@ new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), SpaceUuid :: file_meta:uuid(), file_meta:uuid(),
-    Storage :: datastore:document(), FileId :: helpers:file(),
+    Storage :: datastore:document(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceUuid, FileUuid, #document{} = Storage, FileId, ShareId) ->
     FSize = get_size({uuid, FileUuid}),
@@ -83,7 +83,7 @@ new_handle(SessionId, SpaceUuid, FileUuid, #document{} = Storage, FileId, ShareI
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(session:id(), SpaceUuid :: file_meta:uuid(), file_meta:uuid(),
-    storage:id(), FileId :: helpers:file(), od_share:id() | undefined,
+    storage:id(), FileId :: helpers:file_id(), od_share:id() | undefined,
     oneprovider:id()) -> handle().
 new_handle(SessionId, SpaceUuid, FileUuid, StorageId, FileId, ShareId, ProviderId) ->
     {IsLocal, Storage, Size} =
@@ -206,7 +206,7 @@ mkdir(#sfm_handle{
 %% Moves a file or directory to a new location on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
+-spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
     ok | logical_file_manager:error_reply().
 mv(#sfm_handle{
     storage = Storage,
@@ -260,7 +260,7 @@ chown(_, _, _) ->
 %% Creates a link on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec link(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
+-spec link(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
     ok | logical_file_manager:error_reply().
 link(#sfm_handle{
     storage = Storage,
@@ -277,7 +277,7 @@ link(#sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(FileHandle :: handle()) ->
-    {ok, undefined} | logical_file_manager:error_reply().
+    {ok, #statbuf{}} | logical_file_manager:error_reply().
 stat(#sfm_handle{
     storage = Storage,
     file = FileId,
@@ -295,7 +295,7 @@ stat(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec readdir(FileHandle :: handle(), Offset :: non_neg_integer(),
     Count :: non_neg_integer()) ->
-    {ok, [helpers:file()]} | logical_file_manager:error_reply().
+    {ok, [helpers:file_id()]} | logical_file_manager:error_reply().
 readdir(#sfm_handle{
     storage = Storage,
     file = FileId,

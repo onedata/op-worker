@@ -98,11 +98,11 @@ update_outdated_local_location_replica(FileCtx,
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = fslogic_file_location:get_changes(ExternalDoc, Diff),
     case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize) of
-        deleted ->
+        {deleted, FileCtx2} ->
             ok;
-        NewDoc ->
-            notify_block_change_if_necessary(FileCtx, LocationDocWithNewVersion, NewDoc),
-            notify_size_change_if_necessary(FileCtx, LocationDocWithNewVersion, NewDoc)
+        {NewDoc, FileCtx2} ->
+            notify_block_change_if_necessary(FileCtx2, LocationDocWithNewVersion, NewDoc),
+            notify_size_change_if_necessary(FileCtx2, LocationDocWithNewVersion, NewDoc)
     end.
 
 %%--------------------------------------------------------------------
@@ -210,7 +210,7 @@ reconcile_replicas(FileCtx,
         skip ->
             skipped;
         Rename ->
-            fslogic_file_location:rename_or_delete(NewDoc2, Rename)
+            fslogic_file_location:rename_or_delete(FileCtx, NewDoc2, Rename)
     end,
 
     case RenameResult of

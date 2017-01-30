@@ -68,7 +68,8 @@ get_user(UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_user_id(ctx()) -> od_user:id().
 get_user_id(#user_ctx{session = Session}) ->
-    session:get_user_id(Session).
+    {ok, UserId} = session:get_user_id(Session),
+    UserId.
 
 %%--------------------------------------------------------------------
 %% @doc

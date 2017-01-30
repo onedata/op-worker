@@ -157,7 +157,7 @@ new_by_doc(Doc = #document{key = Uuid, value = #file_meta{}}, SpaceId, ShareId) 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Reset all cached data besides GUID.
+%% Resets all cached data besides GUID.
 %% @end
 %%--------------------------------------------------------------------
 -spec reset(ctx()) -> ctx().
@@ -186,7 +186,7 @@ fill_guid(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add file location to context record
+%% Adds file location to context record
 %% @end
 %%--------------------------------------------------------------------
 -spec add_file_location(ctx(), file_location:id()) -> ctx().
@@ -275,8 +275,8 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
             CanonicalPath = filename:join([<<"/">>, SpaceId | Rest]),
             {CanonicalPath, FileCtx#file_ctx{canonical_path = CanonicalPath}}
     end;
-get_canonical_path(#file_ctx{canonical_path = Path}) ->
-    Path.
+get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
+    {Path, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

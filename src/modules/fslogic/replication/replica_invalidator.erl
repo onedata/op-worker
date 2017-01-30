@@ -32,24 +32,23 @@
 %%--------------------------------------------------------------------
 -spec invalidate_changes(file_ctx:ctx(), file_location:doc(), Changes :: list(),
     Size :: non_neg_integer()) -> file_location:doc() | deleted.
-invalidate_changes(_FileCtx, Doc = #document{value = Loc}, [], NewSize) ->
+invalidate_changes(FileCtx, Doc = #document{value = Loc}, [], NewSize) ->
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     {ok, _} = file_location:save(NewDoc),
-    NewDoc;
+    {NewDoc, FileCtx};
 invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}], NewSize) ->
     % if rename is present, it is always last element of changes list
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
-    case fslogic_file_location:rename_or_delete(NewDoc, Rename) of %todo pass file_ctx
-        deleted ->
-            deleted;
-        skipped ->
+    case fslogic_file_location:rename_or_delete(FileCtx, NewDoc, Rename) of
+        {deleted, FileCtx2} ->
+            {deleted, FileCtx2};
+        {skipped, FileCtx2} ->
             {ok, _} = file_location:save(NewDoc),
-            NewDoc;
-        {renamed, RenamedDoc, FileUuid, _UserId, TargetSpaceId} ->
+            {NewDoc, FileCtx2};
+        {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, FileCtx2} ->
+            ?critical("FileRenamed ~p", [{renamed, RenamedDoc, FileUuid, TargetSpaceId}]),
             {ok, _} = file_location:save(RenamedDoc),
-            file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
-            files_to_chown:chown_file(FileCtx),
-            RenamedDoc
+            {RenamedDoc, FileCtx2}
     end;
 invalidate_changes(FileCtx, Doc = #document{
     value = Loc = #file_location{

@@ -171,7 +171,7 @@ remove_file_and_file_meta(FileCtx, SessId, Silent) ->
 %% Removes file from storage.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_file_on_storage(file_ctx:ctx(), session:id()) -> ok.
+-spec delete_file_on_storage(file_ctx:ctx(), session:id()) -> ok | {error, term()}.
 delete_file_on_storage(FileCtx, SessId) ->
     {[#document{
         value = #file_location{
@@ -183,7 +183,7 @@ delete_file_on_storage(FileCtx, SessId) ->
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
     {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
-    ok = storage_file_manager:unlink(SFMHandle).
+    storage_file_manager:unlink(SFMHandle).
 
 
 %%--------------------------------------------------------------------

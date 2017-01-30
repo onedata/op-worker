@@ -102,9 +102,7 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
 
     InvalidateFun(Worker1, SessId1, TestDir),
     lists:foreach(fun({Worker, SessId}) ->
-%%        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
-        % TODO - repair
-        ?assertEqual({error,{badmatch,{error,eacces}}}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
     end, WS),
 
     lists:foreach(fun(Worker) ->

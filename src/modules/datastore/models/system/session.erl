@@ -200,15 +200,14 @@ all_with_user() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id
-    (id()) -> {ok, od_user:id()} | {error, Reason :: term()};
-    (model() | doc()) -> od_user:id().
+    (id() | model() | doc()) -> {ok, od_user:id()} | {error, Reason :: term()}.
 get_user_id(<<_/binary>> = SessId) ->
     case session:get(SessId) of
-        {ok, Doc} -> {ok, get_user_id(Doc)};
+        {ok, Doc} -> get_user_id(Doc);
         {error, Reason} -> {error, Reason}
     end;
 get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
-    UserId;
+    {ok, UserId};
 get_user_id(#document{value = #session{} = Value}) ->
     get_user_id(Value).
 

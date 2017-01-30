@@ -336,7 +336,7 @@ get_sfm_handle_key(OpType, Handle, Offset, Size) ->
 
     Blocks = try %todo cache location in handle
         #document{value = LocalLocation} = fslogic_utils:get_local_file_location({guid, Guid}), %todo VFS-2813 support multi location
-        #file_location{blocks = Blocks0} = LocalLocation,
+        #file_location{blocks = Blocks0} = normalize_file_location(LocalLocation),
         Blocks0
     catch
         _:_ ->
@@ -547,22 +547,5 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
 %%--------------------------------------------------------------------
 -spec normalize_file_location(#file_location{}) -> #file_location{}.
 normalize_file_location(Loc = #file_location{storage_id = SID, file_id = FID, blocks = Blocks}) ->
-    NewBlocks = [normalize_file_block(SID, FID, Block) || Block <- Blocks],
+    NewBlocks = [Block#file_block{storage_id = SID, file_id = FID} || Block <- Blocks],
     Loc#file_location{blocks = NewBlocks}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns given block with filled storage_id and/or file_id using provided
-%% default values if needed.
-%% @end
-%%--------------------------------------------------------------------
--spec normalize_file_block(storage:id(), helpers:file(), #file_block{}) -> #file_block{}.
-normalize_file_block(SID, FID, #file_block{storage_id = undefined, file_id = undefined} = Block) ->
-    Block#file_block{storage_id = SID, file_id = FID};
-normalize_file_block(SID, _FID, #file_block{storage_id = undefined} = Block) ->
-    Block#file_block{storage_id = SID};
-normalize_file_block(_SID, FID, #file_block{file_id = undefined} = Block) ->
-    Block#file_block{file_id = FID};
-normalize_file_block(_SID, _FID, #file_block{} = Block) ->
-    Block.

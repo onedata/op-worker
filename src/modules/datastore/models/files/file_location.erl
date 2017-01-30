@@ -115,9 +115,9 @@ ensure_blocks_not_empty(Loc) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(Document = #document{key = Key, value = #file_location{uuid = UUID, space_id = SpaceId}}) ->
+save(Document = #document{key = Key, value = #file_location{uuid = Uuid, space_id = SpaceId}}) ->
     NewSize = count_bytes(Document),
-    UserId = get_user_id(UUID),
+    UserId = get_user_id(Uuid),
     case get(Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
@@ -155,9 +155,9 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document = #document{value = #file_location{uuid = UUID, space_id = SpaceId}}) ->
+create(Document = #document{value = #file_location{uuid = Uuid, space_id = SpaceId}}) ->
     NewSize = count_bytes(Document),
-    UserId = get_user_id(UUID),
+    UserId = get_user_id(Uuid),
 
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
     monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize),
@@ -181,9 +181,9 @@ get(Key) ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     case get(Key) of
-        {ok, #document{value = #file_location{uuid = UUID, space_id = SpaceId}} = Doc} ->
+        {ok, #document{value = #file_location{uuid = Uuid, space_id = SpaceId}} = Doc} ->
             Size = count_bytes(Doc),
-            UserId = get_user_id(UUID),
+            UserId = get_user_id(Uuid),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
@@ -260,7 +260,7 @@ count_bytes([#file_block{size = Size} | T], TotalSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id(file_meta:uuid()) -> datastore:id().
-get_user_id(FileUUID) ->
+get_user_id(FileUuid) ->
     {ok, #document{value = #file_meta{owner = UserId}}} =
-        file_meta:get({uuid, FileUUID}),
+        file_meta:get({uuid, FileUuid}),
     UserId.

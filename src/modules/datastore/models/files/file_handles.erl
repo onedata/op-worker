@@ -242,7 +242,11 @@ register_release(FileUuid, SessId, Count) ->
     case update(FileUuid, Diff) of
         {ok, _} -> maybe_delete(FileUuid);
         {error, phantom_file} ->
-            FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid)),
+            FileGuid = %todo check why we cannot get space_id for onedata hidden files
+                try fslogic_uuid:uuid_to_guid(FileUuid)
+                catch _:_ -> fslogic_uuid:uuid_to_guid(FileUuid, undefined)
+                end,
+            FileCtx = file_ctx:new_by_guid(FileGuid),
             fslogic_deletion_worker:request_open_file_deletion(FileCtx),
             delete(FileUuid);
         {error, {not_found, _}} -> ok;

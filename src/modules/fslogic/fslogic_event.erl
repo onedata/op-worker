@@ -265,7 +265,7 @@ handle_file_written_event(#file_written_event{
     file_size = FileSize
 }, SessId) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    UserId = session:get_user_id(SessId),
+    {ok, UserId} = session:get_user_id(SessId),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     monitoring_event:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
 
@@ -293,6 +293,6 @@ handle_file_read_event(#file_read_event{
 }, SessId) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    UserId = session:get_user_id(SessId),
+    {ok, UserId} = session:get_user_id(SessId),
     monitoring_event:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
     fslogic_times:update_atime(FileCtx, UserId).
