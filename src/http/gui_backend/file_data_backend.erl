@@ -29,7 +29,7 @@
 
 %% data_backend_behaviour callbacks
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 %% API
 -export([file_record/2, file_record/3, file_record/5]).
@@ -69,12 +69,12 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"file">>, FileId) ->
+find_record(<<"file">>, FileId) ->
     SessionId = gui_session:get_session_id(),
     try
         file_record(SessionId, FileId)
@@ -84,10 +84,10 @@ find(<<"file">>, FileId) ->
         ]),
         {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
     end;
-find(<<"file-shared">>, AssocId) ->
+find_record(<<"file-shared">>, AssocId) ->
     SessionId = gui_session:get_session_id(),
     file_record(<<"file-shared">>, SessionId, AssocId);
-find(<<"file-public">>, AssocId) ->
+find_record(<<"file-public">>, AssocId) ->
     SessionId = ?GUEST_SESS_ID,
     file_record(<<"file-public">>, SessionId, AssocId).
 
@@ -109,16 +109,31 @@ find_all(<<"file-public">>) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(<<"file">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
+query(<<"file-shared">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>);
+query(<<"file-public">>, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(<<"file">>, _Data) ->
+query_record(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-find_query(<<"file-shared">>, _Data) ->
+query_record(<<"file-shared">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>);
-find_query(<<"file-public">>, _Data) ->
+query_record(<<"file-public">>, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 

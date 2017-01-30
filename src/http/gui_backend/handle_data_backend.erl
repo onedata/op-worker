@@ -23,7 +23,7 @@
 -include_lib("ctool/include/oz/oz_handles.hrl").
 
 -export([init/0, terminate/0]).
--export([find/2, find_all/1, find_query/2]).
+-export([find_record/2, find_all/1, query/2, query_record/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %%%===================================================================
@@ -52,12 +52,12 @@ terminate() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find/2.
+%% {@link data_backend_behaviour} callback find_record/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find(ResourceType :: binary(), Id :: binary()) ->
+-spec find_record(ResourceType :: binary(), Id :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(ModelType, HandleId) ->
+find_record(ModelType, HandleId) ->
     Auth = case ModelType of
         <<"handle">> ->
             op_gui_utils:get_user_auth();
@@ -80,12 +80,23 @@ find_all(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link data_backend_behaviour} callback find_query/2.
+%% {@link data_backend_behaviour} callback query/2.
 %% @end
 %%--------------------------------------------------------------------
--spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+-spec query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
+query(_, _Data) ->
+    gui_error:report_error(<<"Not implemented">>).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback query_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec query_record(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find_query(_, _Data) ->
+query_record(_, _Data) ->
     gui_error:report_error(<<"Not implemented">>).
 
 
@@ -106,7 +117,7 @@ create_record(<<"handle">>, Data) ->
     {ok, HandleId} = handle_logic:create(
         Auth, HandleServiceId, <<"Share">>, ShareId, Metadata
     ),
-    {ok, ShareData} = share_data_backend:find(<<"share">>, ShareId),
+    {ok, ShareData} = share_data_backend:find_record(<<"share">>, ShareId),
     NewShareData = lists:keyreplace(
         <<"handle">>, 1, ShareData, {<<"handle">>, HandleId}
     ),
@@ -155,6 +166,7 @@ delete_record(_, _Id) ->
 -spec handle_record(ModelType :: binary(), Auth :: term(),
     HandleId :: binary()) -> {ok, proplists:proplist()}.
 handle_record(ModelType, Auth, HandleId) ->
+    UserId = gui_session:get_user_id(),
     {ok, #document{value = #od_handle{
         handle_service = HandleServiceId,
         public_handle = PublicHandle,
@@ -173,5 +185,6 @@ handle_record(ModelType, Auth, HandleId) ->
         {<<"handleService">>, HandleService},
         {<<"share">>, Share},
         {<<"metadataString">>, Metadata},
-        {<<"publicHandle">>, PublicHandle}
+        {<<"publicHandle">>, PublicHandle},
+        {<<"user">>, UserId}
     ]}.

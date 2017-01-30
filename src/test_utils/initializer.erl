@@ -275,7 +275,8 @@ clear_models(Worker, Names) ->
 %% @doc Setup test users' sessions on server
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [#user_config{}], Config :: term()) -> NewConfig :: term().
-setup_session(_Worker, [], Config) ->
+setup_session(Worker, [], Config) ->
+    final_file_meta_mock_setup(Worker),
     Config;
 setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     macaroon = Macaroon, groups = Groups, name = UserName}} | R], Config) ->
@@ -871,3 +872,15 @@ add_space_storage(Worker, SpaceId, StorageId, MountInRoot) ->
     ?assertMatch({ok, _},
         rpc:call(Worker, space_storage, add, [SpaceId, StorageId, MountInRoot])
     ).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Ends mocking of file_meta module to disable not wanted modifications.
+%%--------------------------------------------------------------------
+-spec final_file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
+final_file_meta_mock_setup(Workers) ->
+    test_utils:mock_expect(Workers, file_meta, 'after', fun
+        (ModelName, Method, Level, Context, ReturnValue) ->
+            meck:passthrough([ModelName, Method, Level, Context, ReturnValue])
+    end),
+    test_utils:mock_unload(Workers, [od_user]).

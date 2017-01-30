@@ -74,6 +74,14 @@ prepare_environment() ->
     application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
     application:set_env(?APP_NAME, posix_helper_threads_number, 1),
     application:set_env(?APP_NAME, s3_helper_threads_number, 1),
-    application:set_env(?APP_NAME, swift_helper_threads_number, 1).
+    application:set_env(?APP_NAME, swift_helper_threads_number, 1),
+    application:set_env(?APP_NAME, buffer_helpers, false),
+    application:set_env(?APP_NAME, buffer_scheduler_threads_number, 1),
+    application:set_env(?APP_NAME, read_buffer_min_size, 1024),
+    application:set_env(?APP_NAME, read_buffer_max_size, 1024),
+    application:set_env(?APP_NAME, read_buffer_prefetch_duration, 1),
+    application:set_env(?APP_NAME, write_buffer_min_size, 1024),
+    application:set_env(?APP_NAME, write_buffer_max_size, 1024),
+    application:set_env(?APP_NAME, write_buffer_flush_delay, 1).
 
 -endif.
