@@ -406,9 +406,10 @@ get_child(Doc, Name) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update}, {od_user, save}, {od_user, update}],
+    Config = ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update}, {od_user, save}, {od_user, update}],
         ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false,
-        oneprovider:get_provider_id(), true)#model_config{sync_enabled = true}.
+        oneprovider:get_provider_id(), true),
+    Config#model_config{sync_enabled = true, version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
