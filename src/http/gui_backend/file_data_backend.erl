@@ -48,9 +48,7 @@
 -spec init() -> ok.
 init() ->
     NewETS = ets:new(?LS_SUB_CACHE_ETS, [
-        set, public,
-        {read_concurrency, true},
-        {write_concurrency, true}
+        set, public
     ]),
     ets:insert(?LS_CACHE_ETS, {self(), NewETS}),
     ok.
