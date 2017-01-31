@@ -221,7 +221,7 @@ push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Ids) ->
     NewRelations = case AddOrRemove of
         add ->
             % Make sure that the Ids are not duplicated.
-            Ids ++ Relations -- Ids;
+            Ids ++ (Relations -- Ids);
         remove ->
             Relations -- Ids
     end,

@@ -1289,7 +1289,7 @@ copy(Config) ->
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     create_file(Config, FileName2),
     FileData2 = <<"data">>,
-    Acl = [#accesscontrolentity{
+    Acl = [#access_control_entity{
         acetype = ?allow_mask,
         identifier = UserId1,
         aceflags = ?no_flags_mask,

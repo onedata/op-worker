@@ -29,7 +29,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_guid(user_ctx:ctx(), file_ctx:ctx()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors]).
 resolve_guid(_UserCtx, FileCtx) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     #fuse_response{
@@ -39,12 +39,12 @@ resolve_guid(_UserCtx, FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets parent of file
+%% Gets parent of file.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors]).
 get_parent(UserCtx, FileCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
     {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserId),
@@ -60,6 +60,7 @@ get_parent(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_file_path(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
+-check_permissions([traverse_ancestors]).
 get_file_path(UserCtx, FileCtx) ->
     {Path, _FileCtx2} = file_ctx:get_logical_path(FileCtx, UserCtx),
     #provider_response{

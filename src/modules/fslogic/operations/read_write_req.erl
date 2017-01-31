@@ -74,7 +74,7 @@ write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns handle by either retrieving it from session or opening file
+%% Returns handle by either retrieving it from session or opening file.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_handle(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),

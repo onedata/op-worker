@@ -71,15 +71,7 @@ find_record(<<"group">>, GroupId) ->
 
 % PermissionsRecord matches <<"group-(user|group)-(list|permission)">>
 find_record(PermissionsRecord, RecordId) ->
-    GroupId = case PermissionsRecord of
-        <<"group-user-list">> ->
-            RecordId;
-        <<"group-group-list">> ->
-            RecordId;
-        _ -> % covers <<"group-(user|group)-permission">>
-            {_, Id} = op_gui_utils:association_to_ids(RecordId),
-            Id
-    end,
+    GroupId = permission_record_to_group_id(PermissionsRecord, RecordId),
     UserId = gui_session:get_user_id(),
     % Make sure that user is allowed to view requested privileges - he must have
     % view privileges in this group.
@@ -327,7 +319,7 @@ group_record(GroupId, HasViewPrivs) ->
     {ChildGroups, _} = lists:unzip(ChildrenWithPerms),
 
     % Depending on view privileges, show or hide info about members and privs
-    {GroupUserList, GroupGroupList, Parents, Children} = case HasViewPrivs of
+    {GroupUserListId, GroupGroupListId, Parents, Children} = case HasViewPrivs of
         true ->
             {GroupId, GroupId, ParentGroups, ChildGroups};
         false ->
@@ -337,8 +329,8 @@ group_record(GroupId, HasViewPrivs) ->
         {<<"id">>, GroupId},
         {<<"name">>, Name},
         {<<"hasViewPrivilege">>, HasViewPrivs},
-        {<<"userList">>, GroupUserList},
-        {<<"groupList">>, GroupGroupList},
+        {<<"userList">>, GroupUserListId},
+        {<<"groupList">>, GroupGroupListId},
         {<<"parentGroups">>, Parents},
         {<<"childGroups">>, Children},
         {<<"user">>, UserId}
@@ -488,3 +480,13 @@ perm_gui_to_db(<<"permLeaveSpace">>) -> group_leave_space;
 perm_gui_to_db(<<"permGetSupport">>) -> group_create_space_token.
 
 
+
+
+permission_record_to_group_id(<<"group-user-list">>, RecordId) ->
+    RecordId;
+permission_record_to_group_id(<<"group-group-list">>, RecordId) ->
+    RecordId;
+permission_record_to_group_id(_, RecordId) ->
+    % covers <<"group-(user|group)-permission">>
+    {_, Id} = op_gui_utils:association_to_ids(RecordId),
+    Id.

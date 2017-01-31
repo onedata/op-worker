@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
+-check_permissions([traverse_ancestors, ?write_object]).
 truncate(UserCtx, FileCtx, Size) ->
     FileCtx2 = update_quota(FileCtx, Size),
     SessId = user_ctx:get_session_id(UserCtx),

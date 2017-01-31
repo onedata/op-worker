@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, 2}]).
+-check_permissions([traverse_ancestors]).
 delete(UserCtx, FileCtx, Silent) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
@@ -46,23 +46,23 @@ delete(UserCtx, FileCtx, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check
+%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
--check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {?list_container, 2}]).
+-check_permissions([{?delete_subcontainer, parent}, ?delete, ?list_container]).
 delete_dir(UserCtx, FileCtx, Silent) ->
     check_if_empty_and_delete(UserCtx, FileCtx, Silent).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check
+%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
--check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}]).
+-check_permissions([{?delete_object, parent}, ?delete]).
 delete_file(UserCtx, FileCtx, Silent) ->
     delete_insecure(UserCtx, FileCtx, Silent).
 
@@ -85,7 +85,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Deletes file or directory
+%% Deletes file or directory.
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
