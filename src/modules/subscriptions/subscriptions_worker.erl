@@ -25,7 +25,7 @@
 -include_lib("ctool/include/oz/oz_runner.hrl").
 
 % Definitions of reconnect intervals for subscriptions websocket client.
--define(INITIAL_RECONNECT_INTERVAL, 500).
+-define(INITIAL_RECONNECT_INTERVAL, 1000).
 -define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
@@ -192,21 +192,24 @@ start_provider_connection() ->
         Result = try
             case subscription_wss:start_link() of
                 {ok, Pid} ->
-                    ?info("Connection started ~p", [Pid]),
+                    ?info("Subscriptions connection started ~p", [Pid]),
                     ok;
-                {error, Reason} ->
-                    ?error("Connection failed to start: ~p", [Reason]),
-                    error
+                {error, R1} ->
+                    {error, R1}
             end
         catch
-            E:R -> ?error("Connection not started: ~p:~p", [E, R]),
-                error
+            E:R2 ->
+                {E, R2}
         end,
         case Result of
             ok ->
                 reset_reconnect_interval();
-            error ->
+            {Type, Reason} ->
                 Interval = increase_reconnect_interval(),
+                ?error("Subscriptions connection failed to start - ~p:~p. "
+                "Next retry not sooner than ~p seconds.", [
+                    Type, Reason, round(Interval / 1000)
+                ]),
                 % Sleep, blocking the lock for some time - this ensures that
                 % next attempt will occur after intended interval.
                 timer:sleep(Interval)
