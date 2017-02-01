@@ -120,12 +120,12 @@ nagios_test(Config) ->
         end, NodeStatuses).
 
 test_hashing(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+    Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    ?assertEqual(lists:usort(Workers), consistent_hasing:get_all_nodes()),
-    NodeOfUuid1 = consistent_hasing:get_node(<<"uuid1">>),
-    NodeOfUuid2 = consistent_hasing:get_node(<<"uuid2">>),
-    NodeOfObject = consistent_hasing:get_node({some, <<"object">>}),
+    ?assertEqual(lists:usort(Workers), rpc:call(Worker1, consistent_hasing, get_all_nodes, [])),
+    NodeOfUuid1 = rpc:call(Worker1, consistent_hasing, get_node, [<<"uuid1">>]),
+    NodeOfUuid2 = rpc:call(Worker1, consistent_hasing, get_node, [<<"uuid2">>]),
+    NodeOfObject = rpc:call(Worker1, consistent_hasing, get_node, [{some, <<"object">>}]),
 
     ?assert(erlang:is_atom(NodeOfUuid1)),
     ?assert(erlang:is_atom(NodeOfUuid2)),
