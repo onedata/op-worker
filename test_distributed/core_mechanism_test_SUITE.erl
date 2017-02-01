@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This test verifies if the nagios endpoint works as expected.
+%%% @doc This test verifies if the core cluster mechanisms such as nagios,
+%%% hasing and datastore models work as expected.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(core_mechanism_test_SUITE).
@@ -27,9 +28,9 @@
 
 %% export for ct
 -export([all/0]).
--export([nagios_test/1, test_models/1]).
+-export([nagios_test/1, test_models/1, test_hashing/1]).
 
-all() -> ?ALL([nagios_test, test_models]).
+all() -> ?ALL([nagios_test, test_models, test_hashing]).
 
 % Path to nagios endpoint
 -define(HEALTHCHECK_PATH, "http://127.0.0.1:6666/nagios").
@@ -117,3 +118,19 @@ nagios_test(Config) ->
             ?assertMatch([?NODE_MANAGER_NAME], [X#xmlElement.name || X <- Content, X#xmlElement.name == ?NODE_MANAGER_NAME]),
             ?assertMatch([?DISPATCHER_NAME], [X#xmlElement.name || X <- Content, X#xmlElement.name == ?DISPATCHER_NAME])
         end, NodeStatuses).
+
+test_hashing(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+
+    ?assertEqual(lists:usort(Workers), consistent_hasing:get_all_nodes()),
+    NodeOfUuid1 = consistent_hasing:get_node(<<"uuid1">>),
+    NodeOfUuid2 = consistent_hasing:get_node(<<"uuid2">>),
+    NodeOfObject = consistent_hasing:get_node({some, <<"object">>}),
+
+    ?assert(erlang:is_atom(NodeOfUuid1)),
+    ?assert(erlang:is_atom(NodeOfUuid2)),
+    ?assert(erlang:is_atom(NodeOfObject)),
+    ?assert(lists:member(NodeOfUuid1, Workers)),
+    ?assert(lists:member(NodeOfUuid2, Workers)),
+    ?assert(lists:member(NodeOfObject, Workers)),
+    ?assertNotEqual(NodeOfUuid1, NodeOfUuid2).
