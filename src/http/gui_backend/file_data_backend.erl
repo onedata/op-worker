@@ -654,32 +654,81 @@ fetch_dir_children(DirId, ChildrenLimit) ->
     DirId :: fslogic_worker:file_guid()) -> non_neg_integer().
 modify_ls_cache(Operation, FileId, DirId) ->
     LsSubCacheName = ls_sub_cache_name(),
-    % Lookup current values in cache
-    [{{DirId, children}, CurrentChildren}] = ets:lookup(
-        LsSubCacheName, {DirId, children}
-    ),
-    [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
-        LsSubCacheName, {DirId, last_children_count}
-    ),
-    [{{DirId, size}, CurrentSize}] = ets:lookup(
-        LsSubCacheName, {DirId, size}
-    ),
-    % Modify the values according to operation
-    {NewChildren, NewSize, NewLastChildrenCount} = case Operation of
-        add ->
-            {[FileId | CurrentChildren], CurrentSize + 1, LastChCount + 1};
-        remove ->
-            {CurrentChildren -- [FileId], CurrentSize - 1, LastChCount - 1}
+    % ETS does not offer atomic updates, so a lock is required here
+    acquire_lock(),
+    % Try-catch will prevent the process from unexpectedly crashing and taking
+    % the lock to the grave.
+    NewLastChildrenCount = try
+        % Lookup current values in cache
+        [{{DirId, children}, CurrentChildren}] = ets:lookup(
+            LsSubCacheName, {DirId, children}
+        ),
+        [{{DirId, last_children_count}, LastChCount}] = ets:lookup(
+            LsSubCacheName, {DirId, last_children_count}
+        ),
+        [{{DirId, size}, CurrentSize}] = ets:lookup(
+            LsSubCacheName, {DirId, size}
+        ),
+        % Modify the values according to operation
+        {NewChildren, NewSize, NewLastChCount} = case Operation of
+            add ->
+                {[FileId | CurrentChildren], CurrentSize + 1, LastChCount + 1};
+            remove ->
+                {CurrentChildren -- [FileId], CurrentSize - 1, LastChCount - 1}
+        end,
+        ets:insert(LsSubCacheName, {{DirId, children}, NewChildren}),
+        % Update directory size
+        ets:insert(LsSubCacheName, {{DirId, size}, NewSize}),
+        % Update last known children count
+        ets:insert(
+            LsSubCacheName, {{DirId, last_children_count}, NewLastChCount}
+        ),
+        NewLastChCount
+    catch Type:Message ->
+        ?error_stacktrace("Unexpected error in ~p:modify_ls_cache - ~p:~p", [
+            ?MODULE, Type, Message
+        ]),
+        0
+    after
+        release_lock()
     end,
-
-    ets:insert(LsSubCacheName, {{DirId, children}, NewChildren}),
-    % Update directory size
-    ets:insert(LsSubCacheName, {{DirId, size}, NewSize}),
-    % Update last known children count
-    ets:insert(
-        LsSubCacheName, {{DirId, last_children_count}, NewLastChildrenCount}
-    ),
     NewLastChildrenCount.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Acquires a lock on ets by synchronizing on a counter {lock, Value}.
+%% Tries to increment the value by 2, but if it exceeds 2, the value is reset
+%% to 1. Hence, only when current value is 0 the process can increment it to two
+%% and 'acquires' the lock. Other processes will wait until the acquiring process
+%% releases the lock (zeroes the value).
+%% @end
+%%--------------------------------------------------------------------
+-spec acquire_lock() -> ok.
+acquire_lock() ->
+    % args are: (Tab, Key, {Pos, Increment, Threshold, SetValue}, Default)
+    % If Threshold is exceeded, the value is set to SetValue
+    case ets:update_counter(ls_sub_cache_name(), lock, {2, 2, 2, 1}, {lock, 0}) of
+        2 ->
+            ok;
+        1 ->
+            timer:sleep(50),
+            acquire_lock()
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Releases the lock on ets by zeroing the counter in ets. From now, other
+%% processes will be able to acquire the lock.
+%% @end
+%%--------------------------------------------------------------------
+-spec release_lock() -> ok.
+release_lock() ->
+    ets:update_counter(ls_sub_cache_name(), lock, {2, -2, 0, 0}, {lock, 0}),
+    ok.
 
 
 %%--------------------------------------------------------------------
