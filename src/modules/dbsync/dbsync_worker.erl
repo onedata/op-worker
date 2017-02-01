@@ -544,10 +544,10 @@ rev_to_num(Rev) ->
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, Changes) ->
-    apply_changes(SpaceId, Changes, []).
+apply_changes(_SpaceId, []) ->
+    ok;
 apply_changes(SpaceId,
-    [#change{doc = #document{key = Key, value = Value, rev = Rev} = Doc, model = ModelName} = Change | T], Done) ->
+    [#change{doc = #document{key = Key, value = Value, rev = Rev, deleted = Deleted} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
 
@@ -590,6 +590,12 @@ apply_changes(SpaceId,
                     ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
                     maps:keys(AddedMap) ++ maps:keys(DeletedMap);
                 _ ->
+                    case Deleted of
+                        true ->
+                            dbsync_state:verify_and_del_key(Key, ModelName);
+                        _ ->
+                            ok
+                    end,
                     {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
                     []
             end,
@@ -607,36 +613,28 @@ apply_changes(SpaceId,
 
         dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
 
-        apply_changes(SpaceId, T, [Change | Done])
+        Master = self(),
+        spawn(fun() ->
+            try
+                dbsync_events:change_replicated(SpaceId, Change, Master),
+                Master ! {change_replicated_ok, Key}
+            catch
+                E1:E2 ->
+                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
+            end
+        end),
+        receive
+            {change_replicated_ok, Key} -> ok;
+            {file_consistency_wait, Key} -> ok
+        after
+            500 -> ok
+        end,
+        apply_changes(SpaceId, T)
     catch
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p", [Change, Reason]),
             {error, Reason}
-    end;
-apply_changes(SpaceId, [], Done) ->
-    run_posthooks(SpaceId, lists:reverse(Done)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Apply posthooks for list of changes from remote provider.
-%% @end
-%%--------------------------------------------------------------------
--spec run_posthooks(SpaceId :: binary(), [change()]) -> ok.
-run_posthooks(_, []) ->
-    ok;
-run_posthooks(SpaceId, [Change | Done]) ->
-    spawn(
-        fun() ->
-            try
-                dbsync_events:change_replicated(SpaceId, Change)
-            catch
-                E1:E2 ->
-                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
-            end,
-            ok
-        end),
-
-    run_posthooks(SpaceId, Done).
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

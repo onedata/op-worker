@@ -4,6 +4,7 @@
 #include <asio.hpp>
 #include <asio/executor_work.hpp>
 
+#include <chrono>
 #include <map>
 #include <memory>
 #include <random>
@@ -37,70 +38,70 @@ using helper_args_t = std::unordered_map<folly::fbstring, folly::fbstring>;
  * Static resource holder.
  */
 struct HelpersNIF {
-    class HelperIOService {
-    public:
+    struct HelperIOService {
         asio::io_service service;
         asio::executor_work<asio::io_service::executor_type> work =
             asio::make_work(service);
         folly::fbvector<std::thread> workers;
     };
 
-    std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
-        helperServices;
-
-    std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
-
-    HelpersNIF()
+    HelpersNIF(std::unordered_map<folly::fbstring, folly::fbstring> args)
     {
-        for (const auto &helperName : {one::helpers::CEPH_HELPER_NAME,
-                 one::helpers::POSIX_HELPER_NAME, one::helpers::S3_HELPER_NAME,
-                 one::helpers::SWIFT_HELPER_NAME}) {
-            helperServices.emplace(
-                helperName, std::make_unique<HelperIOService>());
+        using namespace one::helpers;
+
+        bufferingEnabled = (args["buffer_helpers"] == "true");
+
+        for (const auto &entry :
+            std::unordered_map<folly::fbstring, folly::fbstring>(
+                {{CEPH_HELPER_NAME, "ceph_helper_threads_number"},
+                    {POSIX_HELPER_NAME, "posix_helper_threads_number"},
+                    {S3_HELPER_NAME, "s3_helper_threads_number"},
+                    {SWIFT_HELPER_NAME, "swift_helper_threads_number"}})) {
+            auto threads = std::stoul(args[entry.second].toStdString());
+            services.emplace(entry.first, std::make_unique<HelperIOService>());
+            auto &service = services[entry.first]->service;
+            auto &workers = services[entry.first]->workers;
+            for (std::size_t i = 0; i < threads; ++i) {
+                workers.push_back(std::thread([&]() { service.run(); }));
+            }
         }
 
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
-            helperServices[one::helpers::CEPH_HELPER_NAME]->service,
-            helperServices[one::helpers::POSIX_HELPER_NAME]->service,
-            helperServices[one::helpers::S3_HELPER_NAME]->service,
-            helperServices[one::helpers::SWIFT_HELPER_NAME]->service);
+            services[CEPH_HELPER_NAME]->service,
+            services[POSIX_HELPER_NAME]->service,
+            services[S3_HELPER_NAME]->service,
+            services[SWIFT_HELPER_NAME]->service,
+            std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
+            buffering::BufferLimits{
+                std::stoul(args["read_buffer_min_size"].toStdString()),
+                std::stoul(args["read_buffer_max_size"].toStdString()),
+                std::chrono::seconds{std::stoul(
+                    args["read_buffer_prefetch_duration"].toStdString())},
+                std::stoul(args["write_buffer_min_size"].toStdString()),
+                std::stoul(args["write_buffer_max_size"].toStdString()),
+                std::chrono::seconds{std::stoul(
+                    args["write_buffer_flush_delay"].toStdString())}});
 
         umask(0);
     }
 
     ~HelpersNIF()
     {
-        for (auto &helperService : helperServices) {
-            helperService.second->service.stop();
-            for (auto &th : helperService.second->workers) {
-                th.join();
+        for (auto &service : services) {
+            service.second->service.stop();
+            for (auto &worker : service.second->workers) {
+                worker.join();
             }
         }
     }
 
-    /**
-     * Adjusts number of threads held by IO service. Allows only to increase
-     * size of thread pool.
-     * @param ioService reference to IO service which thread pool should be
-     * adjusted
-     * @param threads reference to pool of threads held by IO service
-     * @param number number of threads that IO service should hold
-     * @return true if number of IO service threads has been adjusted
-     * (increased) otherwise false.
-     */
-    bool adjust_io_service_threads(asio::io_service &ioService,
-        folly::fbvector<std::thread> &threads, std::size_t number)
-    {
-        if (threads.size() > number)
-            return false;
+    bool bufferingEnabled = false;
+    std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
+        services;
+    std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
+};
 
-        for (std::size_t i = 0; i < threads.size() - number; ++i) {
-            threads.push_back(std::thread([&]() { ioService.run(); }));
-        }
-
-        return true;
-    }
-} application;
+std::unique_ptr<HelpersNIF> application;
 
 namespace {
 
@@ -417,38 +418,12 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
 *
 *********************************************************************/
 
-ERL_NIF_TERM set_threads_number(
-    ErlNifEnv *env, std::unordered_map<folly::fbstring, std::size_t> args)
-{
-    return handle_errors(env, [&]() {
-        for (const auto &name : {one::helpers::CEPH_HELPER_NAME,
-                 one::helpers::POSIX_HELPER_NAME, one::helpers::S3_HELPER_NAME,
-                 one::helpers::SWIFT_HELPER_NAME}) {
-
-            auto result = args.find(name);
-            if (result != args.end()) {
-                auto &service = application.helperServices[name]->service;
-                auto &workers = application.helperServices[name]->workers;
-                if (!application.adjust_io_service_threads(
-                        service, workers, result->second)) {
-                    return nifpp::make(
-                        env, std::make_tuple(error,
-                                 std::make_tuple(
-                                     nifpp::str_atom("wrong_thread_number"),
-                                     name, result->second)));
-                }
-            }
-        }
-
-        return nifpp::make(env, ok);
-    });
-}
-
 ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     auto name = nifpp::get<folly::fbstring>(env, argv[0]);
     auto params = nifpp::get<helper_args_t>(env, argv[1]);
-    auto helper = application.SHCreator->getStorageHelper(name, params);
+    auto helper = application->SHCreator->getStorageHelper(
+        name, params, application->bufferingEnabled);
     auto resource = nifpp::construct_resource<helper_ptr>(helper);
 
     return nifpp::make(env, std::make_tuple(ok, resource));
@@ -589,15 +564,14 @@ extern "C" {
 
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
+    auto args =
+        nifpp::get<std::unordered_map<folly::fbstring, folly::fbstring>>(
+            env, load_info);
+    application = std::make_unique<HelpersNIF>(std::move(args));
+
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
         nifpp::register_resource<file_handle_ptr>(
             env, nullptr, "file_handle_ptr"));
-}
-
-static ERL_NIF_TERM sh_set_threads_number(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    return noctx_wrap(set_threads_number, env, argv);
 }
 
 static ERL_NIF_TERM sh_readdir(
@@ -712,7 +686,6 @@ static ERL_NIF_TERM sh_fsync(
 }
 
 static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
-    {"set_threads_number", 1, sh_set_threads_number},
     {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
     {"readdir", 4, sh_readdir}, {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
     {"unlink", 2, sh_unlink}, {"rmdir", 2, sh_rmdir},
