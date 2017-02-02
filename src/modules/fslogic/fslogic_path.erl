@@ -148,10 +148,14 @@ gen_storage_path({path, Path}) when is_binary(Path) ->
 gen_storage_path(Entry) ->
     ?run(begin
         {ok, Path} = gen_storage_path(Entry, []),
-        {ok, Uuid} = file_meta:to_uuid({path, Path}),
-        SpaceId = fslogic_spaces:get_space_id({uuid, Uuid}),
-        {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId), %todo use file_ctx
-        {ok, filename_mapping:to_storage_path(SpaceId, StorageId, Path)}
+        case file_meta:to_uuid({path, Path}) of %todo delete this case after merging with VFS-2856
+            {ok, Uuid} ->
+                SpaceId = fslogic_spaces:get_space_id({uuid, Uuid}),
+                {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId), %todo use file_ctx
+                {ok, filename_mapping:to_storage_path(SpaceId, StorageId, Path)};
+            {error, _ } ->
+                {ok, Path}
+        end
     end).
 
 %%--------------------------------------------------------------------

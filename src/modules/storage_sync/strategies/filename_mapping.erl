@@ -73,7 +73,6 @@ available_strategies() ->
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(),
     space_strategy:job_data()) -> [space_strategy:job()].
 strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
-    ?critical("strategy_init_jobs: ~p ~p ~p", [StrategyName, StrategyArgs, InitData]),
     [
         #space_strategy_job{
             strategy_name = StrategyName,

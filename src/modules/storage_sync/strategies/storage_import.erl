@@ -153,7 +153,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
     StorageFilePath = filename_mapping:to_storage_path(SpaceId, StorageId, StorageLogicalFileId),
     SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
         fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-        undefined, StorageId, StorageFilePath, undefined,
+        undefined, StorageId, StorageLogicalFileId, undefined,
         oneprovider:get_provider_id()),
     case storage_file_manager:stat(SFMHandle) of
         {ok, FileStats = #statbuf{
@@ -173,7 +173,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                         Guid = fslogic_uuid:uuid_to_guid(Uuid),
                         File = file_ctx:new_by_guid(Guid),
                         LogicalAttrsResponse_ = get_attr(File),
-                        IsImported_ = is_imported(StorageId, StorageFilePath,
+                        IsImported_ = is_imported(StorageId, StorageLogicalFileId,
                             FileType, LogicalAttrsResponse_
                         ),
                         {IsImported_, LogicalAttrsResponse_}
@@ -245,12 +245,12 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
 %%--------------------------------------------------------------------
 -spec is_imported(storage:id(), helpers:file(), file_meta:type(),
     fslogic_worker:fuse_response()) -> boolean().
-is_imported(_StorageId, _FileId, ?DIRECTORY_TYPE, #fuse_response{
+is_imported(_StorageId, _StorageLogicalFileId, ?DIRECTORY_TYPE, #fuse_response{
     status = #status{code = ?OK},
     fuse_response = #file_attr{type = ?DIRECTORY_TYPE}
 }) ->
     true;
-is_imported(StorageId, FileId, ?REGULAR_FILE_TYPE, #fuse_response{
+is_imported(StorageId, StorageLogicalFileId, ?REGULAR_FILE_TYPE, #fuse_response{
     status = #status{code = ?OK},
     fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, uuid = FileGuid}
 }) ->
@@ -259,13 +259,13 @@ is_imported(StorageId, FileId, ?REGULAR_FILE_TYPE, #fuse_response{
             value = #file_location{storage_id = SID, file_id = FID}
         } <- fslogic_utils:get_local_file_locations({guid, FileGuid})
     ],
-    lists:member({StorageId, FileId}, FileIds);
-is_imported(_StorageId, _FileId, _FileType, #fuse_response{
+    lists:member({StorageId, StorageLogicalFileId}, FileIds);
+is_imported(_StorageId, _StorageLogicalFileId, _FileType, #fuse_response{
     status = #status{code = ?OK},
     fuse_response = #file_attr{}
 }) ->
     false;
-is_imported(_StorageId, _FileId, _FileType, #fuse_response{
+is_imported(_StorageId, _StorageLogicalFileId, _FileType, #fuse_response{
     status = #status{code = ?ENOENT}
 }) ->
     false.
@@ -320,17 +320,18 @@ import_file(StorageId, SpaceId, StatBuf, StorageFileId, StorageLogicalFileId, Jo
                 blocks = [#file_block{
                     offset = 0,
                     size = FSize,
-                    file_id = StorageFileId,
+                    file_id = StorageLogicalFileId,
                     storage_id = StorageId
                 }],
                 provider_id = oneprovider:get_provider_id(),
-                file_id = StorageFileId,
+                file_id = StorageLogicalFileId,
                 storage_id = StorageId,
                 uuid = FileUuid,
                 space_id = SpaceId,
                 size = FSize
             },
-            {ok, LocId} = file_location:save_and_bump_version(#document{value = Location}),
+            {ok, LocId} = file_location:save_and_bump_version(
+                #document{key = datastore_utils:gen_uuid(), value = Location}),
             ok = file_meta:attach_location({uuid, FileUuid}, LocId,
                 oneprovider:get_provider_id());
         _ ->
