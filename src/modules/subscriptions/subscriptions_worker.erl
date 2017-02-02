@@ -25,7 +25,7 @@
 -include_lib("ctool/include/oz/oz_runner.hrl").
 
 % Definitions of reconnect intervals for subscriptions websocket client.
--define(INITIAL_RECONNECT_INTERVAL, 1000).
+-define(INITIAL_RECONNECT_INTERVAL_SEC, 2).
 -define(RECONNECT_INTERVAL_INCREASE_RATE, 2).
 -define(MAX_RECONNECT_INTERVAL, timer:minutes(15)).
 
@@ -78,7 +78,7 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: healthcheck | start_provider_connection | refresh_subscription |
+    Request :: healthcheck | ensure_connection_running | refresh_subscription |
     {process_updates, Updates} | {'EXIT', pid(), ExitReason :: term()},
     Updates :: [#sub_update{}],
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
@@ -181,66 +181,135 @@ ensure_connection_running() ->
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Attempts to start the connection. The procedure is wrapped in a global lock
-%% and reattempted in increasing intervals to prevent the provider from
-%% flooding OneZone with connection requests.
+%% Attempts to start a new WebSocket subscriptions connection to OneZone.
+%% The procedure is wrapped in a global lock and reattempted in increasing
+%% intervals to prevent the provider from flooding OneZone with
+%% connection requests. If a reconnect is attempted during the grace period
+%% (after failed connection), the function returns immediately.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_provider_connection() -> ok.
 start_provider_connection() ->
     critical_section:run(subscriptions_wss, fun() ->
-        Result = try
-            case subscription_wss:start_link() of
-                {ok, Pid} ->
-                    ?info("Subscriptions connection started ~p", [Pid]),
-                    ok;
-                {error, R1} ->
-                    {error, R1}
-            end
-        catch
-            E:R2 ->
-                {E, R2}
-        end,
-        case Result of
-            ok ->
-                reset_reconnect_interval();
-            {Type, Reason} ->
-                Interval = increase_reconnect_interval(),
-                ?error("Subscriptions connection failed to start - ~p:~p. "
-                "Next retry not sooner than ~p seconds.", [
-                    Type, Reason, round(Interval / 1000)
-                ]),
-                % Sleep, blocking the lock for some time - this ensures that
-                % next attempt will occur after intended interval.
-                timer:sleep(Interval)
+        case timestamp_in_seconds() >= get_next_reconnect() of
+            false ->
+                ?debug("Discarding subscriptions connection request as the "
+                "grace period has not passed yet.");
+            true ->
+                Result = try
+                    case subscription_wss:start_link() of
+                        {ok, Pid} ->
+                            ?info("Subscriptions connection started ~p", [Pid]),
+                            ok;
+                        {error, R1} ->
+                            {error, R1}
+                    end
+                catch
+                    E:R2 ->
+                        {E, R2}
+                end,
+                case Result of
+                    ok ->
+                        reset_reconnect_interval();
+                    {Type, Reason} ->
+                        Interval = postpone_next_reconnect(),
+                        ?error("Subscriptions connection failed to start - ~p:~p. "
+                        "Next retry not sooner than ~p seconds.", [
+                            Type, Reason, Interval
+                        ])
+                end
         end
-    end).
+    end),
+    ok.
 
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Increases the reconnect interval according to RECONNECT_INTERVAL_INCREASE_RATE,
-%% saves the new value to worker host state and returns the old interval.
+%% Postpones the time of next reconnect in an increasing manner,
+%% according to RECONNECT_INTERVAL_INCREASE_RATE. Saves the 'next_reconnect'
+%% time to worker proxy state.
 %% @end
 %%--------------------------------------------------------------------
--spec increase_reconnect_interval() -> integer().
-increase_reconnect_interval() ->
-    Interval = case worker_host:state_get(?MODULE, reconnect_interval) of
-        undefined -> ?INITIAL_RECONNECT_INTERVAL;
-        Value -> Value
-    end,
-    worker_host:state_put(?MODULE, reconnect_interval, min(
+-spec postpone_next_reconnect() -> integer().
+postpone_next_reconnect() ->
+    Interval = get_reconnect_interval(),
+    set_next_reconnect(timestamp_in_seconds() + Interval),
+    NewInterval = min(
         Interval * ?RECONNECT_INTERVAL_INCREASE_RATE,
         ?MAX_RECONNECT_INTERVAL
-    )),
+    ),
+    set_reconnect_interval(NewInterval),
     Interval.
 
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Resets the reconnect interval to its initial value.
+%% Resets the reconnect interval to its initial value and next reconnect to
+%% current time (which means next reconnect can be performed immediately).
 %% @end
 %%--------------------------------------------------------------------
 -spec reset_reconnect_interval() -> ok.
 reset_reconnect_interval() ->
-    worker_host:state_put(?MODULE, reconnect_interval, ?INITIAL_RECONNECT_INTERVAL).
+    set_reconnect_interval(?INITIAL_RECONNECT_INTERVAL_SEC),
+    set_next_reconnect(timestamp_in_seconds()).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Retrieves reconnect interval from worker host state. It is an integer
+%% value indicating duration in seconds of the grace period after a failed
+%% connection attempt.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_reconnect_interval() -> integer().
+get_reconnect_interval() ->
+    case worker_host:state_get(?MODULE, reconnect_interval) of
+        undefined -> ?INITIAL_RECONNECT_INTERVAL_SEC;
+        Value -> Value
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Saves reconnect interval to worker host state.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_reconnect_interval(integer()) -> ok.
+set_reconnect_interval(Interval) ->
+    worker_host:state_put(?MODULE, reconnect_interval, Interval).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Retrieves next reconnect time from worker host state. It indicates
+%% when the grace period ends and new connection attempts can be made.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_next_reconnect() -> integer().
+get_next_reconnect() ->
+    case worker_host:state_get(?MODULE, next_reconnect) of
+        undefined -> timestamp_in_seconds();
+        Value -> Value
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Saves next reconnect time to worker host state.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_next_reconnect(integer()) -> ok.
+set_next_reconnect(Timestamp) ->
+    worker_host:state_put(?MODULE, next_reconnect, Timestamp).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Returns current timestamp rounded to seconds.
+%% @end
+%%--------------------------------------------------------------------
+-spec timestamp_in_seconds() -> integer().
+timestamp_in_seconds() ->
+    {MegaSeconds, Seconds, MicroSeconds} = erlang:timestamp(),
+    MegaSeconds * 1000000 + Seconds + round(MicroSeconds / 1000000).
+
