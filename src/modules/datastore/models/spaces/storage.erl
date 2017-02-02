@@ -78,7 +78,12 @@ record_upgrade(1, {?MODEL_NAME, Name, Helpers}) ->
     {2, #storage{
         name = Name,
         helpers = [
-            #helper{name = Name, args = Args} || {_, Name, Args} <- Helpers
+            #helper{
+                name = helper:translate_name(HelperName),
+                args = maps:fold(fun(K, V, Args) ->
+                    maps:put(helper:translate_arg_name(K), V, Args)
+                end, #{}, HelperArgs)
+            } || {_, HelperName, HelperArgs} <- Helpers
         ]
     }}.
 
