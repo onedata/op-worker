@@ -27,6 +27,7 @@
 -export([get_name/1, get_args/1, is_insecure/1, get_params/2,
     get_proxy_params/2, get_timeout/1]).
 -export([set_user_ctx/2]).
+-export([translate_name/1, translate_arg_name/1]).
 
 -type name() :: binary().
 -type args() :: #{binary() => binary()}.
@@ -267,6 +268,40 @@ set_user_ctx(#helper{args = Args} = Helper, UserCtx) ->
         ok -> {ok, Helper#helper{args = maps:merge(Args, UserCtx)}};
         {error, Reason} -> {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates storage helper name.
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_name(OldName :: binary()) -> NewName :: binary().
+translate_name(<<"Ceph">>) -> ?CEPH_HELPER_NAME;
+translate_name(<<"DirectIO">>) -> ?POSIX_HELPER_NAME;
+translate_name(<<"ProxyIO">>) -> ?PROXY_HELPER_NAME;
+translate_name(<<"AmazonS3">>) -> ?S3_HELPER_NAME;
+translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
+translate_name(Name) -> Name.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates storage helper argument name.
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_arg_name(OldName :: binary()) -> NewName :: binary().
+translate_arg_name(<<"access_key">>) -> <<"accessKey">>;
+translate_arg_name(<<"auth_url">>) -> <<"authUrl">>;
+translate_arg_name(<<"block_size">>) -> <<"blockSize">>;
+translate_arg_name(<<"bucket_name">>) -> <<"bucketName">>;
+translate_arg_name(<<"cluster_name">>) -> <<"clusterName">>;
+translate_arg_name(<<"container_name">>) -> <<"containerName">>;
+translate_arg_name(<<"host_name">>) -> <<"hostname">>;
+translate_arg_name(<<"mon_host">>) -> <<"monitorHostname">>;
+translate_arg_name(<<"pool_name">>) -> <<"poolName">>;
+translate_arg_name(<<"root_path">>) -> <<"mountPoint">>;
+translate_arg_name(<<"secret_key">>) -> <<"secretKey">>;
+translate_arg_name(<<"tenant_name">>) -> <<"tenantName">>;
+translate_arg_name(<<"user_name">>) -> <<"username">>;
+translate_arg_name(Name) -> Name.
 
 %%%===================================================================
 %%% Internal functions
