@@ -1779,13 +1779,19 @@ remove_times_metadata(ResponseJSON) ->
 
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
-    http_client:request(
+    Result = http_client:request(
         Method,
         cdmi_endpoint(Node) ++ RestSubpath,
-        Headers,
+        maps:from_list(Headers),
         Body,
         [insecure, {connect_timeout, timer:minutes(1)}, {recv_timeout, timer:minutes(1)}]
-    ).
+    ),
+    case Result of
+        {ok, RespCode, RespHeaders, RespBody} ->
+            {ok, RespCode, maps:to_list(RespHeaders), RespBody};
+        Other ->
+            Other
+    end.
 
 cdmi_endpoint(Node) ->
     Port =
