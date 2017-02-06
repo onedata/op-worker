@@ -67,7 +67,7 @@ get_stream_key(#file_attr_changed_event{}) -> file_attr_changed;
 get_stream_key(#file_location_changed_event{}) -> file_location_changed;
 get_stream_key(#file_perm_changed_event{}) -> file_perm_changed;
 get_stream_key(#file_removed_event{}) -> file_removed;
-get_stream_key(#file_renamed{}) -> file_renamed;
+get_stream_key(#file_renamed_event{}) -> file_renamed;
 get_stream_key(#quota_exceeded_event{}) -> quota_exceeded;
 get_stream_key(#monitoring_event{}) -> monitoring.
 
