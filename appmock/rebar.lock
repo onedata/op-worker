@@ -17,7 +17,7 @@
   2},
  {<<"ctool">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/ctool.git",
-       {ref,"d498728ef3870bc84688ccd316e9e5269b822ecf"}},
+       {ref,"6adc90723d0a996712aeee847e99753fc05f2ac9"}},
   0},
  {<<"edown">>,
   {git,"git://github.com/uwiger/edown.git",
@@ -73,5 +73,5 @@
  {<<"ssl_verify_hostname">>,{pkg,<<"ssl_verify_hostname">>,<<"1.0.5">>},3},
  {<<"web_client">>,
   {git,"ssh://git@git.plgrid.pl:7999/vfs/web-client.git",
-       {ref,"6e885bba61da9f483bf8936dd4b1d891356f5e74"}},
+       {ref,"497968c9c393a8662f6bbccdd0a8a367593ccf81"}},
   1}].
