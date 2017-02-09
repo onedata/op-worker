@@ -60,7 +60,8 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                     NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
                     {ok, Size} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT),
                     monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
-                    replica_updater:update(FileCtx2, [BlockToSync#file_block{size = Size}], undefined, false)
+                    replica_updater:update(FileCtx2,
+                        [BlockToSync#file_block{size = Size}], undefined, false)
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = user_ctx:get_session_id(UserCtx),

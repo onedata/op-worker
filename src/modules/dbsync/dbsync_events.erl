@@ -52,7 +52,7 @@ change_replicated(SpaceId, Change, Master) ->
 %% Return value and any errors are ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec change_replicated_internal(SpaceId :: od_space:id(), dbsync_worker:change(), undefined | pid()) ->
+-spec change_replicated_internal(od_space:id(), dbsync_worker:change(), undefined | pid()) ->
     any() | no_return().
 change_replicated_internal(SpaceId, #change{
     model = file_meta,
@@ -66,7 +66,7 @@ change_replicated_internal(SpaceId, #change{
     case couchdb_datastore_driver:exists(file_meta:model_init(), FileUuid) of
         {ok, false} ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-            ok = replica_cleanup:clean_replica_files(FileCtx),
+            sfm_utils:delete_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
             file_consistency:delete(FileUuid);
         _ ->
             ok
@@ -97,14 +97,14 @@ change_replicated_internal(SpaceId, Change = #change{
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = file_consistency:wait(FileUuid, SpaceId, [times], [SpaceId, Change],
-        {Master, FileUUID}),
+        {Master, FileUuid}),
     ok = fslogic_event:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid, [file_meta]),
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
 change_replicated_internal(SpaceId, Change = #change{
     model = file_location,
     doc = Doc = #document{
-        key = FileLocationId
+        key = FileLocationId,
         value = #file_location{uuid = FileUuid}
     }}, Master) ->
     ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
@@ -158,7 +158,7 @@ change_replicated_internal(_SpaceId, #change{
     }}, _Master) ->
     ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]),
     ok = file_consistency:add_components_and_notify(FileUuid, [custom_metadata]);
-change_replicated_internal(_SpaceId, _Change) ->
+change_replicated_internal(_SpaceId, _Change, _Master) ->
     ok.
 
 

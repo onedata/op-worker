@@ -169,10 +169,10 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 %%--------------------------------------------------------------------
 -spec emit_file_renamed_to_client(file_ctx:ctx(), file_meta:name(),
     session:id()) -> ok | {error, Reason :: term()}.
-emit_file_renamed_to_client(FileCtx, NewName, SessionId) ->
-    {ok, UserId} = session:get_user_id(SessionId),
+emit_file_renamed_to_client(FileCtx, NewName, SessionId) -> %todo pass UserCtx
+    UserCtx = user_ctx:new(SessionId),
     Guid = file_ctx:get_guid_const(FileCtx),
-    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserId),
+    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
         old_uuid = Guid,
         new_uuid = Guid,

@@ -37,7 +37,7 @@
     FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
             {[Location = #document{ %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
@@ -73,7 +73,7 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
 -spec rename(file_ctx:ctx(), TargetFileId :: helpers:file(),
     TargetSpaceId :: binary()) -> ok | {error, Reason :: term()}.
 rename(FileCtx, TargetFileId, TargetSpaceId) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
             {[LocationDoc = #document{ %todo VFS-2813 support multi location, get location as argument, instead of operating on first one

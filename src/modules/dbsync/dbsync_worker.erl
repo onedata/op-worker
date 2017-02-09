@@ -623,7 +623,6 @@ apply_changes(SpaceId,
                     ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
             end
         end),
-
         receive
             {change_replicated_ok, Key} -> ok;
             {file_consistency_wait, Key} -> ok
@@ -635,7 +634,7 @@ apply_changes(SpaceId,
         _:Reason ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p", [Change, Reason]),
             {error, Reason}
-    end).
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

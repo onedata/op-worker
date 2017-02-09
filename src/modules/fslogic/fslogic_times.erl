@@ -94,7 +94,7 @@ update_mtime_ctime(FileCtx, UserId, CurrentTime) ->
 -spec update_times_and_emit(file_ctx:ctx(),
     TimesMap :: #{atom() => file_meta:time()}, UserId :: od_user:id()) -> ok.
 update_times_and_emit(FileCtx, TimesMap, _UserId) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     Times = prepare_times(TimesMap),
     {ok, FileUuid} = times:create_or_update(#document{key = FileUuid, value = Times}, TimesMap),
     spawn(fun() ->
@@ -117,7 +117,7 @@ update_times_and_emit(FileCtx, TimesMap, _UserId) ->
 -spec calculate_atime(file_ctx:ctx(), CurrentTime :: file_meta:time()) ->
     file_meta:time() | actual.
 calculate_atime(FileCtx, CurrentTime) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, {ATime, CTime, MTime}} = times:get_or_default(FileUuid),
     case ATime of
         Outdated when Outdated =< MTime orelse Outdated =< CTime ->

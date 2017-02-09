@@ -38,9 +38,12 @@
 %%--------------------------------------------------------------------
 -spec add_change(file_location:doc(), fslogic_file_location:change()) ->
     file_location:doc().
-add_change(Doc = #document{value = Location = #file_location{recent_changes = {_Backup, New}}}, Change)
-    when length(New) >= ?MAX_CHANGES ->
-    Doc#document{value = Location#file_location{recent_changes = {New, [Change]}}};
+add_change(Doc = #document{value = Location = #file_location{
+    recent_changes = {_Backup, New}
+}}, Change) when length(New) >= ?MAX_CHANGES ->
+    Doc#document{value = Location#file_location{
+        recent_changes = {New, [Change]}
+    }};
 add_change(Doc = #document{value = Location = #file_location{recent_changes = {Backup, New}}}, Change) ->
     Doc#document{value = Location#file_location{recent_changes = {Backup, [Change | New]}}}.
 
@@ -52,14 +55,22 @@ add_change(Doc = #document{value = Location = #file_location{recent_changes = {B
 -spec get_changes(file_location:doc(), integer()) -> [fslogic_file_location:change()].
 get_changes(_, N) when N =< 0 ->
     [];
-get_changes(#document{value = #file_location{size = Size,
-    recent_changes = {Backup, New}, blocks = Blocks, last_rename = LastRename}}, N)
-    when N > (length(New) + length(Backup)) ->
+get_changes(#document{value = #file_location{
+    size = Size,
+    recent_changes = {Backup, New},
+    blocks = Blocks,
+    last_rename = LastRename
+}}, N) when N > (length(New) + length(Backup)) ->
     [Blocks, {shrink, Size}, {rename, LastRename}];
-get_changes(#document{value = #file_location{recent_changes = {_Backup, New}, last_rename = LastRename}}, N)
-    when N =< length(New) ->
+get_changes(#document{value = #file_location{
+    recent_changes = {_Backup, New},
+    last_rename = LastRename
+}}, N) when N =< length(New) ->
     lists:sublist(New, N) ++ [{rename, LastRename}];
-get_changes(#document{value = #file_location{recent_changes = {Backup, New}, last_rename = LastRename}}, N) ->
+get_changes(#document{value = #file_location{
+    recent_changes = {Backup, New},
+    last_rename = LastRename
+}}, N) ->
     lists:sublist(New ++ Backup, N) ++ [{rename, LastRename}].
 
 %%--------------------------------------------------------------------
@@ -93,7 +104,7 @@ get_merged_changes(Doc, N) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_last_rename(datastore:document(), helpers:file(), binary()) -> ok.
-set_last_rename(#document{value = #file_location{uuid = FileUuid} = Loc} = Doc,
+set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
     TargetFileId, TargetSpaceId) ->
     critical_section:run([set_last_rename, FileUuid], fun() ->
         {ok, Locations} = file_meta:get_locations({uuid, FileUuid}),
@@ -107,9 +118,9 @@ set_last_rename(#document{value = #file_location{uuid = FileUuid} = Loc} = Doc,
         end, Locations),
         Max = lists:max(RenameNumbers),
         {ok, _} = file_location:save(
-            Doc#document{value = Loc#file_location{last_rename =
-            {{TargetFileId, TargetSpaceId}, Max + 1}}}
-        ),
+            Doc#document{value = Loc#file_location{
+                last_rename = {{TargetFileId, TargetSpaceId}, Max + 1}
+            }}),
         ok
     end).
 
@@ -124,12 +135,13 @@ set_last_rename(#document{value = #file_location{uuid = FileUuid} = Loc} = Doc,
 %%--------------------------------------------------------------------
 -spec rename_or_delete(file_ctx:ctx(), file_location:doc(),
     {{helpers:file(), binary()}, non_neg_integer()} | undefined) ->
-    {renamed, file_location:doc(), file_meta:uuid(), od_space:id()}
-    | skipped | deleted.
+    {{renamed, file_location:doc(), file_meta:uuid(), od_space:id()}
+    | skipped | deleted, file_ctx:ctx()}.
 rename_or_delete(FileCtx, _, undefined) ->
     {skipped, FileCtx};
-rename_or_delete(FileCtx, #document{value = #file_location{last_rename = {_, LocalNum}}},
-    {_, ExternalNum}) when LocalNum >= ExternalNum ->
+rename_or_delete(FileCtx, #document{value = #file_location{
+    last_rename = {_, LocalNum}
+}}, {_, ExternalNum}) when LocalNum >= ExternalNum ->
     {skipped, FileCtx};
 rename_or_delete(FileCtx,
     Doc = #document{
@@ -144,7 +156,8 @@ rename_or_delete(FileCtx,
     }} = od_space:get_or_fetch(?ROOT_SESS_ID, TargetSpaceId),
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            ok = sfm_utils:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId), %todo refactor here and inside
+            {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get(FileUuid),
+            ok = sfm_utils:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId, Mode),
 
             NewFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
             {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),

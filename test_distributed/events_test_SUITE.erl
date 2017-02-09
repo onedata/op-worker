@@ -55,6 +55,7 @@ all() ->
     ]).
 
 -define(TIMEOUT, timer:seconds(15)).
+-define(FILE_GUID, fslogic_uuid:uuid_to_guid(<<"file_uuid">>, <<"spaceid">>)).
 
 %%%===================================================================
 %%% Test functions
@@ -168,34 +169,20 @@ init_per_testcase(Case, Config) when
         session_setup(Worker, SessId),
         SessId
     end, lists:seq(0, 4)),
-    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
-        fun(_) -> <<"spaceid">> end),
-    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_ids, SessIds}, {subscription_id, SubId} | Config]),
-    test_utils:mock_expect(Worker, file_meta, get, fun
-        (<<"file_uuid">>) -> {ok, #document{}};
-        (Entry) -> meck:passthrough([Entry])
-    end),
-    NewConfig;
+    mock_test_file_context(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
+        [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
-    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    test_utils:mock_expect(Worker, fslogic_spaces, get_space_id,
-        fun(_) -> <<"spaceid">> end),
     test_utils:mock_new(Workers, od_space),
     test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
         {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
-    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]),
-    test_utils:mock_expect(Worker, file_meta, get, fun
-        (<<"file_uuid">>) -> {ok, #document{}};
-        (Entry) -> meck:passthrough([Entry])
-    end),
-    NewConfig.
+    mock_test_file_context(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
 
 end_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
@@ -221,20 +208,42 @@ end_per_testcase(Case, Config) when
         session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:clear_assume_all_files_in_space(Config),
-    test_utils:mock_validate_and_unload(Worker, [communicator]);
+    test_utils:mock_validate_and_unload(Worker, [communicator, file_ctx]);
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:clear_assume_all_files_in_space(Config),
     test_utils:mock_unload(Workers, od_space),
-    test_utils:mock_validate_and_unload(Worker, [communicator]).
+    test_utils:mock_validate_and_unload(Worker, [communicator, file_ctx]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mock file context for test file.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_test_file_context(proplists:proplist()) -> ok.
+mock_test_file_context(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, file_ctx),
+    test_utils:mock_expect(Worker, file_ctx, is_root_dir_const,
+        fun (FileCtx) ->
+            case file_ctx:get_guid_const(FileCtx) =:= ?FILE_GUID of
+                true -> false;
+                false -> meck:passthrough([FileCtx])
+            end
+        end),
+    test_utils:mock_expect(Worker, file_ctx, file_exists_const,
+        fun (FileCtx) ->
+            case file_ctx:get_guid_const(FileCtx) =:= ?FILE_GUID of
+                true -> true;
+                false -> meck:passthrough([FileCtx])
+            end
+        end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -392,13 +401,13 @@ flush(Worker, SubId, Notify, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv file_read_event(<<"file_uuid">>, Size, Blocks)
+%% @equiv file_read_event(?FILE_GUID, Size, Blocks).
 %% @end
 %%--------------------------------------------------------------------
 -spec file_read_event(Size :: file_meta:size(), Blocks :: proplists:proplist()) ->
     Evt :: #file_read_event{}.
 file_read_event(Size, Blocks) ->
-    file_read_event(<<"file_uuid">>, Size, Blocks).
+    file_read_event(?FILE_GUID, Size, Blocks).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -418,13 +427,13 @@ file_read_event(FileUuid, Size, Blocks) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv file_written_event(<<"file_size">>, Size, FileSize, Blocks)
+%% @equiv file_written_event(?FILE_GUID, Size, FileSize, Blocks)
 %% @end
 %%--------------------------------------------------------------------
 -spec file_written_event(Size :: file_meta:size(), FileSize :: file_meta:size(),
     Blocks :: proplists:proplist()) -> Evt :: #file_written_event{}.
 file_written_event(Size, FileSize, Blocks) ->
-    file_written_event(<<"file_uuid">>, Size, FileSize, Blocks).
+    file_written_event(?FILE_GUID, Size, FileSize, Blocks).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -451,7 +460,7 @@ file_written_event(FileUuid, Size, FileSize, Blocks) ->
 %%--------------------------------------------------------------------
 -spec file_attr_changed_event() -> #file_attr_changed_event{}.
 file_attr_changed_event() ->
-    #file_attr_changed_event{file_attr = #file_attr{uuid = <<"file_uuid">>}}.
+    #file_attr_changed_event{file_attr = #file_attr{uuid = ?FILE_GUID}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -461,7 +470,7 @@ file_attr_changed_event() ->
 %%--------------------------------------------------------------------
 -spec file_location_changed_event() -> #file_location_changed_event{}.
 file_location_changed_event() ->
-    #file_location_changed_event{file_location = #file_location{uuid = <<"file_uuid">>}}.
+    #file_location_changed_event{file_location = #file_location{uuid = ?FILE_GUID}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -478,10 +487,10 @@ subscription_type_for_testcase_name(emit_file_written_event_should_execute_handl
     #file_written_subscription{};
 
 subscription_type_for_testcase_name(emit_file_attr_changed_event_should_execute_handler) ->
-    #file_attr_changed_subscription{file_uuid = <<"file_uuid">>};
+    #file_attr_changed_subscription{file_uuid = ?FILE_GUID};
 
 subscription_type_for_testcase_name(emit_file_location_changed_event_should_execute_handler) ->
-    #file_location_changed_subscription{file_uuid = <<"file_uuid">>};
+    #file_location_changed_subscription{file_uuid = ?FILE_GUID};
 
 subscription_type_for_testcase_name(_) ->
     #file_read_subscription{}.

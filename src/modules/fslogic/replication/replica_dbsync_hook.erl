@@ -42,7 +42,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
         fun() ->
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
-                    {[LocalLocation], FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx), %todo VFS-2813 support multi location
+                    {[LocalLocation], FileCtx2} =
+                        file_ctx:get_local_file_location_docs(FileCtx), %todo VFS-2813 support multi location
                     update_local_location_replica(FileCtx2, LocalLocation, ChangedLocationDoc);
                 false ->
                     ok
@@ -156,9 +157,12 @@ reconcile_replicas(FileCtx,
             LocalChanges ->
                 fslogic_blocks:invalidate(LocalBlocks, ExternalChanges);
             IndependentLocalChanges ->
-                CommonChanges = fslogic_blocks:invalidate(LocalChanges, IndependentLocalChanges),
-                IndependentExternalChanges = fslogic_blocks:invalidate(ExternalChanges, CommonChanges),
-                PartiallyInvalidatedLocalBlocks = fslogic_blocks:invalidate(LocalBlocks, IndependentExternalChanges),
+                CommonChanges =
+                    fslogic_blocks:invalidate(LocalChanges, IndependentLocalChanges),
+                IndependentExternalChanges =
+                    fslogic_blocks:invalidate(ExternalChanges, CommonChanges),
+                PartiallyInvalidatedLocalBlocks =
+                    fslogic_blocks:invalidate(LocalBlocks, IndependentExternalChanges),
                 case version_vector:replica_id_is_greater(LocalDoc, ExternalDoc) of
                     true ->
                         PartiallyInvalidatedLocalBlocks;
@@ -171,7 +175,10 @@ reconcile_replicas(FileCtx,
         case NewSize < LocalSize of
             true ->
                 fslogic_blocks:consolidate(
-                    fslogic_blocks:invalidate(NewBlocks, [#file_block{offset = NewSize, size = LocalSize - NewSize}])
+                    fslogic_blocks:invalidate(NewBlocks, [#file_block{
+                        offset = NewSize,
+                        size = LocalSize - NewSize
+                    }])
                 );
             false ->
                 fslogic_blocks:consolidate(NewBlocks)
@@ -208,21 +215,22 @@ reconcile_replicas(FileCtx,
 
     RenameResult = case Rename of
         skip ->
-            skipped;
+            {skipped, FileCtx};
         Rename ->
             fslogic_file_location:rename_or_delete(FileCtx, NewDoc2, Rename)
     end,
 
     case RenameResult of
-        deleted ->
+        {deleted, _} ->
             ok;
-        skipped ->
+        {skipped, FileCtx2} ->
             {ok, _} = file_location:save(NewDoc2),
-            notify_block_change_if_necessary(FileCtx, LocalDoc, NewDoc2),
-            notify_size_change_if_necessary(FileCtx, LocalDoc, NewDoc2);
-        {renamed, RenamedDoc, Uuid, _UserId, TargetSpaceId} ->
+            notify_block_change_if_necessary(FileCtx2, LocalDoc, NewDoc2),
+            notify_size_change_if_necessary(FileCtx2, LocalDoc, NewDoc2);
+        {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = file_location:save(RenamedDoc),
-            RenamedFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId)),
+            RenamedFileCtx =
+                file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId)),
             files_to_chown:chown_file(RenamedFileCtx),
             notify_block_change_if_necessary(FileCtx, LocalDoc, RenamedDoc),
             notify_size_change_if_necessary(FileCtx, LocalDoc, RenamedDoc)
@@ -246,7 +254,8 @@ notify_block_change_if_necessary(FileCtx, _, _) ->
 %% Notify clients if file size has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec notify_size_change_if_necessary(file_ctx:ctx(), file_location:doc(), file_location:doc()) -> ok.
+-spec notify_size_change_if_necessary(file_ctx:ctx(), file_location:doc(),
+    file_location:doc()) -> ok.
 notify_size_change_if_necessary(_FileCtx,
     #document{value = #file_location{size = SameSize}},
     #document{value = #file_location{size = SameSize}}

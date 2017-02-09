@@ -31,7 +31,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_changes(file_ctx:ctx(), file_location:doc(), Changes :: list(),
-    Size :: non_neg_integer()) -> file_location:doc() | deleted.
+    Size :: non_neg_integer()) -> {file_location:doc() | deleted, file_ctx:ctx()}.
 invalidate_changes(FileCtx, Doc = #document{value = Loc}, [], NewSize) ->
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     {ok, _} = file_location:save(NewDoc),

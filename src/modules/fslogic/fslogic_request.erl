@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_ctx/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
+-export([get_partial_file_ctx/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
 
 %%%===================================================================
 %%% API
@@ -32,19 +32,19 @@
 %% specific file, the function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_ctx(user_ctx:ctx(), fslogic_worker:request()) ->
+-spec get_partial_file_ctx(user_ctx:ctx(), fslogic_worker:request()) ->
     file_ctx:ctx() | undefined.
-get_file_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
+get_partial_file_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
     file_ctx:new_partial_context_by_logical_path(UserCtx, Path);
-get_file_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
+get_partial_file_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     file_ctx:new_by_guid(FileGuid);
-get_file_ctx(_UserCtx, #fuse_request{}) ->
+get_partial_file_ctx(_UserCtx, #fuse_request{}) ->
     undefined;
-get_file_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->
+get_partial_file_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->
     file_ctx:new_by_guid(FileGuid);
-get_file_ctx(_UserCtx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
+get_partial_file_ctx(_UserCtx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
     file_ctx:new_by_guid(FileGuid);
-get_file_ctx(_UserCtx, Req) ->
+get_partial_file_ctx(_UserCtx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
@@ -85,13 +85,13 @@ update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
 update_target_guid_if_file_is_phantom(FileCtx, Request) ->
     try
-        {_, NewFileCtx} = file_ctx:get_file_doc(file_ctx:fill_guid(FileCtx)),
+        {_, NewFileCtx} = file_ctx:get_file_doc(file_ctx:new_by_partial_context(FileCtx)),
         {NewFileCtx, Request}
     catch
         _:{badmatch, {error, {not_found, file_meta}}} ->
             try
-                {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx),
-                {ok, NewGuid} = file_meta:get_guid_from_phantom_file(Uuid),
+                FileUuid = file_ctx:get_uuid_const(FileCtx),
+                {ok, NewGuid} = file_meta:get_guid_from_phantom_file(FileUuid),
                 NewRequest = change_target_guid(Request, NewGuid),
                 NewFileCtx_ = file_ctx:new_by_guid(NewGuid),
                 {NewFileCtx_, NewRequest}

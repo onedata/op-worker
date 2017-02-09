@@ -35,8 +35,7 @@
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?read_acl]).
 get_acl(_UserCtx, FileCtx) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:get_by_name(FileUuid, ?ACL_KEY) of %todo pass file_ctx
+    case xattr:get_by_name(FileCtx, ?ACL_KEY) of
         {ok, Val} ->
             #provider_response{
                 status = #status{code = ?OK},
@@ -57,11 +56,11 @@ get_acl(_UserCtx, FileCtx) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_acl]).
 set_acl(UserCtx, FileCtx, #acl{value = Val}) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:save(FileUuid, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of %todo pass file_ctx
+    case xattr:save(FileCtx, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of
         {ok, _} ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
             ok = permissions_cache:invalidate(custom_metadata, FileUuid), %todo pass file_ctx
-            ok = sfm_utils:chmod_storage_files(
+            ok = sfm_utils:chmod_storage_file(
                 user_ctx:new(?ROOT_SESS_ID),
                 FileCtx, 8#000
             ),
@@ -80,13 +79,13 @@ set_acl(UserCtx, FileCtx, #acl{value = Val}) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_acl]).
 remove_acl(UserCtx, FileCtx) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:delete_by_name(FileUuid, ?ACL_KEY) of
+    case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
         ok ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
             ok = permissions_cache:invalidate(custom_metadata, FileUuid), %todo pass file_ctx
             {#document{value = #file_meta{mode = Mode}}, FileCtx2} =
                 file_ctx:get_file_doc(FileCtx),
-            ok = sfm_utils:chmod_storage_files(
+            ok = sfm_utils:chmod_storage_file(
                 user_ctx:new(?ROOT_SESS_ID),
                 FileCtx2, Mode
             ),

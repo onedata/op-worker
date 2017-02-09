@@ -35,8 +35,7 @@
 -spec synchronize_block(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(), Prefetch :: boolean()) ->
     fslogic_worker:fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch) ->
-    FileEntry = file_ctx:get_uuid_entry_const(FileCtx),
-    Size = fslogic_blocks:get_file_size(FileEntry), %todo pass file_ctx
+    Size = fslogic_blocks:get_file_size(FileCtx),
     synchronize_block(UserCtx, FileCtx, #file_block{offset = 0, size = Size}, Prefetch);
 synchronize_block(UserCtx, FileCtx, Block, Prefetch) ->
     ok = replica_synchronizer:synchronize(UserCtx, FileCtx, Block, Prefetch),
@@ -57,8 +56,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
 
     Checksum = crypto:hash(md4, Data),
-    LocationToSend =
-        fslogic_file_location:prepare_location_for_client(FileCtx, Range),
+    LocationToSend = fslogic_file_location:prepare_location_for_client(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{

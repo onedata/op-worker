@@ -83,7 +83,7 @@ write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
 get_handle(UserCtx, FileCtx, undefined, StorageId, FileId, OpenFlag)->
     SessId = user_ctx:get_session_id(UserCtx),
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, Storage} = storage:get(StorageId),
     ShareId = file_ctx:get_share_id_const(FileCtx),
     SFMHandle =

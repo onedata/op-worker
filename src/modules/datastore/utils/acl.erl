@@ -30,9 +30,9 @@
 %% Returns file acl, or undefined if the acl is not defined.
 %% @end
 %%--------------------------------------------------------------------
--spec get(file_meta:uuid()) -> [#access_control_entity{}].
-get(FileUuid) ->
-    case xattr:get_by_name(FileUuid, ?ACL_KEY) of
+-spec get(file_ctx:ctx()) -> [#access_control_entity{}].
+get(FileCtx) ->
+    case xattr:get_by_name(FileCtx, ?ACL_KEY) of
         {ok, Val} ->
             fslogic_acl:from_json_format_to_acl(Val);
         {error, {not_found, custom_metadata}} ->
@@ -44,6 +44,6 @@ get(FileUuid) ->
 %% Checks if acl with given UUID exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(file_meta:uuid()) -> boolean().
-exists(FileUuid) ->
-    xattr:exists_by_name(FileUuid, ?ACL_XATTR_NAME).
+-spec exists(file_ctx:ctx()) -> boolean().
+exists(FileCtx) ->
+    xattr:exists_by_name(FileCtx, ?ACL_XATTR_NAME).

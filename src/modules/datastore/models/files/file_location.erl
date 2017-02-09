@@ -33,7 +33,8 @@
 %% Returns structure of the record in specified version.
 %% @end
 %%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+-spec record_struct(datastore_json:record_version()) ->
+    datastore_json:record_struct().
 record_struct(1) ->
     {record, [
         {uuid, string},
@@ -74,8 +75,8 @@ record_upgrade(1, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
-%% run at the same time.
+%% Runs given function within locked ResourceId. This function makes sure that
+%% 2 funs with same ResourceId won't run at the same time.
 %% @end
 %%--------------------------------------------------------------------
 -spec critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
@@ -115,9 +116,12 @@ ensure_blocks_not_empty(Loc) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(Document = #document{key = Key, value = #file_location{uuid = Uuid, space_id = SpaceId}}) ->
+save(Document = #document{key = Key, value = #file_location{
+    uuid = FileUuid,
+    space_id = SpaceId
+}}) ->
     NewSize = count_bytes(Document),
-    UserId = get_user_id(Uuid),
+    UserId = get_owner_id(FileUuid),
     case get(Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
@@ -155,9 +159,12 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document = #document{value = #file_location{uuid = Uuid, space_id = SpaceId}}) ->
+create(Document = #document{value = #file_location{
+    uuid = FileUuid,
+    space_id = SpaceId
+}}) ->
     NewSize = count_bytes(Document),
-    UserId = get_user_id(Uuid),
+    UserId = get_owner_id(FileUuid),
 
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
     monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize),
@@ -181,9 +188,12 @@ get(Key) ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     case get(Key) of
-        {ok, #document{value = #file_location{uuid = Uuid, space_id = SpaceId}} = Doc} ->
+        {ok, Doc = #document{value = #file_location{
+            uuid = Uuid,
+            space_id = SpaceId
+        }}} ->
             Size = count_bytes(Doc),
-            UserId = get_user_id(Uuid),
+            UserId = get_owner_id(Uuid),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
@@ -259,8 +269,8 @@ count_bytes([#file_block{size = Size} | T], TotalSize) ->
 %% Return user id for given file uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(file_meta:uuid()) -> datastore:id().
-get_user_id(FileUuid) ->
+-spec get_owner_id(file_meta:uuid()) -> datastore:id().
+get_owner_id(FileUuid) ->
     {ok, #document{value = #file_meta{owner = UserId}}} =
         file_meta:get({uuid, FileUuid}),
     UserId.

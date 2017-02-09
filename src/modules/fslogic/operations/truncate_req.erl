@@ -36,7 +36,7 @@ truncate(UserCtx, FileCtx, Size) ->
     FileCtx2 = update_quota(FileCtx, Size),
     SessId = user_ctx:get_session_id(UserCtx),
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx2),
     {LocalLocations, FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
     lists:foreach(
         fun(#document{value = #file_location{
@@ -65,8 +65,7 @@ truncate(UserCtx, FileCtx, Size) ->
 %%--------------------------------------------------------------------
 -spec update_quota(file_ctx:ctx(), file_meta:size()) -> NewFileCtx :: file_ctx:ctx().
 update_quota(FileCtx, Size) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    OldSize = fslogic_blocks:get_file_size(FileDoc), %todo pass file_ctx
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    OldSize = fslogic_blocks:get_file_size(FileCtx),
     ok = space_quota:assert_write(SpaceId, Size - OldSize),
-    FileCtx2.
+    FileCtx.

@@ -113,11 +113,16 @@ get_file_size([Location | T]) ->
     max(get_file_size(Location), get_file_size(T));
 get_file_size([]) ->
     throw(locations_not_found);
-get_file_size(Entry) -> %todo execute this function with FileCtx wherever possible
+get_file_size(Entry) ->
     case file_ctx:is_file_ctx_const(Entry) of
         true ->
-            {LocalLocations, _FileCtx2} = file_ctx:get_local_file_location_docs(Entry),
-            get_file_size(LocalLocations);
+            case file_ctx:is_dir(Entry) of
+                {true, _FileCtx2} -> %todo return FileCtx from this funciton
+                    0;
+                {false, FileCtx2} ->
+                    {LocalLocations, _FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+                    get_file_size(LocalLocations)
+            end;
         false ->
             LocalLocations = fslogic_utils:get_local_file_locations(Entry),
             get_file_size(LocalLocations)

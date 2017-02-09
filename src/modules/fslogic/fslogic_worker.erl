@@ -160,14 +160,14 @@ handle_request_and_process_response(SessId, Request) ->
 -spec handle_request(session:id(), request()) -> response().
 handle_request(SessId, Request) ->
     UserCtx = user_ctx:new(SessId),
-    FileCtx = fslogic_request:get_file_ctx(UserCtx, Request),
-    {FileCtx2, Request2} = fslogic_request:update_target_guid_if_file_is_phantom(FileCtx, Request),
-    Providers = fslogic_request:get_target_providers(UserCtx, FileCtx2, Request2),
+    PartialFileCtx = fslogic_request:get_partial_file_ctx(UserCtx, Request),
+    {PartialFileCtx2, Request2} = fslogic_request:update_target_guid_if_file_is_phantom(PartialFileCtx, Request),
+    Providers = fslogic_request:get_target_providers(UserCtx, PartialFileCtx2, Request2),
 
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            FileCtx3 = file_ctx:fill_guid(FileCtx2),
-            handle_request_locally(UserCtx, Request2, FileCtx3);
+            FileCtx = file_ctx:new_by_partial_context(PartialFileCtx2),
+            handle_request_locally(UserCtx, Request2, FileCtx);
         false ->
             handle_request_remotely(UserCtx, Request2, Providers)
     end.

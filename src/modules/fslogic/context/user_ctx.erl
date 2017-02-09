@@ -29,7 +29,7 @@
 %% API
 -export([new/1]).
 -export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
--export([is_root/1, is_guest/1]).
+-export([is_root/1, is_guest/1, is_normal_user/1]).
 
 %%%===================================================================
 %%% API functions
@@ -106,3 +106,12 @@ is_root(#user_ctx{session = #document{key = SessId}}) ->
 -spec is_guest(ctx()) -> boolean().
 is_guest(#user_ctx{session = #document{key = SessId}}) ->
     session:is_guest(SessId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if context represents normal user.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_normal_user(ctx()) -> boolean().
+is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
+    not session:is_special(SessId).

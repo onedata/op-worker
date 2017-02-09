@@ -89,8 +89,9 @@ chown_file(FileCtx) ->
     {Storage, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx3),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx3),
-    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid,
+        FileUuid, Storage, FileId),
     {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx4} =
         file_ctx:get_file_doc(FileCtx3),
     SpaceId = file_ctx:get_space_id_const(FileCtx4),
@@ -209,7 +210,12 @@ add(FileCtx, UserId) ->
     %todo add create_or_update operation to datastore
     FileGuid = file_ctx:get_guid_const(FileCtx),
     UpdateFun = fun(Val = #files_to_chown{file_guids = Guids}) ->
-        {ok, Val#files_to_chown{file_guids = lists:usort([FileGuid | Guids])}}
+        case lists:member(FileGuid, Guids) of
+            true ->
+                {ok, Val};
+            false ->
+                {ok, Val#files_to_chown{file_guids = [FileGuid | Guids]}}
+        end
     end,
     case update(UserId, UpdateFun) of
         {ok, Key} ->

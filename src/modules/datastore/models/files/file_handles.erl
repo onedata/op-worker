@@ -242,7 +242,7 @@ register_release(FileUuid, SessId, Count) ->
     case update(FileUuid, Diff) of
         {ok, _} -> maybe_delete(FileUuid);
         {error, phantom_file} ->
-            FileGuid = %todo check why we cannot get space_id for onedata hidden files
+            FileGuid = %todo VFS-3017 check why we cannot get space_id for onedata hidden files
                 try fslogic_uuid:uuid_to_guid(FileUuid)
                 catch _:_ -> fslogic_uuid:uuid_to_guid(FileUuid, undefined)
                 end,
