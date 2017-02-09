@@ -38,10 +38,10 @@ get_user_ctx(UserId, SpaceId, StorageDoc, Helper) ->
     Url = lists:flatten(io_lib:format("~s://~s:~B/map_user_credentials",
         [Scheme, Hostname, Port])),
 
-    ReqHeaders = [
-        {<<"X-Auth-Token">>, APIKey},
-        {<<"Content-Type">>, <<"application/json">>}
-    ],
+    ReqHeaders = #{
+        <<"X-Auth-Token">> => APIKey,
+        <<"Content-Type">> => <<"application/json">>
+    },
 
     ReqBody = get_request_body(UserId, SpaceId, StorageDoc, Helper),
 

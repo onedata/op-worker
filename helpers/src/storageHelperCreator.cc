@@ -23,24 +23,27 @@ namespace helpers {
 StorageHelperCreator::StorageHelperCreator(asio::io_service &cephService,
     asio::io_service &dioService, asio::io_service &s3Service,
     asio::io_service &swiftService, communication::Communicator &communicator,
-    std::size_t bufferSchedulerWorkers)
+    std::size_t bufferSchedulerWorkers, buffering::BufferLimits bufferLimits)
     : m_cephService{cephService}
     , m_dioService{dioService}
     , m_s3Service{s3Service}
     , m_swiftService{swiftService}
     , m_scheduler{std::make_unique<Scheduler>(bufferSchedulerWorkers)}
+    , m_bufferLimits{std::move(bufferLimits)}
     , m_communicator{communicator}
 {
 }
 #else
 StorageHelperCreator::StorageHelperCreator(asio::io_service &cephService,
     asio::io_service &dioService, asio::io_service &s3Service,
-    asio::io_service &swiftService, std::size_t bufferSchedulerWorkers)
+    asio::io_service &swiftService, std::size_t bufferSchedulerWorkers,
+    buffering::BufferLimits bufferLimits)
     : m_cephService{cephService}
     , m_dioService{dioService}
     , m_s3Service{s3Service}
     , m_swiftService{swiftService}
     , m_scheduler{std::make_unique<Scheduler>(bufferSchedulerWorkers)}
+    , m_bufferLimits{std::move(bufferLimits)}
 {
 }
 #endif
@@ -48,37 +51,37 @@ StorageHelperCreator::StorageHelperCreator(asio::io_service &cephService,
 StorageHelperCreator::~StorageHelperCreator() = default;
 
 std::shared_ptr<StorageHelper> StorageHelperCreator::getStorageHelper(
-    const folly::fbstring &sh_name,
+    const folly::fbstring &name,
     const std::unordered_map<folly::fbstring, folly::fbstring> &args,
     const bool buffered)
 {
-    if (sh_name == POSIX_HELPER_NAME)
-        return PosixHelperFactory{m_dioService}.createStorageHelper(args);
-
     StorageHelperPtr helper;
 
-    if (sh_name == CEPH_HELPER_NAME)
+    if (name == POSIX_HELPER_NAME)
+        helper = PosixHelperFactory{m_dioService}.createStorageHelper(args);
+
+    if (name == CEPH_HELPER_NAME)
         helper = CephHelperFactory{m_cephService}.createStorageHelper(args);
 
 #ifdef BUILD_PROXY_IO
-    if (sh_name == PROXY_HELPER_NAME)
+    if (name == PROXY_HELPER_NAME)
         helper = ProxyHelperFactory{m_communicator}.createStorageHelper(args);
 #endif
 
-    if (sh_name == S3_HELPER_NAME)
+    if (name == S3_HELPER_NAME)
         helper = S3HelperFactory{m_s3Service}.createStorageHelper(args);
 
-    if (sh_name == SWIFT_HELPER_NAME)
+    if (name == SWIFT_HELPER_NAME)
         helper = SwiftHelperFactory{m_swiftService}.createStorageHelper(args);
 
     if (!helper)
         throw std::system_error{
             std::make_error_code(std::errc::invalid_argument),
-            "Invalid storage helper name: '" + sh_name.toStdString() + "'"};
+            "Invalid storage helper name: '" + name.toStdString() + "'"};
 
     if (buffered)
         return std::make_shared<buffering::BufferAgent>(
-            buffering::BufferLimits{}, helper, *m_scheduler);
+            m_bufferLimits, helper, *m_scheduler);
 
     return helper;
 }

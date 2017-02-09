@@ -41,7 +41,7 @@
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1, get_scope_id/1, list_children/3, get_parent/1,
     get_parent_uuid/1, get_parent_uuid/2, get_parent_uuid_in_context/1, rename/2, setup_onedata_user/2,
     get_name/1]).
--export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1, location_ref/1]).
+-export([get_ancestors/1, attach_location/3, get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
@@ -406,10 +406,10 @@ get_child(Doc, Name) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update},
-        {od_user, save}, {od_user, update}], ?GLOBALLY_CACHED_LEVEL,
-        ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id(), true),
-    Config#model_config{version = 2, sync_enabled = true}.
+    Config = ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update}, {od_user, save}, {od_user, update}],
+        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false,
+        oneprovider:get_provider_id(), true),
+    Config#model_config{sync_enabled = true, version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -550,6 +550,23 @@ get_locations(Entry) ->
                             AccIn
                     end, [])
         end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's locations attached with attach_location/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_locations_by_uuid(uuid()) -> {ok, [file_location:id()]} | datastore:get_error().
+get_locations_by_uuid(Uuid) ->
+    ?run(begin
+        datastore:foreach_link(?LINK_STORE_LEVEL, Uuid, ?MODULE,
+            fun
+                (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
+                    [Key | AccIn];
+                (_LinkName, _LinkTarget, AccIn) ->
+                    AccIn
+            end, [])
     end).
 
 %%--------------------------------------------------------------------

@@ -89,7 +89,7 @@ handle_http_download(Req, FileId) ->
 
     case InitSession of
         error ->
-            gui_ctx:reply(500, [], <<"">>);
+            gui_ctx:reply(500, #{}, <<"">>);
         ok ->
             try
                 SessionId = case fslogic_uuid:is_share_guid(FileId) of
@@ -110,13 +110,13 @@ handle_http_download(Req, FileId) ->
                         ?error_stacktrace("Error while processing file download "
                         "for user ~p - ~p:~p", [gui_session:get_user_id(), T2, M2]),
                         logical_file_manager:release(FileHandle), % release if possible
-                        gui_ctx:reply(500, [], <<"">>)
+                        gui_ctx:reply(500, #{}, <<"">>)
                 end
             catch
                 T:M ->
                     ?error_stacktrace("Error while processing file download "
                     "for user ~p - ~p:~p", [gui_session:get_user_id(), T, M]),
-                    gui_ctx:reply(500, [], <<"">>)
+                    gui_ctx:reply(500, #{}, <<"">>)
             end
     end,
     gui_ctx:finish().
@@ -205,18 +205,16 @@ get_download_buffer_size() ->
 %% based on given filepath or filename.
 %% @end
 %%--------------------------------------------------------------------
--spec attachment_headers(FileName :: file_meta:name()) ->
-    [{binary(), binary()}].
+-spec attachment_headers(FileName :: file_meta:name()) -> http_client:headers().
 attachment_headers(FileName) ->
     %% @todo VFS-2073 - check if needed
-%%    FileNameUrlEncoded = http_utils:url_encode(FileName),
+    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
     {Type, Subtype, _} = cow_mimetypes:all(FileName),
     MimeType = <<Type/binary, "/", Subtype/binary>>,
-    [
-        {<<"content-type">>, MimeType},
-        {<<"content-disposition">>,
+    #{
+        <<"content-type">> => MimeType,
+        <<"content-disposition">> =>
             <<"attachment; filename=\"", FileName/binary, "\"">>
             %% @todo VFS-2073 - check if needed
-%%            "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-        }
-    ].
+            %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
+    }.

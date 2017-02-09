@@ -26,7 +26,7 @@
 
 %% API
 -export([init/0]).
--export([get_handle/2, set_threads_number/1]).
+-export([get_handle/2]).
 -export([getattr/2, access/3, mknod/5, mkdir/3, unlink/2, rmdir/2, symlink/3,
     rename/3, link/3, chmod/3, chown/4, truncate/3, open/3, read/3, write/3,
     release/1, flush/1, fsync/2, readdir/4]).
@@ -44,16 +44,6 @@
 -spec get_handle(helpers:name(), helpers:args()) ->
     {ok, helper_handle()} | {error, Reason :: term()}.
 get_handle(_Name, _Params) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets the number of threads for an IO service associated with the helper.
-%% @end
-%%--------------------------------------------------------------------
--spec set_threads_number(#{helpers:name() => Threads :: non_neg_integer()}) ->
-    ok | {error, Reason :: term()}.
-set_threads_number(_ThreadsByHelper) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -196,33 +186,34 @@ init() ->
             filename:join(Dir, LibName)
     end,
 
-    LoadResult = case erlang:load_nif(LibPath, 0) of
+    case erlang:load_nif(LibPath, prepare_args()) of
         ok -> ok;
         {error, {reload, _}} -> ok;
         {error, Reason} -> {error, Reason}
-    end,
-
-    case LoadResult of
-        ok -> set_threads_number();
-        _ -> LoadResult
     end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sets the default number of threads for each storage helper.
+%% Returns NIF library initialization arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec set_threads_number() -> ok.
-set_threads_number() ->
-    Args = lists:foldl(fun({Name, EnvKey}, Map) ->
+-spec prepare_args() -> #{binary() => binary()}.
+prepare_args() ->
+    lists:foldl(fun(EnvKey, Map) ->
         {ok, EnvValue} = application:get_env(?APP_NAME, EnvKey),
-        maps:put(Name, EnvValue, Map)
+        maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
     end, #{}, [
-        {?CEPH_HELPER_NAME, ceph_helper_threads_number},
-        {?POSIX_HELPER_NAME, posix_helper_threads_number},
-        {?S3_HELPER_NAME, s3_helper_threads_number},
-        {?SWIFT_HELPER_NAME, swift_helper_threads_number}
-    ]),
-
-    set_threads_number(Args).
+        ceph_helper_threads_number,
+        posix_helper_threads_number,
+        s3_helper_threads_number,
+        swift_helper_threads_number,
+        buffer_helpers,
+        buffer_scheduler_threads_number,
+        read_buffer_min_size,
+        read_buffer_max_size,
+        read_buffer_prefetch_duration,
+        write_buffer_min_size,
+        write_buffer_max_size,
+        write_buffer_flush_delay
+    ]).

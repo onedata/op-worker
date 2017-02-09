@@ -47,7 +47,7 @@
 
 -define(PERFORMANCE_TEST_CASES, [
     db_sync_many_ops_test, proxy_many_ops_test1, proxy_many_ops_test2,
-    file_consistency_test, mkdir_and_rmdir_loop_test,
+    mkdir_and_rmdir_loop_test, file_consistency_test,
     create_and_delete_file_loop_test, echo_and_delete_file_loop_test
 ]).
 
@@ -295,7 +295,7 @@ multi_space_test(Config) ->
 
 mkdir_and_rmdir_loop_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 5},
+        {repeats, 3},
         {success_rate, 100},
         {parameters, [
             [{name, iterations}, {value, 100}, {description, "Number of times sequence mkdir, rmdir will be repeated"}]
@@ -303,7 +303,7 @@ mkdir_and_rmdir_loop_test(Config) ->
         {description, "Simulates loop of sequence mkdir and rmdir operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 10000}]
+                [{name, iterations}, {value, 3000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
@@ -314,7 +314,7 @@ mkdir_and_rmdir_loop_test_base(Config) ->
 
 create_and_delete_file_loop_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 5},
+        {repeats, 3},
         {success_rate, 100},
         {parameters, [
             [{name, iterations}, {value, 100}, {description, "Number of times sequence create, remove file will be repeated"}]
@@ -322,7 +322,7 @@ create_and_delete_file_loop_test(Config) ->
         {description, "Simulates loop of sequence create and remove file operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 10000}]
+                [{name, iterations}, {value, 3000}]
             ]},
             {description, "Basic performance configuration"}
         ]}
@@ -333,7 +333,7 @@ create_and_delete_file_loop_test_base(Config) ->
 
 echo_and_delete_file_loop_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, 5},
+        {repeats, 3},
         {success_rate, 100},
         {parameters, [
             [{name, iterations}, {value, 100}, {description, "Number of times sequence echo, remove file will be repeated"}]
@@ -341,7 +341,7 @@ echo_and_delete_file_loop_test(Config) ->
         {description, "Simulates loop of sequence echo and remove file operations performed by clients"},
         {config, [{name, performance},
             {parameters, [
-                [{name, iterations}, {value, 10000}]
+                [{name, iterations}, {value, 3000}]
             ]},
             {description, "Basic performance configuration"}
         ]}

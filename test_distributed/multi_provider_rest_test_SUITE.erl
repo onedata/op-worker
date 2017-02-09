@@ -1075,11 +1075,20 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-do_request(Node, URL, Method, Headers, Body, Opts) ->
-    http_client:request(Method, <<(rest_endpoint(Node))/binary,  URL/binary>>, Headers, Body, Opts).
-
 do_request(Node, URL, Method, Headers, Body) ->
-    http_client:request(Method, <<(rest_endpoint(Node))/binary,  URL/binary>>, Headers, Body, [insecure, {recv_timeout, 15000}]).
+    do_request(Node, URL, Method, Headers, Body, [insecure, {recv_timeout, 15000}]).
+
+do_request(Node, URL, Method, Headers, Body, Opts) ->
+    Result = http_client:request(
+        Method, <<(rest_endpoint(Node))/binary,  URL/binary>>,
+        maps:from_list(Headers), Body, Opts
+    ),
+    case Result of
+        {ok, RespCode, RespHeaders, RespBody} ->
+            {ok, RespCode, maps:to_list(RespHeaders), RespBody};
+        Other ->
+            Other
+    end.
 
 rest_endpoint(Node) ->
     Port =

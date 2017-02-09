@@ -949,7 +949,7 @@ set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
 
 add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
     {ok, SID} = dbsync_worker:get_space_id(Doc),
-    {ok, _} = dbsync_state:save(#document{key = {sid, file_meta, Doc#document.key}, value = #dbsync_state{entry = {ok, SID}}}),
+    {ok, _} = dbsync_state:save(#document{key = dbsync_state:sid_doc_key(file_meta, Doc#document.key), value = #dbsync_state{entry = {ok, SID}}}),
     ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->

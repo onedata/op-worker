@@ -44,7 +44,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 95},
+            {success_rate, 90},
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -56,7 +56,7 @@ stress_test_base(Config) ->
 single_dir_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, files_num}, {value, 10000}, {description, "Numer of files in dir"}]
+            [{name, files_num}, {value, 1000}, {description, "Numer of files in dir"}]
         ]},
         {description, "Creates files in dir using single process"}
     ]).
@@ -70,7 +70,7 @@ single_dir_creation_test_base(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
 
     MainDir = generator:gen_name(),
-    Dir = <<SpaceName/binary, "/", MainDir/binary>>,
+    Dir = <<"/", SpaceName/binary, "/", MainDir/binary>>,
 
     case lfm_proxy:mkdir(Worker, SessId, Dir, 8#755) of
         {ok, _} ->
@@ -142,7 +142,7 @@ many_files_creation_tree_test_base(Config) ->
         N2 = integer_to_binary(N),
         NewDir = <<H/binary, "/", N2/binary>>,
         [{NewDir, C} | Acc]
-    end, [{SpaceName, false}], Levels),
+    end, [{<<"/", SpaceName/binary>>, false}], Levels),
     [_ | BaseDirs] = lists:reverse(BaseDirsReversed),
 
     BaseCreationAns = lists:foldl(fun
