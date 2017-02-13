@@ -21,7 +21,7 @@
     model_init/0, 'after'/5, before/4]).
 -export([record_struct/1]).
 
--export([verify_and_del_key/2]).
+-export([verify_and_del_key/2, sid_doc_key/2]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -203,7 +203,7 @@ verify_and_del_key(Key, ModelName, Checks) ->
         ok ->
             spawn(fun() ->
                 timer:sleep(timer:minutes(5)),
-                delete({sid, ModelName, Key})
+                delete(sid_doc_key(ModelName, Key))
             end),
             ok;
         _ ->
@@ -234,11 +234,11 @@ save_space_id(ModelName, Key) ->
         {ok, Doc} ->
             case dbsync_worker:get_space_id(Doc) of
                 {ok, SID} ->
-                    {ok, _} = save(#document{key = {sid, ModelName, Key},
+                    {ok, _} = save(#document{key = sid_doc_key(ModelName, Key),
                         value = #dbsync_state{entry = {ok, SID}}}),
                     ok;
                 {error, not_a_space} ->
-                    {ok, _} = save(#document{key = {sid, ModelName, Key},
+                    {ok, _} = save(#document{key = sid_doc_key(ModelName, Key),
                         value = #dbsync_state{entry = {error, not_a_space}}}),
                     ok;
                 Other ->
@@ -248,4 +248,19 @@ save_space_id(ModelName, Key) ->
             ok;
         Other2 ->
             {prehook_error, Other2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns key for dbsync_state document that holds information about sid.
+%% @end
+%%--------------------------------------------------------------------
+-spec sid_doc_key(ModelName :: model_behaviour:model_type(), Key :: datastore:ext_key()) -> BinKey :: binary().
+sid_doc_key(ModelName, Key) ->
+    Base = base64:encode(term_to_binary({sid, ModelName, Key})),
+    case byte_size(Base) > 120 of
+        true ->
+            binary:part(Base, {0, 120});
+        _ ->
+            Base
     end.

@@ -1116,7 +1116,7 @@ ensure_global_stream_active() ->
 get_sid_from_state(ModelName, #document{key = Key}) ->
     get_sid_from_state(ModelName, Key);
 get_sid_from_state(ModelName, Key) ->
-    case dbsync_state:get({sid, ModelName, Key}) of
+    case dbsync_state:get(dbsync_state:sid_doc_key(ModelName, Key)) of
         {ok, #document{value = #dbsync_state{entry = Value}}} ->
             Value;
         Other ->
