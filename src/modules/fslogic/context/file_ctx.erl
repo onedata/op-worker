@@ -331,7 +331,7 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %% Returns parent's file context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(ctx(), undefined | od_user:id()) -> {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
+-spec get_parent(ctx(), user_ctx:ctx()) -> {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
 get_parent(FileCtx = #file_ctx{
     parent = undefined,
     canonical_path = CanonicalPath,
