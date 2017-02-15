@@ -180,7 +180,7 @@ rename_or_delete(FileCtx,
             %% TODO: VFS-2299 delete file locally without triggering deletion
             %% on other providers, also make sure all locally modified blocks
             %% are synced to other providers that still support target space
-            {deleted, FileCtx}
+            {deleted, file_ctx:reset(FileCtx)}
     end.
 
 %%--------------------------------------------------------------------

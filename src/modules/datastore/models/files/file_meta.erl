@@ -38,9 +38,9 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1, get_scope_id/1, list_children/3, get_parent/1,
-    get_parent_uuid/1, get_parent_uuid/2, get_parent_uuid_in_context/1, rename/2, setup_onedata_user/2,
-    get_name/1]).
+-export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
+    get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
+    get_parent_uuid/2, rename/2, setup_onedata_user/2, get_name/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2]).
@@ -612,23 +612,8 @@ get_parent_uuid(Entry) ->
 %%--------------------------------------------------------------------
 -spec get_parent_uuid(file_meta:uuid(), od_space:id()) -> {ok, datastore:key()} | datastore:get_error().
 get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
-    ?ROOT_DIR_UUID;
+    {ok, ?ROOT_DIR_UUID};
 get_parent_uuid(FileUuid, SpaceId) ->
-    ?run(begin
-        {ok, {ParentKey, ?MODEL_NAME}} =
-            datastore:fetch_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, parent),
-        {ok, ParentKey}
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's parent uuid in context.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent_uuid_in_context(file_meta:uuid()) -> {ok, datastore:key()} | datastore:get_error().
-get_parent_uuid_in_context(?ROOT_DIR_UUID) ->
-    ?ROOT_DIR_UUID;
-get_parent_uuid_in_context(FileUuid) ->
     {ok, {ParentKey, ?MODEL_NAME}} =
         datastore:fetch_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, parent),
     {ok, ParentKey}.

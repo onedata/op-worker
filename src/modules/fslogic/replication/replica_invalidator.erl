@@ -35,20 +35,20 @@
 invalidate_changes(FileCtx, Doc = #document{value = Loc}, [], NewSize) ->
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     {ok, _} = file_location:save(NewDoc),
-    {NewDoc, FileCtx};
+    {NewDoc, file_ctx:reset(FileCtx)};
 invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}], NewSize) ->
     % if rename is present, it is always last element of changes list
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     case fslogic_file_location:rename_or_delete(FileCtx, NewDoc, Rename) of
         {deleted, FileCtx2} ->
-            {deleted, FileCtx2};
+            {deleted, file_ctx:reset(FileCtx2)};
         {skipped, FileCtx2} ->
             {ok, _} = file_location:save(NewDoc),
-            {NewDoc, FileCtx2};
+            {NewDoc, file_ctx:reset(FileCtx2)};
         {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, FileCtx2} ->
             ?critical("FileRenamed ~p", [{renamed, RenamedDoc, FileUuid, TargetSpaceId}]),
             {ok, _} = file_location:save(RenamedDoc),
-            {RenamedDoc, FileCtx2}
+            {RenamedDoc, file_ctx:reset(FileCtx2)}
     end;
 invalidate_changes(FileCtx, Doc = #document{
     value = Loc = #file_location{

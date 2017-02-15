@@ -193,8 +193,8 @@ delete(Key) ->
             space_id = SpaceId
         }}} ->
             Size = count_bytes(Doc),
-            UserId = get_owner_id(Uuid),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
+            UserId = get_owner_id(Uuid),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok
