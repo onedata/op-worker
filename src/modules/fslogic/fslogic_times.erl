@@ -24,9 +24,8 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Updates entry atime to current time, unless it is actual
-%% @doc
+%% @equiv update_atime(FileCtx, UserId, erlang:system_time(seconds)).
+%% @end
 %%--------------------------------------------------------------------
 -spec update_atime(file_ctx:ctx(), UserId :: od_user:id()) -> ok.
 update_atime(FileCtx, UserId) ->
@@ -35,7 +34,7 @@ update_atime(FileCtx, UserId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry atime to given time, unless it is actual
-%% @doc
+%% @end
 %%--------------------------------------------------------------------
 -spec update_atime(file_ctx:ctx(), UserId :: od_user:id(),
     CurrentTime :: file_meta:time()) -> ok.
@@ -48,9 +47,8 @@ update_atime(FileCtx, UserId, CurrentTime) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Updates entry ctime to current time
-%% @doc
+%% @equiv update_ctime(FileCtx, UserId, erlang:system_time(seconds)).
+%% @end
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx(), UserId :: od_user:id()) -> ok.
 update_ctime(FileCtx, UserId) ->
@@ -59,7 +57,7 @@ update_ctime(FileCtx, UserId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry ctime to given time
-%% @doc
+%% @end
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx(), UserId :: od_user:id(),
     CurrentTime :: file_meta:time()) -> ok.
@@ -67,9 +65,8 @@ update_ctime(FileCtx, UserId, CurrentTime) ->
     ok = update_times_and_emit(FileCtx, #{ctime => CurrentTime}, UserId).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Updates entry mtime and ctime to current time
-%% @doc
+%% @equiv update_mtime_ctime(FileCtx, UserId, erlang:system_time(seconds)).
+%% @end
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx(), UserId :: od_user:id()) ->
     ok.
@@ -79,7 +76,7 @@ update_mtime_ctime(FileCtx, UserId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry mtime and ctime to given time
-%% @doc
+%% @end
 %%--------------------------------------------------------------------
 -spec update_mtime_ctime(file_ctx:ctx(), UserId :: od_user:id(),
     CurrentTime :: file_meta:time()) -> ok.
@@ -89,7 +86,7 @@ update_mtime_ctime(FileCtx, UserId, CurrentTime) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry with given map and emits times update event
-%% @doc
+%% @end
 %%--------------------------------------------------------------------
 -spec update_times_and_emit(file_ctx:ctx(),
     TimesMap :: #{atom() => file_meta:time()}, UserId :: od_user:id()) -> ok.
@@ -135,7 +132,7 @@ calculate_atime(FileCtx, CurrentTime) ->
 %% @private
 %% @doc
 %% Convert map to times document
-%% @doc
+%% @end
 %%--------------------------------------------------------------------
 -spec prepare_times(#{atom() => file_meta:time()}) -> #times{}.
 prepare_times(TimesMap) ->

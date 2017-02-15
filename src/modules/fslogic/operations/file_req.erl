@@ -100,14 +100,15 @@ get_file_location(_UserCtx, FileCtx) ->
 
     #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
+        fuse_response = file_location:normalize(
+        file_location:ensure_blocks_not_empty(#file_location{
             uuid = FileGuid,
             provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId,
             file_id = FileId,
             blocks = Blocks,
             space_id = SpaceId
-        })
+        }))
     }.
 
 %%--------------------------------------------------------------------

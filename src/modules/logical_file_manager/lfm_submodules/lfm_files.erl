@@ -184,7 +184,7 @@ open(SessId, FileKey, Flag) ->
                         {ok, Handle} ->
                             {ok, lfm_context:new(
                                 HandleId,
-                                normalize_file_location(Location),
+                                file_location:normalize(Location),
                                 ProviderId,
                                 #{default => {{StorageId, FileId}, Handle}},
                                 SessId,
@@ -336,7 +336,7 @@ get_sfm_handle_key(OpType, Handle, Offset, Size) ->
 
     Blocks = try %todo cache location in handle
         #document{value = LocalLocation} = fslogic_utils:get_local_file_location({guid, Guid}), %todo VFS-2813 support multi location
-        #file_location{blocks = Blocks0} = normalize_file_location(LocalLocation),
+        #file_location{blocks = Blocks0} = file_location:normalize(LocalLocation),
         Blocks0
     catch
         _:_ ->
@@ -537,15 +537,3 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
         {error, Reason2} ->
             {error, Reason2}
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns given file_location with updated blocks filled with storage_id and/or
-%% file_id using default values if needed.
-%% @end
-%%--------------------------------------------------------------------
--spec normalize_file_location(#file_location{}) -> #file_location{}.
-normalize_file_location(Loc = #file_location{storage_id = SID, file_id = FID, blocks = Blocks}) ->
-    NewBlocks = [Block#file_block{storage_id = SID, file_id = FID} || Block <- Blocks],
-    Loc#file_location{blocks = NewBlocks}.

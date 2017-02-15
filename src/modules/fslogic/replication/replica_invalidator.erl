@@ -46,7 +46,6 @@ invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}], Ne
             {ok, _} = file_location:save(NewDoc),
             {NewDoc, file_ctx:reset(FileCtx2)};
         {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, FileCtx2} ->
-            ?critical("FileRenamed ~p", [{renamed, RenamedDoc, FileUuid, TargetSpaceId}]),
             {ok, _} = file_location:save(RenamedDoc),
             {RenamedDoc, file_ctx:reset(FileCtx2)}
     end;
