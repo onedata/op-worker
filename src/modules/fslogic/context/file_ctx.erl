@@ -575,9 +575,13 @@ get_local_file_location_docs(FileCtx) ->
     {[file_location:doc()], ctx()}.
 get_file_location_docs(FileCtx = #file_ctx{file_location_docs = undefined}) ->
     {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
-    LocationDocs = lists:map(fun(LocId) ->
-        {ok, Location} = file_location:get(LocId),
-        Location
+    LocationDocs = lists:filtermap(fun(LocId) ->
+        case file_location:get(LocId) of
+            {ok, Location} ->
+                {true, Location};
+            _Error ->
+                false
+        end
     end, LocationIds),
     {LocationDocs, FileCtx2#file_ctx{file_location_docs = LocationDocs}};
 get_file_location_docs(FileCtx = #file_ctx{file_location_docs = LocationDocs}) ->
