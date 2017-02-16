@@ -89,12 +89,13 @@ basic_operations_test_core(Config, LastLevel) ->
     #document{key = Level20Key} = UL20,
 
     space_info_mock(Workers, <<"Space 1">>),
-    {{A30, U30}, GenPathLevel1} = ?call_with_time(Worker1, fslogic_path, gen_path, [{uuid, U21}, ?ROOT_SESS_ID]),
-    {{A31, U31}, GenPathLevel2} = ?call_with_time(Worker2, fslogic_path, gen_path, [{uuid, U22}, ?ROOT_SESS_ID]),
-    {{A32, U32}, GenPathLevel3} = ?call_with_time(Worker2, fslogic_path, gen_path, [{uuid, U23}, ?ROOT_SESS_ID]),
-    ?assertMatch({ok, <<"/Space 1/dir2/file1">>}, {A30, U30}),
-    ?assertMatch({ok, <<"/Space 1/dir2/file2">>}, {A31, U31}),
-    ?assertMatch({ok, <<"/Space 1/dir2/file3">>}, {A32, U32}),
+    RootUserCtx = rpc:call(Worker1, user_ctx, new, [?ROOT_SESS_ID]),
+    {U30, GenPathLevel1} = ?call_with_time(Worker1, fslogic_uuid, uuid_to_path, [RootUserCtx, U21]),
+    {U31, GenPathLevel2} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [RootUserCtx, U22]),
+    {U32, GenPathLevel3} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [RootUserCtx, U23]),
+    ?assertMatch(<<"/Space 1/dir2/file1">>, U30),
+    ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
+    ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
 
     {{A41, U41}, ResolveLevel2} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/">>]),
     {{A42, U42}, ResolveLevel3} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/dir2">>]),
@@ -104,8 +105,8 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch({ok, {#document{key = Level20Key}, _}}, {A43, U43}),
 
 
-    {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, fslogic_path, gen_path, [UL20, ?ROOT_SESS_ID]),
-    ?assertMatch({ok, Level20Path}, {AL20_2, UL20_2}),
+    {UL20_2, GenPathLevel20} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [RootUserCtx, Level20Key]),
+    ?assertMatch(Level20Path, UL20_2),
     test_utils:mock_unload(Workers, [od_space, fslogic_uuid]),
 
     {{A9, U9}, GetScopeLevel0} = ?call_with_time(Worker1, get_scope, [U14]),

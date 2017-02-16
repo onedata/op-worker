@@ -21,10 +21,6 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
--define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
-    storage_test_file_name_size, 32)).
--define(TEST_FILE_CONTENT_LEN, application:get_env(?APP_NAME,
-    storage_test_file_content_size, 100)).
 -define(REMOVE_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
     remove_storage_test_file_delay_seconds, 300))).
 -define(VERIFY_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
@@ -103,8 +99,8 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             HelperParams = helper:get_params(Helper, ClientStorageUserUserCtx),
 
             {FileId, _NewFile} = file_ctx:get_storage_file_id(File),
-            Dirname = fslogic_path:dirname(FileId),
-            TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
+            Dirname = filename:dirname(FileId),
+            TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
             FileContent = storage_detector:create_test_file(Helper, ServerStorageUserUserCtx, TestFileId),
 

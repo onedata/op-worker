@@ -71,8 +71,8 @@ translate_handshake_error(_) ->
 %% COMMON
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
-translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
-    #file_block{offset = Off, size = S, file_id = FID, storage_id = SID};
+translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
+    #file_block{offset = Off, size = S};
 translate_from_protobuf(#'FileRenamedEntry'{} = Record) ->
     #file_renamed_entry{
         old_uuid = Record#'FileRenamedEntry'.old_uuid,
@@ -302,14 +302,14 @@ translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
         end, FileEntries)};
 translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
-        uuid = Record#'FileLocation'.uuid,
+        uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
         blocks = lists:map(
-            fun(Block) ->
-                translate_from_protobuf(Block)
+            fun(#'FileBlock'{offset = Offset, size = Size}) ->
+                #file_block{offset = Offset, size = Size}
             end, Record#'FileLocation'.blocks)
     };
 translate_from_protobuf(#'HelperParams'{helper_name = HelperName, helper_args = HelpersArgs}) ->
@@ -503,8 +503,8 @@ translate_from_protobuf(undefined) ->
 %% COMMON
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
-translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
-    #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
+translate_to_protobuf(#file_block{offset = Off, size = S}) ->
+    #'FileBlock'{offset = Off, size = S};
 translate_to_protobuf(#file_renamed_entry{} = Record) ->
     #'FileRenamedEntry'{
         old_uuid = Record#'file_renamed_entry'.old_uuid,
@@ -718,13 +718,18 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     end, FileEntries)}};
 translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
-        uuid = Record#file_location.uuid,
+        uuid = fslogic_uuid:uuid_to_guid(Record#file_location.uuid, Record#file_location.space_id),
         provider_id = Record#file_location.provider_id,
         space_id = Record#file_location.space_id,
         storage_id = Record#file_location.storage_id,
         file_id = Record#file_location.file_id,
-        blocks = lists:map(fun(Block) ->
-            translate_to_protobuf(Block)
+        blocks = lists:map(fun(#file_block{offset = Offset, size = Size}) ->
+            #'FileBlock'{
+                offset = Offset,
+                size = Size,
+                file_id = Record#file_location.file_id,
+                storage_id = Record#file_location.storage_id
+            }
         end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->

@@ -34,7 +34,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type handle() :: lfm_context:handle().
+-type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
 -type error_reply() :: {error, term()}.
 
@@ -69,18 +69,18 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_meta:path()) ->
+-spec mkdir(session:id(), Path :: file_meta:path()) ->
     {ok, DirGuid :: file_meta:uuid()} | error_reply().
 mkdir(SessId, Path) ->
     ?run(fun() -> lfm_dirs:mkdir(SessId, Path) end).
 
--spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
+-spec mkdir(session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, DirGUID :: fslogic_worker:file_guid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     ?run(fun() -> lfm_dirs:mkdir(SessId, Path, Mode) end).
 
--spec mkdir(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
+-spec mkdir(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, DirGuid :: fslogic_worker:file_guid()} | error_reply().
 mkdir(SessId, ParentGuid, Name, Mode) ->
@@ -91,7 +91,8 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 %% Deletes a directory with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
+-spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) ->
+    ok | error_reply().
 rm_recursive(SessId, FileKey) ->
     ?run(fun() -> lfm_files:rm(SessId, FileKey) end).
 
@@ -123,7 +124,7 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %% Returns number of children of a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(SessId :: session:id(),
+-spec get_children_count(session:id(),
     FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
@@ -134,7 +135,7 @@ get_children_count(SessId, FileKey) ->
 %% Returns uuid of parent for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_parent(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 get_parent(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_parent(SessId, FileKey) end).
@@ -164,7 +165,7 @@ cp(SessId, FileEntry, TargetPath) ->
 %% Returns full path of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid()) ->
+-spec get_file_path(session:id(), FileGUID :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGUID) ->
     ?run(fun() -> lfm_files:get_file_path(SessId, FileGUID) end).
@@ -184,7 +185,7 @@ unlink(SessId, FileEntry, Silent) ->
 %% Replicates file on given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec replicate_file(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     ProviderId :: oneprovider:id()) ->
     ok | error_reply().
 replicate_file(SessId, FileKey, ProviderId) ->
@@ -195,18 +196,18 @@ replicate_file(SessId, FileKey, ProviderId) ->
 %% Creates a new file
 %% @end
 %%--------------------------------------------------------------------
--spec create(SessId :: session:id(), Path :: file_meta:path()) ->
+-spec create(session:id(), Path :: file_meta:path()) ->
     {ok, file_meta:uuid()} | error_reply().
 create(SessId, Path) ->
     ?run(fun() -> lfm_files:create(SessId, Path) end).
 
--spec create(SessId :: session:id(), Path :: file_meta:path(),
+-spec create(session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path, Mode) ->
     ?run(fun() -> lfm_files:create(SessId, Path, Mode) end).
 
--spec create(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
+-spec create(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, ParentGuid, Name, Mode) ->
@@ -217,7 +218,7 @@ create(SessId, ParentGuid, Name, Mode) ->
 %% Opens a file in selected mode and returns a file handle used to read or write.
 %% @end
 %%--------------------------------------------------------------------
--spec open(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     OpenType :: helpers:open_flag()) ->
     {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
@@ -257,9 +258,8 @@ read(FileHandle, Offset, MaxSize) ->
 %% Truncates a file.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Size :: non_neg_integer()) ->
-    ok | error_reply().
+-spec truncate(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    Size :: non_neg_integer()) -> ok | error_reply().
 truncate(SessId, FileKey, Size) ->
     ?run(fun() -> lfm_files:truncate(SessId, FileKey, Size) end).
 
@@ -268,8 +268,7 @@ truncate(SessId, FileKey, Size) ->
 %% Releases previously opened  file.
 %% @end
 %%--------------------------------------------------------------------
--spec release(handle()) ->
-    ok | error_reply().
+-spec release(handle()) -> ok | error_reply().
 release(FileHandle) ->
     ?run(fun() -> lfm_files:release(FileHandle) end).
 
@@ -278,7 +277,7 @@ release(FileHandle) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, list()} | error_reply().
 get_file_distribution(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_file_distribution(SessId, FileKey) end).
@@ -288,7 +287,7 @@ get_file_distribution(SessId, FileKey) ->
 %% Changes the permissions of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_perms(SessId :: session:id(), FileKey :: file_key(),
+-spec set_perms(session:id(), FileKey :: file_key(),
     NewPerms :: file_meta:posix_permissions()) ->
     ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
@@ -309,7 +308,7 @@ check_perms(SessId, FileKey, PermType) ->
 %% Returns file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, [lfm_perms:access_control_entity()]} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
@@ -319,8 +318,8 @@ get_acl(SessId, FileKey) ->
 %% Updates file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), EntityList :: [lfm_perms:access_control_entity()]) ->
-    ok | error_reply().
+-spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    EntityList :: [lfm_perms:access_control_entity()]) -> ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 
@@ -329,7 +328,7 @@ set_acl(SessId, FileKey, EntityList) ->
 %% Removes file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec remove_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | error_reply().
 remove_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:remove_acl(SessId, FileKey) end).
@@ -339,7 +338,8 @@ remove_acl(SessId, FileKey) ->
 %% Returns file attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec stat(session:id(), file_key()) -> {ok, lfm_attrs:file_attributes()} | error_reply().
+-spec stat(session:id(), file_key()) ->
+    {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
 
@@ -490,7 +490,8 @@ remove_share_by_guid(SessId, ShareGuid) ->
 %% Get metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
+-spec get_metadata(session:id(), file_key(), custom_metadata:type(),
+    custom_metadata:filter(), boolean()) ->
     {ok, custom_metadata:value()} | error_reply().
 get_metadata(SessId, FileKey, Type, Names, Inherited) ->
     ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names, Inherited) end).

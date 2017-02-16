@@ -177,7 +177,7 @@ mkdir(#sfm_handle{
             case Tokens of
                 [_] -> ok;
                 [_ | _] ->
-                    LeafLess = fslogic_path:dirname(Tokens),
+                    LeafLess = filename:dirname(FileId),
                     case mkdir(SFMHandle#sfm_handle{file = LeafLess},
                         ?AUTO_CREATED_PARENT_DIR_MODE, true)
                     of

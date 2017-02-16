@@ -366,25 +366,26 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     read_write_req:read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size).
 
 %%--------------------------------------------------------------------
+%% @todo refactor
 %% @private
 %% @doc
 %% Do posthook for request response
 %% @end
 %%--------------------------------------------------------------------
 -spec process_response(user_ctx:ctx(), request(), response()) -> response().
-process_response(Context, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
+process_response(UserCtx, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
     #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
-    SessId = user_ctx:get_session_id(Context),
-    {ok, Path0} = fslogic_path:gen_path({uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, SessId),
-    {ok, Tokens0} = fslogic_path:tokenize_skipping_dots(Path0),
+    SessId = user_ctx:get_session_id(UserCtx),
+    Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
+    {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
     Tokens = Tokens0 ++ [FileName],
     Path = fslogic_path:join(Tokens),
-    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+    case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
         {path, P} ->
-            {ok, Tokens1} = fslogic_path:tokenize_skipping_dots(P),
+            {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
             case Tokens1 of
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
                     Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
                     space_sync_worker:run(Init);
                 _ -> Response
@@ -392,15 +393,15 @@ process_response(Context, #fuse_request{fuse_request = #file_request{file_reques
         _ ->
             Response
     end;
-process_response(Context, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
+process_response(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
     #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+    case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
         {path, P} ->
-            {ok, Tokens1} = fslogic_path:tokenize_skipping_dots(P),
+            {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
             case Tokens1 of
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
                     Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
                     space_sync_worker:run(Init);
                 _ -> Response

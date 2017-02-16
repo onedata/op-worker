@@ -89,7 +89,7 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, Mode) ->
     {ok, TargetStorage = #document{key = TargetStorageId}} =
         fslogic_storage:select_storage(TargetSpaceId),
     TargetSpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),
-    TargetDir = fslogic_path:dirname(TargetFileId),
+    TargetDir = filename:dirname(TargetFileId),
     TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
         TargetSpaceUuid, undefined, TargetStorage, TargetDir),
     case storage_file_manager:mkdir(TargetDirHandle,
@@ -180,14 +180,6 @@ create_storage_file(UserCtx, FileCtx) ->
     %create its location in db
     SpaceId = file_ctx:get_space_id_const(FileCtx5),
     Location = #file_location{
-        blocks = [
-            #file_block{
-                offset = 0,
-                size = 0,
-                file_id = FileId,
-                storage_id = StorageId
-            }
-        ],
         provider_id = oneprovider:get_provider_id(),
         file_id = FileId,
         storage_id = StorageId,
@@ -266,7 +258,7 @@ create_parent_dirs(FileCtx) ->
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
     {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
 
-    LeafLess = fslogic_path:dirname(StorageFileId),
+    LeafLess = filename:dirname(StorageFileId),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid,
         FileUuid, Storage, LeafLess),

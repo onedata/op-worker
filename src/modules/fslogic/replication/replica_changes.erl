@@ -6,10 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% file location management
+%%% Functions responsible for adding and removing changes from file_location
+%%% documents.
 %%% @end
 %%%--------------------------------------------------------------------
--module(fslogic_file_location).
+-module(replica_changes).
 -author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
@@ -18,7 +19,7 @@
 
 %% API
 -export([add_change/2, get_changes/2, get_merged_changes/2, set_last_rename/3,
-    rename_or_delete/3, prepare_location_for_client/2]).
+    rename_or_delete/3]).
 
 -define(MAX_CHANGES, 20).
 
@@ -36,7 +37,7 @@
 %% Add changelog to file_location document
 %% @end
 %%--------------------------------------------------------------------
--spec add_change(file_location:doc(), fslogic_file_location:change()) ->
+-spec add_change(file_location:doc(), replica_changes:change()) ->
     file_location:doc().
 add_change(Doc = #document{value = Location = #file_location{
     recent_changes = {_Backup, New}
@@ -52,7 +53,7 @@ add_change(Doc = #document{value = Location = #file_location{recent_changes = {B
 %% Get N recent changes of file_location
 %% @end
 %%--------------------------------------------------------------------
--spec get_changes(file_location:doc(), integer()) -> [fslogic_file_location:change()].
+-spec get_changes(file_location:doc(), integer()) -> [replica_changes:change()].
 get_changes(_, N) when N =< 0 ->
     [];
 get_changes(#document{value = #file_location{
@@ -126,7 +127,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
 
 
 %%--------------------------------------------------------------------
-%% @doc
+%% @doc %todo get file system logic out of here, keep only replica changes
 %% Renames file on storage and updates local location if target space
 %% is supported in current provider, otherwise deletes local location and file.
 %% Document is unchanged if there was no rename or given rename
@@ -146,8 +147,7 @@ rename_or_delete(FileCtx, #document{value = #file_location{
 rename_or_delete(FileCtx,
     Doc = #document{
         value = Loc = #file_location{
-            uuid = FileUuid,
-            blocks = OldBlocks
+            uuid = FileUuid
         }},
     {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename
 ) ->
@@ -161,18 +161,11 @@ rename_or_delete(FileCtx,
 
             NewFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
             {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
-            NewBlocks = lists:map(fun(Block) ->
-                Block#file_block{
-                    file_id = RemoteTargetFileId,
-                    storage_id = TargetStorageId
-                }
-            end, OldBlocks),
 
             RenamedDoc = Doc#document{value = Loc#file_location{
                 file_id = RemoteTargetFileId,
                 space_id = TargetSpaceId,
                 storage_id = TargetStorageId,
-                blocks = NewBlocks,
                 last_rename = LastRename
             }},
             {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx2};
@@ -182,48 +175,6 @@ rename_or_delete(FileCtx,
             %% are synced to other providers that still support target space
             {deleted, FileCtx}
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Prepare location that can be understood by client.
-%% @end
-%%--------------------------------------------------------------------
--spec prepare_location_for_client(file_ctx:ctx(), fslogic_blocks:block() | undefined) ->
-    #file_location{}.
-prepare_location_for_client(FileCtx, ReqRange) ->
-    % get locations
-    {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    {[FileLocationDoc = #document{
-        value = FileLocation = #file_location{
-            blocks = Blocks,
-            size = Size
-        }
-    }], _FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
-
-    % find gaps
-    AllRanges = lists:foldl(
-        fun(#document{value = #file_location{blocks = _Blocks}}, Acc) ->
-            fslogic_blocks:merge(Acc, _Blocks)
-        end, [], Locations),
-    RequestedRange = utils:ensure_defined(ReqRange, undefined, #file_block{offset = 0, size = Size}),
-    ExtendedRequestedRange = case RequestedRange of
-        #file_block{offset = O, size = S} when O + S < Size ->
-            RequestedRange#file_block{size = Size - O};
-        _ -> RequestedRange
-    end,
-    FullFile = replica_updater:fill_blocks_with_storage_info(
-        [ExtendedRequestedRange], FileLocationDoc),
-    Gaps = fslogic_blocks:consolidate(
-        fslogic_blocks:invalidate(FullFile, AllRanges)
-    ),
-    BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
-
-    % fill gaps, fill storage info, transform uid and emit
-    file_location:ensure_blocks_not_empty(
-        FileLocation#file_location{
-            uuid = file_ctx:get_guid_const(FileCtx),
-            blocks = BlocksWithFilledGaps
-        }).
 
 %%%===================================================================
 %%% Internal functions

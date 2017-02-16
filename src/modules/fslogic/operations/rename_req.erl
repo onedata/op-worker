@@ -369,7 +369,7 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
                     Uuid = file_ctx:get_uuid_const(FileCtx),
                     {NewName, FileCtx2} = file_ctx:get_aliased_name(FileCtx, UserCtx),
                     {NewParentGuid, _FileCtx3} = file_ctx:get_parent_guid(FileCtx2, UserCtx),
-                    {NewParentUuid, _} = fslogic_uuid:unpack_guid(NewParentGuid),
+                    NewParentUuid = fslogic_uuid:guid_to_uuid(NewParentGuid),
                     [{fslogic_uuid:uuid_to_guid(Uuid, SourceSpaceId),
                       fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId),
                       fslogic_uuid:uuid_to_guid(NewParentUuid, TargetSpaceId),
@@ -387,7 +387,8 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
             ok = sfm_utils:rename_storage_file_updating_location(UserCtx, SourceFileCtx3, TargetSpaceId),
 
             {NewName, _TargetFilePartialCtx2} = file_ctx:get_aliased_name(TargetFilePartialCtx, UserCtx),
-            NewParentUuid = fslogic_uuid:parent_uuid({uuid, SourceFileUuid}, UserId),
+            {NewParentGuid, _} = file_ctx:get_parent_guid(file_ctx:reset(SourceFileCtx3), UserCtx),
+            NewParentUuid = fslogic_uuid:guid_to_uuid(NewParentGuid),
             [{fslogic_uuid:uuid_to_guid(SourceFileUuid, SourceSpaceId),
               fslogic_uuid:uuid_to_guid(SourceFileUuid, TargetSpaceId),
               fslogic_uuid:uuid_to_guid(NewParentUuid, TargetSpaceId),
@@ -765,7 +766,7 @@ get_logical_and_canonical_path_of_file(UserCtx, TargetParentFileCtx, TargetName)
     SessId = user_ctx:get_session_id(UserCtx),
     Guid = file_ctx:get_guid_const(TargetParentFileCtx),
     {ok, LogicalTargetParentPath} = logical_file_manager:get_file_path(SessId, Guid),
-    case fslogic_path:tokenize_skipping_dots(LogicalTargetParentPath) of
+    case fslogic_path:split_skipping_dots(LogicalTargetParentPath) of
         {ok, [<<"/">>]} ->
             throw(?EPERM);
         {ok, [<<"/">>, _SpaceName | Rest]} ->

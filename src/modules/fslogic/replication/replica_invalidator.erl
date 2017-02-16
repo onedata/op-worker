@@ -39,7 +39,7 @@ invalidate_changes(FileCtx, Doc = #document{value = Loc}, [], NewSize) ->
 invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}], NewSize) ->
     % if rename is present, it is always last element of changes list
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
-    case fslogic_file_location:rename_or_delete(FileCtx, NewDoc, Rename) of
+    case replica_changes:rename_or_delete(FileCtx, NewDoc, Rename) of
         {deleted, FileCtx2} ->
             {deleted, FileCtx2};
         {skipped, FileCtx2} ->

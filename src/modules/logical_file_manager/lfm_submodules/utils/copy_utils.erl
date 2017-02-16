@@ -82,6 +82,8 @@ copy_file(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath)
     {ok, TargetHandle} = logical_file_manager:open(SessId, {guid, TargetGuid}, write),
     {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(SourceHandle, TargetHandle, 0),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
+    ok = logical_file_manager:fsync(TargetHandle),
+    ok = logical_file_manager:release(TargetHandle),
     {ok, TargetGuid}.
 
 %%--------------------------------------------------------------------

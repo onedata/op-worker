@@ -33,10 +33,8 @@
 -define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
--define(ROOT_SESS, #session{identity = #user_identity{user_id = ?ROOT_USER_ID}}).
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
--define(GUEST_SESS, #session{identity = #user_identity{user_id = ?GUEST_USER_ID}}).
 
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
@@ -44,6 +42,5 @@
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).
--define(PROXYIO_PARAMETER_SHARE_ID, <<"share_id">>).
 
 -endif.

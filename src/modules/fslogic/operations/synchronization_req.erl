@@ -56,7 +56,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx, Range = #file_block{off
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
 
     Checksum = crypto:hash(md4, Data),
-    LocationToSend = fslogic_file_location:prepare_location_for_client(FileCtx, Range),
+    {LocationToSend, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{

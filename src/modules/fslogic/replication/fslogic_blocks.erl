@@ -16,7 +16,6 @@
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 -type block() :: #file_block{}.
 -type blocks() :: [block()].
 
@@ -24,7 +23,7 @@
 
 %% API
 -export([merge/2, aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
-    lower/1, calculate_file_size/1]).
+    lower/1]).
 
 %%%===================================================================
 %%% API
@@ -42,7 +41,6 @@ merge(Blocks1, Blocks2) ->
     NewBlocks = fslogic_blocks:invalidate(Blocks2, Blocks1) ++ Blocks1,
     fslogic_blocks:consolidate(lists:sort(NewBlocks)).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Aggregates lists of 'file_block' records.
@@ -53,13 +51,10 @@ merge(Blocks1, Blocks2) ->
 -spec aggregate(Blocks1 :: blocks(), Blocks2 :: blocks()) -> AggBlocks :: blocks().
 aggregate([], Blocks) ->
     Blocks;
-
 aggregate(Blocks, []) ->
     Blocks;
-
 aggregate(Blocks1, Blocks2) ->
     aggregate_blocks(Blocks1, Blocks2, []).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -74,7 +69,6 @@ upper([_ | _] = Blocks) ->
 upper([]) ->
     0.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% For given blocks, returns first block number.
@@ -87,7 +81,6 @@ lower([_ | _] = Blocks) ->
     lists:min([lower(Block) || Block <- Blocks]);
 lower([]) ->
     0.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,7 +121,6 @@ get_file_size(Entry) ->
             get_file_size(LocalLocations)
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Invalidates second list's blocks in first list.
@@ -154,7 +146,6 @@ invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = D
 invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO =< DO, CO + CS >= DO + DS ->
     [C#file_block{size = DO - CO}, C#file_block{offset = DO + DS, size = CO + CS - (DO + DS)} | invalidate(T, D)].
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes empty and invalid blocks and merges them whenever it is possible.
@@ -163,25 +154,27 @@ invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = D
 -spec consolidate(blocks()) -> blocks().
 consolidate([]) ->
     [];
-consolidate([#file_block{size = 0} | T]) ->
-    consolidate(T);
-consolidate([#file_block{size = Size} = B | T]) when Size < 0 ->
-    ?warning("Skipping invalid block: ~p", [B]),
-    consolidate(T);
-consolidate([B]) ->
-    [B];
-consolidate([#file_block{offset = LO, size = LS, file_id = FID, storage_id = SID} = B,
-    #file_block{offset = RO, size = RS, file_id = FID, storage_id = SID} | T]) when LO + LS >= RO + RS ->
-    consolidate([B | T]);
-consolidate([#file_block{offset = LO, size = LS, file_id = FID, storage_id = SID} = B,
-    #file_block{offset = RO, size = RS, file_id = FID, storage_id = SID} | T]) when LO + LS >= RO ->
-    consolidate([B#file_block{size = RO + RS - LO} | T]);
-consolidate([B | T]) ->
-    [B | consolidate(T)].
+consolidate([#file_block{size = Size} | Rest]) when Size =< 0  ->
+    consolidate(Rest);
+consolidate([
+    #file_block{offset = LO, size = LS} = FirstBlock,
+    #file_block{offset = RO, size = RS} | Rest]
+) when LO + LS >= RO + RS ->
+    consolidate([FirstBlock | Rest]);
+consolidate([
+    #file_block{offset = LO, size = LS} = FirstBlock,
+    #file_block{offset = RO, size = RS} | Rest]
+) when LO + LS >= RO ->
+    consolidate([FirstBlock#file_block{size = RO + RS - LO} | Rest]);
+consolidate([B | Rest]) ->
+    [B | consolidate(Rest)].
 
-
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% For given file / location or multiple locations, calculates file size based on blocks assigned to those locations.
 %% @end
@@ -204,10 +197,6 @@ calculate_file_size(Entry) ->
     Locations1 = [Location || {ok, #document{value = #file_location{} = Location}} <- Locations],
     calculate_file_size(Locations1).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -218,18 +207,14 @@ calculate_file_size(Entry) ->
     NewAggBlocks :: blocks().
 aggregate_blocks([], [], AggBlocks) ->
     lists:reverse(AggBlocks);
-
 aggregate_blocks([], [Block | Blocks], AggBlocks) ->
     aggregate_blocks([], Blocks, aggregate_block(Block, AggBlocks));
-
 aggregate_blocks([Block | Blocks], [], AggBlocks) ->
     aggregate_blocks(Blocks, [], aggregate_block(Block, AggBlocks));
-
 aggregate_blocks([#file_block{offset = Offset1} = Block1 | Blocks1],
     [#file_block{offset = Offset2} | _] = Blocks2, AggBlocks)
     when Offset1 < Offset2 ->
     aggregate_blocks(Blocks1, Blocks2, aggregate_block(Block1, AggBlocks));
-
 aggregate_blocks(Blocks1, [#file_block{} = Block2 | Blocks2], AggBlocks) ->
     aggregate_blocks(Blocks1, Blocks2, aggregate_block(Block2, AggBlocks)).
 
@@ -242,7 +227,6 @@ aggregate_blocks(Blocks1, [#file_block{} = Block2 | Blocks2], AggBlocks) ->
 -spec aggregate_block(Block :: block(), Blocks :: blocks()) -> AggBlocks :: blocks().
 aggregate_block(Block, []) ->
     [Block];
-
 aggregate_block(#file_block{offset = Offset1, size = Size1} = Block1,
     [#file_block{offset = Offset2, size = Size2} | Blocks])
     when Offset1 =< Offset2 + Size2 ->
@@ -250,6 +234,5 @@ aggregate_block(#file_block{offset = Offset1, size = Size1} = Block1,
         offset = Offset2,
         size = max(Offset1 + Size1, Offset2 + Size2) - Offset2
     } | Blocks];
-
 aggregate_block(Block, Blocks) ->
     [Block | Blocks].

@@ -1,14 +1,14 @@
-%-------------------------------------
+%%%-------------------------------------
 %%% @author Tomasz Lichon
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%-------------------------------------
+%%%-------------------------------------
 %%% @doc
 %%% CDMI tests
 %%% @end
-%-------------------------------------
+%%%-------------------------------------
 -module(cdmi_test_SUITE).
 -author("Tomasz Lichon").
 

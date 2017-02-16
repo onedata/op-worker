@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module exports utility tools for fslogic
+%% @todo remove this module
+%% @doc This module exports utility tools for fslogic
 %% @end
 %% ===================================================================
 -module(fslogic_utils).
@@ -18,47 +19,17 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
--export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1, gen_storage_file_id/2, gen_storage_file_id/3]).
--export([get_local_file_location/1, get_local_file_locations/1,
-    get_local_storage_file_locations/1]).
+-export([gen_storage_file_id/1, gen_storage_file_id/2, gen_storage_file_id/3]).
+-export([get_local_file_location/1, get_local_file_locations/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Create random sequence consisting of lowercase ASCII letters.
-%% @end
-%%--------------------------------------------------------------------
--spec random_ascii_lowercase_sequence(Length :: integer()) -> binary().
-random_ascii_lowercase_sequence(Length) ->
-    random:seed(erlang:phash2([node()]), erlang:monotonic_time(), erlang:unique_integer()),
-    lists:foldl(fun(_, Acc) ->
-        <<Acc/binary, (random:uniform(26) + 96)>>
-    end, <<>>, lists:seq(1, Length)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns parent of given file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(fslogic_worker:file()) -> fslogic_worker:file() | no_return().
-get_parent({path, Path}) ->
-    [_ | R] = lists:reverse(fslogic_path:split(Path)),
-    Tokens = lists:reverse(R),
-    ParentPath = filepath_utils:ensure_begins_with_prefix(fslogic_path:join(Tokens), ?DIRECTORY_SEPARATOR_BINARY),
-    {ok, Doc} = file_meta:get({path, ParentPath}),
-    Doc;
-get_parent(File) ->
-    {ok, Doc} = file_meta:get_parent(File),
-    Doc.
-
 -spec gen_storage_file_id(Entry :: fslogic_worker:file()) ->
     helpers:file() | no_return().
 gen_storage_file_id(Entry) -> %todo refactor
-    {ok, Path} = fslogic_path:gen_storage_path(Entry),
+    {ok, Path} = gen_storage_path(Entry),
     gen_storage_file_id(Entry, Path).
 
 -spec gen_storage_file_id(Entry :: fslogic_worker:file(), Path :: file_meta:path()) ->
@@ -74,13 +45,11 @@ gen_storage_file_id(_Entry, Path, 0) ->
 gen_storage_file_id(_Entry, Path, Version) when is_integer(Version) ->
     file_meta:snapshot_name(Path, Version).
 
-
 -spec get_local_file_location(fslogic_worker:ext_file()) ->
     datastore:document() | no_return().
 get_local_file_location(Entry) -> %%todo VFS-2813 support multi location, get rid of single file location and use get_local_file_locations/1
     [LocalLocation] = get_local_file_locations(Entry),
     LocalLocation.
-
 
 -spec get_local_file_locations(fslogic_worker:ext_file()) ->
     [datastore:document()] | no_return().
@@ -95,13 +64,38 @@ get_local_file_locations(Entry) ->
             <- Locations, LProviderId =:= ProviderId
     ].
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
--spec get_local_storage_file_locations(datastore:document() | #file_location{} | fslogic_worker:file()) ->
-    [{storage:id(), helpers:file()}] | no_return().
-get_local_storage_file_locations(#document{value = #file_location{} = Location}) ->
-    get_local_storage_file_locations(Location);
-get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}) ->
-    lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{storage_id = SID, file_id = FID} <- Blocks]]);
-get_local_storage_file_locations(Entry) ->
-    #document{} = Doc = get_local_file_location(Entry), %todo VFS-2813 support multi location
-    get_local_storage_file_locations(Doc).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generate storage file_meta:path() for given file_meta:entry()
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_path(file_meta:entry()) ->
+    {ok, file_meta:path()}.
+gen_storage_path({path, Path}) when is_binary(Path) ->
+    {ok, Path};
+gen_storage_path(Entry) ->
+    gen_storage_path(Entry, []).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Internal helper for gen_storage_path/1. Accumulates all file meta names
+%% and concatenates them into storage path().
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_path(file_meta:entry(), [file_meta:name()]) ->
+    {ok, file_meta:path()} | datastore:generic_error() | no_return().
+gen_storage_path(Entry, Tokens) ->
+    {ok, #document{value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
+    case file_meta:get_parent(Doc) of
+        {ok, #document{key = ?ROOT_DIR_UUID}} ->
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
+        {ok, #document{key = ParentUUID}} ->
+            gen_storage_path({uuid, ParentUUID}, [Name | Tokens])
+    end.

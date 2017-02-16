@@ -12,12 +12,16 @@
 -module(storage_detector).
 -author("Krzysztof Trzepla").
 
+-include("global_definitions.hrl").
+
 %% API
 -export([generate_file_id/0, create_test_file/3, read_test_file/3,
     update_test_file/3, remove_test_file/3]).
 
--define(TEST_FILE_ID_LEN, 32).
--define(TEST_FILE_LEN, 100).
+-define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
+    storage_test_file_name_size, 32)).
+-define(TEST_FILE_CONTENT_LEN, application:get_env(?APP_NAME,
+    storage_test_file_content_size, 100)).
 
 %%%===================================================================
 %%% API
@@ -30,7 +34,7 @@
 %%--------------------------------------------------------------------
 -spec generate_file_id() -> binary().
 generate_file_id() ->
-    fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_ID_LEN).
+    random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -41,7 +45,7 @@ generate_file_id() ->
     Content :: binary().
 create_test_file(Helper, UserCtx, FileId) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
-    Content = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_LEN),
+    Content = random_ascii_lowercase_sequence(?TEST_FILE_CONTENT_LEN),
     ok = helpers:mknod(Handle, FileId, 8#666, reg),
     {ok, FileHandle} = helpers:open(Handle, FileId, write),
     {ok, _} = helpers:write(FileHandle, 0, Content),
@@ -58,7 +62,7 @@ create_test_file(Helper, UserCtx, FileId) ->
 read_test_file(Helper, UserCtx, FileId) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     {ok, FileHandle} = helpers:open(Handle, FileId, read),
-    {ok, Content} = helpers:read(FileHandle, 0, ?TEST_FILE_LEN),
+    {ok, Content} = helpers:read(FileHandle, 0, ?TEST_FILE_CONTENT_LEN),
     ok = helpers:release(FileHandle),
     Content.
 
@@ -71,7 +75,7 @@ read_test_file(Helper, UserCtx, FileId) ->
     Content :: binary().
 update_test_file(Helper, UserCtx, FileId) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
-    Content = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_LEN),
+    Content = random_ascii_lowercase_sequence(?TEST_FILE_CONTENT_LEN),
     {ok, FileHandle} = helpers:open(Handle, FileId, write),
     {ok, _} = helpers:write(FileHandle, 0, Content),
     ok = helpers:release(FileHandle),
@@ -93,3 +97,20 @@ remove_test_file(Helper, UserCtx, FileId) ->
     end,
     Noop(Handle),
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Create random sequence consisting of lowercase ASCII letters.
+%% @end
+%%--------------------------------------------------------------------
+-spec random_ascii_lowercase_sequence(Length :: integer()) -> binary().
+random_ascii_lowercase_sequence(Length) ->
+    random:seed(erlang:phash2([node()]), erlang:monotonic_time(), erlang:unique_integer()),
+    lists:foldl(fun(_, Acc) ->
+        <<Acc/binary, (random:uniform(26) + 96)>>
+    end, <<>>, lists:seq(1, Length)).

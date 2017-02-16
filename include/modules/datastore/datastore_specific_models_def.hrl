@@ -297,7 +297,7 @@
 
 %% Model for storing file's location data
 -record(file_location, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
+    uuid :: file_meta:uuid(),
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
@@ -306,10 +306,10 @@
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
     recent_changes = {[], []} :: {
-        OldChanges :: [fslogic_file_location:change()],
-        NewChanges :: [fslogic_file_location:change()]
+        OldChanges :: [replica_changes:change()],
+        NewChanges :: [replica_changes:change()]
     },
-    last_rename :: fslogic_file_location:last_rename()
+    last_rename :: replica_changes:last_rename()
 }).
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).

@@ -17,55 +17,18 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([user_root_dir_uuid/1, user_root_dir_guid/1, gen_file_uuid/0, ensure_guid/2]).
--export([path_to_uuid/2, uuid_to_path/2, parent_uuid/2]).
--export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1, unpack_guid/1]).
+-export([user_root_dir_uuid/1, user_root_dir_guid/1, ensure_guid/2]).
+-export([uuid_to_path/2]).
+-export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
 -export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
 -export([uuid_to_share_guid/3, unpack_share_guid/1]).
 -export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
     guid_to_share_id/1, guid_to_space_id/1]).
--export([is_root_dir/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns Uuid file's parent.
-%% If the file is a child of the top level (i.e. a space directory), user's
-%% root dir Uuid is returned as in {@link user_root_dir_uuid}.
-%% If the file is a root directory itself, returns undefined.
-%% @end
-%%--------------------------------------------------------------------
--spec parent_uuid(file_meta:entry(), onedata_user:id()) -> file_meta:uuid() | no_return().
-parent_uuid(Entry, UserId) ->
-    UserRootUuid = user_root_dir_uuid(UserId),
-    case file_meta:get(Entry) of
-        {ok, #document{key = ?ROOT_DIR_UUID}} -> undefined;
-        {ok, #document{key = UserRootUuid}} -> undefined;
-        {ok, FileDoc} ->
-            case file_meta:get_parent_uuid(FileDoc) of
-                {ok, ?ROOT_DIR_UUID} -> UserRootUuid;
-                {ok, ParentUuid} -> ParentUuid
-            end
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Checks if uuid represents user's root dir
-%% @end
-%%--------------------------------------------------------------------
--spec is_root_dir(Uuid :: file_meta:uuid()) -> boolean().
-is_root_dir(?ROOT_DIR_UUID) ->
-    true;
-is_root_dir(Uuid) ->
-    case (catch binary_to_term(http_utils:base64url_decode(Uuid))) of
-        {root_space, _UserId} ->
-            true;
-        _ ->
-            false
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc Returns Uuid of user's root directory.
@@ -82,17 +45,6 @@ user_root_dir_uuid(UserId) ->
 -spec user_root_dir_guid(Uuid :: file_meta:uuid()) -> fslogic_worker:file_guid().
 user_root_dir_guid(Uuid) ->
     uuid_to_guid(Uuid, undefined).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Generates generic file's Uuid that will be not placed in any Space.
-%% @end
-%%--------------------------------------------------------------------
--spec gen_file_uuid() -> file_meta:uuid().
-gen_file_uuid() ->
-    PID = oneprovider:get_provider_id(),
-    Rand = crypto:rand_bytes(16),
-    http_utils:base64url_encode(<<PID/binary, "##", Rand/binary>>).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,18 +66,6 @@ ensure_guid(SessionId, {path, Path}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Converts given file path to Uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec path_to_uuid(user_ctx:ctx(), file_meta:path()) -> file_meta:uuid().
-path_to_uuid(UserCtx, Path) when is_tuple(UserCtx) ->
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    Entry = fslogic_path:get_canonical_file_entry(UserCtx, Tokens),
-    {ok, #document{key = Uuid}} = file_meta:get(Entry),
-    Uuid.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Gets full file path.
 %% @end
 %%--------------------------------------------------------------------
@@ -137,7 +77,7 @@ uuid_to_path(UserCtx, FileUuid) when is_tuple(UserCtx) ->
     case FileUuid of
         UserRoot -> <<"/">>;
         _ ->
-            {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
+            {ok, Path} = gen_path({uuid, FileUuid}, SessId),
             Path
     end;
 uuid_to_path(SessionId, FileUuid) ->
@@ -146,7 +86,7 @@ uuid_to_path(SessionId, FileUuid) ->
     case FileUuid of
         UserRoot -> <<"/">>;
         _ ->
-            {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessionId),
+            {ok, Path} = gen_path({uuid, FileUuid}, SessionId),
             Path
     end.
 
@@ -167,7 +107,7 @@ uuid_to_guid(FileUuid, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec uuid_to_guid(file_meta:uuid()) -> fslogic_worker:file_guid().
 uuid_to_guid(FileUuid) ->
-    try fslogic_spaces:get_space_id({uuid, FileUuid}) of
+    try get_space_id({uuid, FileUuid}) of
         SpaceId ->
             uuid_to_guid(FileUuid, SpaceId)
     catch
@@ -184,26 +124,6 @@ uuid_to_guid(FileUuid) ->
 guid_to_uuid(FileGuid) ->
     {FileUuid, _} = unpack_guid(FileGuid),
     FileUuid.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's Uuid and its SpaceId for given file's Guid.
-%% @end
-%%--------------------------------------------------------------------
--spec unpack_guid(FileGuid :: fslogic_worker:file_guid()) ->
-    {file_meta:uuid(), od_space:id() | undefined}.
-unpack_guid(FileGuid) ->
-    try binary_to_term(http_utils:base64url_decode(FileGuid)) of
-        {guid, FileUuid, SpaceId} ->
-            {FileUuid, SpaceId};
-        {share_guid, FileUuid, SpaceId, _ShareId} ->
-            {FileUuid, SpaceId};
-        _ ->
-            {FileGuid, undefined}
-    catch
-        _:_ ->
-            {FileGuid, undefined}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc Convert SpaceId to uuid of file_meta document of this space directory.
@@ -245,7 +165,7 @@ uuid_to_phantom_uuid(FileUuid) ->
 %% For given file Uuid generates phantom's Uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec phantom_uuid_to_uuid(file_meta:uuid()) -> file_meta:uuid().
+-spec phantom_uuid_to_uuid(file_meta:uuid()) -> file_meta:uuid(). %todo why is it unused
 phantom_uuid_to_uuid(PhantomUuid) ->
     {phantom, FileUuid} = binary_to_term(http_utils:base64url_decode(PhantomUuid)),
     FileUuid.
@@ -350,3 +270,112 @@ guid_to_space_id(Guid) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's Uuid and its SpaceId for given file's Guid.
+%% @end
+%%--------------------------------------------------------------------
+-spec unpack_guid(FileGuid :: fslogic_worker:file_guid()) ->
+    {file_meta:uuid(), od_space:id() | undefined}.
+unpack_guid(FileGuid) ->
+    try binary_to_term(http_utils:base64url_decode(FileGuid)) of
+        {guid, FileUuid, SpaceId} ->
+            {FileUuid, SpaceId};
+        {share_guid, FileUuid, SpaceId, _ShareId} ->
+            {FileUuid, SpaceId};
+        _ ->
+            {FileGuid, undefined}
+    catch
+        _:_ ->
+            {FileGuid, undefined}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generate file_meta:path() for given file_meta:entry()
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_path(file_meta:entry(), SessId :: session:id()) ->
+    {ok, file_meta:path()} | datastore:generic_error().
+gen_path({path, Path}, _SessId) when is_binary(Path) ->
+    {ok, Path};
+gen_path(Entry, SessId) ->
+    {ok, UserId} = session:get_user_id(SessId),
+    gen_path(Entry, UserId, []).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Internal helper for gen_path/2. Accumulates all file meta names
+%% and concatenates them into path().
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_path(file_meta:entry(), od_user:id(), [file_meta:name()]) ->
+    {ok, file_meta:path()} | datastore:generic_error() | no_return().
+gen_path(Entry, UserId, Tokens) ->
+    {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
+    case file_meta:get_parent(Doc) of
+        {ok, #document{key = ?ROOT_DIR_UUID}} ->
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+            {ok, #document{value = #od_space{name = SpaceName}}} =
+                od_space:get(SpaceId, UserId),
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
+        {ok, #document{key = ParentUUID}} ->
+            gen_path({uuid, ParentUUID}, UserId, [Name | Tokens])
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space ID for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_id(Entry :: {uuid, file_meta:uuid()} | {guid, fslogic_worker:file_guid()}) ->
+    SpaceId :: binary().
+get_space_id({uuid, FileUUID}) ->
+    {ok, #document{key = SpaceUUID}} = get_space({uuid, FileUUID}),
+    fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID);
+get_space_id({guid, FileGUID}) ->
+    case fslogic_uuid:unpack_guid(FileGUID) of
+        {FileUUID, undefined} ->
+            get_space_id({uuid, FileUUID});
+        {_, SpaceId} ->
+            SpaceId
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space document for given file or space id. Note: This function
+%% works only with absolute, user independent paths (cannot be used
+%% with paths to default space).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}|
+{id, SpaceId :: datastore:id()}) ->
+    {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
+get_space({id, SpaceId}) ->
+    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    case file_meta:get({uuid, SpaceUUID}) of
+        {error, {not_found, _}} ->
+            file_meta:make_space_exist(SpaceId),
+            file_meta:get({uuid, SpaceUUID});
+        Res -> Res
+    end;
+get_space({guid, FileGUID}) ->
+    case fslogic_uuid:unpack_guid(FileGUID) of
+        {FileUUID, undefined} -> get_space({uuid, FileUUID});
+        {_, SpaceId} ->
+            get_space({id, SpaceId})
+    end;
+get_space(FileEntry) ->
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+
+    case FileUUID of
+        <<"">> ->
+            throw({not_a_space, FileEntry});
+        _ ->
+            {ok, #document{key = SpaceUUID}} = Res = file_meta:get_scope({uuid, FileUUID}),
+            _ = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID), %% Crash if given UUID is not a space
+            Res
+
+    end.

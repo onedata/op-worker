@@ -49,9 +49,9 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     {ok, HandleId} = save_handle(SessId, Handle),
     #fuse_response{fuse_response = #file_attr{} = FileAttr} =
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2),
-    FileGuid = file_ctx:get_guid_const(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx2),
     FileLocation = #file_location{
-        uuid = FileGuid,
+        uuid = FileUuid,
         provider_id = oneprovider:get_provider_id(),
         storage_id = StorageId,
         file_id = FileId,
@@ -95,20 +95,19 @@ get_file_location(_UserCtx, FileCtx) ->
     {[#document{value = #file_location{
         blocks = Blocks, file_id = FileId
     }}], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
-    FileGuid = file_ctx:get_guid_const(FileCtx3),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
 
     #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = file_location:normalize(
-        file_location:ensure_blocks_not_empty(#file_location{
-            uuid = FileGuid,
+        fuse_response = #file_location{
+            uuid = FileUuid,
             provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId,
             file_id = FileId,
             blocks = Blocks,
             space_id = SpaceId
-        }))
+        }
     }.
 
 %%--------------------------------------------------------------------

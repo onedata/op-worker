@@ -270,7 +270,7 @@ import_file(StorageId, SpaceId, StatBuf, #space_strategy_job{data = Data}, Logic
 
     case file_type(Mode) of
         ?REGULAR_FILE_TYPE ->
-            Location = #file_location{blocks = [#file_block{offset = 0, size = FSize, file_id = FileId, storage_id = StorageId}],
+            Location = #file_location{blocks = [#file_block{offset = 0, size = FSize}],
                 provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
                 space_id = SpaceId, size = FSize},
             {ok, LocId} = file_location:create(#document{value = Location}),

@@ -66,6 +66,7 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
 
             {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, Guid}, write),
             {ok, Handle2, RRDSize} = logical_file_manager:write(Handle, 0, RRDFile),
+            ok = logical_file_manager:fsync(Handle2),
             ok = logical_file_manager:release(Handle2),
 
             {ok, _} = monitoring_state:save(#document{key = MonitoringId,
@@ -106,6 +107,7 @@ update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
 
     RRDSize = byte_size(UpdatedRRDFile),
     {ok, Handle3, RRDSize} = logical_file_manager:write(Handle2, 0, UpdatedRRDFile),
+    ok = logical_file_manager:fsync(Handle3),
     ok = logical_file_manager:release(Handle3),
 
     {ok, _} = monitoring_state:update(MonitoringId, #{last_update_time => UpdateTime}),

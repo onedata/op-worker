@@ -264,7 +264,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
-    ExternalBlocks = [#file_block{offset = 0, size = 10, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    ExternalBlocks = [#file_block{offset = 0, size = 10}],
     {ok, FileGuid} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
@@ -342,7 +342,7 @@ read_should_synchronize_file(Config) ->
     FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
     % attach external location
-    ExternalBlocks = [#file_block{offset = 0, size = 10, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    ExternalBlocks = [#file_block{offset = 0, size = 10}],
     RemoteLocation = #file_location{size = 10, space_id = SpaceId,
         storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
@@ -396,7 +396,7 @@ external_change_should_invalidate_blocks(Config) ->
 
     % attach external location
     #document{value = #file_location{version_vector = VVLocal}} = ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
-    ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    ExternalBlocks = [#file_block{offset = 2, size = 5}],
     RemoteLocation = #file_location{size = 10, space_id = SpaceId,
         storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
         blocks = ExternalBlocks, recent_changes = {[], [ExternalBlocks]}, file_id = ExternalFileId, uuid = FileUuid,
@@ -417,7 +417,6 @@ external_change_should_invalidate_blocks(Config) ->
     % then
     ?assertMatch(#document{value = #file_location{version_vector = VV, blocks = [#file_block{offset = 0, size = 2}, #file_block{offset = 7, size = 3}]}},
         ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
-
 
 update_should_save_recent_changes(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -487,7 +486,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     % attach external location
     LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
         ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
-    ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 2, size = 2}],
         [#file_block{offset = 7, size = 3}],
@@ -720,7 +719,6 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
     ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_attr_changed, ['_', '_']])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
 
-
 conflicting_remote_changes_should_be_reconciled(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
@@ -738,7 +736,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     % attach external location
     LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
         ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
-    ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 0, size = 2}],
         [#file_block{offset = 2, size = 2}],
@@ -779,24 +777,30 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         blocks = [#file_block{offset = 4, size = 4}]}},
         ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
-
 rtransfer_config_should_work(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     {ok, FileGuid} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, 15} = lfm_proxy:write(W1, Handle, 0, <<"initial_content">>),
+    ok = lfm_proxy:close(W1, Handle),
 
     ?assertEqual(ok, ?rpc(erlang, apply, [
         fun() ->
             Opts = rtransfer_config:rtransfer_opts(),
             Open = proplists:get_value(open_fun, Opts),
+            Close = proplists:get_value(close_fun, Opts),
             Read = proplists:get_value(read_fun, Opts),
             Write = proplists:get_value(write_fun, Opts),
-            {ok, WriteHandle} = erlang:apply(Open, [FileGuid, write]),
-            {ok, _, 4} = erlang:apply(Write, [WriteHandle, 0, <<"data">>]),
-            {ok, ReadHandle} = erlang:apply(Open, [FileGuid, read]),
-            {ok, _, <<"data">>} = erlang:apply(Read, [ReadHandle, 0, 10]),
-            ok
+
+            {ok, WriteHandle} = Open(FileGuid, write),
+            {ok, WriteHandle2, 4} = Write(WriteHandle, 0, <<"data">>),
+            ok = Close(WriteHandle2),
+
+            {ok, ReadHandle} = Open(FileGuid, read),
+            {ok, ReadHandle2, <<"data">>} = Read(ReadHandle, 0, 4),
+            ok = Close(ReadHandle2)
         end, []
     ])).
 
@@ -846,7 +850,6 @@ external_file_location_notification_should_wait_for_local_file_location(Config) 
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
-
 
 external_file_location_notification_should_wait_for_links(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -965,7 +968,6 @@ external_file_location_notification_should_wait_for_file_meta(Config) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
-
 
 changes_should_be_applied_even_when_the_issuer_process_is_dead(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),

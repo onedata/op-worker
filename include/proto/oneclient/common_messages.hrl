@@ -22,9 +22,7 @@
 
 -record(file_block, {
     offset :: non_neg_integer(),
-    size :: integer(),
-    file_id :: undefined | binary(),
-    storage_id :: undefined | storage:id()
+    size :: integer()
 }).
 
 -record(file_renamed_entry, {

@@ -49,6 +49,7 @@
 -export([add_share/2, remove_share/2]).
 -export([get_uuid/1]).
 -export([record_struct/1, record_upgrade/2]).
+-export([make_space_exist/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -198,7 +199,7 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
         FileDoc =
             case FileDoc0 of
                 #document{key = undefined} = Doc ->
-                    NewUuid = fslogic_uuid:gen_file_uuid(),
+                    NewUuid = gen_file_uuid(),
                     Doc#document{key = NewUuid, value = FM1, generated_uuid = true};
                 _ ->
                     FileDoc0#document{value = FM1}
@@ -755,7 +756,7 @@ setup_onedata_user(_Client, UserId) ->
         CTime = erlang:system_time(seconds),
 
         lists:foreach(fun({SpaceId, _}) ->
-            fslogic_spaces:make_space_exist(SpaceId)
+            make_space_exist(SpaceId)
         end, Spaces),
 
         FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
@@ -897,6 +898,37 @@ remove_share(FileCtx, ShareId) ->
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = Shares -- [ShareId]}}
         end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file meta entry for space if not exists
+%% @end
+%%--------------------------------------------------------------------
+-spec make_space_exist(SpaceId :: datastore:id()) -> no_return().
+make_space_exist(SpaceId) ->
+    CTime = erlang:system_time(seconds),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    case file_meta:exists({uuid, SpaceDirUuid}) of
+        true ->
+            file_meta:fix_parent_links({uuid, ?ROOT_DIR_UUID},
+                {uuid, SpaceDirUuid});
+        false ->
+            case file_meta:create({uuid, ?ROOT_DIR_UUID},
+                #document{key = SpaceDirUuid,
+                    value = #file_meta{
+                        name = SpaceId, type = ?DIRECTORY_TYPE,
+                        mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true
+                    }}) of
+                {ok, _} ->
+                    case times:create(#document{key = SpaceDirUuid, value =
+                    #times{mtime = CTime, atime = CTime, ctime = CTime}}) of
+                        {ok, _} -> ok;
+                        {error, already_exists} -> ok
+                    end;
+                {error, already_exists} ->
+                    ok
+            end
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -1231,3 +1263,15 @@ get_uuid(?ROOT_DIR_UUID) ->
     {ok, ?ROOT_DIR_UUID};
 get_uuid(Uuid) ->
     {ok, Uuid}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates generic file's Uuid that will be not placed in any Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_file_uuid() -> file_meta:uuid().
+gen_file_uuid() ->
+    PID = oneprovider:get_provider_id(),
+    Rand = crypto:rand_bytes(16),
+    http_utils:base64url_encode(<<PID/binary, "##", Rand/binary>>).

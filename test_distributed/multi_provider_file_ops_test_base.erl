@@ -307,12 +307,16 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         verify(Config, fun(W2) ->
-%%            ct:print("Verify write ~p", [{Level2File, W2}]),
-            OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
-            ?assertMatch({ok, _}, OpenAns2),
-            {ok, Handle2} = OpenAns2,
-            ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts),
-            ?assertEqual(ok, lfm_proxy:close(W2, Handle2))
+            ct:print("Verify write ~p", [{Level2File, W2}]),
+            ?match({ok, NewAcc},
+                begin
+                    {ok, Handle2} = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
+                    try
+                        lfm_proxy:read(W2, Handle2, 0, 500)
+                    after
+                        lfm_proxy:close(W2, Handle2)
+                    end
+                end, Attempts)
         end),
         ct:print("Changes of file from node ~p verified", [W]),
         NewAcc
@@ -464,11 +468,16 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
 
         ?match({ok, #file_attr{}},
             lfm_proxy:stat(Worker2, SessId(Worker2), {path, D3Path}), Attempts),
-        OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, D3Path}, rdwr),
-        ?assertMatch({ok, _}, OpenAns),
-        {ok, Handle} = OpenAns,
-        ?match({ok, <<"abc">>}, lfm_proxy:read(Worker2, Handle, 0, 10), Attempts),
-        ?assertEqual(ok, lfm_proxy:close(Worker2, Handle))
+
+        ?match({ok, <<"abc">>},
+            begin
+                {ok, Handle} = lfm_proxy:open(Worker2, SessId(Worker2), {path, D3Path}, rdwr),
+                try
+                    lfm_proxy:read(Worker2, Handle, 0, 10)
+                after
+                    lfm_proxy:close(Worker2, Handle)
+                end
+            end, Attempts)
     end,
 
     {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
@@ -913,7 +922,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
     FileId = fslogic_utils:gen_storage_file_id(FileUuid, Path, FDoc#file_meta.version),
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
+    Location = #file_location{blocks = [#file_block{offset = 0, size = 3}], size = 3,
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
         space_id = SpaceId},
 
@@ -922,7 +931,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
 
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    LeafLess = fslogic_path:dirname(FileId),
+    LeafLess = filename:dirname(FileId),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
     SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
@@ -1081,11 +1090,15 @@ verify_file(Config, FileBeg, {Offset, File}) ->
 
     verify(Config, fun(W) ->
 %%            ct:print("Verify file ~p", [{File, W}]),
-        OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
-        ?assertMatch({ok, _}, OpenAns),
-        {ok, Handle} = OpenAns,
-        ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts),
-        ?assertEqual(ok, lfm_proxy:close(W, Handle))
+        ?match({ok, FileCheck},
+            begin
+                {ok, Handle} = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
+                try
+                    lfm_proxy:read(W, Handle, 0, Size)
+                after
+                    lfm_proxy:close(W, Handle)
+                end
+            end, Attempts)
     end),
 
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},

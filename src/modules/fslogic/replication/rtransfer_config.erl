@@ -71,10 +71,11 @@ rtransfer_opts() ->
             fun(Handle) ->
                 case {lfm_context:get_session_id(Handle), lfm_context:get_open_flag(Handle)} of
                     {?ROOT_SESS_ID, write} ->
-                        lfm_files:fsync(Handle);
+                        ok = lfm_files:fsync(Handle);
                     _ ->
                         ok
-                end
+                end,
+                lfm_files:release(Handle)
             end},
         {ranch_opts,
             [

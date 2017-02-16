@@ -169,7 +169,7 @@ update_record(<<"file">>, FileId, [{<<"name">>, NewName}]) ->
         {ok, OldPath} = logical_file_manager:get_file_path(
             SessionId, FileId
         ),
-        DirPathTokens = fslogic_path:split(fslogic_path:dirname(OldPath)),
+        DirPathTokens = fslogic_path:split(filename:dirname(OldPath)),
         NewPath = fslogic_path:join(DirPathTokens ++ [NewName]),
         case logical_file_manager:mv(SessionId, {guid, FileId}, NewPath) of
             {ok, _} ->

@@ -815,10 +815,13 @@ share_read_test(Config) ->
     {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#707),
     {ok, Handle} = lfm_proxy:open(W, SessId, {guid, Guid}, write),
     {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
+    ok = lfm_proxy:close(W, Handle),
     {ok, {_, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
 
     {ok, ShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareGuid}, read)),
-    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)).
+    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)),
+    ?assertEqual(ok, lfm_proxy:close(W, ShareHandle)).
+
 
 share_child_getattr_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -856,10 +859,12 @@ share_child_read_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(W, SessId, Path, 8#707),
     {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, write),
     {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
+    ok = lfm_proxy:close(W, Handle),
     {ok, [{ShareFileGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
 
     {ok, ShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read)),
-    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)).
+    ?assertEqual({ok, <<"data">>}, lfm_proxy:read(W, ShareHandle, 0, 4)),
+    ?assertEqual(ok, lfm_proxy:close(W, ShareHandle)).
 
 share_permission_denied_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

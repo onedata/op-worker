@@ -20,8 +20,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([critical_section/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
-    normalize/1]).
+-export([critical_section/2, save_and_bump_version/1]).
 -export([record_struct/1, record_upgrade/2]).
 
 -type id() :: binary().
@@ -92,30 +91,6 @@ critical_section(ResourceId, Fun) ->
 -spec save_and_bump_version(doc()) -> {ok, datastore:key()} | datastore:generic_error().
 save_and_bump_version(FileLocationDoc) ->
     file_location:save(version_vector:bump_version(FileLocationDoc)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Ensures that blocks of file location contains at least one entry (so client
-%% will know the storageId and fileId of file). If blocks are empty, function adds
-%% one block with offset and size set to 0.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_blocks_not_empty(#file_location{}) -> #file_location{}.
-ensure_blocks_not_empty(Loc = #file_location{blocks = []}) ->
-    Loc#file_location{blocks = [#file_block{offset = 0, size = 0}]};
-ensure_blocks_not_empty(Loc) ->
-    Loc.
-
-%%--------------------------------------------------------------------
-%% @doc %todo remove this function after removing file_id and storage_id from file_location
-%% Returns given file_location with updated blocks filled with storage_id and
-%% file_id using default value.
-%% @end
-%%--------------------------------------------------------------------
--spec normalize(#file_location{}) -> #file_location{}.
-normalize(Loc = #file_location{storage_id = SID, file_id = FID, blocks = Blocks}) ->
-    NewBlocks = [Block#file_block{storage_id = SID, file_id = FID} || Block <- Blocks],
-    Loc#file_location{blocks = NewBlocks}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
