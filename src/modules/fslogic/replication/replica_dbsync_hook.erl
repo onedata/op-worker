@@ -225,15 +225,15 @@ reconcile_replicas(FileCtx,
             ok;
         {skipped, FileCtx2} ->
             {ok, _} = file_location:save(NewDoc2),
-            notify_block_change_if_necessary(FileCtx2, LocalDoc, NewDoc2),
-            notify_size_change_if_necessary(FileCtx2, LocalDoc, NewDoc2);
+            notify_block_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2),
+            notify_size_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = file_location:save(RenamedDoc),
             RenamedFileCtx =
                 file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid, TargetSpaceId)),
             files_to_chown:chown_file(RenamedFileCtx),
-            notify_block_change_if_necessary(FileCtx, LocalDoc, RenamedDoc),
-            notify_size_change_if_necessary(FileCtx, LocalDoc, RenamedDoc)
+            notify_block_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc),
+            notify_size_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc)
     end.
 
 %%--------------------------------------------------------------------

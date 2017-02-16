@@ -41,11 +41,11 @@ invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}], Ne
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     case fslogic_file_location:rename_or_delete(FileCtx, NewDoc, Rename) of
         {deleted, FileCtx2} ->
-            {deleted, file_ctx:reset(FileCtx2)};
+            {deleted, FileCtx2};
         {skipped, FileCtx2} ->
             {ok, _} = file_location:save(NewDoc),
             {NewDoc, file_ctx:reset(FileCtx2)};
-        {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, FileCtx2} ->
+        {{renamed, RenamedDoc, _FileUuid, _TargetSpaceId}, FileCtx2} ->
             {ok, _} = file_location:save(RenamedDoc),
             {RenamedDoc, file_ctx:reset(FileCtx2)}
     end;
