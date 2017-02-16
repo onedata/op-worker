@@ -210,7 +210,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Guid =
         try
-            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid)),
+            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId)),
             Val
         catch
             _:Error1 ->
@@ -240,7 +240,8 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Size =
         try
-            fslogic_blocks:get_file_size(FileDoc)
+            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+            fslogic_blocks:get_file_size(FileCtx)
         catch
             _:Error4 ->
                 ?error("Cannot fetch size for changes, error: ~p", [Error4]),

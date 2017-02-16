@@ -45,17 +45,16 @@ get_file_attr(UserCtx, FileCtx) ->
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx) ->
-    {FileDoc = #document{key = Uuid, value = #file_meta{
+    {#document{key = Uuid, value = #file_meta{
         type = Type, mode = Mode, provider_id = ProviderId, owner = OwnerId,
         shares = Shares}}, FileCtx2
     } = file_ctx:get_file_doc(FileCtx),
     ShareId = file_ctx:get_share_id_const(FileCtx),
-    UserId = user_ctx:get_user_id(UserCtx),
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
-    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, OwnerId),
-    Size = fslogic_blocks:get_file_size(FileDoc), %todo TL consider caching file_location in File record
-    {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserId),
+    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3),
+    Size = fslogic_blocks:get_file_size(FileCtx4),
+    {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
     {{ATime, CTime, MTime}, _FileCtx6} = file_ctx:get_times(FileCtx5),
 
     #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
@@ -75,8 +74,7 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
 -check_permissions([traverse_ancestors, ?traverse_container]).
 get_child_attr(UserCtx, ParentFileCtx, Name) ->
-    UserId = user_ctx:get_user_id(UserCtx),
-    {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserId),
+    {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
     attr_req:get_file_attr(UserCtx, ChildFileCtx).
 
 %%--------------------------------------------------------------------
@@ -88,16 +86,16 @@ get_child_attr(UserCtx, ParentFileCtx, Name) ->
     fslogic_worker:fuse_response().
 -check_permissions([traverse_ancestors, owner]).
 chmod(UserCtx, FileCtx, Mode) ->
-    {uuid, Uuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    sfm_utils:chmod_storage_files(UserCtx, {uuid, Uuid}, Mode), %todo pass file_ctx
+    ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
 
     % remove acl
-    xattr:delete_by_name(Uuid, ?ACL_KEY),
-    {ok, _} = file_meta:update({uuid, Uuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate(file_meta, Uuid),
+    xattr:delete_by_name(FileCtx, ?ACL_KEY),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
+    ok = permissions_cache:invalidate(file_meta, FileUuid),
 
-    fslogic_times:update_ctime({uuid, Uuid}, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
-    fslogic_event:emit_file_perm_changed(Uuid), %todo pass file_ctx
+    fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+    fslogic_event:emit_file_perm_changed(FileCtx),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -115,8 +113,6 @@ update_times(UserCtx, FileCtx, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:filter(fun(_Key, Value) ->
         is_integer(Value) end, UpdateMap),
-
-    FileEntry = file_ctx:get_uuid_entry_const(FileCtx),
-    fslogic_times:update_times_and_emit(FileEntry, UpdateMap1, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
-
+    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1,
+        user_ctx:get_user_id(UserCtx)),
     #fuse_response{status = #status{code = ?OK}}.

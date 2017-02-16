@@ -125,8 +125,8 @@ delete(Key) ->
             worker_proxy:multicast(?SESSION_MANAGER_WORKER,
                 {apply, fun() -> delete_helpers_on_this_node(SessId) end}),
 
-            lists:foreach(fun(FileUUID) ->
-                file_handles:invalidate_session_entry(FileUUID, Key)
+            lists:foreach(fun(FileUuid) ->
+                file_handles:invalidate_session_entry(FileUuid, Key)
             end, sets:to_list(OpenFiles));
         _ -> ok
     end,
@@ -200,15 +200,14 @@ all_with_user() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_id
-    (id()) -> {ok, od_user:id()} | {error, Reason :: term()};
-    (model() | doc()) -> od_user:id().
+    (id() | model() | doc()) -> {ok, od_user:id()} | {error, Reason :: term()}.
 get_user_id(<<_/binary>> = SessId) ->
     case session:get(SessId) of
-        {ok, Doc} -> {ok, get_user_id(Doc)};
+        {ok, Doc} -> get_user_id(Doc);
         {error, Reason} -> {error, Reason}
     end;
 get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
-    UserId;
+    {ok, UserId};
 get_user_id(#document{value = #session{} = Value}) ->
     get_user_id(Value).
 
@@ -389,9 +388,9 @@ get_rest_session_id(#user_identity{user_id = Uid}) ->
 %%--------------------------------------------------------------------
 -spec add_open_file(id(), file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
-add_open_file(SessId, FileUUID) ->
+add_open_file(SessId, FileUuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:add_element(FileUUID, OpenFiles)}}
+        {ok, Sess#session{open_files = sets:add_element(FileUuid, OpenFiles)}}
     end,
 
     case update(SessId, Diff) of
@@ -406,9 +405,9 @@ add_open_file(SessId, FileUUID) ->
 %%--------------------------------------------------------------------
 -spec remove_open_file(id(), file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
-remove_open_file(SessId, FileUUID) ->
+remove_open_file(SessId, FileUuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:del_element(FileUUID, OpenFiles)}}
+        {ok, Sess#session{open_files = sets:del_element(FileUuid, OpenFiles)}}
     end,
 
     case update(SessId, Diff) of

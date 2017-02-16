@@ -197,15 +197,16 @@ get_provider(Request, #state{providers = Providers} = State) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
         undefined ->
-            {oneprovider:get_provider_id(), RequestCtx, State};
-        {file, FileUuid} ->
-            case maps:find(FileUuid, Providers) of
+            {oneprovider:get_provider_id(), undefined, State};
+        {file, FileCtx} ->
+            FileGuid = file_ctx:get_guid_const(FileCtx),
+            case maps:find(FileGuid, Providers) of
                 {ok, Provider} ->
                     {Provider, RequestCtx, State};
                 error ->
-                    Provider = get_provider_for_file({guid, FileUuid}, State),
+                    Provider = get_provider_for_file(FileCtx, State),
                     {Provider, RequestCtx, State#state{
-                        providers = maps:put(FileUuid, Provider, Providers)
+                        providers = maps:put(FileGuid, Provider, Providers)
                     }}
             end
     end.
@@ -216,17 +217,16 @@ get_provider(Request, #state{providers = Providers} = State) ->
 %% a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_for_file(Entry :: {guid, FileUuid :: fslogic_worker:file_guid()},
-    State :: #state{}) -> ProviderId :: oneprovider:id() | no_return().
-get_provider_for_file(Entry, #state{session_id = SessId}) ->
-    {ok, UserId} = session:get_user_id(SessId),
-    UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
-    case file_meta:to_uuid(Entry) of
-        {ok, UserRootDir} ->
-            oneprovider:get_provider_id();
-        {ok, _} ->
-            ProviderId = oneprovider:get_provider_id(),
-            SpaceId = fslogic_spaces:get_space_id(Entry),
+-spec get_provider_for_file(file_ctx:ctx(), #state{}) ->
+    ProviderId :: oneprovider:id() | no_return().
+get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
+    ProviderId = oneprovider:get_provider_id(),
+    case file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            ProviderId;
+        false ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            {ok, UserId} = session:get_user_id(SessId),
             {ok, #document{value = #od_space{providers = ProviderIds}}} =
                 od_space:get_or_fetch(SessId, SpaceId, UserId),
             case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
@@ -246,18 +246,19 @@ get_provider_for_file(Entry, #state{session_id = SessId}) ->
 handle_locally(Request, undefined, State) ->
     handle_locally(Request, State);
 
-handle_locally(Request, {file, FileGuid}, State) ->
-    {ok, FileUuid} = file_meta:to_uuid({guid, FileGuid}),
-    case file_meta:get(FileUuid) of
-        {error, {not_found, file_meta}} ->
+handle_locally(Request, {file, FileCtx}, State) ->
+    case file_ctx:file_exists_const(FileCtx) of
+        false ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
             case file_meta:get_guid_from_phantom_file(FileUuid) of
                 {ok, NewFileGuid} ->
-                    NewRequest = update_context(Request, {file, NewFileGuid}),
+                    NewFileCtx = file_ctx:new_by_guid(NewFileGuid),
+                    NewRequest = update_context(Request, {file, NewFileCtx}),
                     handle_cast(NewRequest, State);
                 {error, {not_found, _}} ->
                     {noreply, State}
             end;
-        _ ->
+        true ->
             handle_locally(Request, State)
     end.
 

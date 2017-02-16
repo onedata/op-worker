@@ -167,11 +167,9 @@ set_xattr(UserCtx, FileCtx, Xattr) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_metadata]).
 remove_xattr(UserCtx, FileCtx, XattrName) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_ctx
+    case xattr:delete_by_name(FileCtx, XattrName) of
         ok ->
-            fslogic_times:update_ctime({uuid, FileUuid},
-                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -188,8 +186,7 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
     case file_ctx:file_exists_const(FileCtx) of
         true ->
-            {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-            {ok, XattrList} = xattr:list(FileUuid, Inherited),
+            {ok, XattrList} = xattr:list(FileCtx, Inherited),
             FilteredXattrList = case ShowInternal of
                 true ->
                     XattrList;
@@ -223,8 +220,7 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
     Inherited :: boolean()) -> fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?read_metadata]).
 get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:get_by_name(FileUuid, XattrName, Inherited) of %todo pass file_ctx
+    case xattr:get_by_name(FileCtx, XattrName, Inherited) of
         {ok, XattrValue} ->
             #provider_response{
                 status = #status{code = ?OK},
@@ -244,11 +240,9 @@ get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_metadata]).
 set_custom_xattr(UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_ctx
+    case xattr:save(FileCtx, XattrName, XattrValue) of
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid},
-                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

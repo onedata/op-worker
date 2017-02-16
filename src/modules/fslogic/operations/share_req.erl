@@ -35,7 +35,6 @@ create_share(UserCtx, FileCtx, Name) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
-
     Auth = user_ctx:get_auth(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, _} = share_logic:create(Auth, ShareId, Name, SpaceId, ShareGuid),
@@ -60,9 +59,7 @@ remove_share(UserCtx, FileCtx) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
     Auth = user_ctx:get_auth(UserCtx),
     ok = share_logic:delete(Auth, ShareId),
-
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:remove_share(FileCtx, ShareId),
     ok = permissions_cache:invalidate(file_meta, FileUuid), %todo pass file_ctx
-
     #provider_response{status = #status{code = ?OK}}.

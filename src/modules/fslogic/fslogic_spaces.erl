@@ -18,7 +18,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([get_space/2, get_space/1, get_space_id/1, get_space_id/2,
+-export([get_space/1, get_space_id/1, get_space_id/2,
     make_space_exist/1]).
 
 %%%===================================================================
@@ -104,49 +104,6 @@ get_space(FileEntry) ->
 
     end.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file_meta space document for given file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_space(FileEntry :: fslogic_worker:file() | {guid, fslogic_worker:file_guid()}, UserId :: od_user:id()) ->
-    {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
-get_space({guid, FileGUID}, UserId) ->
-    case fslogic_uuid:unpack_guid(FileGUID) of
-        {FileUUID, undefined} -> get_space({uuid, FileUUID}, UserId);
-        {_, SpaceId} ->
-            file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId))
-    end;
-get_space(FileEntry, UserId) ->
-    UserRootDirUUID = fslogic_uuid:user_root_dir_uuid(UserId),
-    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
-
-    SpaceDocument = case FileUUID of
-        <<"">> ->
-            throw({not_a_space, FileEntry});
-        UserRootDirUUID ->
-            throw({not_a_space, FileEntry});
-        _ ->
-            {ok, Doc} = file_meta:get_scope(FileEntry),
-            Doc
-    end,
-
-    case UserId of
-        ?ROOT_USER_ID ->
-            {ok, SpaceDocument};
-        ?GUEST_USER_ID ->
-            {ok, SpaceDocument};
-        _ ->
-            {ok, Spaces} = user_logic:get_spaces(UserId),
-            #document{key = SpaceUUID} = SpaceDocument,
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-            case (is_list(Spaces) andalso lists:keymember(SpaceId, 1, Spaces)) of
-                true ->
-                    {ok, SpaceDocument};
-                false -> throw({not_a_space, FileEntry})
-            end
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

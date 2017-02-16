@@ -49,7 +49,7 @@ all() ->
     ?ALL(?TEST_CASES, ?TEST_CASES).
 
 -define(TIMEOUT, timer:minutes(1)).
--define(FILE_UUID(Id), <<"file_id_", (integer_to_binary(Id))/binary>>).
+-define(FILE_GUID(Id), fslogic_uuid:uuid_to_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"spaceid">>)).
 -define(STM_ID(N), list_to_atom("stream_id_" ++ integer_to_list(N))).
 -define(CTR_THR(Value), [
     {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}
@@ -102,7 +102,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
 emit_should_aggregate_events_with_the_same_key_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
-    FileUuid = <<"file_uuid">>,
+    FileGuid = ?FILE_GUID(0),
     SessId = ?config(session_id, Config),
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
@@ -119,7 +119,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
-            emit(Worker, #file_written_event{file_uuid = FileUuid, size = EvtSize,
+            emit(Worker, #file_written_event{file_uuid = FileGuid, size = EvtSize,
                 file_size = N * EvtSize, blocks = [#file_block{
                     offset = (N - 1) * EvtSize, size = EvtSize
                 }]}, SessId)
@@ -132,7 +132,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         ?assertMatch([#file_written_event{
             counter = EvtNum,
-            file_uuid = FileUuid,
+            file_uuid = FileGuid,
             file_size = FileSize,
             size = FileSize,
             blocks = [#file_block{offset = 0, size = FileSize}]
@@ -184,7 +184,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         utils:pforeach(fun(N) ->
             lists:foreach(fun(M) ->
-                emit(Worker, #file_written_event{file_uuid = ?FILE_UUID(N), size = EvtSize,
+                emit(Worker, #file_written_event{file_uuid = ?FILE_GUID(N), size = EvtSize,
                     file_size = M * EvtSize, blocks = [#file_block{
                         offset = (M - 1) * EvtSize, size = EvtSize
                     }]}, SessId)
@@ -209,7 +209,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
                 }, Evt),
             ?assert(lists:member(FileUuid, FileUuids)),
             lists:delete(FileUuid, FileUuids)
-        end, [?FILE_UUID(N) || N <- lists:seq(1, FileNum)], RecvEvts)
+        end, [?FILE_GUID(N) || N <- lists:seq(1, FileNum)], RecvEvts)
     end),
 
     unsubscribe(Worker, SessId, SubId),
@@ -240,7 +240,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
 emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
-    FileUuid = <<"file_id">>,
+    FileGuid = ?FILE_GUID(0),
     SessId = ?config(session_id, Config),
     EvtNum = ?config(evt_num, Config),
 
@@ -254,7 +254,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            emit(Worker, #file_written_event{file_uuid = FileUuid}, SessId)
+            emit(Worker, #file_written_event{file_uuid = FileGuid}, SessId)
         end, lists:seq(1, EvtNum))
     end),
 
@@ -292,7 +292,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
 subscribe_should_work_for_multiple_sessions_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Self = self(),
-    FileUuid = <<"file_id">>,
+    FileGuid = ?FILE_GUID(0),
     CliNum = ?config(cli_num, Config),
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
@@ -319,7 +319,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         utils:pforeach(fun({SessId, _}) ->
             lists:foreach(fun(N) ->
-                emit(Worker, #file_written_event{file_uuid = FileUuid, size = EvtSize,
+                emit(Worker, #file_written_event{file_uuid = FileGuid, size = EvtSize,
                     file_size = N * EvtSize, blocks = [#file_block{
                         offset = (N - 1) * EvtSize, size = EvtSize
                     }]}, SessId)
@@ -337,7 +337,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
         lists:foreach(fun({SessId, SubId}) ->
             ?assertMatch([#file_written_event{
                 counter = EvtNum,
-                file_uuid = FileUuid,
+                file_uuid = FileGuid,
                 file_size = FileSize,
                 size = FileSize,
                 blocks = [#file_block{offset = 0, size = FileSize}]
@@ -379,15 +379,8 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
         {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
-    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    test_utils:mock_expect(Workers, fslogic_spaces, get_space_id,
-        fun(_) -> <<"spaceid">> end),
-    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    test_utils:mock_expect(Workers, file_meta, get, fun
-        (<<"file_", _/binary>>) -> {ok, #document{}};
-        (Entry) -> meck:passthrough([Entry])
-    end),
-    NewConfig;
+    mock_test_file_context(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -403,23 +396,16 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
         {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
-    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    test_utils:mock_expect(Workers, fslogic_spaces, get_space_id,
-        fun(_) -> <<"spaceid">> end),
     session_setup(Worker, SessId, Iden, Self),
-    NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_id, SessId} | Config]),
-    test_utils:mock_expect(Workers, file_meta, get, fun
-        (<<"file_", _/binary>>) -> {ok, #document{}};
-        (Entry) -> meck:passthrough([Entry])
-    end),
-    NewConfig.
+    mock_test_file_context(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
+        [{session_id, SessId} | Config]).
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, od_space),
-    test_utils:mock_validate_and_unload(Workers, communicator);
+    test_utils:mock_validate_and_unload(Workers, [communicator, file_ctx]);
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -427,11 +413,36 @@ end_per_testcase(_Case, Config) ->
     session_teardown(Worker, SessId),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, od_space),
-    test_utils:mock_validate_and_unload(Worker, communicator).
+    test_utils:mock_validate_and_unload(Worker, [communicator, file_ctx]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mock file context for test file.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_test_file_context(proplists:proplist()) -> ok.
+mock_test_file_context(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_ctx),
+    test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
+        fun (FileCtx) ->
+            case file_ctx:get_uuid_const(FileCtx) of
+                <<"file_id_", _/binary>> -> false;
+                false -> meck:passthrough([FileCtx])
+            end
+        end),
+    test_utils:mock_expect(Workers, file_ctx, file_exists_const,
+        fun (FileCtx) ->
+            case file_ctx:get_uuid_const(FileCtx) of
+                <<"file_id_", _/binary>> -> true;
+                false -> meck:passthrough([FileCtx])
+            end
+        end).
 
 %%--------------------------------------------------------------------
 %% @private

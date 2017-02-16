@@ -352,7 +352,7 @@
 %% the user will be present in current provider.
 %% The Key of this document is UserId.
 -record(files_to_chown, {
-    file_uuids = [] :: [file_meta:uuid()]
+    file_guids = [] :: [fslogic_worker:file_guid()]
 }).
 
 %% Model for holding current quota state for spaces

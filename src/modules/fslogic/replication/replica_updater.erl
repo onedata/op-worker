@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update/5, rename/3, fill_blocks_with_storage_info/2]).
+-export([update/4, rename/3, fill_blocks_with_storage_info/2]).
 
 %%%===================================================================
 %%% API
@@ -33,18 +33,19 @@
 %% Return value tells whether file size has been changed by this call.
 %% @end
 %%--------------------------------------------------------------------
--spec update(FileUUID :: file_meta:uuid(), Blocks :: fslogic_blocks:blocks(),
-    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean(), version_vector:version_vector()) ->
+-spec update(file_ctx:ctx(), fslogic_blocks:blocks(),
+    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
-    file_location:critical_section(FileUUID,
+update(FileCtx, Blocks, FileSize, BumpVersion) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    file_location:critical_section(FileUuid,
         fun() ->
-            Location = #document{value = #file_location{size = OldSize,
-                version_vector = Version}} =
-                fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
+            {[Location = #document{ %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
+                value = #file_location{
+                    size = OldSize
+                }
+            }], _FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
             FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
-
-            warning_if_different_version(BaseVersion, Version, FileUUID),
             UpdatedLocation = append(Location, FullBlocks, BumpVersion),
 
             case FileSize of
@@ -69,13 +70,16 @@ update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
 %% This function in synchronized on the file.
 %% @end
 %%--------------------------------------------------------------------
--spec rename(FileUUID :: file_meta:uuid(), TargetFileId :: helpers:file(),
+-spec rename(file_ctx:ctx(), TargetFileId :: helpers:file(),
     TargetSpaceId :: binary()) -> ok | {error, Reason :: term()}.
-rename(FileUUID, TargetFileId, TargetSpaceId) ->
-    file_location:critical_section(FileUUID,
+rename(FileCtx, TargetFileId, TargetSpaceId) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    file_location:critical_section(FileUuid,
         fun() ->
-            #document{value = #file_location{blocks = Blocks} = Location} = LocationDoc =
-                fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
+            {[LocationDoc = #document{ %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
+                value = Location = #file_location{
+                    blocks = Blocks
+                }}], _FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
 
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
 
@@ -127,21 +131,6 @@ fill_blocks_with_storage_info(Blocks, #document{value = #file_location{storage_i
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Warns if we update file blocks and it has changed in the meantime.
-%% @end
-%%--------------------------------------------------------------------
--spec warning_if_different_version(version_vector:version_vector(),
-    version_vector:version_vector(), file_meta:uuid()) -> ok.
-warning_if_different_version(undefined, _ActualVersion, _FileUuid) ->
-    ok;
-warning_if_different_version(_ActualVersion, _ActualVersion, _FileUuid) ->
-    ok;
-warning_if_different_version(BaseVersion, ActualVersion, FileUuid) ->
-    ?warning("Applying transferred changes of file ~p on top of modified replica, version mismatch: ~p vs ~p",
-        [FileUuid, BaseVersion, ActualVersion]).
 
 %%--------------------------------------------------------------------
 %% @private
