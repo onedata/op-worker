@@ -4,6 +4,34 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc12
+
+* VFS-2860 Updating frontend to 3.0.0-rc12
+* VFS-2934 Enable storage helper buffering configuration
+* VFS-2856 Improve caching of rules result, inject modified file context into function arguments.
+* VFS-2856 Permission refactoring.
+* VFS-2856 Remove cache of users, acls and files from check_permissions module.
+* VFS-2856 Configure new log layout in lager.
+* VFS-2496 Push update of user record on every relation update
+* VFS-2496 Change relations in group-user|group-permissions models
+* VFS-2496 Return unauthorized when trying to update a user other than the one with current session
+* VFS-2931 Reduce number of kept rotated log files
+* VFS-2910 Refactor LUMA modules
+* VFS-2856 Synchronize file before moving it between spaces.
+* VFS-2696 Refactor fslogic
+* VFS-2808 Integrate new helpers.
+* VFS-2696 Rework file permissions in GUI into one record containing POSIX and ACL perms
+* VFS-2696 Rework file ACL model in GUI backend
+* VFS-1959 Add and handle OpenFile, CreateFile and MakeFile msgs
+* VFS-2696 Implement file rename in GUI backend
+* VFS-2807 Repair mnesia overload by session_watcher
+* VFS-2522 Add support for spatial queries.
+* VFS-2773 Subscribe for monitoring events on root session only.
+* VFS-2755 Do not send location update to the client who provoked the sync.
+* VFS-2742 Change API to work with GUID-based protocol.
+* VFS-2755 Send SyncResponse message with checksum and file_location instead of sending solely checksum.
+
+
 ### 3.0.0-rc11
 
 * VFS-2773 Listen to more changes in /changes api and add a few new tests.
