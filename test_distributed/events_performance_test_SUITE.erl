@@ -379,7 +379,7 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     test_utils:mock_expect(Workers, od_space, get_or_fetch, fun(_, _, _) ->
         {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
-    mock_test_file_context(Config),
+    initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
 
 init_per_testcase(_Case, Config) ->
@@ -397,52 +397,29 @@ init_per_testcase(_Case, Config) ->
         {ok, #document{value = #od_space{providers = [oneprovider:get_provider_id()]}}}
     end),
     session_setup(Worker, SessId, Iden, Self),
-    mock_test_file_context(Config),
+    initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
         [{session_id, SessId} | Config]).
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, od_space),
-    test_utils:mock_validate_and_unload(Workers, [communicator, file_ctx]);
+    test_utils:mock_validate_and_unload(Workers, [communicator]);
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, od_space),
-    test_utils:mock_validate_and_unload(Worker, [communicator, file_ctx]).
+    test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mock file context for test file.
-%% @end
-%%--------------------------------------------------------------------
--spec mock_test_file_context(proplists:proplist()) -> ok.
-mock_test_file_context(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, file_ctx),
-    test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
-        fun (FileCtx) ->
-            case file_ctx:get_uuid_const(FileCtx) of
-                <<"file_id_", _/binary>> -> false;
-                false -> meck:passthrough([FileCtx])
-            end
-        end),
-    test_utils:mock_expect(Workers, file_ctx, file_exists_const,
-        fun (FileCtx) ->
-            case file_ctx:get_uuid_const(FileCtx) of
-                <<"file_id_", _/binary>> -> true;
-                false -> meck:passthrough([FileCtx])
-            end
-        end).
 
 %%--------------------------------------------------------------------
 %% @private
