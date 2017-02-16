@@ -141,7 +141,7 @@ uuid_to_path(UserCtx, FileUuid) when is_tuple(UserCtx) ->
             Path
     end;
 uuid_to_path(SessionId, FileUuid) ->
-    UserId = session:get_user_id(SessionId),
+    {ok, UserId} = session:get_user_id(SessionId),
     UserRoot = user_root_dir_uuid(UserId),
     case FileUuid of
         UserRoot -> <<"/">>;

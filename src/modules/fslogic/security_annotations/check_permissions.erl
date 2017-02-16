@@ -152,11 +152,11 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {path, Item}, Inputs) when is_intege
     Path = lists:nth(Item, Inputs),
     {file_ctx:new_by_canonical_path(UserCtx, Path), DefaultFileCtx};
 resolve_file_entry(UserCtx, DefaultFileCtx, parent, _Inputs) ->
-    {ParentCtx, DefaultFileCtx2} = file_ctx:get_parent(DefaultFileCtx, user_ctx:get_user_id(UserCtx)),
+    {ParentCtx, DefaultFileCtx2} = file_ctx:get_parent(DefaultFileCtx, UserCtx),
     {ParentCtx, DefaultFileCtx2};
 resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
     {FileCtx, DefaultFileCtx2} = resolve_file_entry(UserCtx, DefaultFileCtx, Item, Inputs),
-    {ParentCtx, _NewFileCtx} = file_ctx:get_parent(FileCtx, undefined),
+    {ParentCtx, _NewFileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
     {ParentCtx, DefaultFileCtx2}.
 
 %%--------------------------------------------------------------------
@@ -169,7 +169,7 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
 -spec set_root_context_if_file_has_acl([#sfm_handle{} | term()]) ->
     [#sfm_handle{} | term()].
 set_root_context_if_file_has_acl(Args = [Handle = #sfm_handle{file_uuid = FileUuid} | RestOfArgs]) ->
-    case acl:exists(FileUuid) of
+    case acl:exists(file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, undefined))) of %todo pass FileCtx from sfm_handle
         true ->
             [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
         _ ->

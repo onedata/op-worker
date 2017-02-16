@@ -46,8 +46,7 @@ resolve_guid(_UserCtx, FileCtx) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors]).
 get_parent(UserCtx, FileCtx) ->
-    UserId = user_ctx:get_user_id(UserCtx),
-    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserId),
+    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #dir{uuid = ParentGuid}

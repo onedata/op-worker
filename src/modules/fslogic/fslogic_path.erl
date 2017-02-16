@@ -120,8 +120,8 @@ gen_path(Entry, SessId) ->
     {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}.
 check_path(Uuid) ->
     case file_meta:get({uuid, Uuid}) of
-        {ok, #document{value = #file_meta{name = Name}} = Doc} ->
-            case file_meta:get_parent_uuid(Doc) of
+        {ok, #document{value = #file_meta{name = Name, scope = SpaceId}}} ->
+            case catch file_meta:get_parent_uuid(Uuid, SpaceId) of
                 {ok, ?ROOT_DIR_UUID} ->
                     ok;
                 {ok, ParentUuid} ->

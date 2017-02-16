@@ -38,7 +38,7 @@
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block(),
     boolean()) -> ok.
-synchronize(UserCtx, FileCtx, Block = #file_block{offset = RequestedOffset, size = RequestedSize}, Prefetch) ->
+synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetch) ->
     EnlargedBlock =
         case Prefetch of
             true ->
@@ -47,38 +47,25 @@ synchronize(UserCtx, FileCtx, Block = #file_block{offset = RequestedOffset, size
                 Block
         end,
     trigger_prefetching(UserCtx, FileCtx, EnlargedBlock, Prefetch),
-    {Locations, FileCtx2} = file_ctx:get_file_location_ids(FileCtx),
-    LocationDocs = lists:map(
-        fun(LocationId) ->
-            {ok, Loc} = file_location:get(LocationId),
-            Loc
-        end, Locations),
-    LocalProviderId = oneprovider:get_provider_id(),
-    [#document{value = #file_location{version_vector = LocalVersion}}] = [Loc || Loc = #document{value = #file_location{provider_id = Id}}
-        <- LocationDocs, Id =:= LocalProviderId],
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [EnlargedBlock]),
     FileGuid = file_ctx:get_guid_const(FileCtx2),
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
     UserId = user_ctx:get_user_id(UserCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(
                 fun(BlockToSync = #file_block{offset = O, size = S}) ->
                     Ref = rtransfer:prepare_request(ProviderId, FileGuid, O, S),
                     NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
-                    case receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT) of
-                        {ok, Size} ->
-                            monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
-                            replica_updater:update(FileUuid, [BlockToSync#file_block{size = Size}], undefined, false, LocalVersion); %todo pass file_ctx
-                        {error, Error} ->
-                            ?error("Transfer of ~p range (~p, ~p) failed with error: ~p.", [FileGuid, RequestedOffset, RequestedSize, Error]),
-                            throw(?EIO)
-                    end
+                    {ok, Size} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT),
+                    monitoring_event:emit_rtransfer_statistics(SpaceId, UserId, Size),
+                    replica_updater:update(FileCtx2,
+                        [BlockToSync#file_block{size = Size}], undefined, false)
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = user_ctx:get_session_id(UserCtx),
-    fslogic_event:emit_file_location_changed({uuid, FileUuid}, [SessId], Block). %todo pass file_ctx
+    fslogic_event:emit_file_location_changed(FileCtx2, [SessId], Block).
 
 %%%===================================================================
 %%% Internal functions
