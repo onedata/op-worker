@@ -80,8 +80,8 @@ listeners() -> node_manager:cluster_worker_listeners() ++ [
 -spec modules_with_args() -> Models :: [{atom(), [any()]}].
 modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     {session_manager_worker, [
-        {supervisor_spec, session_manager_worker:supervisor_spec()},
-        {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
+        {supervisor_flags, session_manager_worker:supervisor_spec()},
+        {supervisor_children_spec, session_manager_worker:supervisor_child_spec()}
     ]},
     {subscriptions_worker, []},
     {fslogic_worker, []},
