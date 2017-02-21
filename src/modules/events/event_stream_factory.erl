@@ -116,7 +116,8 @@ create(#monitoring_subscription{time_threshold = TimeThr}) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns emission rule based on the counter threshold.
 %% @end
 %%--------------------------------------------------------------------
@@ -128,7 +129,8 @@ make_counter_emission_rule(CtrThr) when is_integer(CtrThr) ->
     fun(Meta) -> Meta >= CtrThr end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns emission time based on the time threshold.
 %% @end
 %%--------------------------------------------------------------------
@@ -140,7 +142,8 @@ make_emission_time(TimeThr) when is_integer(TimeThr) ->
     TimeThr.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns handler which sends events to the remote subscriber via sequencer stream.
 %% @end
 %%--------------------------------------------------------------------

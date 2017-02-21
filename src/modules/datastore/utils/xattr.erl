@@ -31,19 +31,20 @@
 %% @equiv get_by_name(FileUuid, XattrName, false).
 %% @end
 %%--------------------------------------------------------------------
--spec get_by_name(file_meta:uuid(), xattr:name()) ->
+-spec get_by_name(file_ctx:ctx(), xattr:name()) ->
     {ok, value()} | datastore:get_error().
-get_by_name(FileUuid, XattrName) ->
-    get_by_name(FileUuid, XattrName, false).
+get_by_name(FileCtx, XattrName) ->
+    get_by_name(FileCtx, XattrName, false).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets extended attribute with given name
 %% @end
 %%--------------------------------------------------------------------
--spec get_by_name(file_meta:uuid(), xattr:name(), boolean()) ->
+-spec get_by_name(file_ctx:ctx(), xattr:name(), boolean()) ->
     {ok, value()} | datastore:get_error().
-get_by_name(FileUuid, XattrName, Inherited) ->
+get_by_name(FileCtx, XattrName, Inherited) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:get_xattr_metadata(FileUuid, XattrName, Inherited).
 
 %%--------------------------------------------------------------------
@@ -51,9 +52,10 @@ get_by_name(FileUuid, XattrName, Inherited) ->
 %% Deletes extended attribute with given name
 %% @end
 %%--------------------------------------------------------------------
--spec delete_by_name(file_meta:uuid(), xattr:name()) ->
+-spec delete_by_name(file_ctx:ctx(), xattr:name()) ->
     ok | datastore:generic_error().
-delete_by_name(FileUuid, XattrName) ->
+delete_by_name(FileCtx, XattrName) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:remove_xattr_metadata(FileUuid, XattrName).
 
 %%--------------------------------------------------------------------
@@ -61,8 +63,9 @@ delete_by_name(FileUuid, XattrName) ->
 %% Checks existence of extended attribute with given name
 %% @end
 %%--------------------------------------------------------------------
--spec exists_by_name(file_meta:uuid(), xattr:name()) -> datastore:exists_return().
-exists_by_name(FileUuid, XattrName) ->
+-spec exists_by_name(file_ctx:ctx(), xattr:name()) -> datastore:exists_return().
+exists_by_name(FileCtx, XattrName) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:exists_xattr_metadata(FileUuid, XattrName).
 
 %%--------------------------------------------------------------------
@@ -70,9 +73,10 @@ exists_by_name(FileUuid, XattrName) ->
 %% Saves extended attribute
 %% @end
 %%--------------------------------------------------------------------
--spec save(file_meta:uuid(), name(), value()) ->
+-spec save(file_ctx:ctx(), name(), value()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(FileUuid, XattrName, XattreValue) ->
+save(FileCtx, XattrName, XattreValue) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:set_xattr_metadata(FileUuid, XattrName, XattreValue).
 
 %%--------------------------------------------------------------------
@@ -80,6 +84,7 @@ save(FileUuid, XattrName, XattreValue) ->
 %% Lists names of all extended attributes associated with given file
 %% @end
 %%--------------------------------------------------------------------
--spec list(file_meta:uuid(), boolean()) -> {ok, [xattr:name()]} | datastore:generic_error().
-list(FileUuid, Inherited) ->
+-spec list(file_ctx:ctx(), boolean()) -> {ok, [xattr:name()]} | datastore:generic_error().
+list(FileCtx, Inherited) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     custom_metadata:list_xattr_metadata(FileUuid, Inherited).

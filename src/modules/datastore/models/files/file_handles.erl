@@ -164,7 +164,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Registers number given in Count of new file descriptors for given
-%% FileUUID and SessionId.
+%% FileUuid and SessionId.
 %% @end
 %%--------------------------------------------------------------------
 -spec register_open(file_meta:uuid(), session:id(), pos_integer()) ->
@@ -173,13 +173,13 @@ register_open(_, ?ROOT_SESS_ID, _) ->
     ok;
 register_open(_, ?GUEST_SESS_ID, _) ->
     ok;
-register_open(FileUUID, SessId, Count) ->
+register_open(FileUuid, SessId, Count) ->
     Diff = fun
         (#file_handles{is_removed = true}) ->
             {error, phantom_file};
         (#file_handles{descriptors = Fds} = Handle) ->
             case maps:get(SessId, Fds, 0) of
-                0 -> case session:add_open_file(SessId, FileUUID) of
+                0 -> case session:add_open_file(SessId, FileUuid) of
                     ok -> {ok, Handle#file_handles{
                         descriptors = maps:put(SessId, Count, Fds)
                     }};
@@ -191,16 +191,16 @@ register_open(FileUUID, SessId, Count) ->
             end
     end,
 
-    case update(FileUUID, Diff) of
+    case update(FileUuid, Diff) of
         {ok, _} -> ok;
         {error, {not_found, _}} ->
-            Doc = #document{key = FileUUID, value = #file_handles{
+            Doc = #document{key = FileUuid, value = #file_handles{
                 descriptors = #{SessId => Count}
             }},
             case create(Doc) of
-                {ok, _} -> session:add_open_file(SessId, FileUUID);
+                {ok, _} -> session:add_open_file(SessId, FileUuid);
                 {error, already_exists} ->
-                    register_open(FileUUID, SessId, Count);
+                    register_open(FileUuid, SessId, Count);
                 {error, Reason} -> {error, Reason}
             end;
         {error, phantom_file} -> {error, {not_found, ?MODEL_NAME}};
@@ -210,7 +210,7 @@ register_open(FileUUID, SessId, Count) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes number given in Count of file descriptors for given
-%% FileUUID and SessionId. Removes file if no file descriptor
+%% FileUuid and SessionId. Removes file if no file descriptor
 %% is active and file is marked as removed.
 %% @end
 %%--------------------------------------------------------------------
@@ -220,11 +220,11 @@ register_release(_, ?ROOT_SESS_ID, _) ->
     ok;
 register_release(_, ?GUEST_SESS_ID, _) ->
     ok;
-register_release(FileUUID, SessId, Count) ->
+register_release(FileUuid, SessId, Count) ->
     Diff = fun(#file_handles{is_removed = Removed, descriptors = Fds} = Handle) ->
         FdCount = maps:get(SessId, Fds, 0),
         case Count =:= infinity orelse FdCount =< Count of
-            true -> case session:remove_open_file(SessId, FileUUID) of
+            true -> case session:remove_open_file(SessId, FileUuid) of
                 ok ->
                     Fds2 = maps:remove(SessId, Fds),
                     case {Removed, maps:size(Fds2)} of
@@ -239,11 +239,16 @@ register_release(FileUUID, SessId, Count) ->
         end
     end,
 
-    case update(FileUUID, Diff) of
-        {ok, _} -> maybe_delete(FileUUID);
+    case update(FileUuid, Diff) of
+        {ok, _} -> maybe_delete(FileUuid);
         {error, phantom_file} ->
-            worker_proxy:cast(fslogic_deletion_worker, {open_file_deletion_request, FileUUID}),
-            delete(FileUUID);
+            FileGuid = %todo VFS-3017 check why we cannot get space_id for onedata hidden files
+                try fslogic_uuid:uuid_to_guid(FileUuid)
+                catch _:_ -> fslogic_uuid:uuid_to_guid(FileUuid, undefined)
+                end,
+            FileCtx = file_ctx:new_by_guid(FileGuid),
+            fslogic_deletion_worker:request_open_file_deletion(FileCtx),
+            delete(FileUuid);
         {error, {not_found, _}} -> ok;
         {error, Reason} -> {error, Reason}
     end.
@@ -254,8 +259,8 @@ register_release(FileUUID, SessId, Count) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mark_to_remove(file_meta:uuid()) -> ok | {error, Reason :: term()}.
-mark_to_remove(FileUUID) ->
-    case update(FileUUID, #{is_removed => true}) of
+mark_to_remove(FileUuid) ->
+    case update(FileUuid, #{is_removed => true}) of
         {ok, _} -> ok;
         {error, {not_found, _}} -> ok;
         {error, Reason} -> {error, Reason}
@@ -263,14 +268,14 @@ mark_to_remove(FileUUID) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Clears descriptors count associated with SessionId for given FileUUID.
+%% Clears descriptors count associated with SessionId for given FileUuid.
 %% Removes file if no file descriptor is active and file is marked as removed.
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate_session_entry(file_meta:uuid(), session:id()) ->
     ok | {error, Reason :: term()}.
-invalidate_session_entry(FileUUID, SessId) ->
-    case register_release(FileUUID, SessId, infinity) of
+invalidate_session_entry(FileUuid, SessId) ->
+    case register_release(FileUuid, SessId, infinity) of
         ok -> ok;
         {error, {not_found, _}} -> ok;
         {error, Reason} -> {error, Reason}
@@ -281,14 +286,15 @@ invalidate_session_entry(FileUUID, SessId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Removes file handles if descriptors map is empty.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_delete(FileUUID :: file_meta:uuid()) -> ok | {error, Reason :: term()}.
-maybe_delete(FileUUID) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, FileUUID, fun() ->
-        case file_handles:get(FileUUID) of
+-spec maybe_delete(FileUuid :: file_meta:uuid()) -> ok | {error, Reason :: term()}.
+maybe_delete(FileUuid) ->
+    datastore:delete(?STORE_LEVEL, ?MODULE, FileUuid, fun() ->
+        case file_handles:get(FileUuid) of
             {ok, #document{value = #file_handles{descriptors = Fds}}} ->
                 maps:size(Fds) == 0;
             {error, _} -> false

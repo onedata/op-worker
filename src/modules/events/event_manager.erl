@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for dispatching events to event streams. Whenever an event arrives it it
-%%% forwarded to all registered event streams. Event manager is supervised by
+%%% for dispatching events to event streams. Whenever an event arrives it is
+%%% forwarded to an associated event stream. Event manager is supervised by
 %%% event manager supervisor and initialized on session creation.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -38,11 +38,11 @@
 -type ctx() :: event_type:ctx() | subscription_type:ctx().
 
 %% event manager state:
-%% session_id               - ID of a session associated with this event manager
-%% event_manager_sup        - pid of an event manager supervisor
-%% event_stream_sup         - pid of an event stream supervisor
-%% event_streams            - mapping from a subscription ID to an event stream pid
-%% providers    - cache that maps file to provider that shall handle the event
+%% session_id        - ID of a session associated with this event manager
+%% event_manager_sup - pid of an event manager supervisor
+%% event_stream_sup  - pid of an event stream supervisor
+%% event_streams     - mapping from a subscription ID to an event stream pid
+%% providers         - cache that maps file to provider that shall handle the event
 -record(state, {
     session_id :: undefined | session:id(),
     manager_sup :: undefined | pid(),
@@ -71,7 +71,8 @@ start_link(MgrSup, SessId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Initializes the event manager. Returns timeout equal to zero, so that
 %% event manager receives 'timeout' message in handle_info immediately after
 %% initialization. This mechanism is introduced in order to avoid deadlock
@@ -89,7 +90,8 @@ init([MgrSup, SessId]) ->
     {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles call messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -106,7 +108,8 @@ handle_call(Request, _From, State) ->
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Wraps cast messages' handlers.
 %% @end
 %%--------------------------------------------------------------------
@@ -130,7 +133,8 @@ handle_cast(Request, State) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -155,7 +159,8 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_server terminates
@@ -169,7 +174,8 @@ terminate(Reason, #state{session_id = SessId} = State) ->
     session:update(SessId, #{event_manager => undefined}).
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
@@ -183,7 +189,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns ID of a provider responsible for request handling in given context.
 %% @end
 %%--------------------------------------------------------------------
@@ -197,36 +204,37 @@ get_provider(Request, #state{providers = Providers} = State) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
         undefined ->
-            {oneprovider:get_provider_id(), RequestCtx, State};
-        {file, FileUuid} ->
-            case maps:find(FileUuid, Providers) of
+            {oneprovider:get_provider_id(), undefined, State};
+        {file, FileCtx} ->
+            FileGuid = file_ctx:get_guid_const(FileCtx),
+            case maps:find(FileGuid, Providers) of
                 {ok, Provider} ->
                     {Provider, RequestCtx, State};
                 error ->
-                    Provider = get_provider_for_file({guid, FileUuid}, State),
+                    Provider = get_provider_for_file(FileCtx, State),
                     {Provider, RequestCtx, State#state{
-                        providers = maps:put(FileUuid, Provider, Providers)
+                        providers = maps:put(FileGuid, Provider, Providers)
                     }}
             end
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns ID of a provider responsible for handling request associated with
 %% a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_for_file(Entry :: {guid, FileUuid :: fslogic_worker:file_guid()},
-    State :: #state{}) -> ProviderId :: oneprovider:id() | no_return().
-get_provider_for_file(Entry, #state{session_id = SessId}) ->
-    {ok, UserId} = session:get_user_id(SessId),
-    UserRootDir = fslogic_uuid:user_root_dir_uuid(UserId),
-    case file_meta:to_uuid(Entry) of
-        {ok, UserRootDir} ->
-            oneprovider:get_provider_id();
-        {ok, _} ->
-            ProviderId = oneprovider:get_provider_id(),
-            SpaceId = fslogic_spaces:get_space_id(Entry),
+-spec get_provider_for_file(file_ctx:ctx(), #state{}) ->
+    ProviderId :: oneprovider:id() | no_return().
+get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
+    ProviderId = oneprovider:get_provider_id(),
+    case file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            ProviderId;
+        false ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            {ok, UserId} = session:get_user_id(SessId),
             {ok, #document{value = #od_space{providers = ProviderIds}}} =
                 od_space:get_or_fetch(SessId, SpaceId, UserId),
             case {ProviderIds, lists:member(ProviderId, ProviderIds)} of
@@ -237,7 +245,8 @@ get_provider_for_file(Entry, #state{session_id = SessId}) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles request locally and if necessary changes request file context.
 %% @end
 %%--------------------------------------------------------------------
@@ -246,23 +255,25 @@ get_provider_for_file(Entry, #state{session_id = SessId}) ->
 handle_locally(Request, undefined, State) ->
     handle_locally(Request, State);
 
-handle_locally(Request, {file, FileGuid}, State) ->
-    {ok, FileUuid} = file_meta:to_uuid({guid, FileGuid}),
-    case file_meta:get(FileUuid) of
-        {error, {not_found, file_meta}} ->
+handle_locally(Request, {file, FileCtx}, State) ->
+    case file_ctx:file_exists_const(FileCtx) of
+        false ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
             case file_meta:get_guid_from_phantom_file(FileUuid) of
                 {ok, NewFileGuid} ->
-                    NewRequest = update_context(Request, {file, NewFileGuid}),
+                    NewFileCtx = file_ctx:new_by_guid(NewFileGuid),
+                    NewRequest = update_context(Request, {file, NewFileCtx}),
                     handle_cast(NewRequest, State);
                 {error, {not_found, _}} ->
                     {noreply, State}
             end;
-        _ ->
+        true ->
             handle_locally(Request, State)
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles request locally.
 %% @end
 %%--------------------------------------------------------------------
@@ -325,7 +336,8 @@ handle_locally(Request, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Forwards request to the remote provider.
 %% @end
 %%--------------------------------------------------------------------
@@ -370,7 +382,8 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns request context.
 %% @end
 %%--------------------------------------------------------------------
@@ -388,7 +401,8 @@ get_context(_) ->
     undefined.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Updates request file context.
 %% @end
 %%--------------------------------------------------------------------
@@ -403,7 +417,8 @@ update_context(Request, _Ctx) ->
     Request.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------

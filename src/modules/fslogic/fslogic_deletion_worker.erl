@@ -22,7 +22,7 @@
 
 %% API
 -export([init/1, handle/1, cleanup/0]).
--export([request_deletion/3]).
+-export([request_deletion/3, request_open_file_deletion/1]).
 
 %%%===================================================================
 %%% API
@@ -39,6 +39,16 @@ request_deletion(UserCtx, FileCtx, Silent) ->
     ok = worker_proxy:call(fslogic_deletion_worker,
         {fslogic_deletion_request, UserCtx, FileCtx, Silent}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Request deletion of given open file
+%% @end
+%%--------------------------------------------------------------------
+-spec request_open_file_deletion(file_ctx:ctx()) -> ok.
+request_open_file_deletion(FileCtx) ->
+    ok = worker_proxy:cast(fslogic_deletion_worker,
+        {open_file_deletion_request, FileCtx}).
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -51,26 +61,21 @@ request_deletion(UserCtx, FileCtx, Silent) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    case file_handles:list() of
-        {ok, Docs} ->
-            RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
-                Handle#file_handles.is_removed
-            end, Docs),
+    {ok, Docs} = file_handles:list(),
+    RemovedFiles = lists:filter(fun(#document{value = Handle}) ->
+        Handle#file_handles.is_removed
+    end, Docs),
 
-            lists:foreach(fun(#document{key = FileUuid}) ->
-                try
-                    remove_file_and_file_meta(FileUuid, ?ROOT_SESS_ID, false)
-                catch
-                    T:M -> ?error_stacktrace("Cannot remove file - ~p:~p", [T, M])
-                end
-            end, RemovedFiles),
+    lists:foreach(fun(#document{key = FileUuid}) ->
+        FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+        FileCtx = file_ctx:new_by_guid(FileGuid),
+        UserCtx = user_ctx:new(?ROOT_SESS_ID),
+        ok = remove_file_and_file_meta(FileCtx, UserCtx, false)
+    end, RemovedFiles),
 
-            lists:foreach(fun(#document{key = FileUuid}) ->
-                ok = file_handles:delete(FileUuid)
-            end, Docs);
-        {error, Reason} ->
-            ?error_stacktrace("Cannot clean open files descriptors - ~p", [Reason])
-    end,
+    lists:foreach(fun(#document{key = FileUuid}) ->
+        ok = file_handles:delete(FileUuid)
+    end, Docs),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -90,24 +95,23 @@ handle(healthcheck) ->
     ok;
 handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_handles:exists(FileUuid) of
         true ->
-            UserId = user_ctx:get_user_id(UserCtx),
-            {ParentFile, FileCtx2} = file_ctx:get_parent(FileCtx, UserId),
+            {ParentFile, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
             NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
 
             #fuse_response{status = #status{code = ?OK}} = rename_req:rename(
                 UserCtx, FileCtx2, ParentFile, NewName),
             ok = file_handles:mark_to_remove(FileUuid),
-            fslogic_event:emit_file_renamed_to_client(FileCtx2, NewName, SessId);
+            fslogic_event:emit_file_renamed_to_client(FileCtx2, NewName, SessId); %todo pass user_ctx
         false ->
-            remove_file_and_file_meta(FileUuid, SessId, Silent) %todo pass file_ctx
+            remove_file_and_file_meta(FileCtx, UserCtx, Silent)
     end,
     ok;
-handle({open_file_deletion_request, FileUuid}) ->
-    remove_file_and_file_meta(FileUuid, ?ROOT_SESS_ID, false);
+handle({open_file_deletion_request, FileCtx}) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    remove_file_and_file_meta(FileCtx, UserCtx, false);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -135,77 +139,33 @@ cleanup() ->
 %% will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file_and_file_meta(file_meta:uuid(), session:id(), boolean()) -> ok.
-remove_file_and_file_meta(FileUuid, SessId, Silent) ->
-    {ok, #document{value = #file_meta{type = Type, shares = Shares}} = FileDoc} =
-        file_meta:get(FileUuid),
-    {ok, UID} = session:get_user_id(SessId),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, UID),
-    {ok, ParentDoc} = file_meta:get_parent(FileDoc),
+-spec remove_file_and_file_meta(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
+remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
+    {FileDoc = #document{
+        value = #file_meta{
+            type = Type,
+            shares = Shares
+        }
+    }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+    ok = delete_shares(UserCtx, Shares),
 
-    ok = delete_shares(SessId, Shares),
-
-    fslogic_times:update_mtime_ctime(ParentDoc, UID),
-
+    UserId = user_ctx:get_user_id(UserCtx),
+    SessId = user_ctx:get_session_id(UserCtx),
+    fslogic_times:update_mtime_ctime(ParentCtx, UserId), %todo pass UserCtx
     case Type of
         ?REGULAR_FILE_TYPE ->
-            delete_file_on_storage(FileUuid, SessId, SpaceUUID);
+            sfm_utils:delete_storage_file(FileCtx3, UserCtx);
         _ -> ok
     end,
     ok = file_meta:delete(FileDoc),
-
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-
     case Silent of
-        true -> ok;
+        true ->
+            ok;
         false ->
-            fslogic_event:emit_file_removed(
-                fslogic_uuid:uuid_to_guid(FileUuid, SpaceId), [SessId])
-    end,
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes file from storage.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_file_on_storage(file_meta:uuid(), session:id(), file_meta:uuid())
-        -> ok.
-delete_file_on_storage(FileUuid, SessId, SpaceUUID) ->
-    case catch fslogic_utils:get_local_file_location({uuid, FileUuid}) of %todo VFS-2813 support multi location
-        #document{value = #file_location{} = Location} ->
-            ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
-            Results =
-                lists:map( %% @todo: run this via task manager
-                    fun({StorageId, FileId}) ->
-                        case storage:get(StorageId) of
-                            {ok, Storage} ->
-                                SFMHandle = storage_file_manager:new_handle(
-                                    SessId, SpaceUUID, FileUuid, Storage, FileId),
-                                case storage_file_manager:unlink(SFMHandle) of
-                                    ok -> ok;
-                                    {error, Reason1} ->
-                                        {{StorageId, FileId}, {error, Reason1}}
-                                end;
-                            {error, Reason2} ->
-                                {{StorageId, FileId}, {error, Reason2}}
-                        end
-                    end, ToDelete),
-            case Results -- [ok] of
-                [] -> ok;
-                Errors ->
-                    lists:foreach(
-                        fun({{SID0, FID0}, {error, Reason0}}) ->
-                            ?error("Cannot unlink file ~p from storage ~p due to: ~p",
-                                [FID0, SID0, Reason0])
-                        end, Errors)
-            end;
-        Reason3 ->
-            ?error_stacktrace("Unable to unlink file ~p from storage due to: ~p",
-                [FileUuid, Reason3])
-    end,
-    ok.
+            fslogic_event:emit_file_removed(FileCtx3, [SessId]), %todo pass UserCtx
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -213,10 +173,10 @@ delete_file_on_storage(FileUuid, SessId, SpaceUUID) ->
 %% Removes given shares from oz and db.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_shares(session:id(), [od_share:id()]) -> ok | no_return().
-delete_shares(_SessId, []) ->
+-spec delete_shares(user_ctx:ctx(), [od_share:id()]) -> ok | no_return().
+delete_shares(_UserCtx, []) ->
     ok;
-delete_shares(SessId, Shares) ->
-    {ok, Auth} = session:get_auth(SessId),
+delete_shares(UserCtx, Shares) ->
+    Auth = user_ctx:get_auth(UserCtx),
     [ok = share_logic:delete(Auth, ShareId) || ShareId <- Shares],
     ok.
