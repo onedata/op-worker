@@ -86,8 +86,7 @@ change_replicated_internal(SpaceId, Change = #change{
     ok = sfm_utils:create_storage_file_if_not_exists(FileCtx),
     ok = fslogic_event:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid,
-        [file_meta, local_file_location]),
-    ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
+        [file_meta, local_file_location]);
 change_replicated_internal(SpaceId, Change = #change{
     model = file_meta,
     doc = FileDoc = #document{
@@ -96,7 +95,7 @@ change_replicated_internal(SpaceId, Change = #change{
     }}, Master) ->
     ?debug("change_replicated_internal: changed file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    ok = file_consistency:wait(FileUuid, SpaceId, [times], [SpaceId, Change],
+    ok = file_consistency:wait(FileUuid, SpaceId, [times, link_to_parent], [SpaceId, Change],
         {Master, FileUuid}),
     ok = fslogic_event:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid, [file_meta]),
