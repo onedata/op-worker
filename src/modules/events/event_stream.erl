@@ -120,7 +120,8 @@ execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Initializes the event stream.
 %% @end
 %%--------------------------------------------------------------------
@@ -144,7 +145,8 @@ init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
     }}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles call messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -156,7 +158,8 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles cast messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -190,7 +193,8 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -223,7 +227,8 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_server terminates
@@ -240,7 +245,8 @@ terminate(Reason, #state{manager = Mgr, key = Key, stream = Stm, ctx = Ctx} = St
     gen_server2:cast(Mgr, {unregister_stream, Key}).
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
@@ -254,7 +260,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Adds subscription.
 %% @end
 %%--------------------------------------------------------------------
@@ -267,7 +274,8 @@ add_subscription(SessId, #subscription{id = SubId} = Sub, Subs) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Removes subscription.
 %% @end
 %%--------------------------------------------------------------------
@@ -286,7 +294,8 @@ remove_subscription(SessId, SubId, Subs) ->
     {maps:size(NewSubs) == 0, NewSubs}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Removes subscriptions from the events routing table.
 %% @end
 %%--------------------------------------------------------------------
@@ -298,7 +307,8 @@ remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
     end, ok, Subs).
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Spawns event handler execution if no other event handler is currently being
 %% executed.
 %% @end
@@ -312,7 +322,8 @@ maybe_spawn_event_handler(_Force, #state{} = State) ->
     State#state{emission_ref = pending}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Spawns event handler execution and resets stream metadata.
 %% @end
 %%--------------------------------------------------------------------
@@ -327,7 +338,8 @@ spawn_event_handler(Force, #state{stream = Stm} = State) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Processes event on the event stream.
 %% @end
 %%--------------------------------------------------------------------
@@ -349,7 +361,8 @@ process_event(Evt, #state{events = Evts, metadata = Meta, stream = Stm} = State)
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Schedules sending 'periodic_emission' message to itself. Message is
 %% marked with new reference stored in event stream state, so that event stream
 %% can ignore messages with reference different from the one saved in the state.
@@ -366,7 +379,8 @@ maybe_schedule_event_handler_execution(State) ->
     State.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Executes function with provided arguments.
 %% @end
 %%--------------------------------------------------------------------
