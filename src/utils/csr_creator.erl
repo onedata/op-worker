@@ -10,6 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(csr_creator).
+-compile([no_native]).
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").

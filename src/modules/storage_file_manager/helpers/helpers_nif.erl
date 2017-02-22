@@ -10,6 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helpers_nif).
+-compile([no_native]).
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").

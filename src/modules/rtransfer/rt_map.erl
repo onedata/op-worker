@@ -10,7 +10,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(rt_map).
+-compile([no_native]).
 -author("Krzysztof Trzepla").
+
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
