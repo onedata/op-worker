@@ -23,7 +23,11 @@
 ## Configure schedulers
 ## +S 32:32
 ## +SDcpu 16:8
++K true
 +sfwi 500
++stbt db
++sbwt very_long
++swt very_low
 ## +scl false
 ## +sub true
 
