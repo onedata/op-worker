@@ -247,7 +247,7 @@ reconcile_replicas(FileCtx,
 %%    #document{value = #file_location{blocks = SameBlocks}}) ->
 %%    ok;
 notify_block_change_if_necessary(FileCtx, _, _) ->
-    ok = fslogic_event:emit_file_location_changed(FileCtx, []).
+    ok = fslogic_event_emitter:emit_file_location_changed(FileCtx, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -262,4 +262,4 @@ notify_size_change_if_necessary(_FileCtx,
 ) ->
     ok;
 notify_size_change_if_necessary(FileCtx, _, _) ->
-    ok = fslogic_event:emit_file_attr_changed(FileCtx, []).
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []).

@@ -407,7 +407,7 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
     {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} =
         parse_renamed_entries(RenamedEntries),
     spawn(fun() ->
-        fslogic_event:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
+        fslogic_event_emitter:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -490,7 +490,7 @@ rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetP
     {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} =
         parse_renamed_entries(RenamedEntries),
     spawn(fun() ->
-        fslogic_event:emit_file_renamed(TopEntry, ChildEntries, [SessId])
+        fslogic_event_emitter:emit_file_renamed(TopEntry, ChildEntries, [SessId])
     end),
     #fuse_response{
         status = #status{code = ?OK},

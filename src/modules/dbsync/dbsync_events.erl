@@ -84,7 +84,7 @@ change_replicated_internal(SpaceId, Change = #change{
         [times, link_to_parent, parent_links], [SpaceId, Change],
         {Master, FileUuid}),
     ok = sfm_utils:create_storage_file_if_not_exists(FileCtx),
-    ok = fslogic_event:emit_file_attr_changed(FileCtx, []),
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid,
         [file_meta, local_file_location]);
 change_replicated_internal(SpaceId, Change = #change{
@@ -97,7 +97,7 @@ change_replicated_internal(SpaceId, Change = #change{
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     ok = file_consistency:wait(FileUuid, SpaceId, [times, link_to_parent], [SpaceId, Change],
         {Master, FileUuid}),
-    ok = fslogic_event:emit_file_attr_changed(FileCtx, []),
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     ok = file_consistency:add_components_and_notify(FileUuid, [file_meta]),
     ok = file_consistency:check_and_add_components(FileUuid, SpaceId, [parent_links]);
 change_replicated_internal(SpaceId, Change = #change{

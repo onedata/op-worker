@@ -95,7 +95,7 @@ chmod(UserCtx, FileCtx, Mode) ->
     ok = permissions_cache:invalidate(file_meta, FileUuid),
 
     fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
-    fslogic_event:emit_file_perm_changed(FileCtx),
+    fslogic_event_emitter:emit_file_perm_changed(FileCtx),
 
     #fuse_response{status = #status{code = ?OK}}.
 

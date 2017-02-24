@@ -95,7 +95,7 @@ update_times_and_emit(FileCtx, TimesMap, _UserId) ->
     Times = prepare_times(TimesMap),
     {ok, FileUuid} = times:create_or_update(#document{key = FileUuid, value = Times}, TimesMap),
     spawn(fun() ->
-        fslogic_event:emit_sizeless_file_attrs_changed(FileCtx)
+        fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
     end),
     ok.
 

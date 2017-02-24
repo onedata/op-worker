@@ -45,7 +45,7 @@ unlink(SessId, FileEntry, Silent) ->
 %%--------------------------------------------------------------------
 %% @equiv remove_utils:rm(SessId, FileKey).
 %%--------------------------------------------------------------------
--spec rm(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec rm(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | logical_file_manager:error_reply().
 rm(SessId, FileKey) ->
     remove_utils:rm(SessId, FileKey).
@@ -55,7 +55,7 @@ rm(SessId, FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec mv(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 mv(SessId, FileKey, TargetPath) ->
@@ -73,7 +73,8 @@ mv(SessId, FileKey, TargetPath) ->
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
--spec cp(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), TargetPath :: file_meta:path()) ->
+-spec cp(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    TargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
@@ -84,7 +85,7 @@ cp(SessId, FileKey, TargetPath) ->
 %% Returns uuid of parent for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_parent(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 get_parent(SessId, FileKey) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
@@ -99,7 +100,7 @@ get_parent(SessId, FileKey) ->
 %% Returns full path of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(SessId :: session:id(), FileGuid :: fslogic_worker:file_guid()) ->
+-spec get_file_path(session:id(), FileGuid :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, FileGuid) ->
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -113,8 +114,8 @@ get_file_path(SessId, FileGuid) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), ProviderId :: oneprovider:id()) ->
-    ok | logical_file_manager:error_reply().
+-spec replicate_file(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+    ProviderId :: oneprovider:id()) -> ok | logical_file_manager:error_reply().
 replicate_file(SessId, FileKey, ProviderId) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -126,12 +127,12 @@ replicate_file(SessId, FileKey, ProviderId) ->
 %% Creates a new file.
 %% @end
 %%--------------------------------------------------------------------
--spec create(SessId :: session:id(), Path :: file_meta:path()) ->
+-spec create(session:id(), Path :: file_meta:path()) ->
     {ok, file_meta:uuid()} | logical_file_manager:error_reply().
 create(SessId, Path) ->
     create(SessId, Path, undefined).
 
--spec create(SessId :: session:id(), Path :: file_meta:path(),
+-spec create(session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions() | undefined) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(SessId, Path, Mode) ->
@@ -142,7 +143,7 @@ create(SessId, Path, Mode) ->
             lfm_files:create(SessId, ParentGuid, Name, Mode)
         end).
 
--spec create(SessId :: session:id(), ParentGuid :: fslogic_worker:file_guid(),
+-spec create(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(SessId, ParentGuid, Name, undefined) ->
@@ -161,7 +162,7 @@ create(SessId, ParentGuid, Name, Mode) ->
 %% Opens a file in selected mode and returns a file handle used to read or write.
 %% @end
 %%--------------------------------------------------------------------
--spec open(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Flag :: fslogic_worker:open_flag()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(SessId, FileKey, Flag) ->
@@ -236,45 +237,56 @@ fsync(Handle) ->
     ProviderId = lfm_context:get_provider_id(Handle),
 
     ok = storage_file_manager:fsync(SFMHandle),
-    fslogic_event:flush_event_queue(SessionId, ProviderId, fslogic_uuid:guid_to_uuid(FileGuid)).
+    lfm_event_utils:flush_event_queue(SessionId, ProviderId,
+        fslogic_uuid:guid_to_uuid(FileGuid)).
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)
 %%--------------------------------------------------------------------
--spec write(FileHandle :: logical_file_manager:handle(), Offset :: integer(), Buffer :: binary()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), integer()} | logical_file_manager:error_reply().
+-spec write(FileHandle :: logical_file_manager:handle(),
+    Offset :: integer(), Buffer :: binary()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), integer()} |
+    logical_file_manager:error_reply().
 write(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, true).
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, false)
 %%--------------------------------------------------------------------
--spec write_without_events(FileHandle :: logical_file_manager:handle(), Offset :: integer(), Buffer :: binary()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), integer()} | logical_file_manager:error_reply().
+-spec write_without_events(FileHandle :: logical_file_manager:handle(),
+    Offset :: integer(), Buffer :: binary()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), integer()} |
+    logical_file_manager:error_reply().
 write_without_events(FileHandle, Offset, Buffer) ->
     write(FileHandle, Offset, Buffer, false).
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true)
 %%--------------------------------------------------------------------
--spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
+-spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+    MaxSize :: integer()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
+    logical_file_manager:error_reply().
 read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true).
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, true)
 %%--------------------------------------------------------------------
--spec read_without_events(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
+-spec read_without_events(FileHandle :: logical_file_manager:handle(),
+    Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
+    logical_file_manager:error_reply().
 read_without_events(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, true).
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, false)
 %%--------------------------------------------------------------------
--spec silent_read(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
+-spec silent_read(FileHandle :: logical_file_manager:handle(),
+    Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
+    logical_file_manager:error_reply().
 silent_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, false).
 
@@ -283,7 +295,7 @@ silent_read(FileHandle, Offset, MaxSize) ->
 %% Truncates a file.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec truncate(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Size :: non_neg_integer()) ->
     ok | logical_file_manager:error_reply().
 truncate(SessId, FileKey, Size) ->
@@ -291,7 +303,7 @@ truncate(SessId, FileKey, Size) ->
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #truncate{size = Size},
         fun(_) ->
-            ok = fslogic_event:emit_file_truncated(FileGuid, Size, SessId)
+            ok = lfm_event_utils:emit_file_truncated(FileGuid, Size, SessId)
         end).
 
 %%--------------------------------------------------------------------
@@ -299,7 +311,7 @@ truncate(SessId, FileKey, Size) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, list()} | logical_file_manager:error_reply().
 get_file_distribution(SessId, FileKey) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
@@ -307,7 +319,10 @@ get_file_distribution(SessId, FileKey) ->
         #get_file_distribution{},
         fun(#file_distribution{provider_file_distributions = Distributions}) ->
             Distribution =
-                lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
+                lists:map(fun(#provider_file_distribution{
+                    provider_id = ProviderId,
+                    blocks = Blocks
+                }) ->
                     #{
                         <<"providerId">> => ProviderId,
                         <<"blocks">> => lists:map(fun(#file_block{offset = O, size = S}) ->
@@ -329,7 +344,8 @@ get_file_distribution(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
     Buffer :: binary(), GenerateEvents :: boolean()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), integer()} | logical_file_manager:error_reply().
+    {ok, NewHandle :: logical_file_manager:handle(), integer()} |
+    logical_file_manager:error_reply().
 write(FileHandle, Offset, Buffer, GenerateEvents) ->
     Size = size(Buffer),
     case write_internal(FileHandle, Offset, Buffer, GenerateEvents) of
@@ -342,7 +358,9 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
                 [FileHandle, Offset, Size]),
             {error, ?EAGAIN};
         {ok, NewHandle, Written} ->
-            case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written), GenerateEvents) of
+            case write(NewHandle, Offset + Written,
+                binary:part(Buffer, Written, Size - Written), GenerateEvents)
+            of
                 {ok, NewHandle1, Written1} ->
                     {ok, NewHandle1, Written + Written1};
                 {error, Reason1} ->
@@ -356,9 +374,10 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
 %% Writes one portion of data in write/3
 %% @end
 %%--------------------------------------------------------------------
--spec write_internal(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
-    Buffer :: binary(), GenerateEvents :: boolean()) ->
-    {ok, logical_file_manager:handle(), non_neg_integer()} | logical_file_manager:error_reply().
+-spec write_internal(FileHandle :: logical_file_manager:handle(),
+    Offset :: non_neg_integer(), Buffer :: binary(), GenerateEvents :: boolean()) ->
+    {ok, logical_file_manager:handle(), non_neg_integer()} |
+    logical_file_manager:error_reply().
 write_internal(Handle, Offset, Buffer, GenerateEvents) ->
     Guid = lfm_context:get_guid(Handle),
     SessId = lfm_context:get_session_id(Handle),
@@ -368,7 +387,8 @@ write_internal(Handle, Offset, Buffer, GenerateEvents) ->
         {ok, Written} ->
             WrittenBlocks = [#file_block{offset = Offset, size = Written}],
             NewSize = max(Size, Offset + Written),
-            ok = fslogic_event:maybe_emit_file_written(Guid, WrittenBlocks, SessId, GenerateEvents),
+            ok = lfm_event_utils:maybe_emit_file_written(Guid, WrittenBlocks,
+                SessId, GenerateEvents),
             NewLocationHandle = lfm_context:set_size(Handle, NewSize),
             {ok, NewLocationHandle, Written};
         {error, Reason2} ->
@@ -383,7 +403,8 @@ write_internal(Handle, Offset, Buffer, GenerateEvents) ->
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
-    {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} |
+    logical_file_manager:error_reply().
 read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     case read_internal(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) of
         {error, Reason} ->
@@ -395,7 +416,9 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
                 0 ->
                     Ret1;
                 Size ->
-                    case read(NewHandle, Offset + Size, MaxSize - Size, GenerateEvents, PrefetchData) of
+                    case read(NewHandle, Offset + Size, MaxSize - Size,
+                        GenerateEvents, PrefetchData)
+                    of
                         {ok, NewHandle1, Bytes1} ->
                             {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
                         {error, Reason} ->
@@ -426,7 +449,7 @@ read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     case storage_file_manager:read(SfmHandle, Offset, MaxSize) of
         {ok, Data} ->
             ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
-            ok = fslogic_event:maybe_emit_file_read(Guid, ReadBlocks, SessId, GenerateEvents),
+            ok = lfm_event_utils:maybe_emit_file_read(Guid, ReadBlocks, SessId, GenerateEvents),
             {ok, Handle, Data};
         {error, Reason2} ->
             {error, Reason2}

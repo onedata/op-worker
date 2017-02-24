@@ -104,7 +104,7 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
             #fuse_response{status = #status{code = ?OK}} = rename_req:rename(
                 UserCtx, FileCtx2, ParentFile, NewName),
             ok = file_handles:mark_to_remove(FileUuid),
-            fslogic_event:emit_file_renamed_to_client(FileCtx2, NewName, SessId); %todo pass user_ctx
+            fslogic_event_emitter:emit_file_renamed_to_client(FileCtx2, NewName, SessId); %todo pass user_ctx
         false ->
             remove_file_and_file_meta(FileCtx, UserCtx, Silent)
     end,
@@ -163,7 +163,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
         true ->
             ok;
         false ->
-            fslogic_event:emit_file_removed(FileCtx3, [SessId]), %todo pass UserCtx
+            fslogic_event_emitter:emit_file_removed(FileCtx3, [SessId]), %todo pass UserCtx
             ok
     end.
 

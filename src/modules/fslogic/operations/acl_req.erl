@@ -89,7 +89,7 @@ remove_acl(UserCtx, FileCtx) ->
                 user_ctx:new(?ROOT_SESS_ID),
                 FileCtx2, Mode
             ),
-            ok = fslogic_event:emit_file_perm_changed(FileCtx2),
+            ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
             fslogic_times:update_ctime(FileCtx2, user_ctx:get_user_id(UserCtx)),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->

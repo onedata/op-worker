@@ -601,8 +601,8 @@ remote_change_of_size_should_notify_clients(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
-    test_utils:mock_new(W1, [fslogic_event], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_event, emit_file_attr_changed,
+    test_utils:mock_new(W1, [fslogic_event_emitter], [passthrough]),
+    test_utils:mock_expect(W1, fslogic_event_emitter, emit_file_attr_changed,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
@@ -613,9 +613,9 @@ remote_change_of_size_should_notify_clients(Config) ->
     TheFileCtxWithGuid = fun(FileCtx) ->
         FileGuid =:= file_ctx:get_guid_const(FileCtx)
     end,
-    ?assert(?rpc(meck, called, [fslogic_event, emit_file_attr_changed,
+    ?assert(?rpc(meck, called, [fslogic_event_emitter, emit_file_attr_changed,
         [meck:is(TheFileCtxWithGuid), []]])),
-    test_utils:mock_validate_and_unload(W1, fslogic_event).
+    test_utils:mock_validate_and_unload(W1, fslogic_event_emitter).
 
 remote_change_of_blocks_should_notify_clients(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -651,8 +651,8 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
-    test_utils:mock_new(W1, [fslogic_event], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_event, emit_file_location_changed,
+    test_utils:mock_new(W1, [fslogic_event_emitter], [passthrough]),
+    test_utils:mock_expect(W1, fslogic_event_emitter, emit_file_location_changed,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
@@ -663,9 +663,9 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     TheFileCtxWithGuid = fun(FileCtx) ->
         FileGuid =:= file_ctx:get_guid_const(FileCtx)
     end,
-    ?assert(?rpc(meck, called, [fslogic_event, emit_file_location_changed,
+    ?assert(?rpc(meck, called, [fslogic_event_emitter, emit_file_location_changed,
         [meck:is(TheFileCtxWithGuid), []]])),
-    test_utils:mock_validate_and_unload(W1, fslogic_event).
+    test_utils:mock_validate_and_unload(W1, fslogic_event_emitter).
 
 remote_irrelevant_change_should_not_notify_clients(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -706,8 +706,8 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
 
     % mock events
-    test_utils:mock_new(W1, [fslogic_event], [passthrough]),
-    test_utils:mock_expect(W1, fslogic_event, emit_file_location_changed,
+    test_utils:mock_new(W1, [fslogic_event_emitter], [passthrough]),
+    test_utils:mock_expect(W1, fslogic_event_emitter, emit_file_location_changed,
         fun(_Entry, _ExcludedSessions) -> ok end),
 
     % when
@@ -715,9 +715,9 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-%%    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_location_changed, ['_', '_']])), %todo VFS-2132
-    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event, emit_file_attr_changed, ['_', '_']])),
-    test_utils:mock_validate_and_unload(W1, fslogic_event).
+%%    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event_emitter, emit_file_location_changed, ['_', '_']])), %todo VFS-2132
+    ?assertEqual(0, ?rpc(meck, num_calls, [fslogic_event_emitter, emit_file_attr_changed, ['_', '_']])),
+    test_utils:mock_validate_and_unload(W1, fslogic_event_emitter).
 
 conflicting_remote_changes_should_be_reconciled(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),

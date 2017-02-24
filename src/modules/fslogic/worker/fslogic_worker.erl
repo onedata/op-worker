@@ -68,8 +68,8 @@ init(_Args) ->
             {error, already_exists} -> ok
         end
     end, [
-        {fun subscription:create/1, [fslogic_subscriptions:file_read_subscription()]},
-        {fun subscription:create/1, [fslogic_subscriptions:file_written_subscription()]},
+        {fun subscription:create/1, [fslogic_event_subscriptions:file_read_subscription()]},
+        {fun subscription:create/1, [fslogic_event_subscriptions:file_written_subscription()]},
         {fun session_manager:create_root_session/0, []},
         {fun session_manager:create_guest_session/0, []}
     ]),
