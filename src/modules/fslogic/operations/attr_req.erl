@@ -92,7 +92,7 @@ chmod(UserCtx, FileCtx, Mode) ->
     xattr:delete_by_name(FileCtx, ?ACL_KEY),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate(file_meta, FileUuid),
+    ok = permissions_cache:invalidate(file_meta, FileCtx),
 
     fslogic_times:update_ctime(FileCtx),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx),

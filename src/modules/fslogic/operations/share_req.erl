@@ -59,7 +59,6 @@ remove_share(UserCtx, FileCtx) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
     Auth = user_ctx:get_auth(UserCtx),
     ok = share_logic:delete(Auth, ShareId),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:remove_share(FileCtx, ShareId),
-    ok = permissions_cache:invalidate(file_meta, FileUuid), %todo pass file_ctx
+    ok = permissions_cache:invalidate(file_meta, FileCtx),
     #provider_response{status = #status{code = ?OK}}.
