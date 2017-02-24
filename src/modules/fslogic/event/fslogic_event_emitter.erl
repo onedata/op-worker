@@ -121,9 +121,9 @@ emit_file_renamed(TopEntry, ChildEntries, ExcludedSessions) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed_to_client(file_ctx:ctx(), file_meta:name(),
-    session:id()) -> ok | {error, Reason :: term()}.
-emit_file_renamed_to_client(FileCtx, NewName, SessionId) -> %todo pass UserCtx
-    UserCtx = user_ctx:new(SessionId),
+    user_ctx:ctx()) -> ok | {error, Reason :: term()}.
+emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx),
     {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
@@ -138,8 +138,7 @@ emit_file_renamed_to_client(FileCtx, NewName, SessionId) -> %todo pass UserCtx
 %% Sends a list of currently disabled spaces due to exeeded quota.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_quota_exeeded() ->
-    ok | {error, Reason :: term()}.
+-spec emit_quota_exeeded() -> ok | {error, Reason :: term()}.
 emit_quota_exeeded() ->
     BlockedSpaces = space_quota:get_disabled_spaces(),
     ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
