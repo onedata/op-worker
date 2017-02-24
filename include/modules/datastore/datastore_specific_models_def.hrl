@@ -244,7 +244,7 @@
     response_map = #{} :: maps:map(),
     % Key-value in-session memory
     memory = #{} :: maps:map(),
-    open_files = sets:new() :: sets:set(file_meta:uuid()),
+    open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
     transfers = [] :: [transfer:id()]
 }).
 

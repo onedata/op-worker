@@ -49,16 +49,15 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     {ok, HandleId} = save_handle(SessId, Handle),
     #fuse_response{fuse_response = #file_attr{} = FileAttr} =
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx2),
     FileLocation = #file_location{
-        uuid = FileUuid,
+        uuid = file_ctx:get_uuid_const(FileCtx2),
         provider_id = oneprovider:get_provider_id(),
         storage_id = StorageId,
         file_id = FileId,
         blocks = [#file_block{offset = 0, size = 0}],
         space_id = SpaceId
     },
-    ok = file_handles:register_open(FileUuid, SessId, 1), %todo pass file_ctx
+    ok = file_handles:register_open(FileCtx2, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_created{
@@ -134,8 +133,7 @@ open_file(UserCtx, FileCtx, rdwr) ->
 release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = session:remove_handle(SessId, HandleId),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = file_handles:register_release(FileUuid, SessId, 1), %todo pass file_ctx
+    ok = file_handles:register_release(FileCtx, SessId, 1),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
@@ -243,7 +241,7 @@ open_file_insecure(UserCtx, FileCtx, Flag) ->
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
     {ok, HandleId} = save_handle(SessId, Handle),
 
-    ok = file_handles:register_open(FileUuid, SessId, 1), %todo pass file_ctx
+    ok = file_handles:register_open(FileCtx3, SessId, 1),
 
     #fuse_response{
         status = #status{code = ?OK},

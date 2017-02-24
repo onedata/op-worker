@@ -125,8 +125,9 @@ delete(Key) ->
             worker_proxy:multicast(?SESSION_MANAGER_WORKER,
                 {apply, fun() -> delete_helpers_on_this_node(SessId) end}),
 
-            lists:foreach(fun(FileUuid) ->
-                file_handles:invalidate_session_entry(FileUuid, Key)
+            lists:foreach(fun(FileGuid) ->
+                FileCtx = file_ctx:new_by_guid(FileGuid),
+                file_handles:invalidate_session_entry(FileCtx, Key)
             end, sets:to_list(OpenFiles));
         _ -> ok
     end,
@@ -386,11 +387,11 @@ get_rest_session_id(#user_identity{user_id = Uid}) ->
 %% Adds open file UUID to session.
 %% @end
 %%--------------------------------------------------------------------
--spec add_open_file(id(), file_meta:uuid()) ->
+-spec add_open_file(id(), fslogic_worker:file_guid()) ->
     ok | {error, Reason :: term()}.
-add_open_file(SessId, FileUuid) ->
+add_open_file(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:add_element(FileUuid, OpenFiles)}}
+        {ok, Sess#session{open_files = sets:add_element(FileGuid, OpenFiles)}}
     end,
 
     case update(SessId, Diff) of
@@ -403,11 +404,11 @@ add_open_file(SessId, FileUuid) ->
 %% Removes open file UUID from session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_open_file(id(), file_meta:uuid()) ->
+-spec remove_open_file(id(), fslogic_worker:file_guid()) ->
     ok | {error, Reason :: term()}.
-remove_open_file(SessId, FileUuid) ->
+remove_open_file(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:del_element(FileUuid, OpenFiles)}}
+        {ok, Sess#session{open_files = sets:del_element(FileGuid, OpenFiles)}}
     end,
 
     case update(SessId, Diff) of
