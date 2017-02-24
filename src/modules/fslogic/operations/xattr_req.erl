@@ -166,10 +166,10 @@ set_xattr(UserCtx, FileCtx, Xattr) ->
 -spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_metadata]).
-remove_xattr(UserCtx, FileCtx, XattrName) ->
+remove_xattr(_UserCtx, FileCtx, XattrName) ->
     case xattr:delete_by_name(FileCtx, XattrName) of
         ok ->
-            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -239,10 +239,10 @@ get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
 -spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_metadata]).
-set_custom_xattr(UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
+set_custom_xattr(_UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
     case xattr:save(FileCtx, XattrName, XattrValue) of
         {ok, _} ->
-            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

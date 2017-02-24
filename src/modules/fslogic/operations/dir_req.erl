@@ -44,7 +44,7 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
     {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_ctx inside
     {ok, _} = times:create(#document{key = DirUuid, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
-    fslogic_times:update_mtime_ctime(ParentFileCtx2, user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_mtime_ctime(ParentFileCtx2),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #dir{uuid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
     }.
@@ -66,7 +66,7 @@ read_dir(UserCtx, FileCtx, Offset, Limit) ->
             {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
             #child_link{name = ChildName, uuid = ChildGuid}
         end, Children),
-    fslogic_times:update_atime(FileCtx2, user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_atime(FileCtx2),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks

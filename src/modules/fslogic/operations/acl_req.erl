@@ -55,7 +55,7 @@ get_acl(_UserCtx, FileCtx) ->
 -spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_acl]).
-set_acl(UserCtx, FileCtx, #acl{value = Val}) ->
+set_acl(_UserCtx, FileCtx, #acl{value = Val}) ->
     case xattr:save(FileCtx, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of
         {ok, _} ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -64,7 +64,7 @@ set_acl(UserCtx, FileCtx, #acl{value = Val}) ->
                 user_ctx:new(?ROOT_SESS_ID),
                 FileCtx, 8#000
             ),
-            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -78,7 +78,7 @@ set_acl(UserCtx, FileCtx, #acl{value = Val}) ->
 -spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_acl]).
-remove_acl(UserCtx, FileCtx) ->
+remove_acl(_UserCtx, FileCtx) ->
     case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
         ok ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -90,7 +90,7 @@ remove_acl(UserCtx, FileCtx) ->
                 FileCtx2, Mode
             ),
             ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
-            fslogic_times:update_ctime(FileCtx2, user_ctx:get_user_id(UserCtx)),
+            fslogic_times:update_ctime(FileCtx2),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}

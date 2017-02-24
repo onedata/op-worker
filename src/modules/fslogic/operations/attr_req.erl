@@ -94,7 +94,7 @@ chmod(UserCtx, FileCtx, Mode) ->
     {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
     ok = permissions_cache:invalidate(file_meta, FileUuid),
 
-    fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_ctime(FileCtx),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx),
 
     #fuse_response{status = #status{code = ?OK}}.
@@ -109,10 +109,9 @@ chmod(UserCtx, FileCtx, Mode) ->
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
 -check_permissions([traverse_ancestors, {owner, 'or', ?write_attributes}]).
-update_times(UserCtx, FileCtx, ATime, MTime, CTime) ->
+update_times(_UserCtx, FileCtx, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:filter(fun(_Key, Value) ->
         is_integer(Value) end, UpdateMap),
-    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1,
-        user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1),
     #fuse_response{status = #status{code = ?OK}}.

@@ -41,7 +41,7 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {{StorageId, FileId}, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
-    fslogic_times:update_mtime_ctime(ParentFileCtx, user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_mtime_ctime(ParentFileCtx),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
     SpaceDirUuid = file_ctx:get_space_dir_uuid_const(ParentFileCtx),
     SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
@@ -79,7 +79,7 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
 make_file(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     {_, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
-    fslogic_times:update_mtime_ctime(ParentFileCtx, user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_mtime_ctime(ParentFileCtx),
     attr_req:get_file_attr_insecure(UserCtx, FileCtx2).
 
 %%--------------------------------------------------------------------

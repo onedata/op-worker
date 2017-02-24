@@ -79,11 +79,11 @@ handle_file_written_event(#file_written_event{
 
     case replica_updater:update(FileCtx, Blocks, FileSize, true) of
         {ok, size_changed} ->
-            fslogic_times:update_mtime_ctime(FileCtx, UserId),
+            fslogic_times:update_mtime_ctime(FileCtx),
             fslogic_event_emitter:emit_file_attr_changed(FileCtx, [SessId]),
             fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId]);
         {ok, size_not_changed} ->
-            fslogic_times:update_mtime_ctime(FileCtx, UserId),
+            fslogic_times:update_mtime_ctime(FileCtx),
             fslogic_event_emitter:emit_file_location_changed(FileCtx, [SessId])
     end.
 
@@ -104,4 +104,4 @@ handle_file_read_event(#file_read_event{
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, UserId} = session:get_user_id(SessId),
     monitoring_event:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
-    fslogic_times:update_atime(FileCtx, UserId).
+    fslogic_times:update_atime(FileCtx).

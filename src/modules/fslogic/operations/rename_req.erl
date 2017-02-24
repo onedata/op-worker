@@ -311,7 +311,6 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
     SessId = user_ctx:get_session_id(UserCtx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
-    UserId = user_ctx:get_user_id(UserCtx),
     TargetFilePartialCtx =
         file_ctx:new_partial_context_by_canonical_path(UserCtx, CanonicalTargetPath),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
@@ -400,9 +399,9 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
     CurrTime = erlang:system_time(seconds),
     TargetFileCtx = file_ctx:new_by_partial_context(TargetFilePartialCtx),
     TargetParentFileCtx = file_ctx:new_by_partial_context(TargetParentFilePartialCtx),
-    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, UserId, CurrTime),
-    ok = fslogic_times:update_ctime(TargetFileCtx, UserId, CurrTime),
-    ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, UserId, CurrTime),
+    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrTime),
+    ok = fslogic_times:update_ctime(TargetFileCtx, CurrTime),
+    ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrTime),
 
     {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} =
         parse_renamed_entries(RenamedEntries),
@@ -480,8 +479,7 @@ rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetP
     CurrTime = erlang:system_time(seconds),
 
     [{_SourceGuid, TargetGuid, TargetParentGuid, _NewName} | _] = RenamedEntries,
-    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx,
-        user_ctx:get_user_id(UserCtx), CurrTime),
+    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrTime),
     ok = logical_file_manager:update_times(SessId, {guid, TargetGuid},
         undefined, undefined, CurrTime),
     ok = logical_file_manager:update_times(SessId, {guid, TargetParentGuid},

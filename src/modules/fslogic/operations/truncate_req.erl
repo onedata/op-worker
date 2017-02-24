@@ -50,7 +50,7 @@ truncate(UserCtx, FileCtx, Size) ->
             ok = storage_file_manager:truncate(Handle, Size)
         end, LocalLocations),
 
-    fslogic_times:update_mtime_ctime(FileCtx3, user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_mtime_ctime(FileCtx3),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================

@@ -51,10 +51,10 @@ get_transfer_encoding(_UserCtx, FileCtx) ->
 -spec set_transfer_encoding(user_ctx:ctx(), file_ctx:ctx(),
     xattr:transfer_encoding()) -> fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_attributes]).
-set_transfer_encoding(UserCtx, FileCtx, Encoding) ->
+set_transfer_encoding(_UserCtx, FileCtx, Encoding) ->
     case xattr:save(FileCtx, ?TRANSFER_ENCODING_KEY, Encoding) of
         {ok, _} ->
-            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
@@ -118,10 +118,10 @@ get_mimetype(_UserCtx, FileCtx) ->
 -spec set_mimetype(user_ctx:ctx(), file_ctx:ctx(),
     xattr:mimetype()) -> fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_attributes]).
-set_mimetype(UserCtx, FileCtx, Mimetype) ->
+set_mimetype(_UserCtx, FileCtx, Mimetype) ->
     case xattr:save(FileCtx, ?MIMETYPE_KEY, Mimetype) of
         {ok, _} ->
-            fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}

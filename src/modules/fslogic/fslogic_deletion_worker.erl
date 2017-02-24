@@ -149,8 +149,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
     {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
     ok = delete_shares(UserCtx, Shares),
 
-    UserId = user_ctx:get_user_id(UserCtx),
-    fslogic_times:update_mtime_ctime(ParentCtx, UserId), %todo pass UserCtx
+    fslogic_times:update_mtime_ctime(ParentCtx),
     case Type of
         ?REGULAR_FILE_TYPE ->
             sfm_utils:delete_storage_file(FileCtx3, UserCtx);
