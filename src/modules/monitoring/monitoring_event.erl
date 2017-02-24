@@ -256,7 +256,8 @@ handle_monitoring_event(#monitoring_event{type = #rtransfer_statistics{} = Evt})
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc Returns monitoring id without metric for given user and space.
+%% @private
+%% @doc Returns monitoring id without metric for given user and space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_monitoring_id(SpaceId :: od_space:id(), UserId :: od_user:id()) ->
@@ -277,7 +278,8 @@ get_monitoring_id(SpaceId, UserId) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc Emits event using the root session.
+%% @private
+%% @doc Emits event using the root session.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit(Evt :: event:type()) -> ok | {error, Reason :: term()}.

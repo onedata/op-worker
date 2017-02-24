@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for dispatching events to event streams. Whenever an event arrives it it
-%%% forwarded to all registered event streams. Event manager is supervised by
+%%% for dispatching events to event streams. Whenever an event arrives it is
+%%% forwarded to an associated event stream. Event manager is supervised by
 %%% event manager supervisor and initialized on session creation.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -38,11 +38,11 @@
 -type ctx() :: event_type:ctx() | subscription_type:ctx().
 
 %% event manager state:
-%% session_id               - ID of a session associated with this event manager
-%% event_manager_sup        - pid of an event manager supervisor
-%% event_stream_sup         - pid of an event stream supervisor
-%% event_streams            - mapping from a subscription ID to an event stream pid
-%% providers    - cache that maps file to provider that shall handle the event
+%% session_id        - ID of a session associated with this event manager
+%% event_manager_sup - pid of an event manager supervisor
+%% event_stream_sup  - pid of an event stream supervisor
+%% event_streams     - mapping from a subscription ID to an event stream pid
+%% providers         - cache that maps file to provider that shall handle the event
 -record(state, {
     session_id :: undefined | session:id(),
     manager_sup :: undefined | pid(),
@@ -71,7 +71,8 @@ start_link(MgrSup, SessId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Initializes the event manager. Returns timeout equal to zero, so that
 %% event manager receives 'timeout' message in handle_info immediately after
 %% initialization. This mechanism is introduced in order to avoid deadlock
@@ -89,7 +90,8 @@ init([MgrSup, SessId]) ->
     {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles call messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -106,7 +108,8 @@ handle_call(Request, _From, State) ->
     {reply, ok, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Wraps cast messages' handlers.
 %% @end
 %%--------------------------------------------------------------------
@@ -130,7 +133,8 @@ handle_cast(Request, State) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
@@ -155,7 +159,8 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_server terminates
@@ -169,7 +174,8 @@ terminate(Reason, #state{session_id = SessId} = State) ->
     session:update(SessId, #{event_manager => undefined}).
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
@@ -183,7 +189,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns ID of a provider responsible for request handling in given context.
 %% @end
 %%--------------------------------------------------------------------
@@ -212,7 +219,8 @@ get_provider(Request, #state{providers = Providers} = State) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns ID of a provider responsible for handling request associated with
 %% a file.
 %% @end
@@ -237,7 +245,8 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles request locally and if necessary changes request file context.
 %% @end
 %%--------------------------------------------------------------------
@@ -263,7 +272,8 @@ handle_locally(Request, {file, FileCtx}, State) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Handles request locally.
 %% @end
 %%--------------------------------------------------------------------
@@ -326,7 +336,8 @@ handle_locally(Request, State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Forwards request to the remote provider.
 %% @end
 %%--------------------------------------------------------------------
@@ -371,7 +382,8 @@ handle_remotely(Request, ProviderId, #state{session_id = SessId} = State) ->
     {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns request context.
 %% @end
 %%--------------------------------------------------------------------
@@ -389,7 +401,8 @@ get_context(_) ->
     undefined.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Updates request file context.
 %% @end
 %%--------------------------------------------------------------------
@@ -404,7 +417,8 @@ update_context(Request, _Ctx) ->
     Request.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------

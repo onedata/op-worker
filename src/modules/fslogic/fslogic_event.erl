@@ -253,7 +253,8 @@ flush_event_queue(SessionId, ProviderId, FileUuid) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Processes a file written event and returns a response.
 %% @end
 %%--------------------------------------------------------------------
@@ -281,7 +282,8 @@ handle_file_written_event(#file_written_event{
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Processes a file read event and returns a response.
 %% @end
 %%--------------------------------------------------------------------

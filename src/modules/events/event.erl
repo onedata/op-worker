@@ -145,7 +145,8 @@ unsubscribe(SubId, MgrRef) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns pid of an event manager associated with provided reference.
 %% A reference can be either an event manager pid or a session ID.
 %% @end
@@ -168,7 +169,8 @@ get_event_manager(MgrRef) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns list of event managers associated with provided references.
 %% A reference can be either an event manager pids or a session IDs.
 %% @end
@@ -201,7 +203,8 @@ send_to_event_managers(Msg, Mgrs) ->
     end, Mgrs).
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns a list consisting of unique elements that occurs in the ListA
 %% but not in the ListB.
 %% @end
