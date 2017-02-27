@@ -930,10 +930,9 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     LSL = MC#model_config.link_store_level,
     {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
 
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     LeafLess = filename:dirname(FileId),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess, undefined),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, LeafLess, undefined),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
@@ -941,7 +940,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     end,
 
 
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId, undefined),
+    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, FileId, undefined),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, 8#775),
     {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),

@@ -83,10 +83,9 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, Mode) ->
     %create target dir
     {ok, TargetStorage = #document{key = TargetStorageId}} =
         fslogic_storage:select_storage(TargetSpaceId),
-    TargetSpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),
     TargetDir = filename:dirname(TargetFileId),
     TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
-        TargetSpaceUuid, undefined, TargetStorage, TargetDir, undefined),
+        TargetSpaceId, undefined, TargetStorage, TargetDir, undefined),
     case storage_file_manager:mkdir(TargetDirHandle,
         ?AUTO_CREATED_PARENT_DIR_MODE, true)
     of
@@ -97,11 +96,10 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, Mode) ->
     end,
 
     {ok, SourceStorage} = storage:get(SourceStorageId),
-    SourceSpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SourceSpaceId),
-    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUuid,
+    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceId,
         FileUuid, SourceStorage, SourceFileId, undefined),
     TargetHandle = storage_file_manager:new_handle(SessId,
-        TargetSpaceUuid, FileUuid, TargetStorage, TargetFileId, undefined),
+        TargetSpaceId, FileUuid, TargetStorage, TargetFileId, undefined),
     case storage_file_manager:stat(TargetHandle) of
         {ok, _} ->
             ok;
@@ -240,12 +238,12 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
 create_parent_dirs(FileCtx) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
     {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
 
     LeafLess = filename:dirname(StorageFileId),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid,
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
         FileUuid, Storage, LeafLess, undefined),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok ->

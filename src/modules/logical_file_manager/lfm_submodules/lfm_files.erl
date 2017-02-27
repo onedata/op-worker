@@ -181,8 +181,7 @@ open(SessId, FileKey, Flag) ->
                         fun(#file_attr{size = Size}) ->
                             FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
                             SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-                            SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUuid,
+                            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceId,
                                 FileUuid, StorageId, FileId, ShareId, ProviderId),
 
                             case storage_file_manager:open(SFMHandle0, Flag) of

@@ -56,13 +56,12 @@
     [term()].
 before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{
     session_id = SessionId,
-    space_uuid = SpaceDirUuid,
+    space_id = SpaceId,
     file_uuid = FileUuid,
     share_id = ShareId
 } | _] = Args
 ) ->
     UserCtx = user_ctx:new(SessionId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
     FileGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
     DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
     {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),

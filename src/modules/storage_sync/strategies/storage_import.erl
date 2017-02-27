@@ -135,7 +135,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
         space_id := SpaceId,
         storage_id := StorageId
     } = Data,
-    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
         undefined, StorageId, FileId, undefined, oneprovider:get_provider_id()),
     case storage_file_manager:stat(SFMHandle) of
         {ok, #statbuf{st_mode = Mode, st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime} = FileStats} ->

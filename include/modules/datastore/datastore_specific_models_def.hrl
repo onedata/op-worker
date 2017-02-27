@@ -254,7 +254,7 @@
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
-    space_uuid :: file_meta:uuid(),
+    space_id :: file_meta:uuid(),
     storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
