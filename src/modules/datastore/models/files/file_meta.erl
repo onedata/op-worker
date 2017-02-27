@@ -450,7 +450,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_children(Entry :: entry(), Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
-    {ok, [#child_link{}]} | {error, Reason :: term()}.
+    {ok, [#child_link_uuid{}]} | {error, Reason :: term()}.
 list_children(Entry, Offset, Count) ->
     ?run(begin
         {ok, #document{} = File} = get(Entry),
@@ -468,7 +468,7 @@ list_children(Entry, Offset, Count) ->
                             SelectedTargetsTagged = lists:sublist(TargetsTagged, Skip + 1, TargetCount - Skip),
                             ChildLinks = lists:map(
                                 fun({LName, LKey}) ->
-                                    #child_link{name = LName, uuid = LKey}
+                                    #child_link_uuid{name = LName, uuid = LKey}
                                 end, SelectedTargetsTagged),
                             {0, Count1 + (TargetCount - Skip), ChildLinks ++ Acc};
                         false ->
@@ -484,7 +484,7 @@ list_children(Entry, Offset, Count) ->
                         false ->
                             ChildLinks = lists:map(
                                 fun({LName, LKey}) ->
-                                    #child_link{name = LName, uuid = LKey}
+                                    #child_link_uuid{name = LName, uuid = LKey}
                                 end, SelectedTargetsTagged),
                             {0, Count1 - length(ChildLinks), ChildLinks ++ Acc}
                     end;
@@ -1133,7 +1133,7 @@ set_scopes6(Entry, NewScopeUuid, [Setter | Setters], SettersBak, Offset, BatchSi
         false ->
             ok = set_scopes6(Entry, NewScopeUuid, Setters, [Setter | SettersBak], Offset + BatchSize, BatchSize)
     end,
-    ok = set_scopes6([{uuid, Uuid} || #child_link{uuid = Uuid} <- ChildLinks], NewScopeUuid, Setters, [Setter | SettersBak], 0, BatchSize).
+    ok = set_scopes6([{uuid, Uuid} || #child_link_uuid{uuid = Uuid} <- ChildLinks], NewScopeUuid, Setters, [Setter | SettersBak], 0, BatchSize).
 
 
 %%--------------------------------------------------------------------

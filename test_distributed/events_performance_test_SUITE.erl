@@ -119,7 +119,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
-            emit(Worker, #file_written_event{file_uuid = FileGuid, size = EvtSize,
+            emit(Worker, #file_written_event{file_guid = FileGuid, size = EvtSize,
                 file_size = N * EvtSize, blocks = [#file_block{
                     offset = (N - 1) * EvtSize, size = EvtSize
                 }]}, SessId)
@@ -132,7 +132,7 @@ emit_should_aggregate_events_with_the_same_key_base(Config) ->
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         ?assertMatch([#file_written_event{
             counter = EvtNum,
-            file_uuid = FileGuid,
+            file_guid = FileGuid,
             file_size = FileSize,
             size = FileSize,
             blocks = [#file_block{offset = 0, size = FileSize}]
@@ -184,7 +184,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         utils:pforeach(fun(N) ->
             lists:foreach(fun(M) ->
-                emit(Worker, #file_written_event{file_uuid = ?FILE_GUID(N), size = EvtSize,
+                emit(Worker, #file_written_event{file_guid = ?FILE_GUID(N), size = EvtSize,
                     file_size = M * EvtSize, blocks = [#file_block{
                         offset = (M - 1) * EvtSize, size = EvtSize
                     }]}, SessId)
@@ -198,8 +198,8 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
     % and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         RecvEvts = ?assertMatch([_ | _], receive_file_written_events(SubId, SessId)),
-        lists:foldl(fun(Evt, FileUuids) ->
-            #file_written_event{file_uuid = FileUuid} =
+        lists:foldl(fun(Evt, FileGuids) ->
+            #file_written_event{file_guid = FileGuid} =
                 ?assertMatch(#file_written_event{
                     counter = EvtNum,
                     file_size = FileSize,
@@ -207,8 +207,8 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
                     blocks = [#file_block{offset = 0, size = FileSize}]
 
                 }, Evt),
-            ?assert(lists:member(FileUuid, FileUuids)),
-            lists:delete(FileUuid, FileUuids)
+            ?assert(lists:member(FileGuid, FileGuids)),
+            lists:delete(FileGuid, FileGuids)
         end, [?FILE_GUID(N) || N <- lists:seq(1, FileNum)], RecvEvts)
     end),
 
@@ -254,7 +254,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) -
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            emit(Worker, #file_written_event{file_uuid = FileGuid}, SessId)
+            emit(Worker, #file_written_event{file_guid = FileGuid}, SessId)
         end, lists:seq(1, EvtNum))
     end),
 
@@ -319,7 +319,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         utils:pforeach(fun({SessId, _}) ->
             lists:foreach(fun(N) ->
-                emit(Worker, #file_written_event{file_uuid = FileGuid, size = EvtSize,
+                emit(Worker, #file_written_event{file_guid = FileGuid, size = EvtSize,
                     file_size = N * EvtSize, blocks = [#file_block{
                         offset = (N - 1) * EvtSize, size = EvtSize
                     }]}, SessId)
@@ -337,7 +337,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
         lists:foreach(fun({SessId, SubId}) ->
             ?assertMatch([#file_written_event{
                 counter = EvtNum,
-                file_uuid = FileGuid,
+                file_guid = FileGuid,
                 file_size = FileSize,
                 size = FileSize,
                 blocks = [#file_block{offset = 0, size = FileSize}]
@@ -551,12 +551,12 @@ receive_file_written_events(SubId, SessId, AggRule, AggEvts) ->
     receive
         {event_handler, SubId, SessId, Evts} ->
             AggEvts3 = lists:foldl(fun(#file_written_event{
-                file_uuid = FileUuid
+                file_guid = FileGuid
             } = Evt, AggEvts2) ->
-                case maps:find(FileUuid, AggEvts2) of
+                case maps:find(FileGuid, AggEvts2) of
                     {ok, AggEvt} ->
-                        maps:put(FileUuid, AggRule(AggEvt, Evt), AggEvts2);
-                    error -> maps:put(FileUuid, Evt, AggEvts2)
+                        maps:put(FileGuid, AggRule(AggEvt, Evt), AggEvts2);
+                    error -> maps:put(FileGuid, Evt, AggEvts2)
                 end
             end, AggEvts, Evts),
             receive_file_written_events(SubId, SessId, AggRule, AggEvts3);

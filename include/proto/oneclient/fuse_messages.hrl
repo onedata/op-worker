@@ -18,8 +18,13 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+-record(child_link_uuid, {
+    uuid :: file_meta:uuid(),
+    name :: binary()
+}).
+
 -record(child_link, {
-    uuid :: binary() | fslogic_worker:file_guid(),
+    guid :: fslogic_worker:file_guid(),
     name :: binary()
 }).
 
@@ -55,7 +60,7 @@
 }).
 
 -record(rename, {
-    target_parent_uuid :: fslogic_worker:file_guid(),
+    target_parent_guid :: fslogic_worker:file_guid(),
     target_name :: file_meta:name()
 }).
 
@@ -117,7 +122,7 @@
 
 -record(create_storage_test_file, {
     storage_id :: storage:id(),
-    file_uuid :: file_meta:uuid() | fslogic_worker:file_guid()
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 -record(verify_storage_test_file, {
@@ -172,18 +177,18 @@
 }).
 
 -record(file_renamed, {
-    new_uuid :: fslogic_worker:file_guid(),
+    new_guid :: fslogic_worker:file_guid(),
     child_entries :: undefined | [#file_renamed_entry{}]
 }).
 
--record(uuid, {
-    uuid :: fslogic_worker:file_guid()
+-record(guid, {
+    guid :: fslogic_worker:file_guid()
 }).
 
 -type fuse_response_type() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
-    #file_opened{} | #file_renamed{} | #uuid{} | undefined.
+    #file_opened{} | #file_renamed{} | #guid{} | undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},

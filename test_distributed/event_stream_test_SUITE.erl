@@ -225,11 +225,11 @@ file_read_event(Size, Blocks) ->
 %% Returns read event.
 %% @end
 %%--------------------------------------------------------------------
--spec file_read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
+-spec file_read_event(FileUuid :: fslogic_worker:file_guid(), Size :: file_meta:size(),
     Blocks :: proplists:proplist()) -> Evt :: #event{}.
-file_read_event(FileUuid, Size, Blocks) ->
+file_read_event(FileGuid, Size, Blocks) ->
     #file_read_event{
-        file_uuid = FileUuid, size = Size, blocks = [
+        file_guid = FileGuid, size = Size, blocks = [
             #file_block{offset = O, size = S} || {O, S} <- Blocks
         ]
     }.

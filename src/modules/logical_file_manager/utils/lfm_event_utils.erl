@@ -35,7 +35,7 @@ maybe_emit_file_written(_FileGuid, _WrittenBlocks, _SessionId, false) ->
     ok;
 maybe_emit_file_written(FileGuid, WrittenBlocks, SessionId, true) ->
     event:emit(#file_written_event{
-        file_uuid = FileGuid,
+        file_guid = FileGuid,
         blocks = WrittenBlocks
     }, SessionId).
 
@@ -51,7 +51,7 @@ maybe_emit_file_read(_FileGuid, _ReadBlocks, _SessionId, false) ->
     ok;
 maybe_emit_file_read(FileGuid, ReadBlocks, SessionId, true) ->
     event:emit(#file_read_event{
-        file_uuid = FileGuid,
+        file_guid = FileGuid,
         blocks = ReadBlocks
     }, SessionId).
 
@@ -64,7 +64,7 @@ maybe_emit_file_read(FileGuid, ReadBlocks, SessionId, true) ->
     ok | {error, Reason :: term()}.
 emit_file_truncated(FileGuid, Size, SessionId) ->
     event:emit(#file_written_event{
-        file_uuid = FileGuid,
+        file_guid = FileGuid,
         blocks = [],
         file_size = Size
     }, SessionId).

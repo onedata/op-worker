@@ -36,25 +36,25 @@
 
 %% definition of an event associated with a read operation in the file system
 %% counter   - number of events aggregated in this event
-%% file_uuid - UUID of a file associated with the read operation
+%% file_guid - GUID of a file associated with the read operation
 %% size      - number of bytes read
 %% blocks    - list of offset, size pairs that describes bytes segments read
 -record(file_read_event, {
     counter = 1 :: non_neg_integer(),
-    file_uuid :: file_meta:uuid(),
+    file_guid :: fslogic_worker:file_guid(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
 %% definition of an event associated with a write operation in the file system
 %% counter    - number of events aggregated in this event
-%% file_uuid - UUID of a file associated with the write operation
+%% file_guid - GUID of a file associated with the write operation
 %% file_size - size of a file after the write operation
 %% size      - number of bytes written
 %% blocks    - list of offset, size pairs that describes bytes segments written
 -record(file_written_event, {
     counter = 1 :: non_neg_integer(),
-    file_uuid :: file_meta:uuid(),
+    file_guid :: fslogic_worker:file_guid(),
     file_size :: undefined | file_meta:size(),
     size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
@@ -73,15 +73,15 @@
 }).
 
 %% definition of an event triggered when file permission is changed
-%% file_uuid - UUID of a file
+%% file_guid - GUID of a file
 -record(file_perm_changed_event, {
-    file_uuid :: file_meta:uuid()
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% definition of an event triggered when file is removed
-%% file_uuid - UUID of a file
+%% file_guid - GUID of a file
 -record(file_removed_event, {
-    file_uuid :: file_meta:uuid()
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% definition of an event triggered when file is renamed

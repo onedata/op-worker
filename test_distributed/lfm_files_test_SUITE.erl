@@ -933,7 +933,7 @@ get_guid_privileged(Worker, SessId, Path) ->
     get_guid(Worker, SessId, Path).
 
 get_guid(Worker, SessId, Path) ->
-    #fuse_response{fuse_response = #uuid{uuid = Guid}} =
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
         ?assertMatch(
             #fuse_response{status = #status{code = ?OK}},
             ?req(Worker, SessId, #resolve_guid{path = Path}),

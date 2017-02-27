@@ -60,7 +60,7 @@ ensure_guid(UserCtx, {path, Path}) when is_tuple(UserCtx) -> %todo TL use only s
 ensure_guid(SessionId, {path, Path}) ->
     remote_utils:call_fslogic(SessionId, fuse_request,
         #resolve_guid{path = Path},
-        fun(#uuid{uuid = Guid}) ->
+        fun(#guid{guid = Guid}) ->
             {guid, Guid}
         end).
 

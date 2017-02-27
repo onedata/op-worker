@@ -78,7 +78,7 @@ fslogic_get_file_attr_test(Config) ->
     UserRootGuid2 = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
-        #fuse_response{fuse_response = #uuid{uuid = Guid}} =
+        #fuse_response{fuse_response = #guid{guid = Guid}} =
             ?assertMatch(
                 #fuse_response{status = #status{code = ?OK}},
                 ?req(Worker, SessId, #resolve_guid{path = Path})
@@ -147,12 +147,12 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    #fuse_response{fuse_response = #uuid{uuid = RootUuid1}} =
+    #fuse_response{fuse_response = #guid{guid = RootGuid1}} =
         ?assertMatch(
             #fuse_response{status = #status{code = ?OK}},
             ?req(Worker, SessId1, #resolve_guid{path = <<"/space_name1">>})
         ),
-    #fuse_response{fuse_response = #uuid{uuid = RootUuid2}} =
+    #fuse_response{fuse_response = #guid{guid = RootGuid2}} =
         ?assertMatch(
             #fuse_response{status = #status{code = ?OK}},
             ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2">>})
@@ -164,7 +164,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
             ParentUuid, #create_dir{name = Leaf, mode = 8#755}
         )),
 
-        #fuse_response{fuse_response = #uuid{uuid = FileGuid}} =
+        #fuse_response{fuse_response = #guid{guid = FileGuid}} =
             ?assertMatch(
                 #fuse_response{status = #status{code = ?OK}},
                 ?req(Worker, SessId, #resolve_guid{path = NewPath})
@@ -174,16 +174,16 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     end,
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId1,
-        RootUuid1, #create_dir{name = <<"t2_double">>, mode = 8#755}
+        RootGuid1, #create_dir{name = <<"t2_double">>, mode = 8#755}
     )),
     ?assertMatch(#fuse_response{status = #status{code = ?EEXIST}}, ?file_req(Worker, SessId1,
-        RootUuid1, #create_dir{name = <<"t2_double">>, mode = 8#755}
+        RootGuid1, #create_dir{name = <<"t2_double">>, mode = 8#755}
     )),
 
 
-    {_, _, _, _, Uuids1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<"/space_name1">>, RootUuid1, []},
+    {_, _, _, _, Uuids1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<"/space_name1">>, RootGuid1, []},
         [<<"t2_dir1">>, <<"t2_dir2">>, <<"t2_dir3">>]),
-    {_, _, _, _, Uuids2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<"/space_name2">>, RootUuid2, []},
+    {_, _, _, _, Uuids2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<"/space_name2">>, RootGuid2, []},
         [<<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
 
     TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, <<"space_name2">>,
@@ -210,7 +210,7 @@ fslogic_read_dir_test(Config) ->
     {SessId4, _UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     ValidateReadDir = fun({SessId, Path, NameList}) ->
-        #fuse_response{fuse_response = #uuid{uuid = FileGuid}} =
+        #fuse_response{fuse_response = #guid{guid = FileGuid}} =
             ?assertMatch(
                 #fuse_response{status = #status{code = ?OK}},
                 ?req(Worker, SessId, #resolve_guid{path = Path})
@@ -230,7 +230,7 @@ fslogic_read_dir_test(Config) ->
                                 #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
 
                                 RespNames = lists:map(
-                                    fun(#child_link{uuid = _, name = Name}) ->
+                                    fun(#child_link{guid = _, name = Name}) ->
                                         Name
                                     end, Links),
 
@@ -292,7 +292,7 @@ chmod_test(Config) ->
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
                 ?file_req(Worker, SessId, Guid, #change_mode{mode = 8#123})),
 
-            #fuse_response{fuse_response = #uuid{uuid = Guid}} =
+            #fuse_response{fuse_response = #guid{guid = Guid}} =
                 ?assertMatch(
                     #fuse_response{status = #status{code = ?OK}},
                     ?req(Worker, SessId, #resolve_guid{path = Path})
@@ -461,12 +461,12 @@ simple_rename_test(Config) ->
                 meck:passthrough([_Client, _SpaceId])
         end),
 
-    #fuse_response{fuse_response = #uuid{uuid = RootUuid1}} =
+    #fuse_response{fuse_response = #guid{guid = RootGuid1}} =
         ?assertMatch(
             #fuse_response{status = #status{code = ?OK}},
             ?req(Worker, SessId1, #resolve_guid{path = <<"/space_name1">>})
         ),
-    #fuse_response{fuse_response = #uuid{uuid = RootUuid2}} =
+    #fuse_response{fuse_response = #guid{guid = RootGuid2}} =
         ?assertMatch(
             #fuse_response{status = #status{code = ?OK}},
             ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2">>})
@@ -479,7 +479,7 @@ simple_rename_test(Config) ->
                 ParentUuid, #create_dir{name = Leaf, mode = 8#755}
             )),
 
-            #fuse_response{fuse_response = #uuid{uuid = FileUuid}} =
+            #fuse_response{fuse_response = #guid{guid = FileUuid}} =
                 ?assertMatch(
                     #fuse_response{status = #status{code = ?OK}},
                     ?req(Worker, SessId, #resolve_guid{path = NewPath})
@@ -488,11 +488,11 @@ simple_rename_test(Config) ->
             {SessId, DefaultSpaceName, NewPath, FileUuid, [FileUuid | FileUuids]}
         end,
 
-    {_, _, _, _, Uuids1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<"/space_name1">>, RootUuid1, []},
+    {_, _, _, _, Uuids1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<"/space_name1">>, RootGuid1, []},
         [<<"t6_dir1">>, <<"t6_dir2">>, <<"t6_dir3">>]),
     [_, ToMove | _] = lists:reverse(Uuids1),
 
-    RenameResp1 = ?file_req(Worker, SessId1, ToMove, #rename{target_parent_uuid = RootUuid2, target_name = <<"t6_dir4">>}),
+    RenameResp1 = ?file_req(Worker, SessId1, ToMove, #rename{target_parent_guid = RootGuid2, target_name = <<"t6_dir4">>}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RenameResp1),
 
     ?assertMatch(
@@ -631,7 +631,7 @@ get_guid_privileged(Worker, SessId, Path) ->
 
 
 get_guid(Worker, SessId, Path) ->
-    #fuse_response{fuse_response = #uuid{uuid = Guid}} =
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
         ?assertMatch(
             #fuse_response{status = #status{code = ?OK}},
             ?req(Worker, SessId, #resolve_guid{path = Path})

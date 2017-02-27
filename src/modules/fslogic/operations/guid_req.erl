@@ -34,7 +34,7 @@ resolve_guid(_UserCtx, FileCtx) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = #uuid{uuid = Guid}
+        fuse_response = #guid{guid = Guid}
     }.
 
 %%--------------------------------------------------------------------
@@ -49,7 +49,7 @@ get_parent(UserCtx, FileCtx) ->
     {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     #provider_response{
         status = #status{code = ?OK},
-        provider_response = #dir{uuid = ParentGuid}
+        provider_response = #dir{guid = ParentGuid}
     }.
 
 %%--------------------------------------------------------------------

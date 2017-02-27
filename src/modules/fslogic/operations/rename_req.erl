@@ -50,7 +50,7 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
             Guid = file_ctx:get_guid_const(SourceFileCtx2),
             #fuse_response{
                 status = #status{code = ?OK},
-                fuse_response = #file_renamed{new_uuid = Guid}
+                fuse_response = #file_renamed{new_guid = Guid}
             };
         false ->
             rename(UserCtx, SourceFileCtx, CanonicalTargetPath,
@@ -403,14 +403,14 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
     ok = fslogic_times:update_ctime(TargetFileCtx, CurrTime),
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrTime),
 
-    {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} =
+    {#file_renamed_entry{new_guid = NewGuid} = TopEntry, ChildEntries} =
         parse_renamed_entries(RenamedEntries),
     spawn(fun() ->
         fslogic_event_emitter:emit_file_renamed(TopEntry, ChildEntries, [SessId]) end),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
-            new_uuid = NewGuid,
+            new_guid = NewGuid,
             child_entries = ChildEntries
         }
     }.
@@ -485,7 +485,7 @@ rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetP
     ok = logical_file_manager:update_times(SessId, {guid, TargetParentGuid},
         undefined, CurrTime, CurrTime),
 
-    {#file_renamed_entry{new_uuid = NewGuid} = TopEntry, ChildEntries} =
+    {#file_renamed_entry{new_guid = NewGuid} = TopEntry, ChildEntries} =
         parse_renamed_entries(RenamedEntries),
     spawn(fun() ->
         fslogic_event_emitter:emit_file_renamed(TopEntry, ChildEntries, [SessId])
@@ -493,7 +493,7 @@ rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetP
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
-            new_uuid = NewGuid,
+            new_guid = NewGuid,
             child_entries = ChildEntries
         }
     }.
@@ -542,7 +542,7 @@ for_each_child_file(FileCtx, PreFun, PostFun, AccIn) ->
         #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
             {ok, ChildrenLinks} = list_all_children(Doc), %todo use file_ctx:get_file_children
             lists:foldl(
-                fun(#child_link{uuid = ChildUUID}, AccIn0) ->
+                fun(#child_link_uuid{uuid = ChildUUID}, AccIn0) ->
                     SpaceId = file_ctx:get_space_id_const(FileCtx2),
                     ChildGuid = fslogic_uuid:uuid_to_guid(ChildUUID, SpaceId),
                     ChildCtx = file_ctx:new_by_guid(ChildGuid),
@@ -560,14 +560,14 @@ for_each_child_file(FileCtx, PreFun, PostFun, AccIn) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_all_children(fslogic_worker:file()) ->
-    {ok, [#child_link{}]}.
+    {ok, [#child_link_uuid{}]}.
 list_all_children(Entry) ->
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
     list_all_children(Entry, 0, ChunkSize, []).
 
 -spec list_all_children(Entry :: fslogic_worker:file(),
     Offset :: non_neg_integer(), Count :: non_neg_integer(),
-    AccIn :: [#child_link{}]) -> {ok, [#child_link{}]}.
+    AccIn :: [#child_link_uuid{}]) -> {ok, [#child_link_uuid{}]}.
 list_all_children(Entry, Offset, Size, AccIn) ->
     {ok, ChildrenLinks} = file_meta:list_children(Entry, Offset, Size),
     case length(ChildrenLinks) of
@@ -693,14 +693,14 @@ parse_renamed_entries([TopEntryRaw | ChildEntriesRaw]) ->
         TopEntryRaw,
     ChildEntries = lists:map(
         fun({OldGuid, NewGuid, NewParentGuid, NewName}) ->
-            #file_renamed_entry{old_uuid = OldGuid, new_uuid = NewGuid,
-                                new_parent_uuid = NewParentGuid, new_name = NewName}
+            #file_renamed_entry{old_guid = OldGuid, new_guid = NewGuid,
+                                new_parent_guid = NewParentGuid, new_name = NewName}
         end, ChildEntriesRaw),
     {
         #file_renamed_entry{
-            old_uuid = TopEntryOldGuid,
-            new_uuid = TopEntryNewGuid,
-            new_parent_uuid = TopEntryNewParentGuid,
+            old_guid = TopEntryOldGuid,
+            new_guid = TopEntryNewGuid,
+            new_parent_guid = TopEntryNewParentGuid,
             new_name = TopEntryNewName
         },
         ChildEntries

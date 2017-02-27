@@ -26,14 +26,14 @@
 }).
 
 -record(file_renamed_entry, {
-    old_uuid :: fslogic_worker:file_guid(),
-    new_uuid :: fslogic_worker:file_guid(),
-    new_parent_uuid :: fslogic_worker:file_guid(),
+    old_guid :: fslogic_worker:file_guid(),
+    new_guid :: fslogic_worker:file_guid(),
+    new_parent_guid :: fslogic_worker:file_guid(),
     new_name :: file_meta:name()
 }).
 
 -record(dir, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid()
+    guid :: fslogic_worker:file_guid()
 }).
 
 -endif.

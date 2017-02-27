@@ -88,7 +88,7 @@ emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
 -spec emit_file_perm_changed(file_ctx:ctx()) -> ok | {error, Reason :: term()}.
 emit_file_perm_changed(FileCtx) ->
     event:emit(#file_perm_changed_event{
-        file_uuid = file_ctx:get_guid_const(FileCtx)
+        file_guid = file_ctx:get_guid_const(FileCtx)
     }).
 
 %%--------------------------------------------------------------------
@@ -99,7 +99,7 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
-    event:emit(#file_removed_event{file_uuid = file_ctx:get_guid_const(FileCtx)},
+    event:emit(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
         {exclude, ExcludedSessions}).
 
 %%--------------------------------------------------------------------
@@ -127,9 +127,9 @@ emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     event:emit(#file_renamed_event{top_entry = #file_renamed_entry{
-        old_uuid = Guid,
-        new_uuid = Guid,
-        new_parent_uuid = ParentGuid,
+        old_guid = Guid,
+        new_guid = Guid,
+        new_parent_guid = ParentGuid,
         new_name = NewName
     }}, SessionId).
 

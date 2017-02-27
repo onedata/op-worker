@@ -36,15 +36,15 @@
     {ok, Key :: event_router:key()} | {error, session_only}.
 get_routing_key(#subscription{type = Type}) ->
     get_routing_key(Type);
-get_routing_key(#file_attr_changed_subscription{file_uuid = FileGuid}) ->
+get_routing_key(#file_attr_changed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_attr_changed.", FileGuid/binary>>};
-get_routing_key(#file_location_changed_subscription{file_uuid = FileGuid}) ->
+get_routing_key(#file_location_changed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_location_changed.", FileGuid/binary>>};
-get_routing_key(#file_perm_changed_subscription{file_uuid = FileGuid}) ->
+get_routing_key(#file_perm_changed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_perm_changed.", FileGuid/binary>>};
-get_routing_key(#file_removed_subscription{file_uuid = FileGuid}) ->
+get_routing_key(#file_removed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_removed.", FileGuid/binary>>};
-get_routing_key(#file_renamed_subscription{file_uuid = FileGuid}) ->
+get_routing_key(#file_renamed_subscription{file_guid = FileGuid}) ->
     {ok, <<"file_renamed.", FileGuid/binary>>};
 get_routing_key(#quota_exceeded_subscription{}) ->
     {ok, <<"quota_exceeded">>};
@@ -106,15 +106,15 @@ is_remote(_) -> false.
 -spec get_context(Sub :: subscription:base() | subscription:type()) -> Ctx :: ctx().
 get_context(#subscription{type = Type}) ->
     get_context(Type);
-get_context(#file_attr_changed_subscription{file_uuid = FileGuid}) ->
+get_context(#file_attr_changed_subscription{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
-get_context(#file_location_changed_subscription{file_uuid = FileGuid}) ->
+get_context(#file_location_changed_subscription{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
-get_context(#file_perm_changed_subscription{file_uuid = FileGuid}) ->
+get_context(#file_perm_changed_subscription{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
-get_context(#file_removed_subscription{file_uuid = FileGuid}) ->
+get_context(#file_removed_subscription{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
-get_context(#file_renamed_subscription{file_uuid = FileGuid}) ->
+get_context(#file_renamed_subscription{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
 get_context(_) ->
     undefined.
@@ -130,19 +130,19 @@ update_context(#subscription{type = Type} = Sub, Ctx) ->
     Sub#subscription{type = update_context(Type, Ctx)};
 update_context(#file_attr_changed_subscription{} = Object, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_attr_changed_subscription{file_uuid = FileGuid};
+    Object#file_attr_changed_subscription{file_guid = FileGuid};
 update_context(#file_location_changed_subscription{} = Object, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_location_changed_subscription{file_uuid = FileGuid};
+    Object#file_location_changed_subscription{file_guid = FileGuid};
 update_context(#file_perm_changed_subscription{} = Object, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_perm_changed_subscription{file_uuid = FileGuid};
+    Object#file_perm_changed_subscription{file_guid = FileGuid};
 update_context(#file_removed_subscription{} = Object, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_removed_subscription{file_uuid = FileGuid};
+    Object#file_removed_subscription{file_guid = FileGuid};
 update_context(#file_renamed_subscription{} = Object, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Object#file_renamed_subscription{file_uuid = FileGuid};
+    Object#file_renamed_subscription{file_guid = FileGuid};
 update_context(Object, _Ctx) ->
     Object.
 

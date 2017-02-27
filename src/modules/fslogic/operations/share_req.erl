@@ -43,7 +43,7 @@ create_share(UserCtx, FileCtx, Name) ->
         status = #status{code = ?OK},
         provider_response = #share{
             share_id = ShareId,
-            share_file_uuid = ShareGuid
+            share_file_guid = ShareGuid
         }
     }.
 

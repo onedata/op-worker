@@ -46,7 +46,7 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
     {ok, _} = times:create(#document{key = DirUuid, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
     fslogic_times:update_mtime_ctime(ParentFileCtx2),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #dir{uuid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
+        fuse_response = #dir{guid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
     }.
 
 %%--------------------------------------------------------------------
@@ -64,7 +64,7 @@ read_dir(UserCtx, FileCtx, Offset, Limit) ->
         lists:map(fun(ChildFile) ->
             ChildGuid = file_ctx:get_guid_const(ChildFile),
             {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
-            #child_link{name = ChildName, uuid = ChildGuid}
+            #child_link{name = ChildName, guid = ChildGuid}
         end, Children),
     fslogic_times:update_atime(FileCtx2),
     #fuse_response{status = #status{code = ?OK},

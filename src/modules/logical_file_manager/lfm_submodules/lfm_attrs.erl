@@ -42,7 +42,7 @@ stat(SessId, FileKey) ->
         {path, Path} ->
             remote_utils:call_fslogic(SessId, fuse_request,
                 #resolve_guid{path = Path},
-                fun(#uuid{uuid = Guid}) ->
+                fun(#guid{guid = Guid}) ->
                     stat(SessId, {guid, Guid})
                 end);
         {guid, FileGuid} ->

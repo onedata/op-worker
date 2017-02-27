@@ -221,7 +221,7 @@ handle_fuse_request(UserCtx, #get_helper_params{
 }, undefined) ->
     storage_req:get_helper_params(UserCtx, SID, ForceProxy);
 handle_fuse_request(UserCtx, #create_storage_test_file{
-    file_uuid = Guid,
+    file_guid = Guid,
     storage_id = StorageId
 }, undefined) ->
     storage_req:create_storage_test_file(UserCtx, Guid, StorageId);
@@ -256,7 +256,7 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
 handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size}, FileCtx) ->
     dir_req:read_dir(UserCtx, FileCtx, Offset, Size);
 handle_file_request(UserCtx, #rename{
-    target_parent_uuid = TargetParentGuid,
+    target_parent_guid = TargetParentGuid,
     target_name = TargetName
 }, SourceFileCtx) ->
     TargetParentFileCtx = file_ctx:new_by_guid(TargetParentGuid),

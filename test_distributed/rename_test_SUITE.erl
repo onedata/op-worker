@@ -644,17 +644,17 @@ redirecting_event_to_renamed_file_test(Config) ->
 
     flush(),
     ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#file_written_event{
-        file_uuid = File1Guid
+        file_guid = File1Guid
     }, SessId])),
-    {_, [#file_written_event{file_uuid = Evt1Guid}]} =
+    {_, [#file_written_event{file_guid = Evt1Guid}]} =
         ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
     ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile1Guid), fslogic_uuid:guid_to_uuid(Evt1Guid)),
 
     flush(),
     ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#file_written_event{
-        file_uuid = File2Guid
+        file_guid = File2Guid
     }, SessId])),
-    {_, [#file_written_event{file_uuid = Evt2Guid}]} =
+    {_, [#file_written_event{file_guid = Evt2Guid}]} =
         ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
     ?assertEqual(fslogic_uuid:guid_to_uuid(NewFile2Guid), fslogic_uuid:guid_to_uuid(Evt2Guid)).
 

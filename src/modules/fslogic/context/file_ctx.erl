@@ -531,7 +531,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
             Children =
-                lists:map(fun(#child_link{name = Name, uuid = Uuid}) ->
+                lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
                     new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                 end, ChildrenLinks),
             {Children, FileCtx2}

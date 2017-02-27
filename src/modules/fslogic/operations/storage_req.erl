@@ -52,7 +52,7 @@ get_configuration(SessId) ->
         end
     end, Docs),
     #configuration{
-        root_uuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
+        root_guid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
         subscriptions = Subs,
         disabled_spaces = space_quota:get_disabled_spaces()
     }.

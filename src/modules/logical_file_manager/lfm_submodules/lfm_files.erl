@@ -63,8 +63,8 @@ mv(SessId, FileKey, TargetPath) ->
     {TargetName, TargetDir} = fslogic_path:basename_and_parent(TargetPath),
     {guid, TargetDirGuid} = fslogic_uuid:ensure_guid(SessId, {path, TargetDir}),
     remote_utils:call_fslogic(SessId, file_request, Guid,
-        #rename{target_parent_uuid = TargetDirGuid, target_name = TargetName},
-        fun(#file_renamed{new_uuid = NewGuid}) ->
+        #rename{target_parent_guid = TargetDirGuid, target_name = TargetName},
+        fun(#file_renamed{new_guid = NewGuid}) ->
             {ok, NewGuid}
         end).
 
@@ -91,7 +91,7 @@ get_parent(SessId, FileKey) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_parent{},
-        fun(#dir{uuid = ParentGuid}) ->
+        fun(#dir{guid = ParentGuid}) ->
             {ok, ParentGuid}
         end).
 
@@ -139,7 +139,7 @@ create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     remote_utils:call_fslogic(SessId, fuse_request,
         #resolve_guid{path = ParentPath},
-        fun(#uuid{uuid = ParentGuid}) ->
+        fun(#guid{guid = ParentGuid}) ->
             lfm_files:create(SessId, ParentGuid, Name, Mode)
         end).
 

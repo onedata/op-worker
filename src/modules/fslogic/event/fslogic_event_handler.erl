@@ -69,7 +69,7 @@ handle_file_written_event(#file_written_event{
     counter = Counter,
     size = Size,
     blocks = Blocks,
-    file_uuid = FileGuid,
+    file_guid = FileGuid,
     file_size = FileSize
 }, SessId) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -97,7 +97,7 @@ handle_file_written_event(#file_written_event{
     ok | {error, Reason :: term()}.
 handle_file_read_event(#file_read_event{
     counter = Counter,
-    file_uuid = FileGuid,
+    file_guid = FileGuid,
     size = Size
 }, SessId) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
