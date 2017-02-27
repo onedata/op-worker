@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
--export([new_handle/5, new_handle/6, new_handle/7]).
+-export([new_handle/2, new_handle/6, new_handle/7]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
     fsync/1]).
@@ -42,11 +42,14 @@
 %% @equiv new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(session:id(), SpaceUuid :: file_meta:uuid(),
-    file_meta:uuid() | undefined, Storage :: storage:doc(),
-    FileId :: helpers:file_id()) -> handle().
-new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId) ->
-    new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
+-spec new_handle(session:id(), file_ctx:ctx()) -> handle().
+new_handle(SessionId, FileCtx) ->
+    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {Storage, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    ShareId = file_ctx:get_share_id_const(FileCtx3),
+    new_handle(SessionId,SpaceDirUuid, FileUuid, Storage, FileId, ShareId).
 
 %%--------------------------------------------------------------------
 %% @doc

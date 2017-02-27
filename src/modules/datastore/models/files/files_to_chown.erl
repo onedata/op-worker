@@ -86,14 +86,9 @@ chown_or_schedule_chowning(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().
 chown_file(FileCtx) ->
-    {Storage, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {FileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx3),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid,
-        FileUuid, Storage, FileId),
+    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx),
     {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx4} =
-        file_ctx:get_file_doc(FileCtx3),
+        file_ctx:get_file_doc(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx4),
     ok = storage_file_manager:chown(SFMHandle, OwnerUserId, SpaceId),
     FileCtx4.
