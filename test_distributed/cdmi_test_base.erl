@@ -50,7 +50,11 @@
     accept_header/1,
     move_copy_conflict/1,
     move/1,
-    copy/1
+    copy/1,
+    create_raw_file_with_cdmi_version_header_should_succeed/1,
+    create_raw_dir_with_cdmi_version_header_should_succeed/1,
+    create_cdmi_file_without_cdmi_version_header_should_fail/1,
+    create_cdmi_dir_without_cdmi_version_header_should_fail/1
 ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -1087,7 +1091,7 @@ request_format_check(Config) ->
     RequestBody1 = [{<<"value">>, FileContent}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
     {ok, Code1, _Headers1, _Response1} = do_request(Workers, FileToCreate, put, RequestHeaders1, RawRequestBody1),
-    ?assertEqual(415, Code1),
+    ?assertEqual(201, Code1),
     %%------------------------------
 
     %%-- dir missing content-type --
@@ -1095,8 +1099,8 @@ request_format_check(Config) ->
     RequestBody3 = [{<<"metadata">>, <<"">>}],
     RawRequestBody3 = json_utils:encode(RequestBody3),
     {ok, Code3, _Headers3, _Response3} = do_request(Workers, DirToCreate, put, RequestHeaders3, RawRequestBody3),
-    ?assertEqual(415, Code3).
-%%------------------------------
+    ?assertEqual(201, Code3).
+    %%------------------------------
 
 % tests mimetype and valuetransferencoding properties, they are part of cdmi-object and cdmi-container
 % and should be changeble
@@ -1729,11 +1733,74 @@ accept_header(Config) ->
     [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     AcceptHeader = {<<"Accept">>, <<"*/*">>},
 
+    % when
     {ok, Code1, _Headers1, _Response1} =
         do_request(WorkerP2, [], get,
             [user_1_token_header(Config), ?CDMI_VERSION_HEADER, AcceptHeader], []),
 
+    % then
     ?assertEqual(200, Code1).
+
+create_raw_file_with_cdmi_version_header_should_succeed(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/file1", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config)], <<"data">>
+        )),
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders2, _Response2},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/file2", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {<<"Content-type">>, <<"text/plain">>}],
+            <<"data2">>
+        )).
+
+create_raw_dir_with_cdmi_version_header_should_succeed(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/dir1/", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config)]
+        )),
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders2, _Response2},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/dir2/", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {<<"Content-type">>, <<"application/json">>}],
+            <<"{}">>
+        )).
+
+create_cdmi_file_without_cdmi_version_header_should_fail(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 400, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/file1", put,
+            [user_1_token_header(Config), ?OBJECT_CONTENT_TYPE_HEADER], <<"{}">>
+        )).
+
+create_cdmi_dir_without_cdmi_version_header_should_fail(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 400, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/dir1/", put,
+            [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER]
+        )).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
