@@ -92,11 +92,7 @@ join_space(Auth, GroupId, Token) ->
     case oz_groups:join_space(Auth, GroupId, [{<<"token">>, Token}]) of
         {ok, SpaceId} ->
             {ok, SpaceId};
-        {error, {
-            400,
-            <<"invalid_request">>,
-            <<"invalid 'token' value: ", _/binary>>
-        }} ->
+        {error, {400, <<"Bad value:", _/binary>>, _}} ->
             {error, invalid_token_value}
     end.
 
@@ -123,11 +119,7 @@ join_group(Auth, ChildGroupId, Token) ->
     case oz_groups:join_group(Auth, ChildGroupId, [{<<"token">>, Token}]) of
         {ok, ParentGroupId} ->
             {ok, ParentGroupId};
-        {error, {
-            400,
-            <<"invalid_request">>,
-            <<"invalid 'token' value: ", _/binary>>
-        }} ->
+        {error, {400, <<"Bad value:", _/binary>>, _}} ->
             {error, invalid_token_value}
     end.
 
