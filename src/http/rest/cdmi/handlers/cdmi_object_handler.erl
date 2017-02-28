@@ -255,8 +255,8 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                     {true, Req2, State};
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
-                    case cdmi_arg_parser:parse_byte_range(RawRange, Size) of
-                        [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
+                    case cdmi_arg_parser:parse_content_range(RawRange, Size) of
+                        {{From, To}, _ExpectedSize} when Length =:= undefined orelse Length =:= To - From + 1 ->
                             {ok, FileHandle} = onedata_file_api:open(Auth, {guid, FileGUID}, write),
                             cdmi_metadata:update_cdmi_completion_status(Auth, {guid, FileGUID}, <<"Processing">>),
                             {ok, Req3} = cdmi_streamer:write_body_to_file(Req2, From, FileHandle),

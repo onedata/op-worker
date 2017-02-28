@@ -279,7 +279,7 @@ get_file(Config) ->
     %%------------------------------
 
     %% selective value read non-cdmi
-    RequestHeaders7 = [{<<"Range">>, <<"1-3,5-5,-3">>}],
+    RequestHeaders7 = [{<<"Range">>, <<"bytes=1-3,5-5,-3">>}],
     {ok, Code7, _Headers7, Response7} =
         do_request(WorkerP2, FileName, get, [user_1_token_header(Config) | RequestHeaders7]),
     ?assertEqual(206, Code7),
@@ -287,7 +287,7 @@ get_file(Config) ->
     %%------------------------------
 
     %% selective value read non-cdmi error
-    RequestHeaders8 = [{<<"Range">>, <<"1-3,6-4,-3">>}],
+    RequestHeaders8 = [{<<"Range">>, <<"bytes=1-3,6-4,-3">>}],
     {ok, Code8, _Headers8, _Response8} =
         do_request(WorkerP2, FileName, get, [user_1_token_header(Config) | RequestHeaders8]),
     ?assertEqual(400, Code8).
@@ -712,7 +712,7 @@ update_file(Config) ->
 
     %%---- value update, http ------
     UpdateValue = <<"123">>,
-    RequestHeaders4 = [{<<"content-range">>, <<"0-2">>}],
+    RequestHeaders4 = [{<<"content-range">>, <<"bytes 0-2/3">>}],
     {ok, Code4, _Headers4, _Response4} =
         do_request(Workers, FullTestFileName,
             put, [user_1_token_header(Config) | RequestHeaders4], UpdateValue),
@@ -723,18 +723,31 @@ update_file(Config) ->
         get_file_content(Config, FullTestFileName)),
     %%------------------------------
 
-    %%---- value update, http error ------
-    UpdateValue = <<"123">>,
-    RequestHeaders5 = [{<<"content-range">>, <<"0-2,3-4">>}],
+    %%---- value update2, http -----
+    UpdateValue2 = <<"00">>,
+    RequestHeaders5 = [{<<"content-range">>, <<"bytes 3-4/*">>}],
     {ok, Code5, _Headers5, _Response5} =
-        do_request(Workers, FullTestFileName, put, [user_1_token_header(Config) | RequestHeaders5],
-            UpdateValue),
-    ?assertEqual(400, Code5),
+        do_request(Workers, FullTestFileName,
+            put, [user_1_token_header(Config) | RequestHeaders5], UpdateValue2),
+    ?assertEqual(204, Code5),
 
     ?assert(object_exists(Config, FullTestFileName)),
-    ?assertEqual(<<"123t_file_content">>,
+    ?assertEqual(<<"12300file_content">>,
+        get_file_content(Config, FullTestFileName)),
+    %%------------------------------
+
+    %%---- value update, http error ------
+    UpdateValue = <<"123">>,
+    RequestHeaders6 = [{<<"content-range">>, <<"bytes 0-2,3-4/*">>}],
+    {ok, Code6, _Headers6, _Response6} =
+        do_request(Workers, FullTestFileName, put, [user_1_token_header(Config) | RequestHeaders6],
+            UpdateValue),
+    ?assertEqual(400, Code6),
+
+    ?assert(object_exists(Config, FullTestFileName)),
+    ?assertEqual(<<"12300file_content">>,
         get_file_content(Config, FullTestFileName)).
-%%------------------------------
+    %%------------------------------
 
 choose_adequate_handler(Config) ->
     % given
@@ -1442,12 +1455,12 @@ partial_upload(Config) ->
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse5_1)),
 
     % upload second chunk of file
-    RequestHeaders6 = [user_1_token_header(Config), {<<"content-range">>, <<"4-4">>}, {<<"X-CDMI-Partial">>, <<"true">>}],
+    RequestHeaders6 = [user_1_token_header(Config), {<<"content-range">>, <<"bytes 4-4/10">>}, {<<"X-CDMI-Partial">>, <<"true">>}],
     {ok, Code6, _Headers6, _Response6} = do_request(Workers, FileName2, put, RequestHeaders6, Chunk2),
     ?assertEqual(204, Code6),
 
     % upload third chunk of file
-    RequestHeaders7 = [user_1_token_header(Config), {<<"content-range">>, <<"5-9">>}, {<<"X-CDMI-Partial">>, <<"false">>}],
+    RequestHeaders7 = [user_1_token_header(Config), {<<"content-range">>, <<"bytes 5-9/10">>}, {<<"X-CDMI-Partial">>, <<"false">>}],
     {ok, Code7, _Headers7, _Response7} = do_request(Workers, FileName2, put, RequestHeaders7, Chunk3),
     ?assertEqual(204, Code7),
 
