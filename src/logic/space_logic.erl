@@ -91,11 +91,7 @@ join_space(Auth, Token) ->
     case oz_users:join_space(Auth, [{<<"token">>, Token}]) of
         {ok, SpaceId} ->
             {ok, SpaceId};
-        {error, {
-            400,
-            <<"invalid_request">>,
-            <<"invalid 'token' value: ", _/binary>>
-        }} ->
+        {error, {400, <<"Bad value:", _/binary>>, _}} ->
             {error, invalid_token_value}
     end.
 
