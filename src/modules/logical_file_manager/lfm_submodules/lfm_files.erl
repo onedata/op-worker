@@ -180,7 +180,7 @@ open(SessId, FileKey, Flag) ->
                     SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID,
                         FileUUID, StorageId, FileId, ShareId, ProviderId),
 
-                    case storage_file_manager:open(SFMHandle0, Flag) of
+                    case storage_file_manager:open(SFMHandle0, Flag) of %todo remove after fixing race on links
                         {ok, Handle} ->
                             {ok, lfm_context:new(
                                 HandleId,

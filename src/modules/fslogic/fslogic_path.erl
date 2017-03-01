@@ -19,7 +19,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([gen_path/2, gen_storage_path/1, check_path/1]).
+-export([gen_path/2, check_path/1]).
 -export([tokenize_skipping_dots/1, get_canonical_file_entry/2]).
 -export([split/1, join/1, basename_and_parent/1]).
 -export([dirname/1]).
@@ -133,30 +133,6 @@ check_path(Uuid) ->
             path_beg_error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Generate storage file_meta:path() for given file_meta:entry()
-%% @end
-%%--------------------------------------------------------------------
--spec gen_storage_path(file_meta:entry()) ->
-    {ok, file_meta:path()} | datastore:generic_error().
-gen_storage_path({path, Path}) when is_binary(Path) ->
-    {ok, Uuid} = file_meta:to_uuid({path, Path}),
-    SpaceId = fslogic_spaces:get_space_id({uuid, Uuid}),
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId), %todo use file_ctx
-    {ok, filename_mapping:to_storage_path(SpaceId, StorageId, Path)};
-gen_storage_path(Entry) ->
-    ?run(begin
-        {ok, Path} = gen_storage_path(Entry, []),
-        case file_meta:to_uuid({path, Path}) of %todo delete this case after merging with VFS-2856
-            {ok, Uuid} ->
-                SpaceId = fslogic_spaces:get_space_id({uuid, Uuid}),
-                {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId), %todo use file_ctx
-                {ok, filename_mapping:to_storage_path(SpaceId, StorageId, Path)};
-            {error, _ } ->
-                {ok, Path}
-        end
-    end).
 
 %%--------------------------------------------------------------------
 %% @doc Gets file's full name.
@@ -243,24 +219,6 @@ gen_path(Entry, UserId, Tokens) ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUUID}} ->
             gen_path({uuid, ParentUUID}, UserId, [Name | Tokens])
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Internal helper for gen_storage_path/1. Accumulates all file meta names
-%% and concatenates them into storage path().
-%% @end
-%%--------------------------------------------------------------------
--spec gen_storage_path(file_meta:entry(), [file_meta:name()]) ->
-    {ok, file_meta:path()} | datastore:generic_error() | no_return().
-gen_storage_path(Entry, Tokens) ->
-    {ok, #document{value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
-    case file_meta:get_parent(Doc) of
-        {ok, #document{key = ?ROOT_DIR_UUID}} ->
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
-        {ok, #document{key = ParentUUID}} ->
-            gen_storage_path({uuid, ParentUUID}, [Name | Tokens])
     end.
 
 %%--------------------------------------------------------------------

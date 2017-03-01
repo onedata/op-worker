@@ -97,8 +97,13 @@ new_handle(SessionId, SpaceUuid, FileUuid, StorageId, FileId, ShareId, ProviderI
             _ ->
                 {false, undefined, undefined}
         end,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
-    StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
+    StorageFileId = case IsLocal of
+        true ->
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
+            filename_mapping:to_storage_path(SpaceId, StorageId, FileId);
+        _ ->
+            FileId
+    end,
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUuid,
