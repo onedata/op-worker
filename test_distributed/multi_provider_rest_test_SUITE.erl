@@ -292,7 +292,7 @@ attributes_list(Config) ->
         gid = Gid,
         uid = Uid
     }} = lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}),
-    {ok, CdmiObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
+    {ok, CdmiObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     DecodedBody = json_utils:decode_map(Body),
     ?assertEqual(
         #{
@@ -416,7 +416,7 @@ list_file(Config) ->
 
     % then
     DecodedBody = json_utils:decode_map(Body),
-    {ok, FileObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     ?assertEqual(
         [#{<<"id">> => FileObjectId, <<"path">> => File}],
         DecodedBody
@@ -469,7 +469,7 @@ replicate_file_by_id(Config) ->
     ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
         [fslogic_uuid:guid_to_uuid(FileGuid), <<"space3">>])), 15),
     timer:sleep(timer:seconds(2)), % for hooks
-    {ok, FileObjectId} = cdmi_id:uuid_to_objectid(FileGuid),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileObjectId/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
     DecodedBody0 = json_utils:decode_map(Body0),
     #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
@@ -731,7 +731,7 @@ set_get_json_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file">>, 8#777),
-    {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+    {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
@@ -774,7 +774,7 @@ set_get_rdf_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessionId, <<"/space3/file">>, 8#777),
-    {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+    {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
 
     % when
     ?assertMatch({ok, 204, _, _},
@@ -873,14 +873,14 @@ query_geospatial_index(Config) ->
     {ok, 200, _, Body} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    Guids = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_uuid(X), ObjId end, json_utils:decode_map(Body)),
+    Guids = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_guid(X), ObjId end, json_utils:decode_map(Body)),
     ?assertEqual(lists:sort([Guid1, Guid2, Guid3]), lists:sort(Guids)),
 
     % when
     {ok, 200, _, Body2} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"query-index/", Id/binary, "?spatial=true&stale=false&start_range=[0,0]&end_range=[5.5,10.5]">>, get, [user_1_token_header(Config)], [])),
 
     % then
-    Guids2 = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_uuid(X), ObjId end, json_utils:decode_map(Body2)),
+    Guids2 = lists:map(fun(X) -> {ok, ObjId} = cdmi_id:objectid_to_guid(X), ObjId end, json_utils:decode_map(Body2)),
     ?assertEqual(lists:sort([Guid1, Guid2]), lists:sort(Guids2)).
 
 set_get_json_metadata_inherited(Config) ->

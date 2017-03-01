@@ -173,11 +173,11 @@ strategy_merge_result([_ | JobsR], [_ | R]) ->
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
-    #file_attr{uuid = FileGuid, provider_id = ProviderId} = FResponse,
+    #file_attr{guid = FileGuid, provider_id = ProviderId} = FResponse,
     case oneprovider:get_provider_id() of
         ProviderId -> ChildrenResult;
         _ ->
-            #file_attr{uuid = FileGuid} = FResponse,
+            #file_attr{guid = FileGuid} = FResponse,
             file_force_proxy:save(#document{key = FileGuid, value = #file_force_proxy{provider_id = ProviderId}}),
             ChildrenResult
     end;

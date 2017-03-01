@@ -210,7 +210,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Guid =
         try
-            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId)),
+            {ok, Val} = cdmi_id:guid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId)),
             Val
         catch
             _:Error1 ->

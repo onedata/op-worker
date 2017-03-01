@@ -159,16 +159,16 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
 
             LocalResult = case IsImported of
                 true ->
-                    #fuse_response{fuse_response = #file_attr{mode = OldMode, uuid = FileUUID}} = LogicalAttrsResponse,
+                    #fuse_response{fuse_response = #file_attr{mode = OldMode, guid = FileGuid}} = LogicalAttrsResponse,
                     case Mode band 8#1777 of
                         OldMode ->
                             ok;
                         NewMode ->
-%%                            fslogic_req_generic:chmod(user_ctx:new(?ROOT_SESS_ID), {guid, FileUUID}, NewMode), todo deal with different posix mode for space dirs on storage vs db
+%%                            fslogic_req_generic:chmod(user_ctx:new(?ROOT_SESS_ID), {guid, FileGuid}, NewMode), todo deal with different posix mode for space dirs on storage vs db
                             ok
                     end,
 
-                    case times:get(FileUUID) of
+                    case times:get(fslogic_uuid:guid_to_uuid(FileGuid)) of
                         {ok, Doc = #document{value = Times = #times{atime = ATime, ctime = CTime, mtime = MTime}}} ->
                             NewTimes = Times#times{
                                 atime = max(ATime, StorageATime),
@@ -188,7 +188,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                                 mtime = StorageMTime,
                                 ctime = StorageCTime
                             },
-                            times:save(#document{key = FileUUID, value = NewTimes}),
+                            times:save(#document{key = fslogic_uuid:guid_to_uuid(FileGuid), value = NewTimes}),
                             ok
                     end;
                 false ->
@@ -219,7 +219,7 @@ is_imported(_StorageId, _FileId, ?DIRECTORY_TYPE, #fuse_response{
     true;
 is_imported(StorageId, FileId, ?REGULAR_FILE_TYPE, #fuse_response{
     status = #status{code = ?OK},
-    fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, uuid = FileGuid}
+    fuse_response = #file_attr{type = ?REGULAR_FILE_TYPE, guid = FileGuid}
 }) ->
     FileIds = [{SID, FID} || #document{value = #file_location{storage_id = SID, file_id = FID}} <- fslogic_utils:get_local_file_locations({guid, FileGuid})],
     lists:member({StorageId, FileId}, FileIds);

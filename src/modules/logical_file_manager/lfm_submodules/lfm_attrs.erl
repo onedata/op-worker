@@ -14,6 +14,7 @@
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 -type file_attributes() :: #file_attr{}.
 

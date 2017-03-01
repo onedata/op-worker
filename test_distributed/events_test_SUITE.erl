@@ -440,7 +440,7 @@ file_written_event(FileGuid, Size, FileSize, Blocks) ->
 %%--------------------------------------------------------------------
 -spec file_attr_changed_event() -> #file_attr_changed_event{}.
 file_attr_changed_event() ->
-    #file_attr_changed_event{file_attr = #file_attr{uuid = ?FILE_GUID}}.
+    #file_attr_changed_event{file_attr = #file_attr{guid = ?FILE_GUID}}.
 
 %%--------------------------------------------------------------------
 %% @private

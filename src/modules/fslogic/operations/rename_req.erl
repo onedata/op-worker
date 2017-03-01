@@ -509,7 +509,7 @@ ensure_deleted(SessId, LogicalTargetPath) ->
     case logical_file_manager:stat(SessId, {path, LogicalTargetPath}) of
         {error, ?ENOENT} ->
             ok;
-        {ok, #file_attr{uuid = FileGuid}} ->
+        {ok, #file_attr{guid = FileGuid}} ->
             ok = logical_file_manager:unlink(SessId, {guid, FileGuid}, true)
     end.
 

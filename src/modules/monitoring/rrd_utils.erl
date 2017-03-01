@@ -59,7 +59,7 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
                 case logical_file_manager:mkdir(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName, undefined) of
                     {ok, Guid_} -> Guid_;
                     {error, ?EEXIST} ->
-                        {ok, #file_attr{uuid = Guid_}} = logical_file_manager:get_child_attr(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName),
+                        {ok, #file_attr{guid = Guid_}} = logical_file_manager:get_child_attr(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName),
                         Guid_
                 end,
             {ok, Guid} = logical_file_manager:create(?ROOT_SESS_ID, RRDDirGuid, RRDFileName, undefined),

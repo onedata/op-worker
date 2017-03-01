@@ -250,21 +250,21 @@ add_objectid_path_to_state(Req, State) ->
     {Id, Req2} = cowboy_req:binding(id, Req),
     {Path, Req3} = cdmi_path:get_path_of_id_request(Req2),
 
-    % get uuid from objectid
-    Uuid =
-        case cdmi_id:objectid_to_uuid(Id) of
-            {ok, Uuid_} -> Uuid_;
+    % get GUID from objectid
+    Guid =
+        case cdmi_id:objectid_to_guid(Id) of
+            {ok, Guid_} -> Guid_;
             _ -> throw(?ERROR_INVALID_OBJECTID)
         end,
 
-    % get path of object with that uuid
+    % get path of object with that GUID
     {BasePath, Req4} =
         case is_capability_object(Req3) of
             {true, Req3_1} ->
                 {proplists:get_value(Id, ?CapabilityPathById), Req3_1};
             {false, Req3_1} ->
                 {Auth, Req3_2} = try_authenticate(Req3_1),
-                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Uuid),
+                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Guid),
                 {NewPath, Req3_2}
         end,
 

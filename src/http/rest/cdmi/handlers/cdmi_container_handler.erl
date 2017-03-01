@@ -163,7 +163,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
             {undefined, undefined, undefined} ->
                 {ok, NewGuid} = onedata_file_api:mkdir(Auth, Path),
                 {ok, created, NewGuid};
-            {#file_attr{uuid = NewGuid}, undefined, undefined} ->
+            {#file_attr{guid = NewGuid}, undefined, undefined} ->
                 {ok, none, NewGuid};
             {undefined, CopyURI, undefined} ->
                 {ok, NewGuid} = onedata_file_api:cp(Auth, {path, filepath_utils:ensure_begins_with_slash(CopyURI)}, Path),

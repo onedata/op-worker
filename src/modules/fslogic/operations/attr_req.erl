@@ -59,7 +59,7 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
 
     #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
         uid = Uid, gid = Gid, parent_uuid = ParentGuid,
-        uuid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+        guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
         type = Type, mode = Mode, atime = ATime, mtime = MTime,
         ctime = CTime, size = Size, name = FileName, provider_id = ProviderId,
         shares = Shares, owner_id = OwnerId

@@ -62,7 +62,7 @@ copy(SessId, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec copy_dir(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
-copy_dir(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
+copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
     {ok, TargetGuid} = logical_file_manager:mkdir(SessId, LogicalTargetPath),
     ok = copy_children(SessId, SourceGuid, LogicalTargetPath, 0),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
@@ -76,7 +76,7 @@ copy_dir(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) 
 %%--------------------------------------------------------------------
 -spec copy_file(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
-copy_file(SessId, #file_attr{uuid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
+copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
     {ok, TargetGuid} = logical_file_manager:create(SessId, LogicalTargetPath),
     {ok, SourceHandle} = logical_file_manager:open(SessId, {guid, SourceGuid}, read),
     {ok, TargetHandle} = logical_file_manager:open(SessId, {guid, TargetGuid}, write),

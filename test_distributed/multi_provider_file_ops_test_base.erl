@@ -96,8 +96,8 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
 
     StatAns = lfm_proxy:stat(Worker1, SessId1, {path, TestDir}),
     ?assertMatch({ok, #file_attr{}}, StatAns),
-    {ok, #file_attr{uuid = FileGUID}} = StatAns,
-    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+    {ok, #file_attr{guid = FileGuid}} = StatAns,
+    FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
     ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUUID})),
 
     InvalidateFun(Worker1, SessId1, TestDir),
@@ -1032,8 +1032,8 @@ verify_stats(Config, File, IsDir) ->
                     lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
         end,
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
-        {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+        {ok, #file_attr{guid = FileGuid}} = StatAns,
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
         {FileUUID, rpc:call(W, file_meta, get, [FileUUID])}
     end),
 
@@ -1116,8 +1116,8 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     LocToAns = verify(Config, fun(W) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
-        {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+        {ok, #file_attr{guid = FileGuid}} = StatAns,
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
 
         {W, get_locations(W, FileUUID)}
     end),
@@ -1158,8 +1158,8 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
         StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
-        {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+        {ok, #file_attr{guid = FileGuid}} = StatAns,
+        FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
         {W, FileUUID}
     end),
 
