@@ -257,7 +257,7 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates parent dirs on storage
+%% Creates parent dir on storage
 %% @end
 %%--------------------------------------------------------------------
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().

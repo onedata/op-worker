@@ -31,7 +31,7 @@
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0, create_test_users_and_spaces/2,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
-    domain_to_provider_id/1]).
+    domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
 -export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
@@ -481,6 +481,42 @@ unload_quota_mocks(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [space_quota]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks file context for test files with uuids that begin with given prefix.
+%% The files will be seen as existing and non-root.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_test_file_context(proplists:proplist(), binary()) -> ok.
+mock_test_file_context(Config, UuidPrefix) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_ctx),
+    test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
+        fun (FileCtx) ->
+            Uuid = file_ctx:get_uuid_const(FileCtx),
+            case str_utils:binary_starts_with(Uuid, UuidPrefix) of
+                true -> false;
+                false -> meck:passthrough([FileCtx])
+            end
+        end),
+    test_utils:mock_expect(Workers, file_ctx, file_exists_const,
+        fun (FileCtx) ->
+            Uuid = file_ctx:get_uuid_const(FileCtx),
+            case str_utils:binary_starts_with(Uuid, UuidPrefix) of
+                true -> true;
+                false -> meck:passthrough([FileCtx])
+            end
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Unmocks file context for test files
+%% @end
+%%--------------------------------------------------------------------
+-spec unmock_test_file_context(proplists:proplist()) -> ok.
+unmock_test_file_context(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, file_ctx).
 
 %%%===================================================================
 %%% Internal functions
