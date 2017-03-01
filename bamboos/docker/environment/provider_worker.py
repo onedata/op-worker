@@ -77,11 +77,11 @@ class ProviderWorkerConfigurator:
         for s in posix_storages:
             name = s['name']
             readonly = s['readonly']
-            if not (storages_dockers and name in storages_dockers['posix'].keys()):
+            if not storages_dockers:
+                storages_dockers = {'posix': {}}
+            if name not in storages_dockers['posix'].keys():
                 v = common.volume_for_storage(name, readonly)
                 (host_path, docker_path, mode) = v
-                if not storages_dockers:
-                    storages_dockers = {'posix': {}}
                 storages_dockers['posix'][name] = {
                     "host_path": host_path,
                     "docker_path": docker_path,
