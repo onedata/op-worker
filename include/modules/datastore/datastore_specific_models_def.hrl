@@ -282,12 +282,14 @@
 
 -record(storage, {
     name = <<>> :: storage:name(),
-    helpers = [] :: [storage:helper()]
+    helpers = [] :: [storage:helper()],
+    readonly = false :: boolean()
 }).
 
 %% Model that maps space to storage
 -record(space_storage, {
-    storage_ids = [] :: [storage:id()]
+    storage_ids = [] :: [storage:id()],
+    mounted_in_root = [] :: [storage:id()]
 }).
 
 -record(helper_handle, {

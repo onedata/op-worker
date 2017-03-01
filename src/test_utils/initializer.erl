@@ -380,8 +380,19 @@ teardown_storage(Config) ->
 -spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
 space_storage_mock(Workers, StorageId) ->
     test_utils:mock_new(Workers, space_storage),
+    test_utils:mock_new(Workers, space_strategies),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
+    end),
+    test_utils:mock_expect(Workers, space_storage, get_storage_ids,
+        fun(_) -> [StorageId] end),
+    test_utils:mock_expect(Workers, space_strategies, get, fun(_) ->
+        {ok, #document{
+            value = #space_strategies{
+                storage_strategies =
+                    maps:put(StorageId, #storage_strategies{}, #{})
+            }
+        }}
     end).
 
 %%--------------------------------------------------------------------
@@ -537,9 +548,10 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                 ProviderId
             end),
 
-        case ?config({storage_id, Domain}, Config) of %% If storage mock was configured, mock space_storage model
+        case ?config({storage_id, Domain}, Config) of
             undefined -> ok;
             StorageId ->
+                %% If storage mock was configured, mock space_storage model
                 initializer:space_storage_mock(CWorkers, StorageId)
         end,
 
@@ -555,19 +567,11 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     lists:foreach(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
         lists:foreach(fun({PID, ProviderConfig}) ->
-            case proplists:get_value(<<"storage">>, ProviderConfig) of
-                undefined -> ok; %% Skip if not configured
-                StorageName ->
-                    Domain = proplists:get_value(PID, DomainMappings),
-                    case get_same_domain_workers(Config, Domain) of
-                        [Worker | _] ->
-                            {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                storage, select, [StorageName])),
-                            StorageId = rpc:call(Worker, storage, get_id, [Storage]),
-                            {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
-                                space_storage, add, [SpaceId, StorageId]));
-                        _ -> ok
-                    end
+            Domain = proplists:get_value(PID, DomainMappings),
+            case get_same_domain_workers(Config, Domain) of
+                [Worker | _] ->
+                    setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config);
+                _ -> ok
             end
         end, Providers0)
     end, SpacesSetup),
@@ -851,6 +855,64 @@ file_meta_mock_setup(Workers, Config) ->
             meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
             Self ! onedata_user_after
     end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns true if space configured by ProviderConfig should be mounted
+%% in root.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_mount_in_root(proplists:proplist()) -> boolean().
+maybe_mount_in_root(ProviderConfig) ->
+    case proplists:get_value(<<"mounted_in_root">>, ProviderConfig) of
+        <<"true">> -> true;
+        _ ->  false
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Setup test storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec setup_storage(atom(), od_space:id(), atom(), proplists:proplist(), list())
+        -> {ok, od_space:id()} | ok.
+setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config) ->
+    case proplists:get_value(<<"storage">>, ProviderConfig) of
+        undefined ->
+            case ?config({storage_id, Domain}, Config) of
+                undefined ->
+                    ok;
+                StorageId ->
+                    add_space_storage(Worker, SpaceId, StorageId,
+                        maybe_mount_in_root(ProviderConfig))
+            end;
+        StorageName ->
+            StorageId = case ?config({storage_id, Domain}, Config) of
+                %if storage is not mocked, get StorageId
+                undefined ->
+                    {ok, Storage} = ?assertMatch({ok, _},
+                        rpc:call(Worker, storage, select, [StorageName])),
+                    rpc:call(Worker, storage, get_id, [Storage]);
+                StId->
+                    StId
+            end,
+            add_space_storage(Worker, SpaceId, StorageId,
+                maybe_mount_in_root(ProviderConfig))
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add space storage mapping
+%% @end
+%%--------------------------------------------------------------------
+-spec add_space_storage(atom(), od_space:id(), storage:id(), boolean()) -> any().
+add_space_storage(Worker, SpaceId, StorageId, MountInRoot) ->
+    ?assertMatch({ok, _},
+        rpc:call(Worker, space_storage, add, [SpaceId, StorageId, MountInRoot])
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

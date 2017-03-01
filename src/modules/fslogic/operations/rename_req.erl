@@ -384,7 +384,7 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
             maybe_sync_file(SessId, SourceFileCtx3, SourceSpaceId, TargetSpaceId),
             SourceFileUuid = file_ctx:get_uuid_const(SourceFileCtx3),
             ok = file_meta:rename({uuid, SourceFileUuid}, {path, CanonicalTargetPath}),
-            ok = sfm_utils:rename_storage_file_updating_location(UserCtx, SourceFileCtx3, TargetSpaceId),
+            ok = sfm_utils:rename_storage_file_updating_location(UserCtx, file_ctx:reset(SourceFileCtx3), TargetSpaceId),
 
             {NewName, _TargetFilePartialCtx2} = file_ctx:get_aliased_name(TargetFilePartialCtx, UserCtx),
             NewParentUuid = fslogic_uuid:parent_uuid({uuid, SourceFileUuid}, UserId),

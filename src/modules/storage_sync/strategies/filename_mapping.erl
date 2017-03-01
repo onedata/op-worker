@@ -34,7 +34,7 @@
 -export([strategy_merge_result/2, strategy_merge_result/3]).
 
 %% API
--export([to_storage_path/3, to_logical_path/3]).
+-export([to_storage_path/3, to_storage_logical_path/3]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -48,7 +48,21 @@
 -spec available_strategies() -> [space_strategy:definition()].
 available_strategies() ->
     [
-        #space_strategy{result_merge_type = merge_all, name = simple, arguments = [], description = <<"TODO">>}
+        #space_strategy{
+            name = simple,
+            result_merge_type = merge_all,
+            arguments = [],
+            description = <<"Simple strategy, does not modify path.">>
+        },
+        #space_strategy{
+            name = root,
+            result_merge_type = merge_all,
+            arguments = [],
+            description = <<
+                "Strategy used when space is mounted in storage's root. "
+                "Filters SpaceId from storage_path."
+            >>
+        }
     ].
 
 %%--------------------------------------------------------------------
@@ -56,11 +70,15 @@ available_strategies() ->
 %% {@link space_strategy_behaviour} callback strategy_init_jobs/3.
 %% @end
 %%--------------------------------------------------------------------
--spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
-    [space_strategy:job()].
-strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
+-spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(),
+    space_strategy:job_data()) -> [space_strategy:job()].
+strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
     [
-        #space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}
+        #space_strategy_job{
+            strategy_name = StrategyName,
+            strategy_args = StrategyArgs,
+            data = InitData
+        }
     ].
 
 %%--------------------------------------------------------------------
@@ -68,11 +86,35 @@ strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
 %% {@link space_strategy_behaviour} callback strategy_handle_job/1.
 %% @end
 %%--------------------------------------------------------------------
--spec strategy_handle_job(space_strategy:job()) -> {space_strategy:job_result(), [space_strategy:job()]}.
-strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{storage_path := FilePath}}) ->
+-spec strategy_handle_job(space_strategy:job()) ->
+    {space_strategy:job_result(), [space_strategy:job()]}.
+strategy_handle_job(#space_strategy_job{
+    strategy_name = simple,
+    data = #{storage_path := FilePath}
+}) ->
     {FilePath, []};
-strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{logical_path := FilePath}}) ->
-    {FilePath, []}.
+strategy_handle_job(#space_strategy_job{
+    strategy_name = simple,
+    data = #{storage_logical_path := FilePath}
+}) ->
+    {FilePath, []};
+strategy_handle_job(#space_strategy_job{
+    strategy_name = root,
+    data = #{
+        storage_path := FilePath,
+        space_id := SpaceId
+    }
+}) ->
+     {add_space_id(SpaceId, FilePath), []};
+strategy_handle_job(#space_strategy_job{
+    strategy_name = root,
+    data = #{
+        storage_logical_path := FilePath,
+        space_id := SpaceId
+    }
+}) ->
+    {filter_space_id(SpaceId, FilePath), []}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -82,7 +124,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = simple, data = #{logical
 -spec strategy_merge_result(ChildrenJobs :: [space_strategy:job()],
     ChildrenResults :: [space_strategy:job_result()]) ->
     space_strategy:job_result().
-strategy_merge_result([#space_strategy_job{strategy_name = simple}], [Result]) ->
+strategy_merge_result([#space_strategy_job{}], [Result]) ->
     Result.
 
 %%--------------------------------------------------------------------
@@ -90,10 +132,10 @@ strategy_merge_result([#space_strategy_job{strategy_name = simple}], [Result]) -
 %% {@link space_strategy_behaviour} callback strategy_merge_result/3.
 %% @end
 %%--------------------------------------------------------------------
--spec strategy_merge_result(space_strategy:job(), LocalResult :: space_strategy:job_result(),
-    ChildrenResult :: space_strategy:job_result()) ->
-    space_strategy:job_result().
-strategy_merge_result(#space_strategy_job{strategy_name = simple}, LocalResult, _ChildrenResult) ->
+-spec strategy_merge_result(space_strategy:job(),
+    LocalResult :: space_strategy:job_result(),
+    ChildrenResult :: space_strategy:job_result()) -> space_strategy:job_result().
+strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
     LocalResult.
 
 %%%===================================================================
@@ -105,9 +147,14 @@ strategy_merge_result(#space_strategy_job{strategy_name = simple}, LocalResult, 
 %% Convert given logical path to storage path
 %% @end
 %%--------------------------------------------------------------------
--spec to_storage_path(od_space:id(), storage:id(), file_meta:path()) -> file_meta:path().
+-spec to_storage_path(od_space:id(), storage:id(), file_meta:path()) ->
+    file_meta:path().
 to_storage_path(SpaceId, StorageId, FilePath) ->
-    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{logical_path => FilePath}),
+    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{
+        storage_logical_path => FilePath,
+        space_id => SpaceId,
+        storage_id => StorageId
+    }),
     space_sync_worker:run(Init).
 
 %%--------------------------------------------------------------------
@@ -115,11 +162,38 @@ to_storage_path(SpaceId, StorageId, FilePath) ->
 %% Convert given storage path to logical path
 %% @end
 %%--------------------------------------------------------------------
--spec to_logical_path(od_space:id(), storage:id(), file_meta:path()) -> file_meta:path().
-to_logical_path(SpaceId, StorageId, FilePath) ->
-    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{storage_path => FilePath}),
+-spec to_storage_logical_path(od_space:id(), storage:id(), file_meta:path()) ->
+    file_meta:path().
+to_storage_logical_path(SpaceId, StorageId, FilePath) ->
+    Init = space_sync_worker:init(?MODULE, SpaceId, StorageId, #{
+        storage_path => FilePath,
+        space_id => SpaceId,
+        storage_id => StorageId
+    }),
     space_sync_worker:run(Init).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if space is mounted in root on given storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec filter_space_id(od_space:id(), file_meta:path()) -> file_meta:path().
+filter_space_id(SpaceId, FilePath) ->
+    [Sep, SpaceId | Path] = fslogic_path:split(FilePath),
+    fslogic_path:join([Sep | Path]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if space is mounted in root on given storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_space_id(od_space:id(), file_meta:path()) -> file_meta:path().
+add_space_id(SpaceId, FilePath) ->
+    [Sep | Path] = fslogic_path:split(FilePath),
+    fslogic_path:join([Sep, SpaceId | Path]).

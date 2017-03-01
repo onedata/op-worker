@@ -25,7 +25,7 @@
 
 %% API
 -export([new/2, get_id/1, get_name/1, get_helpers/1, select_helper/2,
-    update_helper/3, select/1]).
+    update_helper/3, select/1, new/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -63,7 +63,8 @@ record_struct(2) ->
             {args, #{string => string}},
             {admin_ctx, #{string => string}},
             {insecure, boolean}
-        ]}]}
+        ]}]},
+        {readonly, boolean}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -216,12 +217,22 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs storage record.
+%% @equiv new(Name, Helpers, false).
 %% @end
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()]) -> doc().
 new(Name, Helpers) ->
-    #document{value = #storage{name = Name, helpers = Helpers}}.
+    new(Name, Helpers, false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs storage record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(name(), [helper()], boolean()) -> doc().
+new(Name, Helpers, ReadOnly) ->
+    #document{value = #storage{name = Name, helpers = Helpers, readonly=ReadOnly}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc

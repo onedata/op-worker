@@ -59,13 +59,15 @@ new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId) ->
 -spec new_handle(session:id(), SpaceUuid :: file_meta:uuid(), file_meta:uuid(),
     Storage :: datastore:document(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
-new_handle(SessionId, SpaceUuid, FileUuid, #document{} = Storage, FileId, ShareId) ->
+new_handle(SessionId, SpaceUuid, FileUuid, #document{key=StorageId} = Storage, FileId, ShareId) ->
     FSize = get_size({uuid, FileUuid}),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
+    StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUuid,
         file_uuid = FileUuid,
-        file = FileId,
+        file = StorageFileId,
         provider_id = oneprovider:get_provider_id(),
         is_local = true,
         storage = Storage,
@@ -95,11 +97,18 @@ new_handle(SessionId, SpaceUuid, FileUuid, StorageId, FileId, ShareId, ProviderI
             _ ->
                 {false, undefined, undefined}
         end,
+    StorageFileId = case IsLocal of
+        true ->
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
+            filename_mapping:to_storage_path(SpaceId, StorageId, FileId);
+        _ ->
+            FileId
+    end,
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUuid,
         file_uuid = FileUuid,
-        file = FileId,
+        file = StorageFileId,
         provider_id = ProviderId,
         is_local = IsLocal,
         storage = Storage,

@@ -63,11 +63,11 @@ available_strategies() ->
 %%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
-strategy_init_jobs(check_globally, StartegyArgs, InitData) ->
-    [#space_strategy_job{strategy_name = check_globally, strategy_args = StartegyArgs,
+strategy_init_jobs(check_globally, StrategyArgs, InitData) ->
+    [#space_strategy_job{strategy_name = check_globally, strategy_args = StrategyArgs,
         data = InitData#{provider_id => oneprovider:get_provider_id()}}];
-strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
-    [#space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}].
+strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
+    [#space_strategy_job{strategy_name = StrategyName, strategy_args = StrategyArgs, data = InitData}].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,8 +98,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
                     NewJobs = case lists:member(ProxyVia, ProviderIds) of
                         true -> [];
-                        false ->
-                            [Job#space_strategy_job{data = Data#{provider_id => RProviderId}} || RProviderId <- ProviderIds]
+                        false -> [Job#space_strategy_job{data = Data#{provider_id => RProviderId}} || RProviderId <- ProviderIds]
                     end,
                     {OriginalResponse, NewJobs}
             end;
@@ -119,14 +118,13 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
         fun(StorageId) ->
             {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
             {path, LogicalPath} = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-            ConvertFilePath = space_sync_worker:init(filename_mapping, SpaceId, StorageId, #{logical_path => LogicalPath}),
-            FileId = space_sync_worker:run(ConvertFilePath),
+            FileId = filename_mapping:to_storage_path(SpaceId, StorageId, LogicalPath),
             InitialImportJobData =
                 #{
                     last_import_time => 0,
                     space_id => SpaceId,
                     storage_id => StorageId,
-                    storage_file_id => FileId,
+                    storage_logical_file_id => FileId,
                     max_depth => 1
                 },
 
