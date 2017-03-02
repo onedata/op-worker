@@ -72,7 +72,7 @@
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_local_file_location_docs/1, get_file_location_docs/1,
-    get_file_location_ids/1, get_acl/1]).
+    get_file_location_ids/1, get_acl/1, get_raw_storage_path/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -285,12 +285,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            Guid = get_guid_const(FileCtx),
-            Uuid = fslogic_uuid:guid_to_uuid(Guid),
-            LogicalPath = fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, Uuid),
-            {ok, [<<"/">>, _SpaceName | Rest]} = fslogic_path:split_skipping_dots(LogicalPath),
-            SpaceId = get_space_id_const(FileCtx),
-            CanonicalPath = filename:join([<<"/">>, SpaceId | Rest]),
+            CanonicalPath = filename:join(gen_canonical_path(FileCtx)), %todo rename
             {CanonicalPath, FileCtx#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
@@ -332,12 +327,13 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %% Returns parent's file context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(ctx(), user_ctx:ctx()) -> {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
+-spec get_parent(ctx(), user_ctx:ctx() | undefined) -> {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
 get_parent(FileCtx = #file_ctx{
     parent = undefined,
     canonical_path = CanonicalPath,
     guid = undefined
-}, UserCtx) -> %todo VFS-2986 consider splitting such logic into partial_file_ctx
+}, UserCtx) ->
+    UserCtx =/= undefined, %todo VFS-2986 consider splitting such logic into partial_file_ctx
     ParentCtx = new_partial_context_by_canonical_path(UserCtx,
         filename:dirname(CanonicalPath)),
     {ParentCtx, FileCtx};
@@ -393,11 +389,23 @@ get_parent_guid(FileCtx, UserCtx) ->
 %% its path on storage).
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file(), ctx()}.
-get_storage_file_id(FileCtx) ->
-    FileUuid = get_uuid_const(FileCtx),
-    FileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}), %todo TL do not use this util function, as it it overcomplicated
-    {FileId, FileCtx#file_ctx{storage_file_id = FileId}}.
+-spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
+get_storage_file_id(FileCtx) -> %todo return cached value
+    {FileId, FileCtx2} = get_canonical_path(FileCtx),
+    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns raw path on storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_raw_storage_path(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
+get_raw_storage_path(FileCtx) ->
+    {FileId, FileCtx2} = get_storage_file_id(FileCtx),
+    SpaceId = get_space_id_const(FileCtx2),
+    {StorageId, FileCtx3} = get_storage_id(FileCtx2),
+    {filename_mapping:to_storage_path(SpaceId, StorageId, FileId), FileCtx3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -424,14 +432,14 @@ get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
 %% Returns name of the file (if the file represents space dir, returns user's space alias).
 %% @end
 %%--------------------------------------------------------------------
--spec get_aliased_name(ctx(), user_ctx:ctx()) ->
+-spec get_aliased_name(ctx(), user_ctx:ctx() | undefined) ->
     {file_meta:name(), ctx()} | no_return().
 get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
-    SessionIsNotSpecial = (not session:is_special(user_ctx:get_session_id(UserCtx))),
-    case is_space_dir_const(FileCtx) andalso SessionIsNotSpecial of
+    case is_space_dir_const(FileCtx)
+        andalso UserCtx =/= undefined
+        andalso (not session:is_special(user_ctx:get_session_id(UserCtx))) of
         false ->
-            {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc(FileCtx),
-            {Name, FileCtx2#file_ctx{file_name = Name}};
+            get_name_of_nonspace_file(FileCtx);
         true ->
             {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
             {Name, FileCtx2#file_ctx{file_name = Name}}
@@ -805,3 +813,50 @@ is_root_dir_uuid(Uuid) ->
         _ ->
             false
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns storage id.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
+get_storage_id(FileCtx) ->
+    {#document{key=StorageId}, FileCtx2} = get_storage_doc(FileCtx),
+    {StorageId, FileCtx2}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates canonical path
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_canonical_path(ctx()) -> [file_meta:name()].
+gen_canonical_path(FileCtx) ->
+    case is_root_dir_const(FileCtx) of
+        true ->
+            [<<"/">>];
+        false ->
+            {ParentCtx, FileCtx2} = get_parent(FileCtx, undefined),
+            case is_space_dir_const(FileCtx2) of
+                true ->
+                    SpaceId = get_space_id_const(FileCtx2),
+                    gen_canonical_path(ParentCtx) ++ [SpaceId];
+                false ->
+                    {Name, _FileCtx3} = get_name_of_nonspace_file(FileCtx2),
+                    gen_canonical_path(ParentCtx) ++ [Name]
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns name of file that is not a space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_name_of_nonspace_file(ctx()) -> {file_meta:name(), ctx()} | no_return().
+get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = undefined}) ->
+    {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc(FileCtx),
+    {Name, FileCtx2#file_ctx{file_name = Name}};
+get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
+    {FileName, FileCtx}.

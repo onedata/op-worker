@@ -921,8 +921,8 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
-    FileId = fslogic_utils:gen_storage_file_id(FileUuid, Path, FDoc#file_meta.version),
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 3}], size = 3,
+    FileId = Path,
+    Location = #file_location{blocks = [#file_block{offset = 0, size = 3}, size = 3],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
         space_id = SpaceId},
 

@@ -95,12 +95,12 @@ verify_storage_test_file_test(Config) ->
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, <<"test">>)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 
-    FileId = rpc:call(Worker, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}]),
+    FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
+    {FileId, _} = rpc:call(Worker, file_ctx, get_raw_storage_path, [FileCtx]),
     SpaceId = <<"space_id1">>,
 
     Response1 = ?req(Worker, SessId, #verify_storage_test_file{

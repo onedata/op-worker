@@ -62,13 +62,14 @@ new_handle(SessionId, FileCtx) ->
 -spec new_handle(session:id(), od_space:id(), file_meta:uuid(),
     Storage :: datastore:document(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
-new_handle(SessionId, SpaceId, FileUuid, #document{} = Storage, FileId, ShareId) ->
+new_handle(SessionId, SpaceId, FileUuid, #document{key=StorageId} = Storage, FileId, ShareId) ->
     FSize = get_size({uuid, FileUuid}),
+    StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
     #sfm_handle{
         session_id = SessionId,
         space_id = SpaceId,
         file_uuid = FileUuid,
-        file = FileId,
+        file = StorageFileId,
         provider_id = oneprovider:get_provider_id(),
         is_local = true,
         storage = Storage,
@@ -98,11 +99,17 @@ new_handle(SessionId, SpaceId, FileUuid, StorageId, FileId, ShareId, ProviderId)
             _ ->
                 {false, undefined, undefined}
         end,
+    StorageFileId = case IsLocal of
+        true ->
+            filename_mapping:to_storage_path(SpaceId, StorageId, FileId);
+        _ ->
+            FileId
+    end,
     #sfm_handle{
         session_id = SessionId,
         space_id = SpaceId,
         file_uuid = FileUuid,
-        file = FileId,
+        file = StorageFileId,
         provider_id = ProviderId,
         is_local = IsLocal,
         storage = Storage,
