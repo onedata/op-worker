@@ -757,9 +757,9 @@ get_space_id(#document{key = Key, value = V} = Doc) ->
                     ?debug_stacktrace("Cannot get spaceID from document ~p due to: ~p", [Doc, Reason]),
                     {ok, <<"">>}
             end;
-        {ok, ScopeUUID} ->
+        {ok, SpaceUuid} ->
             try
-                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
                 {ok, SpaceId}
             catch
                 _:Reason ->

@@ -173,14 +173,14 @@ send_change(SendChunk, #change{seq = Seq, doc = #document{
             ok
     end;
 send_change(SendChunk, Change, RequestedSpaceId) ->
-    Scope =
+    SpaceDirUuid =
         case Change#change.doc#document.value#file_meta.is_scope of
             true ->
                 Change#change.doc#document.key;
             false ->
                 Change#change.doc#document.value#file_meta.scope
         end,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Scope),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
 
     case SpaceId =:= RequestedSpaceId of
         true ->

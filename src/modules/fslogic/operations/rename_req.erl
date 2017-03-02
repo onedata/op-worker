@@ -470,7 +470,7 @@ rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetP
             ok = logical_file_manager:unlink(SessId, {guid, ChildGuid}, false),
 
             {NewName, NewParentPath} = fslogic_path:basename_and_parent(NewPath),
-            {guid, TargetParentGuid} = fslogic_uuid:ensure_guid(UserCtx, {path, NewParentPath}),
+            {guid, TargetParentGuid} = fslogic_uuid:ensure_guid(SessId, {path, NewParentPath}),
             [{ChildGuid, TargetGuid, TargetParentGuid, NewName} | Acc]
         end, []),
 

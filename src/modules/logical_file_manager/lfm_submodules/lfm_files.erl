@@ -176,29 +176,24 @@ open(SessId, FileKey, Flag) ->
             remote_utils:call_fslogic(SessId, file_request, FileGuid,
                 #open_file{flag = Flag},
                 fun(#file_opened{handle_id = HandleId}) ->
-                    remote_utils:call_fslogic(SessId, file_request, FileGuid,
-                        #get_file_attr{},
-                        fun(#file_attr{size = Size}) ->
-                            FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-                            SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-                            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceId,
-                                FileUuid, StorageId, FileId, ShareId, ProviderId),
+                    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+                    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
+                    SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceId,
+                        FileUuid, StorageId, FileId, ShareId, ProviderId),
 
-                            case storage_file_manager:open(SFMHandle0, Flag) of
-                                {ok, Handle} ->
-                                    {ok, lfm_context:new(
-                                        HandleId,
-                                        Size,
-                                        ProviderId,
-                                        Handle,
-                                        SessId,
-                                        FileGuid,
-                                        Flag
-                                    )};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end
-                        end)
+                    case storage_file_manager:open(SFMHandle0, Flag) of
+                        {ok, Handle} ->
+                            {ok, lfm_context:new(
+                                HandleId,
+                                ProviderId,
+                                Handle,
+                                SessId,
+                                FileGuid,
+                                Flag
+                            )};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
                 end)
         end
     ).
@@ -381,15 +376,12 @@ write_internal(Handle, Offset, Buffer, GenerateEvents) ->
     Guid = lfm_context:get_guid(Handle),
     SessId = lfm_context:get_session_id(Handle),
     SfmHandle = lfm_context:get_sfm_handle(Handle),
-    Size = lfm_context:get_size(Handle),
     case storage_file_manager:write(SfmHandle, Offset, Buffer) of
         {ok, Written} ->
             WrittenBlocks = [#file_block{offset = Offset, size = Written}],
-            NewSize = max(Size, Offset + Written),
             ok = lfm_event_utils:maybe_emit_file_written(Guid, WrittenBlocks,
                 SessId, GenerateEvents),
-            NewLocationHandle = lfm_context:set_size(Handle, NewSize),
-            {ok, NewLocationHandle, Written};
+            {ok, Handle, Written};
         {error, Reason2} ->
             {error, Reason2}
     end.

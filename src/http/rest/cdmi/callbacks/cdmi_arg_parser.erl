@@ -139,7 +139,7 @@ parse_content_range(RawHeaderRange, Size) when is_binary(RawHeaderRange) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_byte_range(binary() | list(), non_neg_integer()) -> list(Range) | invalid when
-    Range :: {From :: integer(), To :: integer()}.
+    Range :: {From :: integer(), To :: integer()} | invalid.
 parse_byte_range(Range, Size) when is_binary(Range) ->
     case binary:split(Range, <<"=">>, [global]) of
         [<<"bytes">>, RawRange] ->

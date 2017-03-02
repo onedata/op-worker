@@ -96,8 +96,8 @@ get_file_size(#document{value = #file_meta{type = ?DIRECTORY_TYPE}}) ->
     0;
 get_file_size(#document{value = #file_meta{type = ?SYMLINK_TYPE}}) ->
     0;
-get_file_size(#file_location{size = undefined} = Location) ->
-    calculate_file_size(Location);
+get_file_size(#file_location{size = undefined, blocks = Blocks}) ->
+    upper(Blocks);
 get_file_size(#file_location{size = Size}) ->
     Size;
 get_file_size([Location]) ->
@@ -172,30 +172,6 @@ consolidate([B | Rest]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% For given file / location or multiple locations, calculates file size based on blocks assigned to those locations.
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_file_size(datastore:document() | #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
-    Size :: non_neg_integer() | no_return().
-calculate_file_size(#document{value = #file_location{} = Value}) ->
-    calculate_file_size(Value);
-calculate_file_size(#file_location{blocks = []}) ->
-    0;
-calculate_file_size(#file_location{blocks = Blocks}) ->
-    upper(Blocks);
-calculate_file_size([Location | T]) ->
-    max(calculate_file_size(Location), calculate_file_size(T));
-calculate_file_size([]) ->
-    0;
-calculate_file_size(Entry) ->
-    {ok, LocIds} = file_meta:get_locations(Entry),
-    Locations = [file_location:get(LocId) || LocId <- LocIds],
-    Locations1 = [Location || {ok, #document{value = #file_location{} = Location}} <- Locations],
-    calculate_file_size(Locations1).
 
 %%--------------------------------------------------------------------
 %% @private
