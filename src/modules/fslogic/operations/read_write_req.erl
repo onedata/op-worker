@@ -37,7 +37,7 @@
     fslogic_worker:proxyio_response().
 read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size) ->
     #fuse_response{status = #status{code = ?OK}} =
-        synchronization_req:synchronize_block(UserCtx, FileCtx,
+        sync_req:synchronize_block(UserCtx, FileCtx,
             #file_block{offset = Offset, size = Size}, false),
     {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, StorageId, FileId, read),
     {ok, Data} = storage_file_manager:read(Handle, Offset, Size),

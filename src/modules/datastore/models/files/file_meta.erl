@@ -41,7 +41,8 @@
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     get_parent_uuid/2, rename/2, setup_onedata_user/2, get_name/1]).
--export([get_ancestors/1, attach_location/3, get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
+-export([get_ancestors/1, attach_location/3, get_local_locations/1,
+    get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
@@ -531,6 +532,25 @@ tag_children(LinkName, Targets) ->
                     end
             end
         end, Targets).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of documents of local file locations
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_locations(fslogic_worker:ext_file()) ->
+    [datastore:document()] | no_return().
+get_local_locations({guid, FileGUID}) ->
+    get_local_locations({uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
+get_local_locations(Entry) ->
+    LProviderId = oneprovider:get_provider_id(),
+    {ok, LocIds} = file_meta:get_locations(Entry),
+    Locations = [file_location:get(LocId) || LocId <- LocIds],
+    [Location ||
+        {ok, Location = #document{value = #file_location{provider_id = ProviderId}}}
+            <- Locations, LProviderId =:= ProviderId
+    ].
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's locations attached with attach_location/3.
@@ -624,10 +644,10 @@ get_parent_uuid(FileUuid, SpaceId) ->
 %% Returns all file's ancestors' uuids.
 %% @end
 %%--------------------------------------------------------------------
--spec get_ancestors(Entry :: entry()) -> {ok, [uuid()]} | datastore:get_error().
-get_ancestors(Entry) ->
+-spec get_ancestors(uuid()) -> {ok, [uuid()]} | datastore:get_error().
+get_ancestors(FileUuid) ->
     ?run(begin
-        {ok, #document{key = Key}} = get(Entry),
+        {ok, #document{key = Key}} = get(FileUuid),
         {ok, get_ancestors2(Key, [])}
     end).
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->

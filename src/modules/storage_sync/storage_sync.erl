@@ -50,7 +50,7 @@ start_storage_import(SpaceId, ScanInterval, StrategyName) ->
 -spec start_storage_import(od_space:id(), non_neg_integer(), space_strategy:name(),
     storage:id()) -> {ok, datastore:ext_key()} | datastore:update_error().
 start_storage_import(SpaceId, ScanInterval, StrategyName, StorageId) ->
-    fslogic_spaces:make_space_exist(SpaceId),
+    file_meta:make_space_exist(SpaceId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import,
         StrategyName, #{scan_interval => ScanInterval}).
 

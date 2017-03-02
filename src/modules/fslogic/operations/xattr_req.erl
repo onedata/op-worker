@@ -42,7 +42,7 @@ get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
                 status = #status{code = ?OK},
                 provider_response = #xattr{
                     name = ?ACL_KEY,
-                    value = fslogic_acl:from_acl_to_json_format(Acl)
+                    value = acl_logic:from_acl_to_json_format(Acl)
                 }
             };
         Other ->
@@ -140,7 +140,7 @@ get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
 -spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
 set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}) ->
-    acl_req:set_acl(UserCtx, FileCtx, #acl{value = fslogic_acl:from_json_format_to_acl(Acl)});
+    acl_req:set_acl(UserCtx, FileCtx, #acl{value = acl_logic:from_json_format_to_acl(Acl)});
 set_xattr(UserCtx, FileCtx, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}) ->
     cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Mimetype);
 set_xattr(UserCtx, FileCtx, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}) ->

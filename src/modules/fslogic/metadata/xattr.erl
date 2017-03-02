@@ -77,7 +77,8 @@ exists_by_name(FileCtx, XattrName) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(FileCtx, XattrName, XattreValue) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    custom_metadata:set_xattr_metadata(FileUuid, XattrName, XattreValue).
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    custom_metadata:set_xattr_metadata(FileUuid, SpaceId, XattrName, XattreValue).
 
 %%--------------------------------------------------------------------
 %% @doc

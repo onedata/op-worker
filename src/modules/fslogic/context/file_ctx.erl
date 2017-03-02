@@ -285,7 +285,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            CanonicalPath = filename:join(gen_canonical_path(FileCtx)), %todo rename
+            CanonicalPath = filename:join(generate_canonical_path(FileCtx)),
             {CanonicalPath, FileCtx#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
@@ -390,9 +390,11 @@ get_parent_guid(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_storage_file_id(FileCtx) -> %todo return cached value
+get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
     {FileId, FileCtx2} = get_canonical_path(FileCtx),
-    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}}.
+    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
+get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
+    {StorageFileId, FileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -831,8 +833,8 @@ get_storage_id(FileCtx) ->
 %% Generates canonical path
 %% @end
 %%--------------------------------------------------------------------
--spec gen_canonical_path(ctx()) -> [file_meta:name()].
-gen_canonical_path(FileCtx) ->
+-spec generate_canonical_path(ctx()) -> [file_meta:name()].
+generate_canonical_path(FileCtx) ->
     case is_root_dir_const(FileCtx) of
         true ->
             [<<"/">>];
@@ -841,10 +843,10 @@ gen_canonical_path(FileCtx) ->
             case is_space_dir_const(FileCtx2) of
                 true ->
                     SpaceId = get_space_id_const(FileCtx2),
-                    gen_canonical_path(ParentCtx) ++ [SpaceId];
+                    generate_canonical_path(ParentCtx) ++ [SpaceId];
                 false ->
                     {Name, _FileCtx3} = get_name_of_nonspace_file(FileCtx2),
-                    gen_canonical_path(ParentCtx) ++ [Name]
+                    generate_canonical_path(ParentCtx) ++ [Name]
             end
     end.
 

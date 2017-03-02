@@ -273,8 +273,8 @@ check_missing_components(FileUuid, SpaceId, [times | RestMissing], Found) ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [local_file_location | RestMissing], Found) ->
-    case catch fslogic_utils:get_local_file_location({uuid, FileUuid}) of %todo VFS-2813 support multi location
-        #document{} ->
+    case catch file_meta:get_local_locations({uuid, FileUuid}) of %todo VFS-2813 support multi location
+        [#document{}] ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [local_file_location | Found]);
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
@@ -467,8 +467,9 @@ notify_pid(Pid, RestartPosthookData) ->
     ok.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Checks if path to file is ok.
+%% Checks if path to file can be resolved using this file's uuid.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_path(file_meta:uuid()) -> ok | path_beg_error | {path_error,
@@ -492,7 +493,8 @@ check_path(Uuid) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks if path to file is ok.
+%% Checks if path to file's child can be resolved using this file's uuid and
+%% child's name.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_path(file_meta:uuid(), file_meta:name(), file_meta:uuid()) ->

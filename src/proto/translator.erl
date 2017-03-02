@@ -441,7 +441,7 @@ translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
 translate_from_protobuf(#'Mimetype'{value = Value}) ->
     #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
-    #acl{value = fslogic_acl:from_json_format_to_acl(json_utils:decode_map(Value))};
+    #acl{value = acl_logic:from_json_format_to_acl(json_utils:decode_map(Value))};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
 translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, blocks = Blocks}) ->
@@ -865,7 +865,7 @@ translate_to_protobuf(#cdmi_completion_status{value = Value}) ->
 translate_to_protobuf(#mimetype{value = Value}) ->
     {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
-    {acl, #'Acl'{value = json_utils:encode_map(fslogic_acl:from_acl_to_json_format(Value))}};
+    {acl, #'Acl'{value = json_utils:encode_map(acl_logic:from_acl_to_json_format(Value))}};
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
 translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->

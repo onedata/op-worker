@@ -254,7 +254,7 @@
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
-    space_id :: file_meta:uuid(),
+    space_id :: od_space:id(),
     storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
@@ -414,7 +414,7 @@
 %% Record that controls change propagation
 -record(change_propagation_controller, {
     change_revision = 0 :: non_neg_integer(),
-    space_id = <<"">> :: binary(),
+    space_id = <<"">> :: od_space:id(),
     verify_module :: atom(),
     verify_function :: atom()
 }).

@@ -343,7 +343,7 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
 
             % do rename
             SourceFileUuid = file_ctx:get_uuid_const(SourceFileCtx3),
-            ok = file_meta:rename({uuid, SourceFileUuid}, {path, CanonicalTargetPath}), %todo pass file_info
+            ok = file_meta:rename({uuid, SourceFileUuid}, {path, CanonicalTargetPath}), %todo pass file_ctx
 
             SourceFileCtx4 = file_ctx:reset(SourceFileCtx3),
 

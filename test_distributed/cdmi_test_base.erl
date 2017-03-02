@@ -430,22 +430,22 @@ metadata(Config) ->
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     FileName2 = filename:join([binary_to_list(SpaceName), "acl_test_file.txt"]),
     Ace1 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?read_mask)}
     ],
     Ace2 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?deny_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask bor ?execute_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?read_mask bor ?execute_mask)}
     ],
     Ace3 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}
     ],
     Ace3Full = [
         {<<"acetype">>, ?allow},
@@ -479,16 +479,16 @@ metadata(Config) ->
 
     %%-- create forbidden by acl ---
     Ace4 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?execute_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?execute_mask)}
     ],
     Ace5 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?deny_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}],
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4, Ace5]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
@@ -1490,10 +1490,10 @@ acl(Config) ->
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
     Read = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?read_mask)}
     ],
     ReadFull = [
         {<<"acetype">>, ?allow},
@@ -1502,10 +1502,10 @@ acl(Config) ->
         {<<"acemask">>, ?read}
     ],
     Write = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}
     ],
     ReadWriteVerbose = [
         {<<"acetype">>, ?allow},
@@ -1514,22 +1514,22 @@ acl(Config) ->
         {<<"acemask">>, <<(?read)/binary, ", ", (?write)/binary>>}
     ],
     Execute = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?execute_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?execute_mask)}
     ],
     WriteAcl = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_acl_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_acl_mask)}
     ],
     Delete = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?delete_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?delete_mask)}
     ],
 
     MetadataAclReadFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadFull, WriteAcl]}]}]),

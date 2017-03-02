@@ -151,10 +151,8 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
         storage_id := StorageId
     } = Data,
     StorageFilePath = filename_mapping:to_storage_path(SpaceId, StorageId, StorageLogicalFileId),
-    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
-        fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-        undefined, StorageId, StorageLogicalFileId, undefined,
-        oneprovider:get_provider_id()),
+    SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
+        undefined, StorageId, StorageLogicalFileId, undefined, oneprovider:get_provider_id()),
     case storage_file_manager:stat(SFMHandle) of
         {ok, FileStats = #statbuf{
             st_mode = Mode,
@@ -185,7 +183,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                             mode = OldMode,
                             guid = FileGuid
                         }} = LogicalAttrsResponse,
-                    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+                    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
                     case Mode band 8#1777 of
                         OldMode ->
                             ok;
@@ -195,7 +193,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                             ok
                     end,
 
-                    case times:get(fslogic_uuid:guid_to_uuid(FileGuid)) of
+                    case times:get(FileUuid) of
                         {ok, Doc = #document{
                             value = Times = #times{
                                 atime = ATime,
@@ -220,7 +218,7 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
                                 mtime = StorageMTime,
                                 ctime = StorageCTime
                             },
-                            times:save(#document{key = fslogic_uuid:guid_to_uuid(FileGuid), value = NewTimes}),
+                            times:save(#document{key = FileUuid, value = NewTimes}),
                             ok
                     end;
                 false ->
@@ -257,7 +255,7 @@ is_imported(StorageId, StorageLogicalFileId, ?REGULAR_FILE_TYPE, #fuse_response{
     FileIds = [
         {SID, FID} || #document{
             value = #file_location{storage_id = SID, file_id = FID}
-        } <- fslogic_utils:get_local_file_locations({guid, FileGuid})
+        } <- file_meta:get_local_locations({guid, FileGuid})
     ],
     lists:member({StorageId, StorageLogicalFileId}, FileIds);
 is_imported(_StorageId, _StorageLogicalFileId, _FileType, #fuse_response{

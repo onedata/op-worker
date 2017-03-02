@@ -59,12 +59,17 @@ rename_storage_file_updating_location(UserCtx, SourceFileCtx, TargetSpaceId) ->
     {[#document{value = LocalLocation}], SourceFileCtx3} =
         file_ctx:get_local_file_location_docs(SourceFileCtx2),
     {FileId, SourceFileCtx4} = file_ctx:get_storage_file_id(SourceFileCtx3),
+    [<<"/">>, _SourceSpaceId | Rest] = fslogic_path:split(FileId),
+    TargetFileId = filename:join([<<"/">>, TargetSpaceId | Rest]),
     SessId = user_ctx:get_session_id(UserCtx),
-    ok = sfm_utils:rename_storage_file(SessId, LocalLocation, FileId, TargetSpaceId, Mode),
-    ok = replica_updater:rename(SourceFileCtx4, FileId, TargetSpaceId),
+    ok = sfm_utils:rename_storage_file(SessId, LocalLocation, TargetFileId, TargetSpaceId, Mode),
+    ok = replica_updater:rename(SourceFileCtx4, TargetFileId, TargetSpaceId),
+
+    FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
+    TargetFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
     ok = sfm_utils:chmod_storage_file(
         user_ctx:new(?ROOT_SESS_ID),
-        SourceFileCtx4,
+        TargetFileCtx,
         Mode
     ).
 

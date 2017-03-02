@@ -117,7 +117,7 @@ get_file_size(Entry) ->
                     get_file_size(LocalLocations)
             end;
         false ->
-            LocalLocations = fslogic_utils:get_local_file_locations(Entry),
+            LocalLocations = file_meta:get_local_locations(Entry),
             get_file_size(LocalLocations)
     end.
 

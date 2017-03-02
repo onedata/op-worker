@@ -21,11 +21,8 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_json_metadata/1, get_json_metadata/3, set_json_metadata/2,
-    set_json_metadata/3, remove_json_metadata/1]).
--export([get_rdf_metadata/1, set_rdf_metadata/2, remove_rdf_metadata/1]).
 -export([get_xattr_metadata/3, list_xattr_metadata/2, exists_xattr_metadata/2,
-    remove_xattr_metadata/2, set_xattr_metadata/3]).
+    remove_xattr_metadata/2, set_xattr_metadata/4]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -57,7 +54,6 @@
 
 -export_type([type/0, name/0, value/0, names/0, metadata/0, rdf/0, view_id/0, filter/0]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns structure of the record in specified version.
@@ -73,121 +69,6 @@ record_struct(1) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @equiv get_json_metadata(FileUuid, []).
-%%--------------------------------------------------------------------
--spec get_json_metadata(file_meta:uuid()) ->
-    {ok, maps:map()} | datastore:get_error().
-get_json_metadata(FileUuid) ->
-    get_json_metadata(FileUuid, [], false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets json metadata subtree
-%% e. g. for meta:
-%%
-%% {'l1': {'l2': 'value'}}
-%%
-%% get_json_metadata(FileUuid, [<<"l1">>, <<"l2">>]) -> {ok, <<"value">>}
-%% get_json_metadata(FileUuid, [<<"l1">>]) -> {ok, #{<<"l2">> => <<"value">>}}
-%% get_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec get_json_metadata(file_meta:uuid(), filter(), Inherited :: boolean()) ->
-    {ok, maps:map()} | datastore:get_error().
-get_json_metadata(FileUuid, Names, false) ->
-    case get(FileUuid) of
-        {ok, #document{value = #custom_metadata{value = #{?JSON_METADATA_KEY := Json}}}} ->
-            {ok, custom_meta_manipulation:find(Json, Names)};
-        {ok, #document{value = #custom_metadata{}}} ->
-            {error, {not_found,custom_metadata}};
-        Error ->
-            Error
-    end;
-get_json_metadata(FileUuid, Names, true) ->
-    case file_meta:get_ancestors(FileUuid) of
-        {ok, Uuids} ->
-            Jsons = lists:map(fun(Uuid) ->
-                case get_json_metadata(Uuid, Names, false) of
-                    {ok, Json} ->
-                        Json;
-                    {error, {not_found,custom_metadata}} ->
-                        #{}
-                end
-            end, [FileUuid | Uuids]),
-            {ok, custom_meta_manipulation:merge(Jsons)};
-        Error ->
-            Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @equiv set_json_metadata(FileUuid, Json, []).
-%%--------------------------------------------------------------------
--spec set_json_metadata(file_meta:uuid(), maps:map()) ->
-    {ok, file_meta:uuid()} | datastore:get_error().
-set_json_metadata(FileUuid, Json) ->
-    set_json_metadata(FileUuid, Json, []).
-
-%%--------------------------------------------------------------------
-%% @doc Set json metadata subtree
-%% e. g. for meta:
-%%
-%% {'l1': {'l2': 'value'}}
-%%
-%% set_json_metadata(FileUuid, <<"new_value">> [<<"l1">>, <<"l2">>])
-%%    meta: {'l1': {'l2': 'new_value'}}
-%% set_json_metadata(FileUuid, [<<"l1">>])
-%%    meta: {'l1': 'new_value'}
-%% set_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
-%%    meta: 'new_value'
-%%--------------------------------------------------------------------
--spec set_json_metadata(file_meta:uuid(), maps:map(), [binary()]) ->
-    {ok, file_meta:uuid()} | datastore:get_error().
-set_json_metadata(FileUuid, JsonToInsert, Names) ->
-    ToCreate = #document{key = FileUuid, value = #custom_metadata{
-        space_id = get_space_id(FileUuid),
-        value = #{?JSON_METADATA_KEY => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
-    }},
-    create_or_update(ToCreate, fun(Meta = #custom_metadata{value = MetaValue}) ->
-        Json = maps:get(?JSON_METADATA_KEY, MetaValue, #{}),
-        NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
-        {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc Removes file's json metadata
-%% @equiv remove_xattr_metadata(FileUuid, ?JSON_METADATA_KEY).
-%%--------------------------------------------------------------------
--spec remove_json_metadata(file_meta:uuid()) -> ok | datastore:generic_error().
-remove_json_metadata(FileUuid) ->
-    remove_xattr_metadata(FileUuid, ?JSON_METADATA_KEY).
-
-%%--------------------------------------------------------------------
-%% @doc Gets file's rdf metadata
-%% @equiv get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
-%%--------------------------------------------------------------------
--spec get_rdf_metadata(file_meta:uuid()) -> {ok, rdf()} | datastore:get_error().
-get_rdf_metadata(FileUuid) ->
-    get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY, false).
-
-%%--------------------------------------------------------------------
-%% @doc Gets file's rdf metadata
-%% @equiv get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
-%%--------------------------------------------------------------------
--spec set_rdf_metadata(file_meta:uuid(), rdf()) ->
-    {ok, file_meta:uuid()} | datastore:generic_error().
-set_rdf_metadata(FileUuid, Value) ->
-    set_xattr_metadata(FileUuid, ?RDF_METADATA_KEY, Value).
-
-%%--------------------------------------------------------------------
-%% @doc Removes file's rdf metadata
-%% @equiv remove_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
-%%--------------------------------------------------------------------
--spec remove_rdf_metadata(file_meta:uuid()) -> ok | datastore:generic_error().
-remove_rdf_metadata(FileUuid) ->
-    remove_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
 
 %%--------------------------------------------------------------------
 %% @doc Get extended attribute metadata
@@ -289,12 +170,12 @@ exists_xattr_metadata(FileUuid, Name) ->
 %%--------------------------------------------------------------------
 %% @doc Set extended attribute metadata
 %%--------------------------------------------------------------------
--spec set_xattr_metadata(file_meta:uuid(), xattr:name(), xattr:value()) ->
+-spec set_xattr_metadata(file_meta:uuid(), od_space:id(), xattr:name(), xattr:value()) ->
     {ok, file_meta:uuid()} | datastore:generic_error().
-set_xattr_metadata(FileUuid, Name, Value) ->
+set_xattr_metadata(FileUuid, SpaceId, Name, Value) ->
     Map = maps:put(Name,Value, #{}),
     NewDoc = #document{key = FileUuid, value = #custom_metadata{
-        space_id = get_space_id(FileUuid),
+        space_id = SpaceId,
         value = Map}},
     create_or_update(NewDoc, fun(Meta = #custom_metadata{value = MetaValue}) ->
         NewMetaValue = maps:put(Name, Value, MetaValue),
@@ -411,13 +292,3 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% Internal functions
 %%%==================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get space id of file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_space_id(file_meta:uuid()) -> od_space:id().
-get_space_id(FileUuid) ->
-    {ok, #document{key = SpaceUuid}} = file_meta:get_scope({uuid, FileUuid}),
-    fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid).

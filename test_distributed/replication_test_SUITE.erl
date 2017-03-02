@@ -377,8 +377,8 @@ read_should_synchronize_file(Config) ->
     ?assertEqual(1, ?rpc(meck, num_calls, [rtransfer, fetch, '_'])),
     ?assert(?rpc(meck, called, [rtransfer, fetch, [ref, '_', '_']])),
     test_utils:mock_validate_and_unload(Workers, rtransfer),
-    ?assertMatch(#document{value = #file_location{blocks = [#file_block{offset = 1, size = 3}]}},
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+    ?assertMatch([#document{value = #file_location{blocks = [#file_block{offset = 1, size = 3}]}}],
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}])).
 
 external_change_should_invalidate_blocks(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -395,7 +395,7 @@ external_change_should_invalidate_blocks(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % attach external location
-    #document{value = #file_location{version_vector = VVLocal}} = ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [#document{value = #file_location{version_vector = VVLocal}}] = ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     RemoteLocation = #file_location{size = 10, space_id = SpaceId,
         storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
@@ -415,8 +415,9 @@ external_change_should_invalidate_blocks(Config) ->
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-    ?assertMatch(#document{value = #file_location{version_vector = VV, blocks = [#file_block{offset = 0, size = 2}, #file_block{offset = 7, size = 3}]}},
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+    ?assertMatch([#document{value = #file_location{version_vector = VV, blocks =
+    [#file_block{offset = 0, size = 2}, #file_block{offset = 7, size = 3}]}}],
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}])).
 
 update_should_save_recent_changes(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -484,8 +485,8 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % attach external location
-    LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [LocalDoc] = [#document{value = LocalLocation = #file_location{version_vector = VVLocal}}] =
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 2, size = 2}],
@@ -516,8 +517,9 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-    ?assertMatch(#document{value = #file_location{version_vector = VV, blocks = [#file_block{offset = 0, size = 2}, #file_block{offset = 4, size = 3}]}},
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+    ?assertMatch([#document{value = #file_location{version_vector = VV, blocks =
+    [#file_block{offset = 0, size = 2}, #file_block{offset = 4, size = 3}]}}],
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}])).
 
 remote_change_without_history_should_invalidate_whole_data(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -535,8 +537,8 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % prepare external location
-    #document{value = #file_location{version_vector = VVLocal}} =
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [#document{value = #file_location{version_vector = VVLocal}}] =
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 1, size = 1}, #file_block{offset = 5, size = 1}],
     ExternalSize = 8,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -559,13 +561,13 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
         #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
 
     % then
-    ?assertMatch(#document{value = #file_location{version_vector = VV, size = ExternalSize,
+    ?assertMatch([#document{value = #file_location{version_vector = VV, size = ExternalSize,
         blocks = [
             #file_block{offset = 0, size = 1},
             #file_block{offset = 2, size = 3},
             #file_block{offset = 6, size = 2}
-        ]}},
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+        ]}}],
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}])).
 
 remote_change_of_size_should_notify_clients(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -582,8 +584,8 @@ remote_change_of_size_should_notify_clients(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % prepare external location
-    #document{value = #file_location{version_vector = VVLocal}} =
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [#document{value = #file_location{version_vector = VVLocal}}] =
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ExternalBlocks = [],
     ExternalSize = 8,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -632,8 +634,8 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % prepare external location
-    #document{value = #file_location{version_vector = VVLocal}} =
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [#document{value = #file_location{version_vector = VVLocal}}] =
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 1, size = 1}],
     ExternalSize = 10,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -682,13 +684,13 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % invalidate half of file
-    LocalDoc = #document{value = LocalLoc = #file_location{blocks = [Block]}} =
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [LocalDoc] = [#document{value = LocalLoc = #file_location{blocks = [Block]}}] =
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ?rpc(file_location, save, [LocalDoc#document{value = LocalLoc#file_location{blocks = [Block#file_block{offset = 0, size = 5}]}}]),
 
     % prepare external location
-    #document{value = #file_location{version_vector = VVLocal}} =
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [#document{value = #file_location{version_vector = VVLocal}}] =
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 5, size = 5}],
     ExternalSize = 10,
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
@@ -734,8 +736,8 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % attach external location
-    LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    [LocalDoc] = [#document{value = LocalLocation = #file_location{version_vector = VVLocal}}] =
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 0, size = 2}],
@@ -772,10 +774,10 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     % then
     #document{value = #file_location{version_vector = MergedVV}} =
         bump_version(LocalDoc#document{value = LocalLocation#file_location{version_vector = ExternalVV}}, 3),
-    ?assertMatch(#document{value = #file_location{
+    ?assertMatch([#document{value = #file_location{
         version_vector = MergedVV,
-        blocks = [#file_block{offset = 4, size = 4}]}},
-        ?rpc(fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+        blocks = [#file_block{offset = 4, size = 4}]}}],
+        ?rpc(file_meta, get_local_locations, [{uuid, FileUuid}])).
 
 rtransfer_config_should_work(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),

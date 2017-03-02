@@ -143,7 +143,3 @@ emit_quota_exeeded() ->
     BlockedSpaces = space_quota:get_disabled_spaces(),
     ?debug("Sending disabled spaces ~p", [BlockedSpaces]),
     event:emit(#quota_exceeded_event{spaces = BlockedSpaces}).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

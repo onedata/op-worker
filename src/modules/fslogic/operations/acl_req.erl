@@ -40,7 +40,7 @@ get_acl(_UserCtx, FileCtx) ->
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #acl{
-                    value = fslogic_acl:from_json_format_to_acl(Val)
+                    value = acl_logic:from_json_format_to_acl(Val)
                 }
             };
         {error, {not_found, custom_metadata}} ->
@@ -56,7 +56,7 @@ get_acl(_UserCtx, FileCtx) ->
     fslogic_worker:provider_response().
 -check_permissions([traverse_ancestors, ?write_acl]).
 set_acl(_UserCtx, FileCtx, #acl{value = Val}) ->
-    case xattr:save(FileCtx, ?ACL_KEY, fslogic_acl:from_acl_to_json_format(Val)) of
+    case xattr:save(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val)) of
         {ok, _} ->
             ok = permissions_cache:invalidate(custom_metadata, FileCtx),
             ok = sfm_utils:chmod_storage_file(

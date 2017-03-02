@@ -274,9 +274,9 @@ handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
-    synchronization_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
+    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
-    synchronization_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block).
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -287,9 +287,9 @@ handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Blo
 -spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
     provider_response().
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
-    synchronization_req:get_file_distribution(UserCtx, FileCtx);
+    sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #replicate_file{block = Block}, FileCtx) ->
-    synchronization_req:replicate_file(UserCtx, FileCtx, Block);
+    sync_req:replicate_file(UserCtx, FileCtx, Block);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

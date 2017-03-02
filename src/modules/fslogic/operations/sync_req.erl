@@ -10,7 +10,7 @@
 %%% synchronization state of files.
 %%% @end
 %%%--------------------------------------------------------------------
--module(synchronization_req).
+-module(sync_req).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").

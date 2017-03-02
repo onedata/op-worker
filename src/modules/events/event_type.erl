@@ -41,7 +41,11 @@ get_routing_key(#event{type = Type}) ->
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}) ->
     {ok, <<"file_attr_changed.", (FileAttr#file_attr.guid)/binary>>};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}) ->
-    {ok, <<"file_location_changed.", (FileLocation#file_location.uuid)/binary>>};
+    FileGuid = fslogic_uuid:uuid_to_guid(
+        FileLocation#file_location.uuid,
+        FileLocation#file_location.space_id
+    ),
+    {ok, <<"file_location_changed.", FileGuid/binary>>};
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}) ->
     {ok, <<"file_perm_changed.", FileGuid/binary>>};
 get_routing_key(#file_removed_event{file_guid = FileGuid}) ->
@@ -88,7 +92,10 @@ get_aggregation_key(#file_written_event{file_guid = FileGuid}) ->
 get_aggregation_key(#file_attr_changed_event{file_attr = FileAttr}) ->
     FileAttr#file_attr.guid;
 get_aggregation_key(#file_location_changed_event{file_location = FileLocation}) ->
-    FileLocation#file_location.uuid;
+    fslogic_uuid:uuid_to_guid(
+        FileLocation#file_location.uuid,
+        FileLocation#file_location.space_id
+    );
 get_aggregation_key(#file_perm_changed_event{file_guid = FileGuid}) ->
     FileGuid;
 get_aggregation_key(#file_removed_event{file_guid = FileGuid}) ->
@@ -125,7 +132,11 @@ get_context(#file_written_event{file_guid = FileGuid}) ->
 get_context(#file_attr_changed_event{file_attr = FileAttr}) ->
     {file, file_ctx:new_by_guid(FileAttr#file_attr.guid)};
 get_context(#file_location_changed_event{file_location = FileLocation}) ->
-    {file, file_ctx:new_by_guid(FileLocation#file_location.uuid)};
+    FileGuid = fslogic_uuid:uuid_to_guid(
+        FileLocation#file_location.uuid,
+        FileLocation#file_location.space_id
+    ),
+    {file, file_ctx:new_by_guid(FileGuid)};
 get_context(#file_perm_changed_event{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
 get_context(#file_removed_event{file_guid = FileGuid}) ->
