@@ -96,8 +96,8 @@ all() ->
         set_get_json_metadata_id,
         set_get_rdf_metadata,
         set_get_rdf_metadata_id,
-        create_list_index,
         remove_index,
+        create_list_index,
         create_geospatial_index,
         query_geospatial_index,
         set_get_json_metadata_inherited,
@@ -789,6 +789,28 @@ set_get_rdf_metadata_id(Config) ->
             [user_1_token_header(Config), {<<"accept">>,<<"application/rdf+xml">>}], [])),
     ?assertMatch(<<"some_xml">>, Body).
 
+remove_index(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Function =
+        <<"function (meta) {
+              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
+                  return meta['onedata_json']['meta']['color'];
+              }
+              return null;
+        }">>,
+    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
+        do_request(WorkerP1, <<"index?space_id=space1&name=name">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
+    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
+    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
+    IndexList = json_utils:decode_map(ListBody),
+    ?assertMatch([_], IndexList),
+
+    %when
+    ?assertMatch({ok, 204, _, _}, do_request(WorkerP1, <<"index/", Id/binary>>, delete, [user_1_token_header(Config)], [])),
+
+    %then
+    ?assertMatch({ok, 200, _, <<"[]">>}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])).
+
 create_list_index(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     Function =
@@ -822,28 +844,6 @@ create_list_index(Config) ->
         [user_1_token_header(Config)], [])),
     IndexList2 = json_utils:decode_map(ListBody2),
     ?assertMatch([#{}, #{}], IndexList2).
-
-remove_index(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    Function =
-        <<"function (meta) {
-              if(meta['onedata_json'] && meta['onedata_json']['meta'] && meta['onedata_json']['meta']['color']) {
-                  return meta['onedata_json']['meta']['color'];
-              }
-              return null;
-        }">>,
-    {ok, 303, Headers, _} = ?assertMatch({ok, 303, _, _},
-        do_request(WorkerP1, <<"index?space_id=space1&name=name">>, post, [user_1_token_header(Config), {<<"content-type">>,<<"application/javascript">>}], Function)),
-    <<"/api/v3/oneprovider/index/", Id/binary>> = proplists:get_value(<<"location">>, Headers),
-    {ok, _, _, ListBody} = ?assertMatch({ok, 200, _, _}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])),
-    IndexList = json_utils:decode_map(ListBody),
-    ?assertMatch([_], IndexList),
-
-    %when
-    ?assertMatch({ok, 204, _, _}, do_request(WorkerP1, <<"index/", Id/binary>>, delete, [user_1_token_header(Config)], [])),
-
-    %then
-    ?assertMatch({ok, 200, _, <<"[]">>}, do_request(WorkerP1, <<"index">>, get, [user_1_token_header(Config)], [])).
 
 create_geospatial_index(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
