@@ -17,7 +17,7 @@
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_provided/2, content_types_accepted/2]).
+    content_types_provided/2, content_types_accepted/2, delete_resource/2]).
 
 %% resource functions
 -export([get_index/2, modify_index/2]).
@@ -45,7 +45,7 @@ terminate(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), maps:map() | {error, term()}) -> {[binary()], req(), maps:map()}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>, <<"PUT">>], Req, State}.
+    {[<<"GET">>, <<"PUT">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
@@ -72,6 +72,24 @@ content_types_accepted(Req, State) ->
     {[
         {<<"application/javascript">>, modify_index}
     ], Req, State}.
+
+%%--------------------------------------------------------------------
+%% '/api/v3/oneprovider/index/{iid}'
+%% @doc This method removes index
+%%
+%% HTTP method: DELETE
+%%
+%% @param iid Id of the index to return.
+%%--------------------------------------------------------------------
+-spec delete_resource(req(), maps:map()) -> {term(), req(), maps:map()}.
+delete_resource(Req, State) ->
+    {State2, Req2} = validator:parse_id(Req, State),
+
+    #{auth := Auth, id := IndexId} = State2,
+
+    {ok, UserId} = session:get_user_id(Auth),
+    ok = indexes:remove_index(UserId, IndexId),
+    {true, Req2, State2}.
 
 %%%===================================================================
 %%% Content type handler functions

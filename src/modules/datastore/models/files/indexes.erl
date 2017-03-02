@@ -18,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add_index/5, get_index/2, query_view/2, get_all_indexes/1, change_index_function/3]).
+-export([add_index/5, get_index/2, remove_index/2, query_view/2,
+    get_all_indexes/1, change_index_function/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -120,6 +121,25 @@ get_index(UserId, IndexId) ->
             end;
         {error, {not_found, indexes}} ->
             {error, ?ENOENT};
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove index from db
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_index(od_user:id(), index_id()) -> ok | {error, any()}.
+remove_index(UserId, IndexId) ->
+    case update(UserId, fun(IndexesDoc = #indexes{value = Indexes}) ->
+        NewValue = maps:remove(IndexId, Indexes),
+        {ok, IndexesDoc#indexes{value = NewValue}}
+    end) of
+        {ok, _} ->
+            couchdb_datastore_driver:delete_view(custom_metadata, IndexId);
+        {error, {not_found, indexes}} ->
+            ok;
         Error ->
             Error
     end.
