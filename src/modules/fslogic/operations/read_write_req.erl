@@ -20,7 +20,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% API
--export([write/6, read/7]).
+-export([read/7, write/6]).
 
 %%%===================================================================
 %%% API functions

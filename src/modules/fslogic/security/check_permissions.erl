@@ -7,13 +7,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% check_permissions annotation implementation.
-%%% This annotation shall check whether annotation's caller has given
-%%% permissions to file that is also somewhere within annotation's arguments.
+%%% check_permissions implementation.
+%%% This function wrapper checks whether function caller has given
+%%% permissions to file that is somewhere within function's arguments.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(check_permissions).
--annotation('function').
 -author("Rafal Slota").
 -author("Tomasz Lichon").
 
@@ -21,12 +20,11 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([before_advice/4, after_advice/5]).
+-export([execute/3]).
 
-%% Object pointing to annotation's argument which holds file data (see resolve_file/2)
+%% Object pointing to wrapper argument which holds file data (see resolve_file/2)
 -type item_definition() :: non_neg_integer() | parent | {path, non_neg_integer()}
 | {parent, item_definition()}.
 -type check_type() :: owner % Check whether user owns the item
@@ -37,7 +35,10 @@
 | acl_access_mask().
 -type acl_access_mask() :: binary().
 
--type raw_access_definition() :: root | check_type() | {check_type(), item_definition()}.
+-type raw_access_definition() :: root
+| check_type()
+| {check_type(), item_definition()}
+| {check_type(), 'or', check_type()}.
 -type access_definition() :: root | check_type() | {check_type(), file_ctx:ctx()}.
 
 -export_type([check_type/0, item_definition/0, raw_access_definition/0]).
@@ -52,35 +53,27 @@
 %% #annotation.data informs about permissions that should be checked.
 %% @end
 %%--------------------------------------------------------------------
--spec before_advice(#annotation{data :: [raw_access_definition()]}, module(), atom(), [term()]) ->
-    [term()].
-before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{
+-spec execute([raw_access_definition()], Args :: [term()], function()) ->
+    term().
+execute(AccessDefinitions, Args = [#sfm_handle{
     session_id = SessionId,
     space_id = SpaceId,
     file_uuid = FileUuid,
     share_id = ShareId
-} | _] = Args
-) ->
+} | _], Function) ->
     UserCtx = user_ctx:new(SessionId),
     FileGuid = fslogic_uuid:uuid_to_share_guid(FileUuid, SpaceId, ShareId),
     DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
     {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
     rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
-    set_root_context_if_file_has_acl(Args);
-before_advice(#annotation{data = AccessDefinitions}, _M, _F,
-    Args = [UserCtx, DefaultFileCtx | OtherArgs]
-) ->
+    NewArgs = set_root_context_if_file_has_acl(Args),
+    apply(Function, NewArgs);
+execute(AccessDefinitions, Args = [UserCtx, DefaultFileCtx | OtherArgs], Function) ->
     {ExpandedAccessDefinitions, DefaultFileCtx2} =
         expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
     rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
-    [UserCtx, DefaultFileCtx2 | OtherArgs].
-
-%%--------------------------------------------------------------------
-%% @doc Annotation's after_advice implementation. Currently does nothing.
-%%--------------------------------------------------------------------
--spec after_advice(#annotation{}, atom(), atom(), [term()], term()) -> term().
-after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
-    Result.
+    NewArgs = [UserCtx, DefaultFileCtx2 | OtherArgs],
+    apply(Function, NewArgs).
 
 %%%===================================================================
 %%% Internal functions

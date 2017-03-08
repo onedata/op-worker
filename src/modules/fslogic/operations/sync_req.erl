@@ -16,7 +16,6 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -93,13 +92,16 @@ get_file_distribution(_UserCtx, FileCtx) ->
     }.
 
 %%--------------------------------------------------------------------
-%% @equiv replicate_file(UserCtx, {uuid, Uuid}, Block, 0)
+%% @equiv replicate_file_insecure/3 with permission check
 %% @end
 %%--------------------------------------------------------------------
 -spec replicate_file(user_ctx:ctx(), file_ctx:ctx(), fslogic_blocks:block()) ->
     fslogic_worker:provider_response().
 replicate_file(UserCtx, FileCtx, Block) ->
-    replicate_file(UserCtx, FileCtx, Block, 0).
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, Block, 0],
+        fun replicate_file_insecure/4).
 
 %%%===================================================================
 %%% Internal functions
@@ -112,11 +114,10 @@ replicate_file(UserCtx, FileCtx, Block) ->
 %% (the space has to be locally supported).
 %% @end
 %%--------------------------------------------------------------------
--spec replicate_file(user_ctx:ctx(), file_ctx:ctx(),
+-spec replicate_file_insecure(user_ctx:ctx(), file_ctx:ctx(),
     fslogic_blocks:block(), non_neg_integer()) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?write_object]).
-replicate_file(UserCtx, FileCtx, Block, Offset) ->
+replicate_file_insecure(UserCtx, FileCtx, Block, Offset) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
@@ -126,7 +127,7 @@ replicate_file(UserCtx, FileCtx, Block, Offset) ->
                     #provider_response{status = #status{code = ?OK}};
                 {Children, FileCtx3} ->
                     replicate_children(UserCtx, Children, Block),
-                    replicate_file(UserCtx, FileCtx3, Block, Offset + Chunk)
+                    replicate_file_insecure(UserCtx, FileCtx3, Block, Offset + Chunk)
             end;
         {false, FileCtx2} ->
             #fuse_response{status = Status} =

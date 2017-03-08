@@ -57,7 +57,8 @@ all() ->
 -define(TIMEOUT, timer:seconds(15)).
 
 -define(FILE_UUID, <<"file_uuid">>).
--define(FILE_GUID, fslogic_uuid:uuid_to_guid(?FILE_UUID, <<"spaceid">>)).
+-define(SPACE_ID, <<"spaceid">>).
+-define(FILE_GUID, fslogic_uuid:uuid_to_guid(?FILE_UUID, ?SPACE_ID)).
 
 %%%===================================================================
 %%% Test functions
@@ -450,7 +451,7 @@ file_attr_changed_event() ->
 %%--------------------------------------------------------------------
 -spec file_location_changed_event() -> #file_location_changed_event{}.
 file_location_changed_event() ->
-    #file_location_changed_event{file_location = #file_location{uuid = ?FILE_GUID}}.
+    #file_location_changed_event{file_location = #file_location{uuid = ?FILE_UUID, space_id = ?SPACE_ID}}.
 
 %%--------------------------------------------------------------------
 %% @private

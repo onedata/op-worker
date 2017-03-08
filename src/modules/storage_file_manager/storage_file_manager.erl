@@ -21,7 +21,6 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 -export([new_handle/2, new_handle/6, new_handle/7]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3]).
@@ -507,9 +506,12 @@ fsync(#sfm_handle{file_handle = FileHandle}) ->
 %%--------------------------------------------------------------------
 -spec open_for_read(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
--check_permissions([?read_object]).
 open_for_read(SFMHandle) ->
-    open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read).
+    check_permissions:execute(
+        [?read_object],
+        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read],
+        fun open_insecure/2
+    ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -519,9 +521,12 @@ open_for_read(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_for_write(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
--check_permissions([?write_object]).
 open_for_write(SFMHandle) ->
-    open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write).
+    check_permissions:execute(
+        [?write_object],
+        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write],
+        fun open_insecure/2
+    ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -531,9 +536,12 @@ open_for_write(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_for_rdwr(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
--check_permissions([?read_object, ?write_object]).
 open_for_rdwr(SFMHandle) ->
-    open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
+    check_permissions:execute(
+        [?read_object, ?write_object],
+        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr],
+        fun open_insecure/2
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

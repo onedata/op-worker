@@ -19,7 +19,6 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 -define(REMOVE_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
     remove_storage_test_file_delay_seconds, 300))).

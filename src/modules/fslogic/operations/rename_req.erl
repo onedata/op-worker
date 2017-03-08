@@ -21,7 +21,6 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -63,16 +62,30 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Executes proper rename case to check permissions.
+%% @equiv rename_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec rename(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?delete]).
 rename(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?delete],
+        [UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName],
+        fun rename_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes proper rename case to check permissions.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(),
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    fslogic_worker:fuse_response().
+rename_insecure(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
     case file_ctx:is_dir(SourceFileCtx) of
         {true, SourceFileCtx2} ->
             rename_dir(UserCtx, SourceFileCtx2, CanonicalTargetPath,
@@ -84,15 +97,28 @@ rename(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetN
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks necessary permissions and renames directory.
+%% @equiv rename_dir_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_dir(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
--check_permissions([{?delete_subcontainer, parent}]).
 rename_dir(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
+    check_permissions:execute(
+        [{?delete_subcontainer, parent}],
+        [UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName],
+        fun rename_dir_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_dir_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
+    TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
+rename_dir_insecure(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
     case check_dir_preconditions(UserCtx, SourceFileCtx, CanonicalTargetPath,
         TargetParentFileCtx, TargetName)
     of
@@ -105,15 +131,28 @@ rename_dir(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, Tar
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks necessary permissions and renames file.
+%% @equiv rename_file_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
--check_permissions([{?delete_object, parent}]).
 rename_file(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
+    check_permissions:execute(
+        [{?delete_object, parent}],
+        [UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName],
+        fun rename_file_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames file.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_file_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    CanonicalTargetPath :: file_meta:path(), TargetParentFileCtx :: file_ctx:ctx(),
+    TargetName :: file_meta:name()) -> fslogic_worker:fuse_response().
+rename_file_insecure(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx, TargetName) ->
     case check_reg_preconditions(UserCtx, TargetParentFileCtx, TargetName) of
         ok ->
             rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath,
@@ -238,29 +277,35 @@ rename_select(UserCtx, SourceFileCtx, CanonicalTargetPath, TargetParentFileCtx,
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks permissions before renaming regular file within one space.
+%% @equiv rename_trivial/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {parent, {path, 3}}},
-    {?traverse_container, {parent, {path, 3}}}, {?add_object, {parent, {path, 3}}}]).
 rename_file_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
+    check_permissions:execute([
+            {traverse_ancestors, {parent, {path, 3}}},
+            {?traverse_container, {parent, {path, 3}}},
+            {?add_object, {parent, {path, 3}}}
+        ],
+        [UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath],
+        fun rename_trivial/4).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks permissions before renaming directory within one space.
+%% @equiv rename_trivial/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_dir_trivial(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {parent, {path, 3}}},
-    {?traverse_container, {parent, {path, 3}}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
+    check_permissions:execute([
+        {traverse_ancestors, {parent, {path, 3}}},
+        {?traverse_container, {parent, {path, 3}}},
+        {?add_subcontainer, {parent, {path, 3}}}
+    ],
+        [UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath],
+        fun rename_trivial/4).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -275,29 +320,34 @@ rename_trivial(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) -
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks permissions before renaming regular file within one provider.
+%% @equiv rename_interspace/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {parent, {path, 3}}},
-    {?traverse_container, {parent, {path, 3}}}, {?add_object, {parent, {path, 3}}}]).
 rename_file_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
+    check_permissions:execute([
+        {traverse_ancestors, {parent, {path, 3}}},
+        {?traverse_container, {parent, {path, 3}}},
+        {?add_object, {parent, {path, 3}}}
+    ],
+        [UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath],
+        fun rename_interspace/4).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks permissions before renaming directory within one provider.
+%% @equiv rename_interspace/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_dir_interspace(user_ctx:ctx(), file_ctx:ctx(),
     file_meta:path(), file_meta:path()) -> fslogic_worker:fuse_response().
--check_permissions([{traverse_ancestors, {parent, {path, 3}}},
-    {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath) ->
-    rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath).
+    check_permissions:execute([
+        {traverse_ancestors, {parent, {path, 3}}},
+        {?add_subcontainer, {parent, {path, 3}}}
+    ],
+        [UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath],
+        fun rename_interspace/4).
 
 %%--------------------------------------------------------------------
 %% @private

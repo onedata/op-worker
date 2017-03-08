@@ -14,7 +14,6 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([mkdir/4, read_dir/4]).
@@ -24,15 +23,44 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates new directory.
+%% @equiv mkdir_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?traverse_container, ?add_subcontainer]).
 mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container, ?add_subcontainer],
+        [UserCtx, ParentFileCtx, Name, Mode],
+        fun mkdir_insecure/4).
+
+%%--------------------------------------------------------------------
+%% @equiv read_dir_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
+    Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
+    fslogic_worker:fuse_response().
+read_dir(UserCtx, FileCtx, Offset, Limit) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?list_container],
+        [UserCtx, FileCtx, Offset, Limit],
+        fun read_dir_insecure/4).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec mkdir_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
+    Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
+    fslogic_worker:fuse_response().
+mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
@@ -43,7 +71,10 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
     {ParentDoc, ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
     {ok, DirUuid} = file_meta:create(ParentDoc, File), %todo maybe pass file_ctx inside
-    {ok, _} = times:create(#document{key = DirUuid, value = #times{mtime = CTime, atime = CTime, ctime = CTime}}),
+    {ok, _} = times:create(#document{
+        key = DirUuid,
+        value = #times{mtime = CTime, atime = CTime, ctime = CTime}
+    }),
     fslogic_times:update_mtime_ctime(ParentFileCtx2),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #dir{guid = fslogic_uuid:uuid_to_guid(DirUuid, SpaceId)}
@@ -54,11 +85,10 @@ mkdir(UserCtx, ParentFileCtx, Name, Mode) ->
 %% Lists directory. Starts with ROffset entity and limits returned list to RCount size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
+-spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?list_container]).
-read_dir(UserCtx, FileCtx, Offset, Limit) ->
+read_dir_insecure(UserCtx, FileCtx, Offset, Limit) ->
     {Children, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit),
     ChildrenLinks =
         lists:map(fun(ChildFile) ->

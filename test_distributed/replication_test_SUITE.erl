@@ -19,7 +19,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").

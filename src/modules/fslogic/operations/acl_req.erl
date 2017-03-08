@@ -16,7 +16,6 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -27,14 +26,53 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Gets access control list of file.
+%% @equiv get_acl_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?read_acl]).
 get_acl(_UserCtx, FileCtx) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?read_acl],
+        [_UserCtx, FileCtx],
+        fun get_acl_insecure/2).
+
+%%--------------------------------------------------------------------
+%% @equiv set_acl_insecure/3 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
+    fslogic_worker:provider_response().
+set_acl(_UserCtx, FileCtx, Acl) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_acl],
+        [_UserCtx, FileCtx, Acl],
+        fun set_acl_insecure/3).
+
+%%--------------------------------------------------------------------
+%% @equiv remove_acl_insecure/2 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+remove_acl(_UserCtx, FileCtx) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_acl],
+        [_UserCtx, FileCtx],
+        fun remove_acl_insecure/2).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets access control list of file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+get_acl_insecure(_UserCtx, FileCtx) ->
     case xattr:get_by_name(FileCtx, ?ACL_KEY) of
         {ok, Val} ->
             #provider_response{
@@ -52,10 +90,9 @@ get_acl(_UserCtx, FileCtx) ->
 %% Sets access control list of file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
+-spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?write_acl]).
-set_acl(_UserCtx, FileCtx, #acl{value = Val}) ->
+set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}) ->
     case xattr:save(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val)) of
         {ok, _} ->
             ok = permissions_cache:invalidate(custom_metadata, FileCtx),
@@ -74,10 +111,9 @@ set_acl(_UserCtx, FileCtx, #acl{value = Val}) ->
 %% Removes access control list of file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?write_acl]).
-remove_acl(_UserCtx, FileCtx) ->
+remove_acl_insecure(_UserCtx, FileCtx) ->
     case xattr:delete_by_name(FileCtx, ?ACL_KEY) of
         ok ->
             ok = permissions_cache:invalidate(custom_metadata, FileCtx),

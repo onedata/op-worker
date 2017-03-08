@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -26,16 +25,83 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates and open file. Returns handle to the file, its attributes
-%% and location.
+%% @equiv create_file_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?traverse_container, ?add_object]).
 create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container, ?add_object],
+        [UserCtx, ParentFileCtx, Name, Mode, _Flag],
+        fun create_file_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @equiv make_file_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec make_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
+make_file(UserCtx, ParentFileCtx, Name, Mode) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container, ?add_object],
+        [UserCtx, ParentFileCtx, Name, Mode],
+        fun make_file_insecure/4).
+
+%%--------------------------------------------------------------------
+%% @equiv get_file_location_insecure/2 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_location(_UserCtx, FileCtx) ->
+    check_permissions:execute(
+        [traverse_ancestors],
+        [_UserCtx, FileCtx],
+        fun get_file_location_insecure/2).
+
+%%--------------------------------------------------------------------
+%% @equiv open_file(UserCtx, FileCtx) with permission check
+%% depending on the open flag.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+    OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
+open_file(UserCtx, FileCtx, read) ->
+    open_file_for_read(UserCtx, FileCtx);
+open_file(UserCtx, FileCtx, write) ->
+    open_file_for_write(UserCtx, FileCtx);
+open_file(UserCtx, FileCtx, rdwr) ->
+    open_file_for_rdwr(UserCtx, FileCtx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file handle saved in session.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(user_ctx:ctx(), file_ctx:ctx(), HandleId :: binary()) ->
+    fslogic_worker:fuse_response().
+release(UserCtx, FileCtx, HandleId) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    ok = session:remove_handle(SessId, HandleId),
+    ok = file_handles:register_release(FileCtx, SessId, 1),
+    #fuse_response{status = #status{code = ?OK}}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates and open file. Returns handle to the file, its attributes
+%% and location.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
+    fslogic_worker:fuse_response().
+create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     SessId = user_ctx:get_session_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
@@ -69,10 +135,9 @@ create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
 %% Creates file. Returns its attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec make_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
+-spec make_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?traverse_container, ?add_object]).
-make_file(UserCtx, ParentFileCtx, Name, Mode) ->
+make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     {_, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
     fslogic_times:update_mtime_ctime(ParentFileCtx),
@@ -83,10 +148,9 @@ make_file(UserCtx, ParentFileCtx, Name, Mode) ->
 %% Returns file location.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_file_location_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors]).
-get_file_location(_UserCtx, FileCtx) ->
+get_file_location_insecure(_UserCtx, FileCtx) ->
     {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {[#document{value = #file_location{
         blocks = Blocks, file_id = FileId
@@ -105,37 +169,6 @@ get_file_location(_UserCtx, FileCtx) ->
             space_id = SpaceId
         }
     }.
-
-%%--------------------------------------------------------------------
-%% @equiv open_file(UserCtx, FileCtx, CreateHandle) with permission check
-%% depending on the open flag.
-%% @end
-%%--------------------------------------------------------------------
--spec open_file(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
-    OpenFlag :: fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file(UserCtx, FileCtx, read) ->
-    open_file_for_read(UserCtx, FileCtx);
-open_file(UserCtx, FileCtx, write) ->
-    open_file_for_write(UserCtx, FileCtx);
-open_file(UserCtx, FileCtx, rdwr) ->
-    open_file_for_rdwr(UserCtx, FileCtx).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file handle saved in session.
-%% @end
-%%--------------------------------------------------------------------
--spec release(user_ctx:ctx(), file_ctx:ctx(), HandleId :: binary()) ->
-    fslogic_worker:fuse_response().
-release(UserCtx, FileCtx, HandleId) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    ok = session:remove_handle(SessId, HandleId),
-    ok = file_handles:register_release(FileCtx, SessId, 1),
-    #fuse_response{status = #status{code = ?OK}}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
@@ -181,39 +214,42 @@ save_handle(SessId, Handle) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, read, CreateHandle)
-%% with permission check.
+%% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_read(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
--check_permissions([traverse_ancestors, ?read_object]).
 open_file_for_read(UserCtx, FileCtx) ->
-    open_file_insecure(UserCtx, FileCtx, read).
+    check_permissions:execute(
+        [traverse_ancestors, ?read_object],
+        [UserCtx, FileCtx, read],
+        fun open_file_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, write, CreateHandle)
-%% with permission check.
+%% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_write(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
--check_permissions([traverse_ancestors, ?write_object]).
 open_file_for_write(UserCtx, FileCtx) ->
-    open_file_insecure(UserCtx, FileCtx, write).
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, write],
+        fun open_file_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, rdwr, CreateHandle)
-%% with permission check.
+%% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
--check_permissions([traverse_ancestors, ?read_object, ?write_object]).
 open_file_for_rdwr(UserCtx, FileCtx) ->
-    open_file_insecure(UserCtx, FileCtx, rdwr).
+    check_permissions:execute(
+        [traverse_ancestors, ?read_object, ?write_object],
+        [UserCtx, FileCtx, rdwr],
+        fun open_file_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private

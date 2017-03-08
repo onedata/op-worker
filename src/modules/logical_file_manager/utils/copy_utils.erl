@@ -16,7 +16,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 

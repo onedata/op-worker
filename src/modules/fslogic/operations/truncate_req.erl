@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -24,16 +23,31 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc 
+%% @equiv truncate_insecure/3 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
+    fslogic_worker:fuse_response().
+truncate(UserCtx, FileCtx, Size) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, Size],
+        fun truncate_insecure/3).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Truncates file on storage and returns only if operation is complete.
 %% Does not change file size in #file_meta model. Model's size should be
 %% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
+-spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(), Size :: non_neg_integer()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?write_object]).
-truncate(UserCtx, FileCtx, Size) ->
+truncate_insecure(UserCtx, FileCtx, Size) ->
     FileCtx2 = update_quota(FileCtx, Size),
     SessId = user_ctx:get_session_id(UserCtx),
     SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
@@ -41,10 +55,6 @@ truncate(UserCtx, FileCtx, Size) ->
     ok = storage_file_manager:truncate(Handle, Size),
     fslogic_times:update_mtime_ctime(FileCtx2),
     #fuse_response{status = #status{code = ?OK}}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
