@@ -38,7 +38,7 @@ create(#file_read_subscription{time_threshold = TimeThr}) ->
         aggregation_rule = fun event_utils:aggregate_file_read_events/2,
         emission_time = make_emission_time(TimeThr),
         emission_rule = fun(_) -> false end,
-        event_handler = fun fslogic_event:handle_file_read_events/2
+        event_handler = fun fslogic_event_handler:handle_file_read_events/2
     };
 
 create(#file_written_subscription{time_threshold = TimeThr}) ->
@@ -46,7 +46,7 @@ create(#file_written_subscription{time_threshold = TimeThr}) ->
         aggregation_rule = fun event_utils:aggregate_file_written_events/2,
         emission_time = make_emission_time(TimeThr),
         emission_rule = fun(_) -> false end,
-        event_handler = fun fslogic_event:handle_file_written_events/2
+        event_handler = fun fslogic_event_handler:handle_file_written_events/2
     };
 
 create(#file_attr_changed_subscription{} = Sub) ->

@@ -43,12 +43,7 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
         {true, _FileCtx2} ->
             ok;
         {false, FileCtx2} ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx2),
-            {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
-            {FileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-            SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx4),
-            SFMHandle = storage_file_manager:new_handle(SessId,
-                SpaceDirUuid, FileUuid, Storage, FileId),
+            SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
             ok = storage_file_manager:chmod(SFMHandle, Mode)
     end.
 
@@ -64,12 +59,17 @@ rename_storage_file_updating_location(UserCtx, SourceFileCtx, TargetSpaceId) ->
     {[#document{value = LocalLocation}], SourceFileCtx3} =
         file_ctx:get_local_file_location_docs(SourceFileCtx2),
     {FileId, SourceFileCtx4} = file_ctx:get_storage_file_id(SourceFileCtx3),
+    [<<"/">>, _SourceSpaceId | Rest] = fslogic_path:split(FileId),
+    TargetFileId = filename:join([<<"/">>, TargetSpaceId | Rest]),
     SessId = user_ctx:get_session_id(UserCtx),
-    ok = sfm_utils:rename_storage_file(SessId, LocalLocation, FileId, TargetSpaceId, Mode),
-    ok = replica_updater:rename(SourceFileCtx4, FileId, TargetSpaceId),
+    ok = sfm_utils:rename_storage_file(SessId, LocalLocation, TargetFileId, TargetSpaceId, Mode),
+    ok = replica_updater:rename(SourceFileCtx4, TargetFileId, TargetSpaceId),
+
+    FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
+    TargetFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
     ok = sfm_utils:chmod_storage_file(
         user_ctx:new(?ROOT_SESS_ID),
-        SourceFileCtx4,
+        TargetFileCtx,
         Mode
     ).
 
@@ -88,10 +88,9 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, Mode) ->
     %create target dir
     {ok, TargetStorage = #document{key = TargetStorageId}} =
         fslogic_storage:select_storage(TargetSpaceId),
-    TargetSpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(TargetSpaceId),
-    TargetDir = fslogic_path:dirname(TargetFileId),
+    TargetDir = filename:dirname(TargetFileId),
     TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
-        TargetSpaceUuid, undefined, TargetStorage, TargetDir),
+        TargetSpaceId, undefined, TargetStorage, TargetDir, undefined),
     case storage_file_manager:mkdir(TargetDirHandle,
         ?AUTO_CREATED_PARENT_DIR_MODE, true)
     of
@@ -102,11 +101,10 @@ rename_storage_file(SessId, Location, TargetFileId, TargetSpaceId, Mode) ->
     end,
 
     {ok, SourceStorage} = storage:get(SourceStorageId),
-    SourceSpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SourceSpaceId),
-    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUuid,
-        FileUuid, SourceStorage, SourceFileId),
+    SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceId,
+        FileUuid, SourceStorage, SourceFileId, undefined),
     TargetHandle = storage_file_manager:new_handle(SessId,
-        TargetSpaceUuid, FileUuid, TargetStorage, TargetFileId),
+        TargetSpaceId, FileUuid, TargetStorage, TargetFileId, undefined),
     case storage_file_manager:stat(TargetHandle) of
         {ok, _} ->
             ok;
@@ -165,29 +163,19 @@ create_storage_file(UserCtx, FileCtx) ->
 
     %create file on storage
     SessId = user_ctx:get_session_id(UserCtx),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
     FileUuid = file_ctx:get_uuid_const(FileCtx2),
-    {Storage = #document{key = StorageId}, FileCtx3} =
+    {#document{key = StorageId}, FileCtx3} =
         file_ctx:get_storage_doc(FileCtx2),
     {#document{value = #file_meta{mode = Mode}}, FileCtx4} =
         file_ctx:get_file_doc(FileCtx3),
     {FileId, FileCtx5} = file_ctx:get_storage_file_id(FileCtx4),
-    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid,
-        FileUuid, Storage, FileId),
+    SFMHandle1 = storage_file_manager:new_handle(SessId, FileCtx),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, Mode),
 
     %create its location in db
     SpaceId = file_ctx:get_space_id_const(FileCtx5),
     Location = #file_location{
-        blocks = [
-            #file_block{
-                offset = 0,
-                size = 0,
-                file_id = FileId,
-                storage_id = StorageId
-            }
-        ],
         provider_id = oneprovider:get_provider_id(),
         file_id = FileId,
         storage_id = StorageId,
@@ -209,18 +197,10 @@ create_storage_file(UserCtx, FileCtx) ->
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
-    {[#document{
-        key = FileLocationId,
-        value = #file_location{
-            storage_id = StorageId,
-            file_id = FileId
-        }
-    }], FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
-    {ok, Storage} = storage:get(StorageId),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx2),
+    {[#document{key = FileLocationId}], FileCtx2} =
+        file_ctx:get_local_file_location_docs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
+    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
     storage_file_manager:unlink(SFMHandle),
     file_location:delete(FileLocationId).
 
@@ -263,13 +243,13 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
 create_parent_dirs(FileCtx) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
     {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
 
-    LeafLess = fslogic_path:dirname(StorageFileId),
+    LeafLess = filename:dirname(StorageFileId),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid,
-        FileUuid, Storage, LeafLess),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
+        FileUuid, Storage, LeafLess, undefined),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok ->
             FileCtx3;

@@ -19,12 +19,7 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 
--define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
-    storage_test_file_name_size, 32)).
--define(TEST_FILE_CONTENT_LEN, application:get_env(?APP_NAME,
-    storage_test_file_content_size, 100)).
 -define(REMOVE_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
     remove_storage_test_file_delay_seconds, 300))).
 -define(VERIFY_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
@@ -56,7 +51,7 @@ get_configuration(SessId) ->
         end
     end, Docs),
     #configuration{
-        root_uuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
+        root_guid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
         subscriptions = Subs,
         disabled_spaces = space_quota:get_disabled_spaces()
     }.
@@ -103,8 +98,8 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             HelperParams = helper:get_params(Helper, ClientStorageUserUserCtx),
 
             {RawStoragePath, _NewFile} = file_ctx:get_raw_storage_path(FileCtx),
-            Dirname = fslogic_path:dirname(RawStoragePath),
-            TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
+            Dirname = filename:dirname(RawStoragePath),
+            TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
             FileContent = storage_detector:create_test_file(Helper, ServerStorageUserUserCtx, TestFileId),
 

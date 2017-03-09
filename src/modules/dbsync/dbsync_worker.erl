@@ -710,16 +710,16 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
 %%--------------------------------------------------------------------
 -spec get_sync_context(datastore:document()) ->
     datastore:key() | datastore:document().
-get_sync_context(#document{key = FileUUID, value = #times{}}) ->
-    FileUUID;
+get_sync_context(#document{key = FileUuid, value = #times{}}) ->
+    FileUuid;
 get_sync_context(#document{value = #file_meta{}} = Doc) ->
     Doc;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
 get_sync_context(#document{key = Key, value = #custom_metadata{}}) ->
     Key;
-get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
-    FileUUID.
+get_sync_context(#document{value = #file_location{uuid = FileUuid}}) ->
+    FileUuid.
 
 
 %%--------------------------------------------------------------------
@@ -757,9 +757,9 @@ get_space_id(#document{key = Key, value = V} = Doc) ->
                     ?debug_stacktrace("Cannot get spaceID from document ~p due to: ~p", [Doc, Reason]),
                     {ok, <<"">>}
             end;
-        {ok, ScopeUUID} ->
+        {ok, SpaceUuid} ->
             try
-                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
                 {ok, SpaceId}
             catch
                 _:Reason ->

@@ -88,7 +88,7 @@ parse_id(Req, State) ->
     {parse_result(), cowboy_req:req()}.
 parse_objectid(Req, State) ->
     {Id, NewReq} = cowboy_req:binding(id, Req),
-    case catch cdmi_id:objectid_to_uuid(Id) of
+    case catch cdmi_id:objectid_to_guid(Id) of
         {ok, Guid} ->
             {State#{id => Guid}, NewReq};
         Error ->

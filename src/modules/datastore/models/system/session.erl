@@ -125,8 +125,9 @@ delete(Key) ->
             worker_proxy:multicast(?SESSION_MANAGER_WORKER,
                 {apply, fun() -> delete_helpers_on_this_node(SessId) end}),
 
-            lists:foreach(fun(FileUuid) ->
-                file_handles:invalidate_session_entry(FileUuid, Key)
+            lists:foreach(fun(FileGuid) ->
+                FileCtx = file_ctx:new_by_guid(FileGuid),
+                file_handles:invalidate_session_entry(FileCtx, Key)
             end, sets:to_list(OpenFiles));
         _ -> ok
     end,
@@ -386,11 +387,11 @@ get_rest_session_id(#user_identity{user_id = Uid}) ->
 %% Adds open file UUID to session.
 %% @end
 %%--------------------------------------------------------------------
--spec add_open_file(id(), file_meta:uuid()) ->
+-spec add_open_file(id(), fslogic_worker:file_guid()) ->
     ok | {error, Reason :: term()}.
-add_open_file(SessId, FileUuid) ->
+add_open_file(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:add_element(FileUuid, OpenFiles)}}
+        {ok, Sess#session{open_files = sets:add_element(FileGuid, OpenFiles)}}
     end,
 
     case update(SessId, Diff) of
@@ -403,11 +404,11 @@ add_open_file(SessId, FileUuid) ->
 %% Removes open file UUID from session.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_open_file(id(), file_meta:uuid()) ->
+-spec remove_open_file(id(), fslogic_worker:file_guid()) ->
     ok | {error, Reason :: term()}.
-remove_open_file(SessId, FileUuid) ->
+remove_open_file(SessId, FileGuid) ->
     Diff = fun(#session{open_files = OpenFiles} = Sess) ->
-        {ok, Sess#session{open_files = sets:del_element(FileUuid, OpenFiles)}}
+        {ok, Sess#session{open_files = sets:del_element(FileGuid, OpenFiles)}}
     end,
 
     case update(SessId, Diff) of
@@ -513,10 +514,10 @@ get_handle(SessionId, HandleID) ->
 %% with the session if it doesn't exist.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper(id(), SpaceUuid :: file_meta:uuid(), storage:doc()) ->
+-spec get_helper(id(), od_space:id(), storage:doc()) ->
     {ok, helpers:helper_handle()} | datastore:generic_error().
-get_helper(SessionId, SpaceUuid, StorageDoc) ->
-    fetch_lock_fetch_helper(SessionId, SpaceUuid, StorageDoc, false).
+get_helper(SessionId, SpaceId, StorageDoc) ->
+    fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -568,25 +569,25 @@ is_guest(_) ->
 %% instantiating unnecessary helper handles.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_lock_fetch_helper(id(), SpaceUuid :: file_meta:uuid(), storage:doc(),
+-spec fetch_lock_fetch_helper(id(), od_space:id(), storage:doc(),
     InCriticalSection :: boolean()) ->
     {ok, helpers:helper_handle()} | datastore:generic_error().
-fetch_lock_fetch_helper(SessionId, SpaceUuid, StorageDoc, InCriticalSection) ->
+fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, InCriticalSection) ->
     StorageId = storage:get_id(StorageDoc),
     FetchResult = datastore:fetch_link_target(?HELPER_LINK_LEVEL, SessionId,
-        ?MODEL_NAME, link_key(SpaceUuid, StorageId)),
+        ?MODEL_NAME, link_key(SpaceId, StorageId)),
 
     case {FetchResult, InCriticalSection} of
         {{ok, #document{value = Handle}}, _} ->
             {ok, Handle};
 
         {{error, link_not_found}, false} ->
-            critical_section:run({SessionId, SpaceUuid, StorageId}, fun() ->
-                fetch_lock_fetch_helper(SessionId, SpaceUuid, StorageDoc, true)
+            critical_section:run({SessionId, SpaceId, StorageId}, fun() ->
+                fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, true)
             end);
 
         {{error, link_not_found}, true} ->
-            add_missing_helper(SessionId, SpaceUuid, StorageDoc);
+            add_missing_helper(SessionId, SpaceId, StorageDoc);
 
         {{error, Reason}, _} ->
             {error, Reason}
@@ -599,18 +600,17 @@ fetch_lock_fetch_helper(SessionId, SpaceUuid, StorageDoc, InCriticalSection) ->
 %% it with current session.
 %% @end
 %%--------------------------------------------------------------------
--spec add_missing_helper(id(), SpaceUuid :: file_meta:uuid(),
+-spec add_missing_helper(id(), od_space:id(),
     storage:doc()) -> {ok, helpers:helper_handle()} | datastore:generic_error().
-add_missing_helper(SessionId, SpaceUuid, StorageDoc) ->
+add_missing_helper(SessionId, SpaceId, StorageDoc) ->
     StorageId = storage:get_id(StorageDoc),
     {ok, UserId} = get_user_id(SessionId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
 
     {ok, #document{key = Key, value = HelperHandle}} =
         helper_handle:create(UserId, SpaceId, StorageDoc),
 
     case datastore:add_links(?HELPER_LINK_LEVEL, SessionId, ?MODEL_NAME,
-        [{link_key(StorageId, SpaceUuid),
+        [{link_key(StorageId, SpaceId),
             {Key, helper_handle}}]) of
         ok ->
             {ok, HelperHandle};

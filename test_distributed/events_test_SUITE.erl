@@ -57,7 +57,8 @@ all() ->
 -define(TIMEOUT, timer:seconds(15)).
 
 -define(FILE_UUID, <<"file_uuid">>).
--define(FILE_GUID, fslogic_uuid:uuid_to_guid(?FILE_UUID, <<"spaceid">>)).
+-define(SPACE_ID, <<"spaceid">>).
+-define(FILE_GUID, fslogic_uuid:uuid_to_guid(?FILE_UUID, ?SPACE_ID)).
 
 %%%===================================================================
 %%% Test functions
@@ -395,11 +396,11 @@ file_read_event(Size, Blocks) ->
 %% Returns read event with custom file UUID, size and blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec file_read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
+-spec file_read_event(fslogic_worker:file_guid(), Size :: file_meta:size(),
     Blocks :: proplists:proplist()) -> Evt :: #file_read_event{}.
-file_read_event(FileUuid, Size, Blocks) ->
+file_read_event(FileGuid, Size, Blocks) ->
     #file_read_event{
-        file_uuid = FileUuid,
+        file_guid = FileGuid,
         size = Size,
         blocks = [#file_block{offset = O, size = S} || {O, S} <- Blocks]
     }.
@@ -421,12 +422,12 @@ file_written_event(Size, FileSize, Blocks) ->
 %% Returns write event with custom file UUID, size, file size and blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec file_written_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
+-spec file_written_event(fslogic_worker:file_guid(), Size :: file_meta:size(),
     FileSize :: file_meta:size(), Blocks :: proplists:proplist()) ->
     Evt :: #file_written_event{}.
-file_written_event(FileUuid, Size, FileSize, Blocks) ->
+file_written_event(FileGuid, Size, FileSize, Blocks) ->
     #file_written_event{
-        file_uuid = FileUuid,
+        file_guid = FileGuid,
         size = Size,
         file_size = FileSize,
         blocks = [#file_block{offset = O, size = S} || {O, S} <- Blocks]
@@ -440,7 +441,7 @@ file_written_event(FileUuid, Size, FileSize, Blocks) ->
 %%--------------------------------------------------------------------
 -spec file_attr_changed_event() -> #file_attr_changed_event{}.
 file_attr_changed_event() ->
-    #file_attr_changed_event{file_attr = #file_attr{uuid = ?FILE_GUID}}.
+    #file_attr_changed_event{file_attr = #file_attr{guid = ?FILE_GUID}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -450,7 +451,7 @@ file_attr_changed_event() ->
 %%--------------------------------------------------------------------
 -spec file_location_changed_event() -> #file_location_changed_event{}.
 file_location_changed_event() ->
-    #file_location_changed_event{file_location = #file_location{uuid = ?FILE_GUID}}.
+    #file_location_changed_event{file_location = #file_location{uuid = ?FILE_UUID, space_id = ?SPACE_ID}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -467,10 +468,10 @@ subscription_type_for_testcase_name(emit_file_written_event_should_execute_handl
     #file_written_subscription{};
 
 subscription_type_for_testcase_name(emit_file_attr_changed_event_should_execute_handler) ->
-    #file_attr_changed_subscription{file_uuid = ?FILE_GUID};
+    #file_attr_changed_subscription{file_guid = ?FILE_GUID};
 
 subscription_type_for_testcase_name(emit_file_location_changed_event_should_execute_handler) ->
-    #file_location_changed_subscription{file_uuid = ?FILE_GUID};
+    #file_location_changed_subscription{file_guid = ?FILE_GUID};
 
 subscription_type_for_testcase_name(_) ->
     #file_read_subscription{}.

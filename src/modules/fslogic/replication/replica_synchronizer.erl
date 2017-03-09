@@ -65,7 +65,7 @@ synchronize(UserCtx, FileCtx, Block = #file_block{size = RequestedSize}, Prefetc
                 end, Blocks)
         end, ProvidersAndBlocks),
     SessId = user_ctx:get_session_id(UserCtx),
-    fslogic_event:emit_file_location_changed(FileCtx2, [SessId], Block).
+    fslogic_event_emitter:emit_file_location_changed(FileCtx2, [SessId], Block).
 
 %%%===================================================================
 %%% Internal functions

@@ -34,7 +34,7 @@
 get(FileCtx) ->
     case xattr:get_by_name(FileCtx, ?ACL_KEY) of
         {ok, Val} ->
-            fslogic_acl:from_json_format_to_acl(Val);
+            acl_logic:from_json_format_to_acl(Val);
         {error, {not_found, custom_metadata}} ->
             undefined
     end.

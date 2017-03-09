@@ -97,7 +97,7 @@ update_outdated_local_location_replica(FileCtx,
     ?debug("Updating outdated replica of file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
-    Changes = fslogic_file_location:get_changes(ExternalDoc, Diff),
+    Changes = replica_changes:get_changes(ExternalDoc, Diff),
     case replica_invalidator:invalidate_changes(FileCtx, LocationDocWithNewVersion, Changes, NewSize) of
         {deleted, FileCtx2} ->
             ok;
@@ -131,9 +131,9 @@ reconcile_replicas(FileCtx,
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
     {ExternalChanges, ExternalShrink, ExternalRename} =
-        fslogic_file_location:get_merged_changes(ExternalDoc, ExternalChangesNum),
+        replica_changes:get_merged_changes(ExternalDoc, ExternalChangesNum),
     {LocalChanges, LocalShrink, LocalRename} =
-        fslogic_file_location:get_merged_changes(LocalDoc, LocalChangesNum),
+        replica_changes:get_merged_changes(LocalDoc, LocalChangesNum),
 
     NewSize =
         case {LocalShrink, ExternalShrink} of
@@ -217,7 +217,7 @@ reconcile_replicas(FileCtx,
         skip ->
             {skipped, FileCtx};
         Rename ->
-            fslogic_file_location:rename_or_delete(FileCtx, NewDoc2, Rename)
+            replica_changes:rename_or_delete(FileCtx, NewDoc2, Rename)
     end,
 
     case RenameResult of
@@ -247,7 +247,7 @@ reconcile_replicas(FileCtx,
 %%    #document{value = #file_location{blocks = SameBlocks}}) ->
 %%    ok;
 notify_block_change_if_necessary(FileCtx, _, _) ->
-    ok = fslogic_event:emit_file_location_changed(FileCtx, []).
+    ok = fslogic_event_emitter:emit_file_location_changed(FileCtx, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -262,4 +262,4 @@ notify_size_change_if_necessary(_FileCtx,
 ) ->
     ok;
 notify_size_change_if_necessary(FileCtx, _, _) ->
-    ok = fslogic_event:emit_file_attr_changed(FileCtx, []).
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []).

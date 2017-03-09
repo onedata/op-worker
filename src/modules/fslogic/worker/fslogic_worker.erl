@@ -68,8 +68,8 @@ init(_Args) ->
             {error, already_exists} -> ok
         end
     end, [
-        {fun subscription:create/1, [fslogic_subscriptions:file_read_subscription()]},
-        {fun subscription:create/1, [fslogic_subscriptions:file_written_subscription()]},
+        {fun subscription:create/1, [fslogic_event_subscriptions:file_read_subscription()]},
+        {fun subscription:create/1, [fslogic_event_subscriptions:file_written_subscription()]},
         {fun session_manager:create_root_session/0, []},
         {fun session_manager:create_guest_session/0, []}
     ]),
@@ -221,7 +221,7 @@ handle_fuse_request(UserCtx, #get_helper_params{
 }, undefined) ->
     storage_req:get_helper_params(UserCtx, SID, ForceProxy);
 handle_fuse_request(UserCtx, #create_storage_test_file{
-    file_uuid = Guid,
+    file_guid = Guid,
     storage_id = StorageId
 }, undefined) ->
     storage_req:create_storage_test_file(UserCtx, Guid, StorageId);
@@ -256,7 +256,7 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
 handle_file_request(UserCtx, #get_file_children{offset = Offset, size = Size}, FileCtx) ->
     dir_req:read_dir(UserCtx, FileCtx, Offset, Size);
 handle_file_request(UserCtx, #rename{
-    target_parent_uuid = TargetParentGuid,
+    target_parent_guid = TargetParentGuid,
     target_name = TargetName
 }, SourceFileCtx) ->
     TargetParentFileCtx = file_ctx:new_by_guid(TargetParentGuid),
@@ -274,9 +274,9 @@ handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
-    synchronization_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
+    sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
-    synchronization_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block).
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -287,9 +287,9 @@ handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Blo
 -spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
     provider_response().
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
-    synchronization_req:get_file_distribution(UserCtx, FileCtx);
+    sync_req:get_file_distribution(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #replicate_file{block = Block}, FileCtx) ->
-    synchronization_req:replicate_file(UserCtx, FileCtx, Block);
+    sync_req:replicate_file(UserCtx, FileCtx, Block);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
@@ -366,25 +366,26 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     read_write_req:read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size).
 
 %%--------------------------------------------------------------------
+%% @todo refactor
 %% @private
 %% @doc
 %% Do posthook for request response
 %% @end
 %%--------------------------------------------------------------------
 -spec process_response(user_ctx:ctx(), request(), response()) -> response().
-process_response(Context, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
+process_response(UserCtx, #fuse_request{fuse_request = #file_request{file_request = #get_child_attr{name = FileName}, context_guid = ParentGuid}} = Request,
     #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
-    SessId = user_ctx:get_session_id(Context),
-    {ok, Path0} = fslogic_path:gen_path({uuid, fslogic_uuid:guid_to_uuid(ParentGuid)}, SessId),
-    {ok, Tokens0} = fslogic_path:tokenize_skipping_dots(Path0),
+    SessId = user_ctx:get_session_id(UserCtx),
+    Path0 = fslogic_uuid:uuid_to_path(SessId, fslogic_uuid:guid_to_uuid(ParentGuid)),
+    {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
     Tokens = Tokens0 ++ [FileName],
     Path = fslogic_path:join(Tokens),
-    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+    case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
         {path, P} ->
-            {ok, Tokens1} = fslogic_path:tokenize_skipping_dots(P),
+            {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
             case Tokens1 of
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
                     Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
                     space_sync_worker:run(Init);
                 _ -> Response
@@ -392,15 +393,15 @@ process_response(Context, #fuse_request{fuse_request = #file_request{file_reques
         _ ->
             Response
     end;
-process_response(Context, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
+process_response(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}} = Request,
     #fuse_response{status = #status{code = ?ENOENT}} = Response) ->
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-    case fslogic_path:get_canonical_file_entry(Context, Tokens) of
+    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+    case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
         {path, P} ->
-            {ok, Tokens1} = fslogic_path:tokenize_skipping_dots(P),
+            {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
             case Tokens1 of
                 [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                    Data = #{response => Response, path => Path, ctx => Context, space_id => SpaceId, request => Request},
+                    Data = #{response => Response, path => Path, ctx => UserCtx, space_id => SpaceId, request => Request},
                     Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
                     space_sync_worker:run(Init);
                 _ -> Response

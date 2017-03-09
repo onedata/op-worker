@@ -94,7 +94,6 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
-    SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_handles:exists(FileUuid) of
         true ->
@@ -103,8 +102,9 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
 
             #fuse_response{status = #status{code = ?OK}} = rename_req:rename(
                 UserCtx, FileCtx2, ParentFile, NewName),
-            ok = file_handles:mark_to_remove(FileUuid),
-            fslogic_event:emit_file_renamed_to_client(file_ctx:reset(FileCtx2), NewName, SessId); %todo pass user_ctx
+            ok = file_handles:mark_to_remove(FileCtx),
+            fslogic_event_emitter:emit_file_renamed_to_client(
+                file_ctx:reset(FileCtx2), NewName, UserCtx);
         false ->
             remove_file_and_file_meta(FileCtx, UserCtx, Silent)
     end,
@@ -150,9 +150,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
     {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
     ok = delete_shares(UserCtx, Shares),
 
-    UserId = user_ctx:get_user_id(UserCtx),
-    SessId = user_ctx:get_session_id(UserCtx),
-    fslogic_times:update_mtime_ctime(ParentCtx, UserId), %todo pass UserCtx
+    fslogic_times:update_mtime_ctime(ParentCtx),
     case Type of
         ?REGULAR_FILE_TYPE ->
             sfm_utils:delete_storage_file(FileCtx3, UserCtx);
@@ -163,7 +161,8 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
         true ->
             ok;
         false ->
-            fslogic_event:emit_file_removed(FileCtx3, [SessId]), %todo pass UserCtx
+            SessId = user_ctx:get_session_id(UserCtx),
+            fslogic_event_emitter:emit_file_removed(FileCtx3, [SessId]),
             ok
     end.
 

@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -24,14 +23,41 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Shares a given file.
+%% @equiv create_share_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors]).
 create_share(UserCtx, FileCtx, Name) ->
+    check_permissions:execute(
+        [traverse_ancestors],
+        [UserCtx, FileCtx, Name],
+        fun create_share_insecure/3).
+
+%%--------------------------------------------------------------------
+%% @equiv remove_share_insecure/2 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+remove_share(UserCtx, FileCtx) ->
+    check_permissions:execute(
+        [traverse_ancestors],
+        [UserCtx, FileCtx],
+        fun remove_share_insecure/2).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Shares a given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
+    fslogic_worker:provider_response().
+create_share_insecure(UserCtx, FileCtx, Name) ->
     Guid = file_ctx:get_guid_const(FileCtx),
     ShareId = datastore_utils:gen_uuid(),
     ShareGuid = fslogic_uuid:guid_to_share_guid(Guid, ShareId),
@@ -43,7 +69,7 @@ create_share(UserCtx, FileCtx, Name) ->
         status = #status{code = ?OK},
         provider_response = #share{
             share_id = ShareId,
-            share_file_uuid = ShareGuid
+            share_file_guid = ShareGuid
         }
     }.
 
@@ -52,14 +78,12 @@ create_share(UserCtx, FileCtx, Name) ->
 %% Stops sharing a given file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec remove_share_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors]).
-remove_share(UserCtx, FileCtx) ->
+remove_share_insecure(UserCtx, FileCtx) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
     Auth = user_ctx:get_auth(UserCtx),
     ok = share_logic:delete(Auth, ShareId),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:remove_share(FileCtx, ShareId),
-    ok = permissions_cache:invalidate(file_meta, FileUuid), %todo pass file_ctx
+    ok = permissions_cache:invalidate(file_meta, FileCtx),
     #provider_response{status = #status{code = ?OK}}.

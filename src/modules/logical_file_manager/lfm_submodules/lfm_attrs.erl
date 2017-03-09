@@ -14,6 +14,7 @@
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 -type file_attributes() :: #file_attr{}.
 
@@ -42,7 +43,7 @@ stat(SessId, FileKey) ->
         {path, Path} ->
             remote_utils:call_fslogic(SessId, fuse_request,
                 #resolve_guid{path = Path},
-                fun(#uuid{uuid = Guid}) ->
+                fun(#guid{guid = Guid}) ->
                     stat(SessId, {guid, Guid})
                 end);
         {guid, FileGuid} ->

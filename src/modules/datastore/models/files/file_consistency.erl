@@ -273,14 +273,14 @@ check_missing_components(FileUuid, SpaceId, [times | RestMissing], Found) ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [local_file_location | RestMissing], Found) ->
-    case catch fslogic_utils:get_local_file_location({uuid, FileUuid}) of %todo VFS-2813 support multi location
-        #document{} ->
+    case catch file_meta:get_local_locations({uuid, FileUuid}) of %todo VFS-2813 support multi location
+        [#document{}] ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [local_file_location | Found]);
         _ ->
             check_missing_components(FileUuid, SpaceId, RestMissing, Found)
     end;
 check_missing_components(FileUuid, SpaceId, [parent_links | RestMissing], Found) ->
-    case catch fslogic_path:check_path(FileUuid) of
+    case catch check_path(FileUuid) of
         ok ->
             check_missing_components(FileUuid, SpaceId, RestMissing, [parent_links | Found]);
         path_beg_error ->
@@ -465,3 +465,61 @@ notify_pid(Pid, RestartPosthookData) ->
             end
     end,
     ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if path to file can be resolved using this file's uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_path(file_meta:uuid()) -> ok | path_beg_error | {path_error,
+    {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}.
+check_path(Uuid) ->
+    case file_meta:get({uuid, Uuid}) of
+        {ok, #document{value = #file_meta{name = Name, scope = SpaceId}}} ->
+            case catch file_meta:get_parent_uuid(Uuid, SpaceId) of
+                {ok, ?ROOT_DIR_UUID} ->
+                    ok;
+                {ok, ParentUuid} ->
+                    check_path(ParentUuid, Name, Uuid);
+                _ ->
+                    path_beg_error
+            end;
+        _ ->
+            path_beg_error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if path to file's child can be resolved using this file's uuid and
+%% child's name.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_path(file_meta:uuid(), file_meta:name(), file_meta:uuid()) ->
+    ok | {path_error, {file_meta:uuid(), file_meta:name(), file_meta:uuid()}}.
+check_path(Uuid, Name, ChildUuid) ->
+    case file_meta:get({uuid, Uuid}) of
+        {ok, #document{value = #file_meta{name = NewName}} = Doc} ->
+            case file_meta:get_child(Doc, Name) of
+                {ok, UUIDs} ->
+                    case lists:member(ChildUuid, UUIDs) of
+                        true ->
+                            case file_meta:get_parent_uuid(Doc) of
+                                {ok, ?ROOT_DIR_UUID} ->
+                                    ok;
+                                {ok, ParentUuid} ->
+                                    check_path(ParentUuid, NewName, Uuid);
+                                _ ->
+                                    {path_error, {Uuid, Name, ChildUuid}}
+                            end;
+                        false ->
+                            {path_error, {Uuid, Name, ChildUuid}}
+                    end;
+                _ ->
+                    {path_error, {Uuid, Name, ChildUuid}}
+            end;
+        _ ->
+            {path_error, {Uuid, Name, ChildUuid}}
+    end.

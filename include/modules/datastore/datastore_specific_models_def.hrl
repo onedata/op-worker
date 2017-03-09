@@ -244,7 +244,7 @@
     response_map = #{} :: maps:map(),
     % Key-value in-session memory
     memory = #{} :: maps:map(),
-    open_files = sets:new() :: sets:set(file_meta:uuid()),
+    open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
     transfers = [] :: [transfer:id()]
 }).
 
@@ -254,7 +254,7 @@
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
-    space_uuid :: file_meta:uuid(),
+    space_id :: undefined | od_space:id(),
     storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
@@ -299,7 +299,7 @@
 
 %% Model for storing file's location data
 -record(file_location, {
-    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
+    uuid :: file_meta:uuid(),
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
@@ -308,10 +308,10 @@
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
     recent_changes = {[], []} :: {
-        OldChanges :: [fslogic_file_location:change()],
-        NewChanges :: [fslogic_file_location:change()]
+        OldChanges :: [replica_changes:change()],
+        NewChanges :: [replica_changes:change()]
     },
-    last_rename :: fslogic_file_location:last_rename()
+    last_rename :: replica_changes:last_rename()
 }).
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
@@ -414,7 +414,7 @@
 %% Record that controls change propagation
 -record(change_propagation_controller, {
     change_revision = 0 :: non_neg_integer(),
-    space_id = <<"">> :: binary(),
+    space_id = <<"">> :: od_space:id(),
     verify_module :: atom(),
     verify_function :: atom()
 }).

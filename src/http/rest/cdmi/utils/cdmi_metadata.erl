@@ -93,7 +93,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
     ReplaceAttributeFunction =
         fun
             ({?ACL_XATTR_NAME, Value}) ->
-                ACL = try fslogic_acl:from_json_format_to_acl(Value)
+                ACL = try acl_logic:from_json_format_to_acl(Value)
                 catch _:Error ->
                     ?warning_stacktrace("Acl conversion error ~p", [Error]),
                     throw(?ERROR_INVALID_ACL)
@@ -299,7 +299,7 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                     case onedata_file_api:get_acl(Auth, FileKey) of
                         {ok, Acl} ->
                             (prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix))#{
-                                ?ACL_XATTR_NAME => fslogic_acl:from_acl_to_json_format(Acl)
+                                ?ACL_XATTR_NAME => acl_logic:from_acl_to_json_format(Acl)
                             };
                         {error, ?ENOATTR} ->
                             prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)

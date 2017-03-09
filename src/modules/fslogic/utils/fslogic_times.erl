@@ -16,72 +16,62 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update_atime/2, update_atime/3, update_ctime/2, update_ctime/3,
-    update_mtime_ctime/2, update_mtime_ctime/3, update_times_and_emit/3]).
+-export([update_atime/1, update_ctime/1, update_ctime/2, update_mtime_ctime/1,
+    update_mtime_ctime/2, update_times_and_emit/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv update_atime(FileCtx, UserId, erlang:system_time(seconds)).
-%% @end
-%%--------------------------------------------------------------------
--spec update_atime(file_ctx:ctx(), UserId :: od_user:id()) -> ok.
-update_atime(FileCtx, UserId) ->
-    update_atime(FileCtx, UserId, erlang:system_time(seconds)).
-
-%%--------------------------------------------------------------------
 %% @doc
-%% Updates entry atime to given time, unless it is actual
+%% Updates entry atime to current time, unless it is actual
 %% @end
 %%--------------------------------------------------------------------
--spec update_atime(file_ctx:ctx(), UserId :: od_user:id(),
-    CurrentTime :: file_meta:time()) -> ok.
-update_atime(FileCtx, UserId, CurrentTime) ->
+-spec update_atime(file_ctx:ctx()) -> ok.
+update_atime(FileCtx) ->
+    CurrentTime = erlang:system_time(seconds),
     case calculate_atime(FileCtx, CurrentTime) of
         actual ->
             ok;
         NewATime ->
-            ok = update_times_and_emit(FileCtx, #{atime => NewATime}, UserId)
+            ok = update_times_and_emit(FileCtx, #{atime => NewATime})
     end.
 
 %%--------------------------------------------------------------------
-%% @equiv update_ctime(FileCtx, UserId, erlang:system_time(seconds)).
+%% @equiv update_ctime(FileCtx, erlang:system_time(seconds)).
 %% @end
 %%--------------------------------------------------------------------
--spec update_ctime(file_ctx:ctx(), UserId :: od_user:id()) -> ok.
-update_ctime(FileCtx, UserId) ->
-    update_ctime(FileCtx, UserId, erlang:system_time(seconds)).
+-spec update_ctime(file_ctx:ctx()) -> ok.
+update_ctime(FileCtx) ->
+    update_ctime(FileCtx, erlang:system_time(seconds)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry ctime to given time
 %% @end
 %%--------------------------------------------------------------------
--spec update_ctime(file_ctx:ctx(), UserId :: od_user:id(),
-    CurrentTime :: file_meta:time()) -> ok.
-update_ctime(FileCtx, UserId, CurrentTime) ->
-    ok = update_times_and_emit(FileCtx, #{ctime => CurrentTime}, UserId).
+-spec update_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time()) -> ok.
+update_ctime(FileCtx, CurrentTime) ->
+    ok = update_times_and_emit(FileCtx, #{ctime => CurrentTime}).
 
 %%--------------------------------------------------------------------
-%% @equiv update_mtime_ctime(FileCtx, UserId, erlang:system_time(seconds)).
+%% @equiv update_mtime_ctime(FileCtx, erlang:system_time(seconds)).
 %% @end
 %%--------------------------------------------------------------------
--spec update_mtime_ctime(file_ctx:ctx(), UserId :: od_user:id()) ->
+-spec update_mtime_ctime(file_ctx:ctx()) ->
     ok.
-update_mtime_ctime(FileCtx, UserId) ->
-    update_mtime_ctime(FileCtx, UserId, erlang:system_time(seconds)).
+update_mtime_ctime(FileCtx) ->
+    update_mtime_ctime(FileCtx, erlang:system_time(seconds)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry mtime and ctime to given time
 %% @end
 %%--------------------------------------------------------------------
--spec update_mtime_ctime(file_ctx:ctx(), UserId :: od_user:id(),
-    CurrentTime :: file_meta:time()) -> ok.
-update_mtime_ctime(FileCtx, UserId, CurrentTime) ->
-    ok = update_times_and_emit(FileCtx, #{mtime => CurrentTime, ctime => CurrentTime}, UserId).
+-spec update_mtime_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time()) -> ok.
+update_mtime_ctime(FileCtx, CurrentTime) ->
+    ok = update_times_and_emit(FileCtx, #{mtime => CurrentTime, ctime => CurrentTime}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -89,13 +79,13 @@ update_mtime_ctime(FileCtx, UserId, CurrentTime) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_times_and_emit(file_ctx:ctx(),
-    TimesMap :: #{atom() => file_meta:time()}, UserId :: od_user:id()) -> ok.
-update_times_and_emit(FileCtx, TimesMap, _UserId) ->
+    TimesMap :: #{atom() => file_meta:time()}) -> ok.
+update_times_and_emit(FileCtx, TimesMap) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     Times = prepare_times(TimesMap),
     {ok, FileUuid} = times:create_or_update(#document{key = FileUuid, value = Times}, TimesMap),
     spawn(fun() ->
-        fslogic_event:emit_sizeless_file_attrs_changed(FileCtx)
+        fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
     end),
     ok.
 

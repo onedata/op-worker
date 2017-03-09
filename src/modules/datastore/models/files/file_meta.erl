@@ -41,7 +41,8 @@
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     get_parent_uuid/2, rename/2, setup_onedata_user/2, get_name/1]).
--export([get_ancestors/1, attach_location/3, get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
+-export([get_ancestors/1, attach_location/3, get_local_locations/1,
+    get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2]).
 -export([create_phantom_file/3, get_guid_from_phantom_file/1]).
@@ -49,6 +50,7 @@
 -export([add_share/2, remove_share/2]).
 -export([get_uuid/1]).
 -export([record_struct/1, record_upgrade/2]).
+-export([make_space_exist/1]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -198,7 +200,7 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
         FileDoc =
             case FileDoc0 of
                 #document{key = undefined} = Doc ->
-                    NewUuid = fslogic_uuid:gen_file_uuid(),
+                    NewUuid = gen_file_uuid(),
                     Doc#document{key = NewUuid, value = FM1, generated_uuid = true};
                 _ ->
                     FileDoc0#document{value = FM1}
@@ -449,7 +451,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_children(Entry :: entry(), Offset :: non_neg_integer(), Count :: non_neg_integer()) ->
-    {ok, [#child_link{}]} | {error, Reason :: term()}.
+    {ok, [#child_link_uuid{}]} | {error, Reason :: term()}.
 list_children(Entry, Offset, Count) ->
     ?run(begin
         {ok, #document{} = File} = get(Entry),
@@ -467,7 +469,7 @@ list_children(Entry, Offset, Count) ->
                             SelectedTargetsTagged = lists:sublist(TargetsTagged, Skip + 1, TargetCount - Skip),
                             ChildLinks = lists:map(
                                 fun({LName, LKey}) ->
-                                    #child_link{name = LName, uuid = LKey}
+                                    #child_link_uuid{name = LName, uuid = LKey}
                                 end, SelectedTargetsTagged),
                             {0, Count1 + (TargetCount - Skip), ChildLinks ++ Acc};
                         false ->
@@ -483,7 +485,7 @@ list_children(Entry, Offset, Count) ->
                         false ->
                             ChildLinks = lists:map(
                                 fun({LName, LKey}) ->
-                                    #child_link{name = LName, uuid = LKey}
+                                    #child_link_uuid{name = LName, uuid = LKey}
                                 end, SelectedTargetsTagged),
                             {0, Count1 - length(ChildLinks), ChildLinks ++ Acc}
                     end;
@@ -530,6 +532,25 @@ tag_children(LinkName, Targets) ->
                     end
             end
         end, Targets).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of documents of local file locations
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_locations(fslogic_worker:ext_file()) ->
+    [datastore:document()] | no_return().
+get_local_locations({guid, FileGUID}) ->
+    get_local_locations({uuid, fslogic_uuid:guid_to_uuid(FileGUID)});
+get_local_locations(Entry) ->
+    LProviderId = oneprovider:get_provider_id(),
+    {ok, LocIds} = file_meta:get_locations(Entry),
+    Locations = [file_location:get(LocId) || LocId <- LocIds],
+    [Location ||
+        {ok, Location = #document{value = #file_location{provider_id = ProviderId}}}
+            <- Locations, LProviderId =:= ProviderId
+    ].
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's locations attached with attach_location/3.
@@ -623,10 +644,10 @@ get_parent_uuid(FileUuid, SpaceId) ->
 %% Returns all file's ancestors' uuids.
 %% @end
 %%--------------------------------------------------------------------
--spec get_ancestors(Entry :: entry()) -> {ok, [uuid()]} | datastore:get_error().
-get_ancestors(Entry) ->
+-spec get_ancestors(uuid()) -> {ok, [uuid()]} | datastore:get_error().
+get_ancestors(FileUuid) ->
     ?run(begin
-        {ok, #document{key = Key}} = get(Entry),
+        {ok, #document{key = Key}} = get(FileUuid),
         {ok, get_ancestors2(Key, [])}
     end).
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->
@@ -755,7 +776,7 @@ setup_onedata_user(_Client, UserId) ->
         CTime = erlang:system_time(seconds),
 
         lists:foreach(fun({SpaceId, _}) ->
-            fslogic_spaces:make_space_exist(SpaceId)
+            make_space_exist(SpaceId)
         end, Spaces),
 
         FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
@@ -897,6 +918,37 @@ remove_share(FileCtx, ShareId) ->
         fun(FileMeta = #file_meta{shares = Shares}) ->
             {ok, FileMeta#file_meta{shares = Shares -- [ShareId]}}
         end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file meta entry for space if not exists
+%% @end
+%%--------------------------------------------------------------------
+-spec make_space_exist(SpaceId :: datastore:id()) -> no_return().
+make_space_exist(SpaceId) ->
+    CTime = erlang:system_time(seconds),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    case file_meta:exists({uuid, SpaceDirUuid}) of
+        true ->
+            file_meta:fix_parent_links({uuid, ?ROOT_DIR_UUID},
+                {uuid, SpaceDirUuid});
+        false ->
+            case file_meta:create({uuid, ?ROOT_DIR_UUID},
+                #document{key = SpaceDirUuid,
+                    value = #file_meta{
+                        name = SpaceId, type = ?DIRECTORY_TYPE,
+                        mode = 8#1775, owner = ?ROOT_USER_ID, is_scope = true
+                    }}) of
+                {ok, _} ->
+                    case times:create(#document{key = SpaceDirUuid, value =
+                    #times{mtime = CTime, atime = CTime, ctime = CTime}}) of
+                        {ok, _} -> ok;
+                        {error, already_exists} -> ok
+                    end;
+                {error, already_exists} ->
+                    ok
+            end
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -1101,7 +1153,7 @@ set_scopes6(Entry, NewScopeUuid, [Setter | Setters], SettersBak, Offset, BatchSi
         false ->
             ok = set_scopes6(Entry, NewScopeUuid, Setters, [Setter | SettersBak], Offset + BatchSize, BatchSize)
     end,
-    ok = set_scopes6([{uuid, Uuid} || #child_link{uuid = Uuid} <- ChildLinks], NewScopeUuid, Setters, [Setter | SettersBak], 0, BatchSize).
+    ok = set_scopes6([{uuid, Uuid} || #child_link_uuid{uuid = Uuid} <- ChildLinks], NewScopeUuid, Setters, [Setter | SettersBak], 0, BatchSize).
 
 
 %%--------------------------------------------------------------------
@@ -1231,3 +1283,15 @@ get_uuid(?ROOT_DIR_UUID) ->
     {ok, ?ROOT_DIR_UUID};
 get_uuid(Uuid) ->
     {ok, Uuid}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates generic file's Uuid that will be not placed in any Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_file_uuid() -> file_meta:uuid().
+gen_file_uuid() ->
+    PID = oneprovider:get_provider_id(),
+    Rand = crypto:rand_bytes(16),
+    http_utils:base64url_encode(<<PID/binary, "##", Rand/binary>>).

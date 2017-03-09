@@ -94,7 +94,7 @@ list_files(Req, State) ->
 
     Response =
         case onedata_file_api:stat(Auth, {path, Path}) of
-            {ok, #file_attr{type = ?DIRECTORY_TYPE, uuid = Guid}} ->
+            {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
                 case onedata_file_api:get_children_count(Auth, {guid, Guid}) of
                     {ok, ChildNum} when Limit =:= undefined andalso ChildNum > ?MAX_ENTRIES ->
                         throw(?ERROR_TOO_MANY_ENTRIES);
@@ -103,12 +103,12 @@ list_files(Req, State) ->
                         {ok, Children} = onedata_file_api:ls(Auth, {path, Path}, Offset, DefinedLimit),
                         json_utils:encode_map(
                             lists:map(fun({ChildGuid, ChildPath}) ->
-                                {ok, ObjectId} = cdmi_id:uuid_to_objectid(ChildGuid),
+                                {ok, ObjectId} = cdmi_id:guid_to_objectid(ChildGuid),
                                 #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
                             end, Children))
                 end;
-            {ok, #file_attr{uuid = Guid}} ->
-                {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+            {ok, #file_attr{guid = Guid}} ->
+                {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
                 json_utils:encode_map([#{<<"id">> => ObjectId, <<"path">> => Path}])
         end,
     {Response, Req4, State4}.

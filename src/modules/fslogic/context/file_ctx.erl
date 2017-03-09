@@ -70,7 +70,8 @@
 -export([get_canonical_path/1, get_file_doc/1, get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
-    get_storage_doc/1, get_local_file_location_docs/1, get_file_location_docs/1,
+    get_storage_doc/1, get_file_location_with_filled_gaps/2,
+    get_local_file_location_docs/1, get_file_location_docs/1,
     get_file_location_ids/1, get_acl/1, get_raw_storage_path/1]).
 -export([is_dir/1]).
 
@@ -87,7 +88,7 @@
 %%--------------------------------------------------------------------
 -spec new_partial_context_by_logical_path(user_ctx:ctx(), path()) -> ctx().
 new_partial_context_by_logical_path(UserCtx, Path) ->
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
+    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
     case session:is_special(user_ctx:get_session_id(UserCtx)) of
         true ->
             throw({invalid_request, <<"Path resolution requested in the context of special session."
@@ -130,7 +131,7 @@ new_partial_context_by_logical_path(UserCtx, Path) ->
     ctx().
 new_partial_context_by_canonical_path(UserCtx, Path) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
+    {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
     case Tokens of
         [<<"/">>] ->
             UserRootDirGuid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
@@ -284,7 +285,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            CanonicalPath = filename:join(gen_canonical_path(FileCtx)),
+            CanonicalPath = filename:join(generate_canonical_path(FileCtx)),
             {CanonicalPath, FileCtx#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
@@ -303,7 +304,7 @@ get_logical_path(FileCtx, UserCtx) ->
             {<<"/">>, FileCtx2};
         {Path, FileCtx2} ->
             {SpaceName, FileCtx3} = get_space_name(FileCtx2, UserCtx),
-            {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:tokenize_skipping_dots(Path),
+            {ok, [<<"/">>, _SpaceId | Rest]} = fslogic_path:split_skipping_dots(Path),
             LogicalPath = filename:join([<<"/">>, SpaceName | Rest]),
             {LogicalPath, FileCtx3}
     end.
@@ -331,7 +332,8 @@ get_parent(FileCtx = #file_ctx{
     parent = undefined,
     canonical_path = CanonicalPath,
     guid = undefined
-}, UserCtx) when UserCtx =/= undefined ->  %todo VFS-2986 consider splitting such logic into partial_file_ctx
+}, UserCtx) ->
+    UserCtx =/= undefined, %todo VFS-2986 consider splitting such logic into partial_file_ctx
     ParentCtx = new_partial_context_by_canonical_path(UserCtx,
         filename:dirname(CanonicalPath)),
     {ParentCtx, FileCtx};
@@ -339,7 +341,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     {Doc, FileCtx2} = get_file_doc(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
-        case fslogic_uuid:is_root_dir(ParentUuid) of
+        case is_root_dir_uuid(ParentUuid) of
             true ->
                 case ParentUuid =:= ?ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
@@ -388,9 +390,11 @@ get_parent_guid(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_file_id(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_storage_file_id(FileCtx) ->
+get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
     {FileId, FileCtx2} = get_canonical_path(FileCtx),
-    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}}.
+    {FileId, FileCtx2#file_ctx{storage_file_id = FileId}};
+get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
+    {StorageFileId, FileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -537,7 +541,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
             Children =
-                lists:map(fun(#child_link{name = Name, uuid = Uuid}) ->
+                lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
                     new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
                 end, ChildrenLinks),
             {Children, FileCtx2}
@@ -555,6 +559,45 @@ get_storage_doc(FileCtx = #file_ctx{storage_doc = undefined}) ->
     {StorageDoc, FileCtx#file_ctx{storage_doc = StorageDoc}};
 get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
     {StorageDoc, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns location that can be understood by client. It has gaps filled, and
+%% stores guid instead of uuid.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_with_filled_gaps(ctx(), fslogic_blocks:block() | undefined) ->
+    {#file_location{}, ctx()}.
+get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
+    % get locations
+    {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    {[#document{value = FileLocation = #file_location{
+            blocks = Blocks,
+            size = Size
+        }
+    }], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+
+    % find gaps
+    AllRanges = lists:foldl(
+        fun(#document{value = #file_location{blocks = _Blocks}}, Acc) ->
+            fslogic_blocks:merge(Acc, _Blocks)
+        end, [], Locations),
+    RequestedRange = utils:ensure_defined(ReqRange, undefined, #file_block{offset = 0, size = Size}),
+    ExtendedRequestedRange = case RequestedRange of
+        #file_block{offset = O, size = S} when O + S < Size ->
+            RequestedRange#file_block{size = Size - O};
+        _ -> RequestedRange
+    end,
+    Gaps = fslogic_blocks:consolidate(
+        fslogic_blocks:invalidate([ExtendedRequestedRange], AllRanges)
+    ),
+    BlocksWithFilledGaps = fslogic_blocks:merge(Blocks, Gaps),
+
+    % fill gaps transform uid and emit
+    {FileLocation#file_location{
+        uuid = file_ctx:get_uuid_const(FileCtx),
+        blocks = BlocksWithFilledGaps
+    }, FileCtx3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -673,7 +716,7 @@ is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
     Uuid = fslogic_uuid:guid_to_uuid(Guid),
-    fslogic_uuid:is_root_dir(Uuid);
+    is_root_dir_uuid(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 
@@ -759,6 +802,21 @@ get_space_id_from_user_spaces(SpaceName, UserCtx) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @doc Checks if uuid represents user's root dir
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root_dir_uuid(Uuid :: file_meta:uuid()) -> boolean().
+is_root_dir_uuid(?ROOT_DIR_UUID) ->
+    true;
+is_root_dir_uuid(Uuid) ->
+    case (catch binary_to_term(http_utils:base64url_decode(Uuid))) of
+        {root_space, _UserId} ->
+            true;
+        _ ->
+            false
+    end.
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Returns storage id.
@@ -769,15 +827,14 @@ get_storage_id(FileCtx) ->
     {#document{key=StorageId}, FileCtx2} = get_storage_doc(FileCtx),
     {StorageId, FileCtx2}.
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Generates canonical path
 %% @end
 %%--------------------------------------------------------------------
--spec gen_canonical_path(ctx()) -> [file_meta:name()].
-gen_canonical_path(FileCtx) ->
+-spec generate_canonical_path(ctx()) -> [file_meta:name()].
+generate_canonical_path(FileCtx) ->
     case is_root_dir_const(FileCtx) of
         true ->
             [<<"/">>];
@@ -786,10 +843,10 @@ gen_canonical_path(FileCtx) ->
             case is_space_dir_const(FileCtx2) of
                 true ->
                     SpaceId = get_space_id_const(FileCtx2),
-                    gen_canonical_path(ParentCtx) ++ [SpaceId];
+                    generate_canonical_path(ParentCtx) ++ [SpaceId];
                 false ->
                     {Name, _FileCtx3} = get_name_of_nonspace_file(FileCtx2),
-                    gen_canonical_path(ParentCtx) ++ [Name]
+                    generate_canonical_path(ParentCtx) ++ [Name]
             end
     end.
 

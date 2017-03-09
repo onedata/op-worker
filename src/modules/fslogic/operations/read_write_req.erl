@@ -20,7 +20,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% API
--export([write/6, read/7]).
+-export([read/7, write/6]).
 
 %%%===================================================================
 %%% API functions
@@ -37,7 +37,7 @@
     fslogic_worker:proxyio_response().
 read(UserCtx, FileCtx, HandleId, StorageId, FileId, Offset, Size) ->
     #fuse_response{status = #status{code = ?OK}} =
-        synchronization_req:synchronize_block(UserCtx, FileCtx,
+        sync_req:synchronize_block(UserCtx, FileCtx,
             #file_block{offset = Offset, size = Size}, false),
     {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, StorageId, FileId, read),
     {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
@@ -82,12 +82,12 @@ write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
 get_handle(UserCtx, FileCtx, undefined, StorageId, FileId, OpenFlag)->
     SessId = user_ctx:get_session_id(UserCtx),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, Storage} = storage:get(StorageId),
     ShareId = file_ctx:get_share_id_const(FileCtx),
     SFMHandle =
-        storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId, ShareId),
+        storage_file_manager:new_handle(SessId, SpaceId, FileUuid, Storage, FileId, ShareId),
     storage_file_manager:open(SFMHandle, OpenFlag);
 get_handle(UserCtx, _FileCtx, HandleId, _StorageId, _FileId, _OpenFlag)->
     SessId = user_ctx:get_session_id(UserCtx),

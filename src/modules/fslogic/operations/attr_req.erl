@@ -15,7 +15,6 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -27,15 +26,16 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes with permission check.
+%% @equiv get_file_attr_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors]).
 get_file_attr(UserCtx, FileCtx) ->
-    get_file_attr_insecure(UserCtx, FileCtx).
+    check_permissions:execute(
+        [traverse_ancestors],
+        [UserCtx, FileCtx],
+        fun get_file_attr_insecure/2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,21 +59,62 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
 
     #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
         uid = Uid, gid = Gid, parent_uuid = ParentGuid,
-        uuid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
+        guid = fslogic_uuid:uuid_to_share_guid(Uuid, SpaceId, ShareId),
         type = Type, mode = Mode, atime = ATime, mtime = MTime,
         ctime = CTime, size = Size, name = FileName, provider_id = ProviderId,
         shares = Shares, owner_id = OwnerId
     }}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns attributes of directory child (if exists).
+%% @equiv get_child_attr_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?traverse_container]).
 get_child_attr(UserCtx, ParentFileCtx, Name) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container],
+        [UserCtx, ParentFileCtx, Name],
+        fun get_child_attr_insecure/3).
+
+%%--------------------------------------------------------------------
+%% @equiv chmod_insecure/3 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec chmod(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
+    fslogic_worker:fuse_response().
+chmod(UserCtx, FileCtx, Mode) ->
+    check_permissions:execute(
+        [traverse_ancestors, owner],
+        [UserCtx, FileCtx, Mode],
+        fun chmod_insecure/3).
+
+%%--------------------------------------------------------------------
+%% @equiv update_times_insecure/5 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec update_times(user_ctx:ctx(), file_ctx:ctx(),
+    ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined,
+    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
+update_times(_UserCtx, FileCtx, ATime, MTime, CTime) ->
+    check_permissions:execute(
+        [traverse_ancestors, {owner, 'or', ?write_attributes}],
+        [_UserCtx, FileCtx, ATime, MTime, CTime],
+        fun update_times_insecure/5).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns attributes of directory child (if exists).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
+    Name :: file_meta:name()) -> fslogic_worker:fuse_response().
+get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
     {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
     attr_req:get_file_attr(UserCtx, ChildFileCtx).
 
@@ -82,20 +123,19 @@ get_child_attr(UserCtx, ParentFileCtx, Name) ->
 %% Changes file permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
+-spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), Perms :: fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, owner]).
-chmod(UserCtx, FileCtx, Mode) ->
+chmod_insecure(UserCtx, FileCtx, Mode) ->
     ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
 
     % remove acl
     xattr:delete_by_name(FileCtx, ?ACL_KEY),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
-    ok = permissions_cache:invalidate(file_meta, FileUuid),
+    ok = permissions_cache:invalidate(file_meta, FileCtx),
 
-    fslogic_times:update_ctime(FileCtx, user_ctx:get_user_id(UserCtx)),
-    fslogic_event:emit_file_perm_changed(FileCtx),
+    fslogic_times:update_ctime(FileCtx),
+    fslogic_event_emitter:emit_file_perm_changed(FileCtx),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -104,15 +144,13 @@ chmod(UserCtx, FileCtx, Mode) ->
 %% Changes file access times.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(user_ctx:ctx(), file_ctx:ctx(),
+-spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(),
     ATime :: file_meta:time() | undefined,
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, {owner, 'or', ?write_attributes}]).
-update_times(UserCtx, FileCtx, ATime, MTime, CTime) ->
+update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:filter(fun(_Key, Value) ->
         is_integer(Value) end, UpdateMap),
-    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1,
-        user_ctx:get_user_id(UserCtx)),
+    fslogic_times:update_times_and_emit(FileCtx, UpdateMap1),
     #fuse_response{status = #status{code = ?OK}}.

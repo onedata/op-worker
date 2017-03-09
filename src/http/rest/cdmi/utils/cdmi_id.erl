@@ -24,7 +24,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
--export([uuid_to_objectid/1, objectid_to_uuid/1]).
+-export([guid_to_objectid/1, objectid_to_guid/1]).
 
 %% test API
 -export([crc16/1, build_objectid/1, build_objectid/2, to_base16/1, from_base16/1]).
@@ -89,9 +89,9 @@
 %%--------------------------------------------------------------------
 %% @doc Converts uuid to cdmi objectid format
 %%--------------------------------------------------------------------
--spec uuid_to_objectid(onedata_file_api:file_guid()) -> {ok, binary()} | {error, atom()}.
-uuid_to_objectid(Uuid) ->
-    case build_objectid(http_utils:base64url_decode(Uuid)) of
+-spec guid_to_objectid(onedata_file_api:file_guid()) -> {ok, binary()} | {error, atom()}.
+guid_to_objectid(Guid) ->
+    case build_objectid(http_utils:base64url_decode(Guid)) of
         {error, Error} -> {error, Error};
         Id -> {ok, to_base16(Id)}
     end.
@@ -99,8 +99,8 @@ uuid_to_objectid(Uuid) ->
 %%--------------------------------------------------------------------
 %% @doc Converts cdmi objectid format to uuid
 %%--------------------------------------------------------------------
--spec objectid_to_uuid(binary()) -> {ok, onedata_file_api:file_guid()} | {error, atom()}.
-objectid_to_uuid(ObjectId) ->
+-spec objectid_to_guid(binary()) -> {ok, onedata_file_api:file_guid()} | {error, atom()}.
+objectid_to_guid(ObjectId) ->
     case from_base16(ObjectId) of
         <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> ->
             {ok, http_utils:base64url_encode(Data)};

@@ -39,15 +39,19 @@
 get_routing_key(#event{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}) ->
-    {ok, <<"file_attr_changed.", (FileAttr#file_attr.uuid)/binary>>};
+    {ok, <<"file_attr_changed.", (FileAttr#file_attr.guid)/binary>>};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}) ->
-    {ok, <<"file_location_changed.", (FileLocation#file_location.uuid)/binary>>};
-get_routing_key(#file_perm_changed_event{file_uuid = FileGuid}) ->
+    FileGuid = fslogic_uuid:uuid_to_guid(
+        FileLocation#file_location.uuid,
+        FileLocation#file_location.space_id
+    ),
+    {ok, <<"file_location_changed.", FileGuid/binary>>};
+get_routing_key(#file_perm_changed_event{file_guid = FileGuid}) ->
     {ok, <<"file_perm_changed.", FileGuid/binary>>};
-get_routing_key(#file_removed_event{file_uuid = FileGuid}) ->
+get_routing_key(#file_removed_event{file_guid = FileGuid}) ->
     {ok, <<"file_removed.", FileGuid/binary>>};
 get_routing_key(#file_renamed_event{top_entry = Entry}) ->
-    {ok, <<"file_renamed.", (Entry#file_renamed_entry.old_uuid)/binary>>};
+    {ok, <<"file_renamed.", (Entry#file_renamed_entry.old_guid)/binary>>};
 get_routing_key(#quota_exceeded_event{}) ->
     {ok, <<"quota_exceeded">>};
 get_routing_key(_) ->
@@ -81,20 +85,23 @@ get_stream_key(#monitoring_event{}) -> monitoring.
     Key :: aggregation_key().
 get_aggregation_key(#event{type = Type}) ->
     get_aggregation_key(Type);
-get_aggregation_key(#file_read_event{file_uuid = FileGuid}) ->
+get_aggregation_key(#file_read_event{file_guid = FileGuid}) ->
     FileGuid;
-get_aggregation_key(#file_written_event{file_uuid = FileGuid}) ->
+get_aggregation_key(#file_written_event{file_guid = FileGuid}) ->
     FileGuid;
 get_aggregation_key(#file_attr_changed_event{file_attr = FileAttr}) ->
-    FileAttr#file_attr.uuid;
+    FileAttr#file_attr.guid;
 get_aggregation_key(#file_location_changed_event{file_location = FileLocation}) ->
-    FileLocation#file_location.uuid;
-get_aggregation_key(#file_perm_changed_event{file_uuid = FileGuid}) ->
+    fslogic_uuid:uuid_to_guid(
+        FileLocation#file_location.uuid,
+        FileLocation#file_location.space_id
+    );
+get_aggregation_key(#file_perm_changed_event{file_guid = FileGuid}) ->
     FileGuid;
-get_aggregation_key(#file_removed_event{file_uuid = FileGuid}) ->
+get_aggregation_key(#file_removed_event{file_guid = FileGuid}) ->
     FileGuid;
 get_aggregation_key(#file_renamed_event{top_entry = Entry}) ->
-    Entry#file_renamed_entry.old_uuid;
+    Entry#file_renamed_entry.old_guid;
 get_aggregation_key(#quota_exceeded_event{}) ->
     <<>>;
 get_aggregation_key(#monitoring_event{type = #storage_used_updated{} = Type}) ->
@@ -118,20 +125,24 @@ get_aggregation_key(#monitoring_event{type = #rtransfer_statistics{} = Type}) ->
 -spec get_context(Evt :: event:base() | event:type()) -> Ctx :: ctx().
 get_context(#event{type = Type}) ->
     get_context(Type);
-get_context(#file_read_event{file_uuid = FileGuid}) ->
+get_context(#file_read_event{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
-get_context(#file_written_event{file_uuid = FileGuid}) ->
+get_context(#file_written_event{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
 get_context(#file_attr_changed_event{file_attr = FileAttr}) ->
-    {file, file_ctx:new_by_guid(FileAttr#file_attr.uuid)};
+    {file, file_ctx:new_by_guid(FileAttr#file_attr.guid)};
 get_context(#file_location_changed_event{file_location = FileLocation}) ->
-    {file, file_ctx:new_by_guid(FileLocation#file_location.uuid)};
-get_context(#file_perm_changed_event{file_uuid = FileGuid}) ->
+    FileGuid = fslogic_uuid:uuid_to_guid(
+        FileLocation#file_location.uuid,
+        FileLocation#file_location.space_id
+    ),
     {file, file_ctx:new_by_guid(FileGuid)};
-get_context(#file_removed_event{file_uuid = FileGuid}) ->
+get_context(#file_perm_changed_event{file_guid = FileGuid}) ->
+    {file, file_ctx:new_by_guid(FileGuid)};
+get_context(#file_removed_event{file_guid = FileGuid}) ->
     {file, file_ctx:new_by_guid(FileGuid)};
 get_context(#file_renamed_event{top_entry = Entry}) ->
-    {file, file_ctx:new_by_guid(Entry#file_renamed_entry.old_uuid)};
+    {file, file_ctx:new_by_guid(Entry#file_renamed_entry.old_guid)};
 get_context(_) ->
     undefined.
 
@@ -146,24 +157,24 @@ update_context(#event{type = Type} = Evt, Ctx) ->
     Evt#event{type = update_context(Type, Ctx)};
 update_context(#file_read_event{} = Evt, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Evt#file_read_event{file_uuid = FileGuid};
+    Evt#file_read_event{file_guid = FileGuid};
 update_context(#file_written_event{} = Evt, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Evt#file_written_event{file_uuid = FileGuid};
+    Evt#file_written_event{file_guid = FileGuid};
 update_context(#file_attr_changed_event{file_attr = A} = Evt, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Evt#file_attr_changed_event{file_attr = A#file_attr{uuid = FileGuid}};
+    Evt#file_attr_changed_event{file_attr = A#file_attr{guid = FileGuid}};
 update_context(#file_location_changed_event{file_location = L} = Evt, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Evt#file_location_changed_event{file_location = L#file_location{uuid = FileGuid}};
 update_context(#file_perm_changed_event{} = Evt, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Evt#file_perm_changed_event{file_uuid = FileGuid};
+    Evt#file_perm_changed_event{file_guid = FileGuid};
 update_context(#file_removed_event{} = Evt, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Evt#file_removed_event{file_uuid = FileGuid};
+    Evt#file_removed_event{file_guid = FileGuid};
 update_context(#file_renamed_event{top_entry = E} = Evt, {file, FileCtx}) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_uuid = FileGuid}};
+    Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_guid = FileGuid}};
 update_context(Evt, _Ctx) ->
     Evt.

@@ -190,7 +190,7 @@ mkdir(Worker, SessId, Path) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path)).
 
 -spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
+    {ok, DirUuid :: file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path, Mode)).
 
@@ -341,7 +341,7 @@ remove_share_by_guid(Worker, SessId, ShareGuid) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 resolve_guid(Worker, SessId, Path) ->
     ?EXEC(Worker, remote_utils:call_fslogic(SessId, fuse_request, #resolve_guid{path = Path},
-        fun(#uuid{uuid = Guid}) ->
+        fun(#guid{guid = Guid}) ->
             {ok, Guid}
         end)).
 
@@ -370,9 +370,9 @@ exec(Worker, Fun, Timeout) ->
     end.
 
 
-uuid_to_guid(W, {uuid, UUID}) ->
-    {guid, uuid_to_guid(W, UUID)};
-uuid_to_guid(W, UUID) when is_binary(UUID) ->
-    rpc:call(W, fslogic_uuid, uuid_to_guid, [UUID]);
+uuid_to_guid(W, {uuid, Uuid}) ->
+    {guid, uuid_to_guid(W, Uuid)};
+uuid_to_guid(W, Uuid) when is_binary(Uuid) ->
+    rpc:call(W, fslogic_uuid, uuid_to_guid, [Uuid]);
 uuid_to_guid(_, Other) ->
     Other.

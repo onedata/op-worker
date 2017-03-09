@@ -9,7 +9,7 @@
 %%% functions
 %%% @end
 %%%--------------------------------------------------------------------
--module(fslogic_acl).
+-module(acl_logic).
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_specific_models_def.hrl").

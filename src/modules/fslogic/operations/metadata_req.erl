@@ -12,10 +12,8 @@
 -module(metadata_req).
 -author("Tomasz Lichon").
 
--include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("annotations/include/annotations.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([get_metadata/5, set_metadata/5, remove_metadata/3]).
@@ -25,26 +23,72 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @equiv get_metadata_insecure/5 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec get_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
+    custom_metadata:filter(), Inherited :: boolean()) ->
+    fslogic_worker:provider_response().
+get_metadata(_UserCtx, FileCtx, MetadataType, Names, Inherited) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?read_metadata],
+        [_UserCtx, FileCtx, MetadataType, Names, Inherited],
+        fun get_metadata_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @equiv set_metadata_insecure/5 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec set_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
+    custom_metadata:value(), custom_metadata:filter()) ->
+    fslogic_worker:provider_response().
+set_metadata(_UserCtx, FileCtx, MetadataType, Value, Names) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_metadata],
+        [_UserCtx, FileCtx, MetadataType, Value, Names],
+        fun set_metadata_insecure/5).
+
+%%--------------------------------------------------------------------
+%% @equiv remove_metadata_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
+    fslogic_worker:provider_response().
+remove_metadata(_UserCtx, FileCtx, MetadataType) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_metadata],
+        [_UserCtx, FileCtx, MetadataType],
+        fun remove_metadata_insecure/3).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Gets metadata linked with file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
-    custom_metadata:filter(), Inherited :: boolean()) -> fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?read_metadata]).
-get_metadata(_UserCtx, FileCtx, json, Names, Inherited) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case custom_metadata:get_json_metadata(FileUuid, Names, Inherited) of %todo pass file_ctx
+-spec get_metadata_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    custom_metadata:type(), custom_metadata:filter(), Inherited :: boolean()) ->
+    fslogic_worker:provider_response().
+get_metadata_insecure(_UserCtx, FileCtx, json, Names, Inherited) ->
+    case json_metadata:get(FileCtx, Names, Inherited) of
         {ok, Meta} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = json, value = Meta}};
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #metadata{type = json, value = Meta}
+            };
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end;
-get_metadata(_UserCtx, FileCtx, rdf, _, _) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case custom_metadata:get_rdf_metadata(FileUuid) of %todo pass file_ctx
+get_metadata_insecure(_UserCtx, FileCtx, rdf, _, _) ->
+    case rdf_metadata:get(FileCtx) of
         {ok, Meta} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #metadata{type = rdf, value = Meta}};
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #metadata{type = rdf, value = Meta}
+            };
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
@@ -54,16 +98,14 @@ get_metadata(_UserCtx, FileCtx, rdf, _, _) ->
 %% Sets metadata linked with file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type(),
-    custom_metadata:value(), custom_metadata:filter()) -> fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?write_metadata]).
-set_metadata(_UserCtx, FileCtx, json, Value, Names) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, _} = custom_metadata:set_json_metadata(FileUuid, Value, Names), %todo pass file_ctx
+-spec set_metadata_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
+    fslogic_worker:provider_response().
+set_metadata_insecure(_UserCtx, FileCtx, json, Value, Names) ->
+    {ok, _} = json_metadata:set(FileCtx, Value, Names),
     #provider_response{status = #status{code = ?OK}};
-set_metadata(_UserCtx, FileCtx, rdf, Value, _) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, _} = custom_metadata:set_rdf_metadata(FileUuid, Value),
+set_metadata_insecure(_UserCtx, FileCtx, rdf, Value, _) ->
+    {ok, _} = rdf_metadata:set(FileCtx, Value),
     #provider_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -71,14 +113,11 @@ set_metadata(_UserCtx, FileCtx, rdf, Value, _) ->
 %% Removes metadata linked with file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
-    fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?write_metadata]).
-remove_metadata(_UserCtx, FileCtx, json) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = custom_metadata:remove_json_metadata(FileUuid), %todo pass file_ctx
+-spec remove_metadata_insecure(user_ctx:ctx(), file_ctx:ctx(),
+    custom_metadata:type()) -> fslogic_worker:provider_response().
+remove_metadata_insecure(_UserCtx, FileCtx, json) ->
+    ok = json_metadata:remove(FileCtx),
     #provider_response{status = #status{code = ?OK}};
-remove_metadata(_UserCtx, FileCtx, rdf) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = custom_metadata:remove_rdf_metadata(FileUuid), %todo pass file_ctx
+remove_metadata_insecure(_UserCtx, FileCtx, rdf) ->
+    ok = rdf_metadata:remove(FileCtx),
     #provider_response{status = #status{code = ?OK}}.

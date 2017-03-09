@@ -52,37 +52,37 @@
 }).
 
 %% definition of a subscription for file attributes changes
-%% file_uuid         - UUID of a file for which notifications should be sent
+%% file_guid         - GUID of a file for which notifications should be sent
 %% counter_threshold - maximal number of aggregated events before emission
 %% time_threshold    - maximal delay in milliseconds between successive events
 %%                     emissions
 -record(file_attr_changed_subscription, {
-    file_uuid :: file_meta:uuid(),
+    file_guid :: fslogic_worker:file_guid(),
     counter_threshold :: undefined | non_neg_integer(),
     time_threshold :: undefined | non_neg_integer()
 }).
 
 %% definition of a subscription for file location changes
-%% file_uuid         - UUID of a file for which notifications should be sent
+%% file_guid         - GUID of a file for which notifications should be sent
 %% counter_threshold - maximal number of aggregated events before emission
 %% time_threshold    - maximal delay in milliseconds between successive events
 %%                     emissions
 -record(file_location_changed_subscription, {
-    file_uuid :: file_meta:uuid(),
+    file_guid :: fslogic_worker:file_guid(),
     counter_threshold :: undefined | non_neg_integer(),
     time_threshold :: undefined | non_neg_integer()
 }).
 
 %% definition of a subscription for permission changes
-%% file_uuid         - UUID of a file for which notifications should be sent
+%% file_guid         - GUID of a file for which notifications should be sent
 -record(file_perm_changed_subscription, {
-    file_uuid :: file_meta:uuid()
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% definition of a subscription for file removal
-%% file_uuid         - UUID of a file for which notifications should be sent
+%% file_guid         - GUID of a file for which notifications should be sent
 -record(file_removed_subscription, {
-    file_uuid :: file_meta:uuid()
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% definition of a subscription for quota watcher
@@ -90,9 +90,9 @@
 }).
 
 %% definition of a subscription for file renaming
-%% file_uuid         - UUID of a file for which notifications should be sent
+%% file_guid         - GUID of a file for which notifications should be sent
 -record(file_renamed_subscription, {
-    file_uuid :: file_meta:uuid()
+    file_guid :: fslogic_worker:file_guid()
 }).
 
 %% definition of a subscription for monitoring events

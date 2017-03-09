@@ -33,7 +33,7 @@ create_share(SessId, FileKey, Name) ->
     {guid, GUID} = fslogic_uuid:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
-        fun(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+        fun(#share{share_id = ShareId, share_file_guid = ShareGuid}) ->
             {ok, {ShareId, ShareGuid}} end).
 
 %%--------------------------------------------------------------------
