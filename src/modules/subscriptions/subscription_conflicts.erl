@@ -34,7 +34,6 @@ update_model(Model, UpdateDoc, UpdateRevs) ->
     try
         Key = UpdateDoc#document.key,
         Update = UpdateDoc#document{
-            rev = hd(UpdateRevs),
             value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs)
         },
 

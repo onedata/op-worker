@@ -18,7 +18,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, create_or_update/2,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2,
     list/0, model_init/0, 'after'/5, before/4]).
 -export([record_struct/1]).
 %% export API
@@ -104,9 +104,10 @@ delete(Key) ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key(), datastore:delete_predicate()) -> ok | datastore:generic_error().
-delete(Key, Pred) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key, Pred).
+-spec delete(datastore:ext_key(), datastore:delete_predicate(), Options :: [datastore:option()]) ->
+    ok | datastore:generic_error().
+delete(Key, Pred, Opts) ->
+    datastore:delete(?STORE_LEVEL, ?MODULE, Key, Pred, Opts).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -235,7 +236,7 @@ verify_propagation(ControllerKey, SpaceId, AddLocal) ->
     case ToDel of
         true ->
             ok = datastore:delete_links(?LINK_STORE_LEVEL, ControllerKey, ?MODEL_NAME, Links),
-            ok = delete(ControllerKey);
+            ok = delete(ControllerKey, ?PRED_ALWAYS, [ignore_links]);
         _ ->
             ok
     end,

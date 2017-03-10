@@ -24,7 +24,7 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/5,
     rename_storage_file_updating_location/3, create_storage_file_if_not_exists/1,
-    create_storage_file/2, delete_storage_file/2]).
+    create_storage_file/2, delete_storage_file/2, delete_storage_file_without_location/2]).
 
 %%%===================================================================
 %%% API
@@ -141,7 +141,7 @@ create_storage_file_if_not_exists(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            case file_ctx:get_local_file_location_docs(FileCtx) of
+            case file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)) of
                 {[], _} ->
                     {_, FileCtx2} = create_storage_file(user_ctx:new(?ROOT_SESS_ID), FileCtx),
                     files_to_chown:chown_or_schedule_chowning(FileCtx2),
@@ -189,7 +189,6 @@ create_storage_file(UserCtx, FileCtx) ->
     {{StorageId, FileId}, FileCtx6}.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Removes file from storage.
 %% @end
@@ -197,12 +196,23 @@ create_storage_file(UserCtx, FileCtx) ->
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
+    FileLocationId = delete_storage_file_without_location(FileCtx, UserCtx),
+    file_location:delete(FileLocationId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file from storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_storage_file_without_location(file_ctx:ctx(), user_ctx:ctx()) ->
+    datastore:ext_key().
+delete_storage_file_without_location(FileCtx, UserCtx) ->
     {[#document{key = FileLocationId}], FileCtx2} =
         file_ctx:get_local_file_location_docs(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
     SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
     storage_file_manager:unlink(SFMHandle),
-    file_location:delete(FileLocationId).
+    FileLocationId.
 
 %%%===================================================================
 %%% Internal functions

@@ -29,6 +29,7 @@
     mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
     create_and_delete_file_loop_test_base/3
 ]).
+-export([init_env/1, teardown_env/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
@@ -850,6 +851,33 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     ok.
 
 
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_env(Config) ->
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+%%        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
+        % TODO - change to 2 seconds
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_pool_queue_flush_delay, 1000)
+    end, ?config(op_worker_nodes, Config)),
+
+    application:start(etls),
+    hackney:start(),
+    initializer:enable_grpca_based_communication(Config),
+    initializer:disable_quota_limit(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
+
+teardown_env(Config) ->
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:unload_quota_mocks(Config),
+    initializer:disable_grpca_based_communication(Config),
+    hackney:stop(),
+    application:stop(etls).
 
 
 %%%===================================================================

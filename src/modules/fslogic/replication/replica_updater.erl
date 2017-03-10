@@ -44,7 +44,7 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                 value = #file_location{
                     size = OldSize
                 }
-            }], _FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
+            }], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
             UpdatedLocation = append(Location, Blocks, BumpVersion),
 
             case FileSize of
@@ -75,7 +75,7 @@ rename(FileCtx, TargetFileId, TargetSpaceId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     file_location:critical_section(FileUuid,
         fun() ->
-            {[LocationDoc], _FileCtx2} = file_ctx:get_local_file_location_docs(FileCtx),
+            {[LocationDoc], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)),
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
 
 

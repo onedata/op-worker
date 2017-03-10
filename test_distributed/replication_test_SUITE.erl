@@ -882,7 +882,7 @@ external_file_location_notification_should_wait_for_links(Config) ->
     {ok, [Id1]} = ?assertMatch({ok, [_]}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
 
     ModelConfig = ?rpc(file_meta, model_init, []),
-    {ok, #document{key = LinkId, value = LinkValue}} = ?rpc(mnesia_cache_driver, get_link_doc, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
+    {ok, #document{key = LinkId, value = LinkValue}} = ?rpc(mnesia_cache_driver_internal, get_link_doc, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
     test_utils:mock_expect([W1], file_meta, exists_local_link_doc,
         fun(Key) ->
             case Key of

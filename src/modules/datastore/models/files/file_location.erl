@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
+-export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 -export([critical_section/2, save_and_bump_version/1]).
 -export([record_struct/1, record_upgrade/2]).
@@ -182,6 +182,25 @@ delete(Key) ->
             Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             UserId = get_owner_id(Uuid),
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
+        _ ->
+            ok
+    end,
+    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes doc and emits event for owner.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(datastore:key(), datastore:id()) -> ok | datastore:generic_error().
+delete(Key, UserId) ->
+    case get(Key) of
+        {ok, Doc = #document{value = #file_location{
+            space_id = SpaceId
+        }}} ->
+            Size = count_bytes(Doc),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
             ok
