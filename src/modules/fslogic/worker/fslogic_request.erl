@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_partial_file_ctx/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
+-export([get_file_partial_ctx/2, get_target_providers/3, update_target_guid_if_file_is_phantom/2]).
 
 %%%===================================================================
 %%% API
@@ -32,19 +32,19 @@
 %% specific file, the function returns undefined.
 %% @end
 %%--------------------------------------------------------------------
--spec get_partial_file_ctx(user_ctx:ctx(), fslogic_worker:request()) ->
-    file_ctx:ctx() | undefined.
-get_partial_file_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
-    file_ctx:new_partial_context_by_logical_path(UserCtx, Path);
-get_partial_file_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
-    file_ctx:new_by_guid(FileGuid);
-get_partial_file_ctx(_UserCtx, #fuse_request{}) ->
+-spec get_file_partial_ctx(user_ctx:ctx(), fslogic_worker:request()) ->
+    file_partial_ctx:ctx() | undefined.
+get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = Path}}) ->
+    file_partial_ctx:new_by_logical_path(UserCtx, Path);
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
+    file_partial_ctx:new_by_guid(FileGuid);
+get_file_partial_ctx(_UserCtx, #fuse_request{}) ->
     undefined;
-get_partial_file_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->
-    file_ctx:new_by_guid(FileGuid);
-get_partial_file_ctx(_UserCtx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
-    file_ctx:new_by_guid(FileGuid);
-get_partial_file_ctx(_UserCtx, Req) ->
+get_file_partial_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->
+    file_partial_ctx:new_by_guid(FileGuid);
+get_file_partial_ctx(_UserCtx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
+    file_partial_ctx:new_by_guid(FileGuid);
+get_file_partial_ctx(_UserCtx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
@@ -53,7 +53,7 @@ get_partial_file_ctx(_UserCtx, Req) ->
 %% Get providers capable of handling given request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:request()) ->
+-spec get_target_providers(user_ctx:ctx(), file_partial_ctx:ctx(), fslogic_worker:request()) ->
     [oneprovider:id()].
 get_target_providers(_UserCtx, undefined, _) ->
     [oneprovider:get_provider_id()];
@@ -79,28 +79,29 @@ get_target_providers(UserCtx, File, _Req) ->
 %% by the phantom target.
 %% @end
 %%--------------------------------------------------------------------
--spec update_target_guid_if_file_is_phantom(file_ctx:ctx() | undefined, fslogic_worker:request()) ->
-    {NewFileCtx :: file_ctx:ctx() | undefined, NewRequest :: fslogic_worker:request()}.
+-spec update_target_guid_if_file_is_phantom(file_partial_ctx:ctx() | undefined, fslogic_worker:request()) ->
+    {NewFileCtx :: file_partial_ctx:ctx() | undefined, NewRequest :: fslogic_worker:request()}.
 update_target_guid_if_file_is_phantom(undefined, Request) ->
     {undefined, Request};
-update_target_guid_if_file_is_phantom(FileCtx, Request) ->
+update_target_guid_if_file_is_phantom(FilePartialCtx, Request) ->
     try
-        {_, NewFileCtx} = file_ctx:get_file_doc(file_ctx:new_by_partial_context(FileCtx)),
+        {_, NewFileCtx} = file_ctx:get_file_doc(file_ctx:new_by_partial_context(FilePartialCtx)),
         {NewFileCtx, Request}
     catch
         _:{badmatch, {error, {not_found, file_meta}}} ->
             try
+                FileCtx = file_ctx:new_by_partial_context(FilePartialCtx),
                 FileUuid = file_ctx:get_uuid_const(FileCtx),
                 {ok, NewGuid} = file_meta:get_guid_from_phantom_file(FileUuid),
                 NewRequest = change_target_guid(Request, NewGuid),
-                NewFileCtx_ = file_ctx:new_by_guid(NewGuid),
-                {NewFileCtx_, NewRequest}
+                NewFilePartialCtx_ = file_partial_ctx:new_by_guid(NewGuid),
+                {NewFilePartialCtx_, NewRequest}
             catch
                 _:_ ->
-                    {FileCtx, Request}
+                    {FilePartialCtx, Request}
             end;
         _:_ ->
-            {FileCtx, Request}
+            {FilePartialCtx, Request}
     end.
 
 %%%===================================================================
@@ -113,11 +114,11 @@ update_target_guid_if_file_is_phantom(FileCtx, Request) ->
 %% Get providers capable of handling resolve_guid/get_attr request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_attr_req(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_target_providers_for_attr_req(user_ctx:ctx(), file_partial_ctx:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_attr_req(UserCtx, FileCtx) ->
     %todo TL handle guids stored in file_force_proxy
-    case file_ctx:is_space_dir_const(FileCtx) of
+    case file_partial_ctx:is_space_dir_const(FileCtx) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
@@ -130,14 +131,14 @@ get_target_providers_for_attr_req(UserCtx, FileCtx) ->
 %% Get providers cappable of handling generic request.
 %% @end
 %%--------------------------------------------------------------------
--spec get_target_providers_for_file(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_target_providers_for_file(user_ctx:ctx(), file_partial_ctx:ctx()) ->
     [oneprovider:id()].
-get_target_providers_for_file(UserCtx, FileCtx) ->
-    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
+get_target_providers_for_file(UserCtx, FilePartialCtx) ->
+    case file_partial_ctx:is_user_root_dir_const(FilePartialCtx, UserCtx) of
         true ->
             [oneprovider:get_provider_id()];
         false ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx),
             Auth = user_ctx:get_auth(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
             {ok, #document{value = #od_space{providers = ProviderIds}}} =
