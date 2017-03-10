@@ -21,7 +21,7 @@
 %% Context definition
 -record(user_ctx, {
     session :: session:doc(),
-    user_doc :: undefined | od_user:doc()
+    user_doc :: od_user:doc()
 }).
 
 -type ctx() :: #user_ctx{}.
@@ -46,8 +46,11 @@ new(SessId) ->
         auth = Auth,
         identity = #user_identity{user_id = UserId}
     }}} = session:get(SessId),
-%%    {ok, User} = od_user:get_or_fetch(Auth, UserId), %todo enable after fixing race
-    #user_ctx{session = Session}.
+    {ok, User} = od_user:get_or_fetch(Auth, UserId),
+    #user_ctx{
+        session = Session,
+        user_doc = User
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -55,10 +58,7 @@ new(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
-get_user(UserCtx) ->
-    Auth = get_auth(UserCtx),
-    UserId = get_user_id(UserCtx),
-    {ok, User} = od_user:get_or_fetch(Auth, UserId), %todo remove after fixing race
+get_user(#user_ctx{user_doc = User}) ->
     User.
 
 %%--------------------------------------------------------------------
