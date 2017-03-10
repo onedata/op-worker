@@ -361,14 +361,13 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
     SessId = user_ctx:get_session_id(UserCtx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
-    TargetFilePartialCtx =
-        file_ctx:new_partial_context_by_canonical_path(UserCtx, CanonicalTargetPath),
+    TargetFilePartialCtx = file_partial_ctx:new_by_canonical_path(UserCtx, CanonicalTargetPath),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
-    TargetSpaceId = file_ctx:get_space_id_const(TargetFilePartialCtx),
+    TargetSpaceId = file_partial_ctx:get_space_id_const(TargetFilePartialCtx),
     {SourceParentFileCtx, SourceFileCtx2} =
         file_ctx:get_parent(SourceFileCtx, UserCtx),
     {TargetParentFilePartialCtx, _TargetFilePartialCtx2} =
-        file_ctx:get_parent(TargetFilePartialCtx, UserCtx),
+        file_partial_ctx:get_parent(TargetFilePartialCtx, UserCtx),
 
     RenamedEntries = case file_ctx:is_dir(SourceFileCtx2) of
         {true, SourceFileCtx3} ->
@@ -435,7 +434,7 @@ rename_interspace(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetPath
             ok = file_meta:rename({uuid, SourceFileUuid}, {path, CanonicalTargetPath}),
             ok = sfm_utils:rename_storage_file_updating_location(UserCtx, file_ctx:reset(SourceFileCtx3), TargetSpaceId),
 
-            {NewName, _TargetFilePartialCtx2} = file_ctx:get_aliased_name(TargetFilePartialCtx, UserCtx),
+            NewName = filename:basename(CanonicalTargetPath),
             {NewParentGuid, _} = file_ctx:get_parent_guid(file_ctx:reset(SourceFileCtx3), UserCtx),
             NewParentUuid = fslogic_uuid:guid_to_uuid(NewParentGuid),
             [{fslogic_uuid:uuid_to_guid(SourceFileUuid, SourceSpaceId),
@@ -477,10 +476,9 @@ rename_interprovider(UserCtx, SourceFileCtx, CanonicalTargetPath, LogicalTargetP
     SessId = user_ctx:get_session_id(UserCtx),
     ok = ensure_deleted(SessId, LogicalTargetPath),
 
-    TargetFilePartialCtx =
-        file_ctx:new_partial_context_by_canonical_path(UserCtx, CanonicalTargetPath),
+    TargetFilePartialCtx = file_partial_ctx:new_by_canonical_path(UserCtx, CanonicalTargetPath),
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
-    TargetSpaceId = file_ctx:get_space_id_const(TargetFilePartialCtx),
+    TargetSpaceId = file_partial_ctx:get_space_id_const(TargetFilePartialCtx),
     {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserCtx),
 
     RenamedEntries = for_each_child_file(SourceFileCtx2,
