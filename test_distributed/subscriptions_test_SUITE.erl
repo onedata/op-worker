@@ -852,7 +852,7 @@ pushing_space_group_write_priv_locks_space_for_user_even_if_owner(Config) ->
                 [], [{P1, 1000}], [<<"Share1">>]
             )),
             update(2, [<<"r1">>], U1, user(<<"onedata">>, [],
-                [{S1, <<"space_name">>}], S1, []))
+                [{S1, <<"space_name">>}], S1))
         ]),
         expect_message([U1], 2, [])
     end,

@@ -53,26 +53,6 @@ creates_docs_with_proper_value_test_() ->
             ?assertMatch(Expectation, CreateDoc)
         end]}.
 
-creates_docs_with_proper_rev_number_test_() ->
-    {setup,
-        fun setup/0,
-        fun teardown/1,
-        [fun() ->
-            % given
-            UpdateDoc = #document{
-                rev = <<"rev_not_connected_with_update">>,
-                value = #od_space{}
-            },
-
-            % when
-            subscription_conflicts:update_model(od_space, UpdateDoc,
-                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
-
-            %then
-            {CreateDoc, _} = last_create_or_update(od_space),
-            ?assertEqual(<<"r4">>, CreateDoc#document.rev)
-        end]}.
-
 accepts_unseen_revs_test_() ->
     {setup,
         fun setup/0,

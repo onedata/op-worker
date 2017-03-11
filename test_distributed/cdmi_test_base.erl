@@ -80,8 +80,11 @@ user_1_token_header(Config) ->
 % Tests cdmi container GET request (also refered as LIST)
 list_dir(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, ShortTestDirName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
+
+    TestDirNameCheck = list_to_binary(ShortTestDirName ++ "/"),
+    TestFileNameBin = list_to_binary(TestFileName),
 
     %%------ list basic dir --------
     {ok, Code1, Headers1, Response1} =
@@ -94,11 +97,11 @@ list_dir(Config) ->
     CdmiResponse1 = json_utils:decode(Response1),
     ?assertEqual(<<"application/cdmi-container">>,
         proplists:get_value(<<"objectType">>, CdmiResponse1)),
-    ?assertEqual(<<"dir 1/">>,
+    ?assertEqual(TestDirNameCheck,
         proplists:get_value(<<"objectName">>, CdmiResponse1)),
     ?assertEqual(<<"Complete">>,
         proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
-    ?assertEqual([<<"file.txt">>],
+    ?assertEqual([TestFileNameBin],
         proplists:get_value(<<"children">>, CdmiResponse1)),
     ?assert(proplists:get_value(<<"metadata">>, CdmiResponse1) =/= <<>>),
     %%------------------------------
@@ -110,7 +113,7 @@ list_dir(Config) ->
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(list_to_binary(SpaceName ++ "/"), proplists:get_value(<<"objectName">>, CdmiResponse2)),
-    ?assertEqual([<<"dir 1/">>],
+    ?assertEqual([TestDirNameCheck],
         proplists:get_value(<<"children">>, CdmiResponse2)),
     %%------------------------------
 
@@ -127,9 +130,9 @@ list_dir(Config) ->
             get, [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
-    ?assertEqual(<<"dir 1/">>,
+    ?assertEqual(TestDirNameCheck,
         proplists:get_value(<<"objectName">>, CdmiResponse4)),
-    ?assertEqual([<<"file.txt">>],
+    ?assertEqual([TestFileNameBin],
         proplists:get_value(<<"children">>, CdmiResponse4)),
     ?assertEqual(2, length(CdmiResponse4)),
     %%------------------------------
@@ -667,7 +670,7 @@ create_file(Config) ->
 % Tests cdmi object PUT requests (updating content)
 update_file(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {_SpaceName, _TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
+    {_SpaceName, _ShortTestDirName, _TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
         create_test_dir_and_file(Config),
     NewValue = <<"New Value!">>,
     UpdatedValue = <<"123 Value!">>,
@@ -857,8 +860,11 @@ create_dir(Config) ->
 % tests access to file by objectid
 objectid(Config) ->
     [WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    {SpaceName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, ShortTestDirName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
+    TestDirNameCheck = list_to_binary(ShortTestDirName ++ "/"),
+    ShortTestDirNameBin = list_to_binary(ShortTestDirName),
+    TestFileNameBin = list_to_binary(TestFileName),
 
     %%-------- / objectid ----------
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
@@ -888,7 +894,7 @@ objectid(Config) ->
     ?assertEqual(200, Code2),
 
     CdmiResponse2 = json_utils:decode(Response2),
-    ?assertEqual(<<"dir 1/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
+    ?assertEqual(TestDirNameCheck, proplists:get_value(<<"objectName">>, CdmiResponse2)),
     DirId = proplists:get_value(<<"objectID">>, CdmiResponse2),
     ?assertNotEqual(DirId, undefined),
     ?assert(is_binary(DirId)),
@@ -903,11 +909,11 @@ objectid(Config) ->
     ?assertEqual(200, Code3),
 
     CdmiResponse3 = json_utils:decode(Response3),
-    ?assertEqual(<<"file.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse3)),
+    ?assertEqual(TestFileNameBin, proplists:get_value(<<"objectName">>, CdmiResponse3)),
     FileId = proplists:get_value(<<"objectID">>, CdmiResponse3),
     ?assertNotEqual(FileId, undefined),
     ?assert(is_binary(FileId)),
-    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/dir 1/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
+    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/", ShortTestDirNameBin/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
     ?assertEqual(DirId, proplists:get_value(<<"parentID">>, CdmiResponse3)),
     ?assertEqual(<<"cdmi_capabilities/dataobject/">>, proplists:get_value(<<"capabilitiesURI">>, CdmiResponse3)),
     %%------------------------------
@@ -941,7 +947,7 @@ objectid(Config) ->
 
     %% get /dir 1/file.txt by objectid
     RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code6, _Headers6, Response6} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/file.txt", get, RequestHeaders6, []),
+    {ok, Code6, _Headers6, Response6} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/" ++ TestFileName, get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
     CdmiResponse6 = json_utils:decode(Response6),
     Meta3 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse3)),
@@ -1119,7 +1125,7 @@ request_format_check(Config) ->
 % and should be changeble
 mimetype_and_encoding(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {_SpaceName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
+    {_SpaceName, _ShortTestDirName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -1184,7 +1190,7 @@ mimetype_and_encoding(Config) ->
 % tests reading&writing file at random ranges
 out_of_range(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {_SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {_SpaceName, _ShortTestDirName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -1641,7 +1647,7 @@ acl(Config) ->
 % test error handling
 errors(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, _ShortTestDirName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     %%---- unauthorized access -----
@@ -1887,8 +1893,8 @@ cdmi_endpoint(Node) ->
 
 create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    TestDirName = "dir 1",
-    TestFileName = "file.txt",
+    TestDirName = get_random_string(),
+    TestFileName = get_random_string(),
     FullTestDirName = filename:join([binary_to_list(SpaceName), TestDirName]),
     FullTestFileName = filename:join(["/", binary_to_list(SpaceName), TestDirName, TestFileName]),
     TestFileContent = <<"test_file_content">>,
@@ -1904,7 +1910,7 @@ create_test_dir_and_file(Config) ->
         true -> ok
     end,
 
-    {binary_to_list(SpaceName), FullTestDirName, TestFileName, FullTestFileName, TestFileContent}.
+    {binary_to_list(SpaceName), TestDirName, FullTestDirName, TestFileName, FullTestFileName, TestFileContent}.
 
 object_exists(Config, Path) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
@@ -2007,3 +2013,13 @@ mock_opening_file_without_perms(Config) ->
 unmock_opening_file_without_perms(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, onedata_file_api).
+
+get_random_string() ->
+    get_random_string(10, "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ").
+
+get_random_string(Length, AllowedChars) ->
+    lists:foldl(fun(_, Acc) ->
+        [lists:nth(rand:uniform(length(AllowedChars)),
+            AllowedChars)]
+        ++ Acc
+    end, [], lists:seq(1, Length)).

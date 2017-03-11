@@ -15,7 +15,7 @@
 -include("modules/fslogic/metadata.hrl").
 
 %% API
--export([get/1, set/2, remove/1]).
+-export([get/2, set/2, remove/1]).
 
 %%%===================================================================
 %%% API
@@ -25,9 +25,9 @@
 %% @doc Gets file's rdf metadata
 %% @equiv get_xattr_metadata(FileUuid, ?RDF_METADATA_KEY).
 %%--------------------------------------------------------------------
--spec get(file_ctx:ctx()) -> {ok, custom_metadata:rdf()} | {error, term()}.
-get(FileCtx) ->
-    custom_metadata:get_xattr_metadata(file_ctx:get_uuid_const(FileCtx), ?RDF_METADATA_KEY, false).
+-spec get(file_ctx:ctx(), boolean()) -> {ok, custom_metadata:rdf()} | {error, term()}.
+get(FileCtx, Inherited) ->
+    custom_metadata:get_xattr_metadata(file_ctx:get_uuid_const(FileCtx), ?RDF_METADATA_KEY, Inherited).
 
 %%--------------------------------------------------------------------
 %% @doc Gets file's rdf metadata
