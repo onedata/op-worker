@@ -169,7 +169,7 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_users,
+    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_users, %todo remove file_meta mock
         oz_groups, space_storage, oneprovider, oz_providers]).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -286,7 +286,6 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
-    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -844,11 +843,6 @@ file_meta_mock_setup(Workers, Config) ->
         Opts ->
             test_utils:mock_new(Workers, file_meta, Opts)
     end,
-    test_utils:mock_expect(Workers, file_meta, 'after', fun
-        (ModelName, Method, Level, Context, ReturnValue) ->
-            meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
-            Self ! onedata_user_setup
-    end),
     test_utils:mock_new(Workers, od_user),
     test_utils:mock_expect(Workers, od_user, 'after', fun
         (ModelName, Method, Level, Context, ReturnValue) ->

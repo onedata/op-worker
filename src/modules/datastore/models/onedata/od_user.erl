@@ -83,7 +83,13 @@ record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    case datastore:save(?STORE_LEVEL, Document) of
+        {ok, Uuid} ->
+            catch file_meta:setup_onedata_user(provider, Uuid),
+            {ok, Uuid};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,7 +99,13 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    case datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff) of
+        {ok, Uuid} ->
+            catch file_meta:setup_onedata_user(provider, Uuid),
+            {ok, Uuid};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,7 +114,13 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+    case datastore:create(?STORE_LEVEL, Document) of
+        {ok, Uuid} ->
+            catch file_meta:setup_onedata_user(provider, Uuid),
+            {ok, Uuid};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -187,7 +205,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+    case datastore:create_or_update(?STORE_LEVEL, Doc, Diff) of
+        {ok, Uuid} ->
+            catch file_meta:setup_onedata_user(provider, Uuid),
+            {ok, Uuid};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
