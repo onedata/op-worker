@@ -58,7 +58,7 @@ change_replicated_internal(SpaceId, #change{
     model = file_meta,
     doc =  FileDoc = #document{
         key = FileUuid,
-        value = #file_meta{type = ?REGULAR_FILE_TYPE},
+        value = #file_meta{type = ?REGULAR_FILE_TYPE, owner = UserId},
         deleted = true
     }
 }, _Master) ->
@@ -66,7 +66,8 @@ change_replicated_internal(SpaceId, #change{
     case couchdb_datastore_driver:exists(file_meta:model_init(), FileUuid) of
         {ok, false} ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-            sfm_utils:delete_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+            FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+            file_location:delete(FileLocationId, UserId),
             file_consistency:delete(FileUuid);
         _ ->
             ok
@@ -196,14 +197,14 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                     case NewTargetsAdd of
                         [] -> ok;
                         _ ->
-                            MC1 = MC#model_config{link_replica_scope = ?DEFAULT_LINK_REPLICA_SCOPE},
-                            ok = datastore:add_links(?DISK_ONLY_LEVEL, MainDocKey, MC1, [{K, {Version, NewTargetsAdd}}])
+                            ok = mnesia_cache_driver:add_links(MC, MainDocKey, [{K, {Version, NewTargetsAdd}}],
+                                ?DEFAULT_LINK_REPLICA_SCOPE)
                     end,
 
                     %% Handle links marked as deleted
                     lists:foreach(
                         fun({Scope0, {deleted, VH0}, _, _}) ->
-                            ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, MC,
+                            ok = mnesia_cache_driver:delete_links(MC, MainDocKey,
                                 [links_utils:make_scoped_link_name(K, Scope0, VH0, size(Scope0))])
                         end, NewTargetsDel)
 
@@ -219,7 +220,7 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                         {deleted, VH1} ->
                             ok; %% Ignore deletion of deleted link
                         VH1 ->
-                            ok = datastore:delete_links(?DISK_ONLY_LEVEL, MainDocKey, MC,
+                            ok = datastore:delete_links(?GLOBALLY_CACHED_LEVEL, MainDocKey, MC,
                                 [links_utils:make_scoped_link_name(K, S, VH1, size(S))])
                     end
                 end, DelTargets)

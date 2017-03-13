@@ -52,7 +52,7 @@ json_to_updates(Raw) ->
                 Value = props_to_value(Model, Props),
                 #sub_update{
                     seq = Seq, id = ID, revs = Revs, model = Model,
-                    doc = #document{key = ID, value = Value, rev = hd(Revs)}
+                    doc = #document{key = ID, value = Value}
                 };
             _ ->
                 ?warning("Ignoring update data: ~p, seq: ~p", [Data, Seq]),

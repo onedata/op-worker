@@ -82,8 +82,8 @@ get_metadata_insecure(_UserCtx, FileCtx, json, Names, Inherited) ->
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end;
-get_metadata_insecure(_UserCtx, FileCtx, rdf, _, _) ->
-    case rdf_metadata:get(FileCtx) of
+get_metadata_insecure(_UserCtx, FileCtx, rdf, _, Inherited) ->
+    case rdf_metadata:get(FileCtx, Inherited) of
         {ok, Meta} ->
             #provider_response{
                 status = #status{code = ?OK},

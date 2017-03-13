@@ -112,7 +112,7 @@ exists(Key) ->
 model_init() ->
     ?MODEL_CONFIG(dbsync_bucket, [{file_meta, delete}, {file_meta, delete_links}, {times, delete},
         {custom_metadata, delete}, {file_location, delete}, {change_propagation_controller, delete},
-        {change_propagation_controller, delete_links}], ?LOCALLY_CACHED_LEVEL).
+        {change_propagation_controller, delete_links}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

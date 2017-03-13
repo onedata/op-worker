@@ -625,7 +625,7 @@ get_parent_uuid(Entry) ->
 -spec get_parent_uuid(file_meta:uuid(), od_space:id()) -> {ok, datastore:key()} | datastore:get_error().
 get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
     {ok, ?ROOT_DIR_UUID};
-get_parent_uuid(FileUuid, SpaceId) ->
+get_parent_uuid(FileUuid, _SpaceId) ->
     {ok, {ParentKey, ?MODEL_NAME}} =
         datastore:fetch_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, parent),
     {ok, ParentKey}.
