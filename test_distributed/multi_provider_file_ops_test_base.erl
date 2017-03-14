@@ -98,8 +98,8 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
     StatAns = lfm_proxy:stat(Worker1, SessId1, {path, TestDir}),
     ?assertMatch({ok, #file_attr{}}, StatAns),
     {ok, #file_attr{guid = FileGuid}} = StatAns,
-    FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
-    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUUID})),
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUuid})),
 
     InvalidateFun(Worker1, SessId1, TestDir),
     lists:foreach(fun({Worker, SessId}) ->
@@ -450,7 +450,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                     true ->
                         {ok, SpaceDoc};
                     _ ->
-                        erlang:apply(meck_util:original_name(file_meta), get_scope, [Arg])
+                        meck:passthrough([Arg])
                 end
             end),
 
@@ -884,27 +884,27 @@ teardown_env(Config) ->
 %%% Internal functions
 %%%===================================================================
 
-get_links(W, FileUUID) ->
-    rpc:call(W, ?MODULE, get_links, [FileUUID]).
+get_links(W, FileUuid) ->
+    rpc:call(W, ?MODULE, get_links, [FileUuid]).
 
-get_links(FileUUID) ->
+get_links(FileUuid) ->
     try
         AccFun = fun(LN, LV, Acc) ->
             maps:put(LN, LV, Acc)
         end,
-        {ok, Links} = datastore:foreach_link(?GLOBALLY_CACHED_LEVEL, FileUUID, file_meta, AccFun, #{}),
+        {ok, Links} = datastore:foreach_link(?GLOBALLY_CACHED_LEVEL, FileUuid, file_meta, AccFun, #{}),
         Links
     catch
         _:_ ->
             #{}
     end.
 
-count_links(W, FileUUID) ->
-    Links = get_links(W, FileUUID),
+count_links(W, FileUuid) ->
+    Links = get_links(W, FileUuid),
     maps:size(Links).
 
-verify_locations(W, FileUUID) ->
-    IDs = get_locations(W, FileUUID),
+verify_locations(W, FileUuid) ->
+    IDs = get_locations(W, FileUuid),
     lists:foldl(fun(ID, Acc) ->
         case rpc:call(W, file_location, get, [ID]) of
             {ok, _} ->
@@ -913,8 +913,8 @@ verify_locations(W, FileUUID) ->
         end
     end, 0, IDs).
 
-get_locations(W, FileUUID) ->
-    Links = get_links(W, FileUUID),
+get_locations(W, FileUuid) ->
+    Links = get_links(W, FileUuid),
     get_locations_from_map(Links).
 
 get_locations_from_map(Map) ->
@@ -1061,8 +1061,8 @@ verify_stats(Config, File, IsDir) ->
         end,
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
-        {FileUUID, rpc:call(W, file_meta, get, [FileUUID])}
+        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        {FileUuid, rpc:call(W, file_meta, get, [FileUuid])}
     end),
 
     NotFoundList = lists:filter(fun({_, {error, {not_found, _}}}) -> true; (_) -> false end, VerAns),
@@ -1070,8 +1070,8 @@ verify_stats(Config, File, IsDir) ->
 
     ?assertEqual(ProxyNodes - ProxyNodesWritten, length(NotFoundList)),
     ?assertEqual(SyncNodes + ProxyNodesWritten, length(OKList)),
-    [{FileUUIDAns, _} | _] = VerAns,
-    FileUUIDAns.
+    [{FileUuidAns, _} | _] = VerAns,
+    FileUuidAns.
 
 create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
     SessId = ?config(session, Config),
@@ -1100,7 +1100,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
 
     Offset2 = Offset rem 5 + 1,
     Size = 2*Offset2,
-    FileUUID = verify_stats(Config, File, false),
+    FileUuid = verify_stats(Config, File, false),
 
     Beg = binary:part(FileBeg, 0, Offset2),
     End = binary:part(File, 0, Offset2),
@@ -1108,7 +1108,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
 
     VerifyLocation = fun() ->
         verify(Config, fun(W) ->
-            verify_locations(W, FileUUID)
+            verify_locations(W, FileUuid)
         end)
     end,
 
@@ -1145,24 +1145,24 @@ verify_file(Config, FileBeg, {Offset, File}) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
+        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
-        {W, get_locations(W, FileUUID)}
+        {W, get_locations(W, FileUuid)}
     end),
-    {File, FileUUID, LocToAns}.
+    {File, FileUuid, LocToAns}.
 
-verify_del(Config, {F, FileUUID, Locations}) ->
+verify_del(Config, {F, FileUuid, Locations}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
 
     verify(Config, fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
+%%            ct:print("Del ~p", [{W, F,  FileUuid, Locations}]),
 %%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
         % TODO - match to chosen error (check perms may also result in ENOENT)
         ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
 
-        ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts)
-%%        ?match(0, count_links(W, FileUUID), Attempts),
+        ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUuid]), Attempts)
+%%        ?match(0, count_links(W, FileUuid), Attempts),
 %%
 %%        lists:foreach(fun(Location) ->
 %%            ?match({error, {not_found, _}},
@@ -1187,8 +1187,8 @@ verify_dir_size(Config, DirToCheck, DSize) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
         {ok, #file_attr{guid = FileGuid}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGuid),
-        {W, FileUUID}
+        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        {W, FileUuid}
     end),
 
     AssertLinks = fun() ->

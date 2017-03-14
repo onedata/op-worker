@@ -883,13 +883,14 @@ external_file_location_notification_should_wait_for_links(Config) ->
 
     ModelConfig = ?rpc(file_meta, model_init, []),
     {ok, #document{key = LinkId, value = LinkValue}} = ?rpc(mnesia_cache_driver_internal, get_link_doc, [ModelConfig, links_utils:links_doc_key(FileUuid, ProviderId)]),
-    test_utils:mock_expect([W1], file_meta, exists_local_link_doc,
+    test_utils:mock_new(W1, file_meta, [passthrough]),
+    test_utils:mock_expect(W1, file_meta, exists_local_link_doc,
         fun(Key) ->
             case Key of
                 FileUuid ->
                     false;
                 _ ->
-                    erlang:apply(meck_util:original_name(file_meta), exists_local_link_doc, [Key])
+                    meck:passthrough([Key])
             end
         end),
 
@@ -907,9 +908,9 @@ external_file_location_notification_should_wait_for_links(Config) ->
     ?assertMatch({ok, #document{value = #file_location{version_vector = #{}}}}, ?rpc(file_location, get, [Id1])),
     LinkDoc = #document{key = LinkId, value = LinkValue},
 
-    test_utils:mock_expect([W1], file_meta, exists_local_link_doc,
+    test_utils:mock_expect(W1, file_meta, exists_local_link_doc,
         fun(Key) ->
-            erlang:apply(meck_util:original_name(file_meta), exists_local_link_doc, [Key])
+            meck:passthrough([Key])
         end),
 
     ?rpc(dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = LinkDoc}]),
@@ -920,7 +921,8 @@ external_file_location_notification_should_wait_for_links(Config) ->
         ?rpc(file_location, get, [Id1])),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
-    ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
+    ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)),
+    test_utils:mock_validate_and_unload(W1, file_meta).
 
 external_file_location_notification_should_wait_for_file_meta(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
