@@ -24,8 +24,8 @@
 
 -export([new_handle/2, new_handle/6, new_handle/7]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3]).
--export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
-    fsync/1]).
+-export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
+    truncate/2, unlink/1, fsync/1]).
 -export([open_at_creation/1]).
 
 -type handle() :: #sfm_handle{}.
@@ -142,12 +142,21 @@ open(#sfm_handle{is_local = false} = SFMHandle, _) ->
 %% when handle goes out of scope (term will be released by Erlang's GC).
 %% Bypasses permissions check to allow to open file at creation.
 %% @end
-% TODO - relese in spec - how (missing release function in sfm)?
 %%--------------------------------------------------------------------
 -spec open_at_creation(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
 open_at_creation(SFMHandle) ->
     open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Closes the file.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(handle()) ->
+    ok | logical_file_manager:error_reply().
+release(#sfm_handle{file_handle = FileHandle}) ->
+    helpers:release(FileHandle).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -352,7 +361,8 @@ write(#sfm_handle{
             byte_sequence = [#byte_sequence{offset = Offset, data = Data}]
         }
     },
-    case worker_proxy:call(fslogic_worker,
+    Node = consistent_hasing:get_node(FileGuid),
+    case worker_proxy:call({fslogic_worker, Node},
         {proxyio_request, SessionId, ProxyIORequest})
     of
         {ok, #proxyio_response{
@@ -394,7 +404,8 @@ read(#sfm_handle{
         file_id = FID,
         proxyio_request = #remote_read{offset = Offset, size = Size}
     },
-    case worker_proxy:call(fslogic_worker,
+    Node = consistent_hasing:get_node(FileGuid),
+    case worker_proxy:call({fslogic_worker, Node},
         {proxyio_request, SessionId, ProxyIORequest})
     of
         {ok, #proxyio_response{
@@ -489,7 +500,7 @@ unlink(#sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(handle()) -> ok | logical_file_manager:error_reply().
-fsync(#sfm_handle{is_local = false}) ->
+fsync(#sfm_handle{is_local = false}) -> %todo add fsync to file_req
     ok;
 fsync(#sfm_handle{file_handle = FileHandle}) ->
     helpers:fsync(FileHandle, true).

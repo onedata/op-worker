@@ -92,11 +92,11 @@ stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
   JsonBodyPrefix, JsonBodySuffix) ->
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
     fun(Socket, Transport) ->
-            Transport:send(Socket, JsonBodyPrefix),
-            {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-            stream_range(Socket, Transport, State, Range,
-                ValueTransferEncoding, BufferSize, FileHandle),
-            Transport:send(Socket,JsonBodySuffix)
+        Transport:send(Socket, JsonBodyPrefix),
+        {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
+        stream_range(Socket, Transport, State, Range,
+            ValueTransferEncoding, BufferSize, FileHandle),
+        Transport:send(Socket,JsonBodySuffix)
     end.
 
 %%--------------------------------------------------------------------

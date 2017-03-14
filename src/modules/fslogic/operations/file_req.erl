@@ -13,12 +13,14 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+
 %% API
 -export([create_file/5, make_file/4, get_file_location/2, open_file/3,
-    release/3]).
+    open_file_insecure/3, release/3]).
 
 %%%===================================================================
 %%% API
@@ -84,9 +86,30 @@ open_file(UserCtx, FileCtx, rdwr) ->
     fslogic_worker:fuse_response().
 release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
+    {ok, SfmHandle} = session:get_handle(SessId, HandleId),
     ok = session:remove_handle(SessId, HandleId),
     ok = file_handles:register_release(FileCtx, SessId, 1),
+    ok = storage_file_manager:release(SfmHandle),
     #fuse_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Opens a file and returns a handle to it.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
+    fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
+open_file_insecure(UserCtx, FileCtx, Flag) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx),
+    {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
+    {ok, HandleId} = save_handle(SessId, Handle),
+    ok = file_handles:register_open(FileCtx, SessId, 1),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened{handle_id = HandleId}
+    }.
 
 %%%===================================================================
 %%% Internal functions
@@ -103,13 +126,18 @@ release(UserCtx, FileCtx, HandleId) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
     FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-    SessId = user_ctx:get_session_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {{StorageId, FileId}, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
     fslogic_times:update_mtime_ctime(ParentFileCtx),
-    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
-    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
-    {ok, HandleId} = save_handle(SessId, Handle),
+
+    FileGuid = file_ctx:get_guid_const(FileCtx2),
+    Node = consistent_hasing:get_node(FileGuid),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_opened{handle_id = HandleId}
+    } = rpc:call(Node, file_req, open_file_insecure,
+        [user_ctx:new(?ROOT_SESS_ID), FileCtx2, rdwr]),
+
     #fuse_response{fuse_response = #file_attr{} = FileAttr} =
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2),
     FileLocation = #file_location{
@@ -120,7 +148,6 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         blocks = [#file_block{offset = 0, size = 0}],
         space_id = SpaceId
     },
-    ok = file_handles:register_open(FileCtx2, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_created{
@@ -206,10 +233,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     {ok, binary()}.
 save_handle(SessId, Handle) ->
     HandleId = base64:encode(crypto:strong_rand_bytes(20)),
-    case session:is_special(SessId) of
-        true -> ok;
-        _ -> session:add_handle(SessId, HandleId, Handle)
-    end,
+    session:add_handle(SessId, HandleId, Handle),
     {ok, HandleId}.
 
 %%--------------------------------------------------------------------
@@ -250,22 +274,3 @@ open_file_for_rdwr(UserCtx, FileCtx) ->
         [traverse_ancestors, ?read_object, ?write_object],
         [UserCtx, FileCtx, rdwr],
         fun open_file_insecure/3).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Opens a file and returns a handle to it.
-%% @end
-%%--------------------------------------------------------------------
--spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
-    fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
-open_file_insecure(UserCtx, FileCtx, Flag) ->
-    SessId = user_ctx:get_session_id(UserCtx),
-    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx),
-    {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
-    {ok, HandleId} = save_handle(SessId, Handle),
-    ok = file_handles:register_open(FileCtx, SessId, 1),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_opened{handle_id = HandleId}
-    }.

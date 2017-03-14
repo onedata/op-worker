@@ -13,6 +13,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -167,8 +168,6 @@ create(SessId, ParentGuid, Name, Mode) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(SessId, FileKey, Flag) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    ShareId = fslogic_uuid:guid_to_share_id(FileGuid),
-
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_location{},
         fun(#file_location{provider_id = ProviderId, file_id = FileId,
@@ -176,24 +175,15 @@ open(SessId, FileKey, Flag) ->
             remote_utils:call_fslogic(SessId, file_request, FileGuid,
                 #open_file{flag = Flag},
                 fun(#file_opened{handle_id = HandleId}) ->
-                    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
-                    SpaceId = fslogic_uuid:guid_to_space_id(FileGuid),
-                    SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceId,
-                        FileUuid, StorageId, FileId, ShareId, ProviderId),
-
-                    case storage_file_manager:open(SFMHandle0, Flag) of %todo remove after fixing race on links
-                        {ok, Handle} ->
-                            {ok, lfm_context:new(
-                                HandleId,
-                                ProviderId,
-                                Handle,
-                                SessId,
-                                FileGuid,
-                                Flag
-                            )};
-                        {error, Reason} ->
-                            {error, Reason}
-                    end
+                    {ok, lfm_context:new(
+                        HandleId,
+                        ProviderId,
+                        SessId,
+                        FileGuid,
+                        Flag,
+                        FileId,
+                        StorageId
+                    )}
                 end)
         end
     ).
@@ -225,12 +215,12 @@ release(Handle) ->
 -spec fsync(FileHandle :: logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
 fsync(Handle) ->
-    SFMHandle = lfm_context:get_sfm_handle(Handle),
+%%    SFMHandle = lfm_context:get_sfm_handle(Handle), %todo send via fslogic
     SessionId = lfm_context:get_session_id(Handle),
     FileGuid = lfm_context:get_guid(Handle),
     ProviderId = lfm_context:get_provider_id(Handle),
 
-    ok = storage_file_manager:fsync(SFMHandle),
+%%    ok = storage_file_manager:fsync(SFMHandle),
     lfm_event_utils:flush_event_queue(SessionId, ProviderId,
         fslogic_uuid:guid_to_uuid(FileGuid)).
 
@@ -345,18 +335,18 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
     case write_internal(FileHandle, Offset, Buffer, GenerateEvents) of
         {error, Reason} ->
             {error, Reason};
-        {ok, _, Size} = Ret1 ->
-            Ret1;
-        {ok, _, 0} ->
+        {ok, Size} ->
+            {ok, FileHandle, Size};
+        {ok, 0} ->
             ?warning("File ~p write operation failed (0 bytes written), offset ~p, buffer size ~p",
                 [FileHandle, Offset, Size]),
             {error, ?EAGAIN};
-        {ok, NewHandle, Written} ->
-            case write(NewHandle, Offset + Written,
+        {ok, Written} ->
+            case write(FileHandle, Offset + Written,
                 binary:part(Buffer, Written, Size - Written), GenerateEvents)
             of
-                {ok, NewHandle1, Written1} ->
-                    {ok, NewHandle1, Written + Written1};
+                {ok, NewHandle, Written1} ->
+                    {ok, NewHandle, Written + Written1};
                 {error, Reason1} ->
                     {error, Reason1}
             end
@@ -370,21 +360,33 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
 %%--------------------------------------------------------------------
 -spec write_internal(FileHandle :: logical_file_manager:handle(),
     Offset :: non_neg_integer(), Buffer :: binary(), GenerateEvents :: boolean()) ->
-    {ok, logical_file_manager:handle(), non_neg_integer()} |
-    logical_file_manager:error_reply().
-write_internal(Handle, Offset, Buffer, GenerateEvents) ->
-    Guid = lfm_context:get_guid(Handle),
-    SessId = lfm_context:get_session_id(Handle),
-    SfmHandle = lfm_context:get_sfm_handle(Handle),
-    case storage_file_manager:write(SfmHandle, Offset, Buffer) of
-        {ok, Written} ->
-            WrittenBlocks = [#file_block{offset = Offset, size = Written}],
-            ok = lfm_event_utils:maybe_emit_file_written(Guid, WrittenBlocks,
+    {ok, non_neg_integer()} |logical_file_manager:error_reply().
+write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
+    FileGuid = lfm_context:get_guid(LfmCtx),
+    SessId = lfm_context:get_session_id(LfmCtx),
+    FileId = lfm_context:get_file_id(LfmCtx),
+    StorageId = lfm_context:get_storage_id(LfmCtx),
+    HandleId = lfm_context:get_handle_id(LfmCtx),
+    ProxyIORequest = #proxyio_request{
+        parameters = #{
+            ?PROXYIO_PARAMETER_FILE_GUID => FileGuid,
+            ?PROXYIO_PARAMETER_HANDLE_ID => HandleId
+        },
+        file_id = FileId,
+        storage_id = StorageId,
+        proxyio_request = #remote_write{
+            byte_sequence = [#byte_sequence{offset = Offset, data = Buffer}]
+        }
+    },
+
+    remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
+        fun(#remote_write_result{wrote = Wrote}) ->
+            WrittenBlocks = [#file_block{offset = Offset, size = Wrote}],
+            ok = lfm_event_utils:maybe_emit_file_written(FileGuid, WrittenBlocks,
                 SessId, GenerateEvents),
-            {ok, Handle, Written};
-        {error, Reason2} ->
-            {error, Reason2}
-    end.
+            {ok, Wrote}
+        end
+    ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -400,14 +402,14 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
     case read_internal(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) of
         {error, Reason} ->
             {error, Reason};
-        {ok, NewHandle, Bytes} = Ret1 ->
+        {ok, Bytes} ->
             case size(Bytes) of
                 MaxSize ->
-                    Ret1;
+                    {ok, FileHandle, Bytes};
                 0 ->
-                    Ret1;
+                    {ok, FileHandle, Bytes};
                 Size ->
-                    case read(NewHandle, Offset + Size, MaxSize - Size,
+                    case read(FileHandle, Offset + Size, MaxSize - Size,
                         GenerateEvents, PrefetchData)
                     of
                         {ok, NewHandle1, Bytes1} ->
@@ -426,22 +428,35 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
 %%--------------------------------------------------------------------
 -spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean()) ->
-    {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
-read_internal(Handle, Offset, MaxSize, GenerateEvents, PrefetchData) ->
-    Guid = lfm_context:get_guid(Handle),
-    SfmHandle = lfm_context:get_sfm_handle(Handle),
-    SessId = lfm_context:get_session_id(Handle),
-
-    ok = remote_utils:call_fslogic(SessId, file_request, Guid,
+    {ok, binary()} | logical_file_manager:error_reply().
+read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData) ->
+    FileGuid = lfm_context:get_guid(LfmCtx),
+    SessId = lfm_context:get_session_id(LfmCtx),
+    ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
             prefetch = PrefetchData},
         fun(_) -> ok end),
 
-    case storage_file_manager:read(SfmHandle, Offset, MaxSize) of
-        {ok, Data} ->
+    FileId = lfm_context:get_file_id(LfmCtx),
+    StorageId = lfm_context:get_storage_id(LfmCtx),
+    HandleId = lfm_context:get_handle_id(LfmCtx),
+    ProxyIORequest = #proxyio_request{
+        parameters = #{
+            ?PROXYIO_PARAMETER_FILE_GUID => FileGuid,
+            ?PROXYIO_PARAMETER_HANDLE_ID => HandleId
+        },
+        file_id = FileId,
+        storage_id = StorageId,
+        proxyio_request = #remote_read{
+            offset = Offset,
+            size = MaxSize
+        }
+    },
+
+    remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
+        fun(#remote_data{data = Data}) ->
             ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
-            ok = lfm_event_utils:maybe_emit_file_read(Guid, ReadBlocks, SessId, GenerateEvents),
-            {ok, Handle, Data};
-        {error, Reason2} ->
-            {error, Reason2}
-    end.
+            ok = lfm_event_utils:maybe_emit_file_read(FileGuid, ReadBlocks, SessId, GenerateEvents),
+            {ok, Data}
+        end
+    ).
