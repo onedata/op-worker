@@ -88,13 +88,9 @@ counting_file_open_and_release_test(Config) ->
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     %% Release of file marked to remove should trigger call to file deletion worker.
-    tracer:start(Worker),
-    tracer:trace_calls(fslogic_deletion_worker),
-    tracer:trace_calls(file_handles),
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
         [FileCtx, ?SESSION_ID_1, 1])),
-    tracer:stop(),
 
     test_utils:mock_assert_num_calls(Worker, fslogic_deletion_worker, handle, 1, 1).
 
@@ -259,11 +255,11 @@ end_per_suite(Config) ->
 init_per_testcase(Case, Config) when
     Case =:= counting_file_open_and_release_test;
     Case =:= invalidating_session_open_files_test ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(Worker, fslogic_uuid, [passthrough]),
-    test_utils:mock_new(Worker, file_ctx, [passthrough]),
-    test_utils:mock_new(Worker, fslogic_deletion_worker, [passthrough]),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, [fslogic_uuid, file_ctx, fslogic_deletion_worker, file_meta],
+        [passthrough]),
+
     test_utils:mock_expect(Worker, fslogic_deletion_worker, handle,
         fun({open_file_deletion_request, FileCtx}) ->
             true = file_ctx:is_file_ctx_const(FileCtx),
@@ -280,12 +276,12 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, [storage_file_manager, rename_req,
-        worker_proxy], [passthrough]),
+        worker_proxy, file_meta], [passthrough]),
     test_utils:mock_expect(Worker, worker_proxy, cast,
         fun(W, A) -> worker_proxy:call(W, A) end),
 
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
-        ?TEST_FILE(Config, "env_desc.json"), [{file_meta_mock_options, [passthrough]} | Config]),
+        ?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(Case, Config) when
@@ -293,7 +289,7 @@ end_per_testcase(Case, Config) when
     Case =:= invalidating_session_open_files_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_validate_and_unload(Worker, [fslogic_deletion_worker, file_ctx]),
+    test_utils:mock_validate_and_unload(Worker, [fslogic_deletion_worker, file_ctx, file_meta]),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_2])),
 
@@ -303,18 +299,16 @@ end_per_testcase(Case, Config) when
     Case =:= init_should_clear_open_files_test;
     Case =:= open_file_deletion_request_test;
     Case =:= deletion_of_not_open_file_test;
-    Case =:= deletion_of_open_file_test->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    Case =:= deletion_of_open_file_test ->
 
+    [Worker | _] = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    %% unload is in initializer:clean_test_users_and_spaces_no_validate
-    test_utils:mock_validate(Worker, file_meta),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
 
     test_utils:mock_validate_and_unload(Worker, [storage_file_manager,
         rename_req]),
-    test_utils:mock_unload(Worker, worker_proxy),
+    test_utils:mock_unload(Worker, [worker_proxy, file_meta]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->

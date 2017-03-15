@@ -169,7 +169,7 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_users,
+    test_utils:mock_validate_and_unload(Workers, [oz_spaces, oz_users,
         oz_groups, space_storage, oneprovider, oz_providers]).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -187,7 +187,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, Workers),
-    test_utils:mock_unload(Workers, [file_meta, od_user, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
+    test_utils:mock_unload(Workers, [od_user, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 clear_cache(W) ->
@@ -263,7 +263,7 @@ clear_models(Worker, Names) ->
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [#user_config{}], Config :: term()) -> NewConfig :: term().
 setup_session(Worker, [], Config) ->
-    final_file_meta_mock_setup(Worker),
+    test_utils:mock_unload(Worker, [od_user]),
     Config;
 setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     macaroon = Macaroon, groups = Groups, name = UserName}} | R], Config) ->
@@ -286,7 +286,6 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
-    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -658,7 +657,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         ]
     end, [], UserToSpaces),
 
-    file_meta_mock_setup(AllWorkers, Config),
+    od_user_mock_setup(AllWorkers),
     oz_users_mock_setup(AllWorkers, Users),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
@@ -832,23 +831,12 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Mocks file_meta module, so that creation of onedata user sends notification.
+%% Mocks od_user module, so that its 'after' posthook sends notification.
 %% @end
 %%--------------------------------------------------------------------
--spec file_meta_mock_setup(Workers :: node() | [node()], Config :: list()) -> ok.
-file_meta_mock_setup(Workers, Config) ->
+-spec od_user_mock_setup(Workers :: node() | [node()]) -> ok.
+od_user_mock_setup(Workers) ->
     Self = self(),
-    case ?config(file_meta_mock_options, Config) of
-        undefined ->
-            test_utils:mock_new(Workers, file_meta);
-        Opts ->
-            test_utils:mock_new(Workers, file_meta, Opts)
-    end,
-    test_utils:mock_expect(Workers, file_meta, 'after', fun
-        (ModelName, Method, Level, Context, ReturnValue) ->
-            meck:passthrough([ModelName, Method, Level, Context, ReturnValue]),
-            Self ! onedata_user_setup
-    end),
     test_utils:mock_new(Workers, od_user),
     test_utils:mock_expect(Workers, od_user, 'after', fun
         (ModelName, Method, Level, Context, ReturnValue) ->
@@ -913,17 +901,3 @@ add_space_storage(Worker, SpaceId, StorageId, MountInRoot) ->
     ?assertMatch({ok, _},
         rpc:call(Worker, space_storage, add, [SpaceId, StorageId, MountInRoot])
     ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ends mocking of file_meta module to disable not wanted modifications.
-%% @end
-%%--------------------------------------------------------------------
--spec final_file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
-final_file_meta_mock_setup(Workers) ->
-    test_utils:mock_expect(Workers, file_meta, 'after', fun
-        (ModelName, Method, Level, Context, ReturnValue) ->
-            meck:passthrough([ModelName, Method, Level, Context, ReturnValue])
-    end),
-    test_utils:mock_unload(Workers, [od_user]).

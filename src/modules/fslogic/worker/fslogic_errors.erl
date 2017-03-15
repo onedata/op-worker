@@ -1,14 +1,14 @@
-%% ===================================================================
-%% @author Rafal Slota
-%% @copyright (C): 2015, ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc
-%% This module provides error translators for generic fslogic errors.
-%% @end
-%% ===================================================================
+%%%--------------------------------------------------------------------
+%%% @author Rafal Slota
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% This module provides error translators for generic fslogic errors.
+%%% @end
+%%%--------------------------------------------------------------------
 -module(fslogic_errors).
 -author("Rafal Slota").
 
