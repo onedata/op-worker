@@ -298,21 +298,21 @@ get_events(N) ->
 get_event() ->
     {#event{}, #'Event'{type = {type, undefined}}}.
 
-get_read_event(FileUuid, Size, Num, MaxS) ->
+get_read_event(FileGuid, Size, Num, MaxS) ->
     {InternalBlocks, ProtobufBlocks} = get_file_block_list(Num, MaxS),
     {
-        #file_read_event{counter = 1, file_uuid = FileUuid, size = Size,
+        #file_read_event{counter = 1, file_guid = FileGuid, size = Size,
             blocks = InternalBlocks},
-        #'FileReadEvent'{counter = 1, file_uuid = FileUuid, size = Size,
+        #'FileReadEvent'{counter = 1, file_uuid = FileGuid, size = Size,
             blocks = ProtobufBlocks}
     }.
 
-get_write_event(FileUuid, Size, FileSize, Num, MaxS) ->
+get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
     {InternalBlocks, ProtobufBlocks} = get_file_block_list(Num, MaxS),
     {
-        #file_written_event{counter = 1, file_uuid = FileUuid, size = Size,
+        #file_written_event{counter = 1, file_guid = FileGuid, size = Size,
             file_size = FileSize, blocks = InternalBlocks},
-        #'FileWrittenEvent'{counter = 1, file_uuid = FileUuid, size = Size,
+        #'FileWrittenEvent'{counter = 1, file_uuid = FileGuid, size = Size,
             file_size = FileSize, blocks = ProtobufBlocks}
     }.
 

@@ -34,7 +34,7 @@
 -export([strategy_merge_result/2, strategy_merge_result/3]).
 
 %% API
--export([]).
+-export([get_canonical_file_entry/2]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -63,11 +63,11 @@ available_strategies() ->
 %%--------------------------------------------------------------------
 -spec strategy_init_jobs(space_strategy:name(), space_strategy:arguments(), space_strategy:job_data()) ->
     [space_strategy:job()].
-strategy_init_jobs(check_globally, StartegyArgs, InitData) ->
-    [#space_strategy_job{strategy_name = check_globally, strategy_args = StartegyArgs,
+strategy_init_jobs(check_globally, StrategyArgs, InitData) ->
+    [#space_strategy_job{strategy_name = check_globally, strategy_args = StrategyArgs,
         data = InitData#{provider_id => oneprovider:get_provider_id()}}];
-strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
-    [#space_strategy_job{strategy_name = StrategyName, strategy_args = StartegyArgs, data = InitData}].
+strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
+    [#space_strategy_job{strategy_name = StrategyName, strategy_args = StrategyArgs, data = InitData}].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,8 +98,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_globally, data = D
                     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionId),
                     NewJobs = case lists:member(ProxyVia, ProviderIds) of
                         true -> [];
-                        false ->
-                            [Job#space_strategy_job{data = Data#{provider_id => RProviderId}} || RProviderId <- ProviderIds]
+                        false -> [Job#space_strategy_job{data = Data#{provider_id => RProviderId}} || RProviderId <- ProviderIds]
                     end,
                     {OriginalResponse, NewJobs}
             end;
@@ -117,16 +116,15 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
 
     MaybeAttrs = lists:map(
         fun(StorageId) ->
-            {ok, Tokens} = fslogic_path:tokenize_skipping_dots(Path),
-            {path, LogicalPath} = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-            ConvertFilePath = space_sync_worker:init(filename_mapping, SpaceId, StorageId, #{logical_path => LogicalPath}),
-            FileId = space_sync_worker:run(ConvertFilePath),
+            {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
+            {path, LogicalPath} = get_canonical_file_entry(CTX, Tokens),
+            FileId = filename_mapping:to_storage_path(SpaceId, StorageId, LogicalPath),
             InitialImportJobData =
                 #{
                     last_import_time => 0,
                     space_id => SpaceId,
                     storage_id => StorageId,
-                    storage_file_id => FileId,
+                    storage_logical_file_id => FileId,
                     max_depth => 1
                 },
 
@@ -173,11 +171,11 @@ strategy_merge_result([_ | JobsR], [_ | R]) ->
     ChildrenResult :: space_strategy:job_result()) ->
     space_strategy:job_result().
 strategy_merge_result(#space_strategy_job{}, _LocalResult, #fuse_response{status = #status{code = ?OK}, fuse_response = FResponse} = ChildrenResult) ->
-    #file_attr{uuid = FileGuid, provider_id = ProviderId} = FResponse,
+    #file_attr{guid = FileGuid, provider_id = ProviderId} = FResponse,
     case oneprovider:get_provider_id() of
         ProviderId -> ChildrenResult;
         _ ->
-            #file_attr{uuid = FileGuid} = FResponse,
+            #file_attr{guid = FileGuid} = FResponse,
             file_force_proxy:save(#document{key = FileGuid, value = #file_force_proxy{provider_id = ProviderId}}),
             ChildrenResult
     end;
@@ -188,6 +186,44 @@ strategy_merge_result(#space_strategy_job{}, LocalResult, _ChildrenResult) ->
 %%% API functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file's full name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_canonical_file_entry(user_ctx:ctx(), [file_meta:path()]) ->
+    file_meta:entry() | no_return().
+get_canonical_file_entry(UserCtx, Tokens) ->
+    case session:is_special(user_ctx:get_session_id(UserCtx)) of
+        true ->
+            {path, fslogic_path:join(Tokens)};
+        false ->
+            get_canonical_file_entry_for_user(UserCtx, Tokens)
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file's full name, checking user defined space names.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_canonical_file_entry_for_user(user_ctx:ctx(), [file_meta:path()]) -> file_meta:entry() | no_return().
+get_canonical_file_entry_for_user(UserCtx, [<<?DIRECTORY_SEPARATOR>>]) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    {uuid, fslogic_uuid:user_root_dir_uuid(UserId)};
+get_canonical_file_entry_for_user(UserCtx, [<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens]) ->
+    #document{value = #od_user{space_aliases = Spaces}} = user_ctx:get_user(UserCtx),
+    case lists:keyfind(SpaceName, 2, Spaces) of
+        false ->
+            throw(?ENOENT);
+        {SpaceId, _} ->
+            {path, fslogic_path:join(
+                [<<?DIRECTORY_SEPARATOR>>, SpaceId | Tokens])}
+    end;
+get_canonical_file_entry_for_user(_UserCtx, Tokens) ->
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens]),
+    {path, Path}.

@@ -50,7 +50,11 @@
     accept_header/1,
     move_copy_conflict/1,
     move/1,
-    copy/1
+    copy/1,
+    create_raw_file_with_cdmi_version_header_should_succeed/1,
+    create_raw_dir_with_cdmi_version_header_should_succeed/1,
+    create_cdmi_file_without_cdmi_version_header_should_fail/1,
+    create_cdmi_dir_without_cdmi_version_header_should_fail/1
 ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -76,8 +80,11 @@ user_1_token_header(Config) ->
 % Tests cdmi container GET request (also refered as LIST)
 list_dir(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, ShortTestDirName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
+
+    TestDirNameCheck = list_to_binary(ShortTestDirName ++ "/"),
+    TestFileNameBin = list_to_binary(TestFileName),
 
     %%------ list basic dir --------
     {ok, Code1, Headers1, Response1} =
@@ -90,11 +97,11 @@ list_dir(Config) ->
     CdmiResponse1 = json_utils:decode(Response1),
     ?assertEqual(<<"application/cdmi-container">>,
         proplists:get_value(<<"objectType">>, CdmiResponse1)),
-    ?assertEqual(<<"dir 1/">>,
+    ?assertEqual(TestDirNameCheck,
         proplists:get_value(<<"objectName">>, CdmiResponse1)),
     ?assertEqual(<<"Complete">>,
         proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
-    ?assertEqual([<<"file.txt">>],
+    ?assertEqual([TestFileNameBin],
         proplists:get_value(<<"children">>, CdmiResponse1)),
     ?assert(proplists:get_value(<<"metadata">>, CdmiResponse1) =/= <<>>),
     %%------------------------------
@@ -106,7 +113,7 @@ list_dir(Config) ->
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(list_to_binary(SpaceName ++ "/"), proplists:get_value(<<"objectName">>, CdmiResponse2)),
-    ?assertEqual([<<"dir 1/">>],
+    ?assertEqual([TestDirNameCheck],
         proplists:get_value(<<"children">>, CdmiResponse2)),
     %%------------------------------
 
@@ -123,9 +130,9 @@ list_dir(Config) ->
             get, [user_1_token_header(Config), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
-    ?assertEqual(<<"dir 1/">>,
+    ?assertEqual(TestDirNameCheck,
         proplists:get_value(<<"objectName">>, CdmiResponse4)),
-    ?assertEqual([<<"file.txt">>],
+    ?assertEqual([TestFileNameBin],
         proplists:get_value(<<"children">>, CdmiResponse4)),
     ?assertEqual(2, length(CdmiResponse4)),
     %%------------------------------
@@ -275,7 +282,7 @@ get_file(Config) ->
     %%------------------------------
 
     %% selective value read non-cdmi
-    RequestHeaders7 = [{<<"Range">>, <<"1-3,5-5,-3">>}],
+    RequestHeaders7 = [{<<"Range">>, <<"bytes=1-3,5-5,-3">>}],
     {ok, Code7, _Headers7, Response7} =
         do_request(WorkerP2, FileName, get, [user_1_token_header(Config) | RequestHeaders7]),
     ?assertEqual(206, Code7),
@@ -283,7 +290,7 @@ get_file(Config) ->
     %%------------------------------
 
     %% selective value read non-cdmi error
-    RequestHeaders8 = [{<<"Range">>, <<"1-3,6-4,-3">>}],
+    RequestHeaders8 = [{<<"Range">>, <<"bytes=1-3,6-4,-3">>}],
     {ok, Code8, _Headers8, _Response8} =
         do_request(WorkerP2, FileName, get, [user_1_token_header(Config) | RequestHeaders8]),
     ?assertEqual(400, Code8).
@@ -426,22 +433,22 @@ metadata(Config) ->
     UserName1 = ?config({user_name, <<"user1">>}, Config),
     FileName2 = filename:join([binary_to_list(SpaceName), "acl_test_file.txt"]),
     Ace1 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?read_mask)}
     ],
     Ace2 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?deny_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask bor ?execute_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?read_mask bor ?execute_mask)}
     ],
     Ace3 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}
     ],
     Ace3Full = [
         {<<"acetype">>, ?allow},
@@ -475,16 +482,16 @@ metadata(Config) ->
 
     %%-- create forbidden by acl ---
     Ace4 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?execute_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?execute_mask)}
     ],
     Ace5 = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?deny_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}],
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4, Ace5]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
@@ -663,7 +670,7 @@ create_file(Config) ->
 % Tests cdmi object PUT requests (updating content)
 update_file(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {_SpaceName, _TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
+    {_SpaceName, _ShortTestDirName, _TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
         create_test_dir_and_file(Config),
     NewValue = <<"New Value!">>,
     UpdatedValue = <<"123 Value!">>,
@@ -708,7 +715,7 @@ update_file(Config) ->
 
     %%---- value update, http ------
     UpdateValue = <<"123">>,
-    RequestHeaders4 = [{<<"content-range">>, <<"0-2">>}],
+    RequestHeaders4 = [{<<"content-range">>, <<"bytes 0-2/3">>}],
     {ok, Code4, _Headers4, _Response4} =
         do_request(Workers, FullTestFileName,
             put, [user_1_token_header(Config) | RequestHeaders4], UpdateValue),
@@ -719,18 +726,31 @@ update_file(Config) ->
         get_file_content(Config, FullTestFileName)),
     %%------------------------------
 
-    %%---- value update, http error ------
-    UpdateValue = <<"123">>,
-    RequestHeaders5 = [{<<"content-range">>, <<"0-2,3-4">>}],
+    %%---- value update2, http -----
+    UpdateValue2 = <<"00">>,
+    RequestHeaders5 = [{<<"content-range">>, <<"bytes 3-4/*">>}],
     {ok, Code5, _Headers5, _Response5} =
-        do_request(Workers, FullTestFileName, put, [user_1_token_header(Config) | RequestHeaders5],
-            UpdateValue),
-    ?assertEqual(400, Code5),
+        do_request(Workers, FullTestFileName,
+            put, [user_1_token_header(Config) | RequestHeaders5], UpdateValue2),
+    ?assertEqual(204, Code5),
 
     ?assert(object_exists(Config, FullTestFileName)),
-    ?assertEqual(<<"123t_file_content">>,
+    ?assertEqual(<<"12300file_content">>,
+        get_file_content(Config, FullTestFileName)),
+    %%------------------------------
+
+    %%---- value update, http error ------
+    UpdateValue = <<"123">>,
+    RequestHeaders6 = [{<<"content-range">>, <<"bytes 0-2,3-4/*">>}],
+    {ok, Code6, _Headers6, _Response6} =
+        do_request(Workers, FullTestFileName, put, [user_1_token_header(Config) | RequestHeaders6],
+            UpdateValue),
+    ?assertEqual(400, Code6),
+
+    ?assert(object_exists(Config, FullTestFileName)),
+    ?assertEqual(<<"12300file_content">>,
         get_file_content(Config, FullTestFileName)).
-%%------------------------------
+    %%------------------------------
 
 choose_adequate_handler(Config) ->
     % given
@@ -840,8 +860,11 @@ create_dir(Config) ->
 % tests access to file by objectid
 objectid(Config) ->
     [WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
-    {SpaceName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, ShortTestDirName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
+    TestDirNameCheck = list_to_binary(ShortTestDirName ++ "/"),
+    ShortTestDirNameBin = list_to_binary(ShortTestDirName),
+    TestFileNameBin = list_to_binary(TestFileName),
 
     %%-------- / objectid ----------
     RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
@@ -871,7 +894,7 @@ objectid(Config) ->
     ?assertEqual(200, Code2),
 
     CdmiResponse2 = json_utils:decode(Response2),
-    ?assertEqual(<<"dir 1/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
+    ?assertEqual(TestDirNameCheck, proplists:get_value(<<"objectName">>, CdmiResponse2)),
     DirId = proplists:get_value(<<"objectID">>, CdmiResponse2),
     ?assertNotEqual(DirId, undefined),
     ?assert(is_binary(DirId)),
@@ -886,11 +909,11 @@ objectid(Config) ->
     ?assertEqual(200, Code3),
 
     CdmiResponse3 = json_utils:decode(Response3),
-    ?assertEqual(<<"file.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse3)),
+    ?assertEqual(TestFileNameBin, proplists:get_value(<<"objectName">>, CdmiResponse3)),
     FileId = proplists:get_value(<<"objectID">>, CdmiResponse3),
     ?assertNotEqual(FileId, undefined),
     ?assert(is_binary(FileId)),
-    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/dir 1/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
+    ?assertEqual(<<"/", (list_to_binary(SpaceName))/binary, "/", ShortTestDirNameBin/binary, "/">>, proplists:get_value(<<"parentURI">>, CdmiResponse3)),
     ?assertEqual(DirId, proplists:get_value(<<"parentID">>, CdmiResponse3)),
     ?assertEqual(<<"cdmi_capabilities/dataobject/">>, proplists:get_value(<<"capabilitiesURI">>, CdmiResponse3)),
     %%------------------------------
@@ -924,7 +947,7 @@ objectid(Config) ->
 
     %% get /dir 1/file.txt by objectid
     RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header(Config)],
-    {ok, Code6, _Headers6, Response6} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/file.txt", get, RequestHeaders6, []),
+    {ok, Code6, _Headers6, Response6} = do_request(WorkerP2, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/" ++ TestFileName, get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
     CdmiResponse6 = json_utils:decode(Response6),
     Meta3 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse3)),
@@ -1087,7 +1110,7 @@ request_format_check(Config) ->
     RequestBody1 = [{<<"value">>, FileContent}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
     {ok, Code1, _Headers1, _Response1} = do_request(Workers, FileToCreate, put, RequestHeaders1, RawRequestBody1),
-    ?assertEqual(415, Code1),
+    ?assertEqual(201, Code1),
     %%------------------------------
 
     %%-- dir missing content-type --
@@ -1095,14 +1118,14 @@ request_format_check(Config) ->
     RequestBody3 = [{<<"metadata">>, <<"">>}],
     RawRequestBody3 = json_utils:encode(RequestBody3),
     {ok, Code3, _Headers3, _Response3} = do_request(Workers, DirToCreate, put, RequestHeaders3, RawRequestBody3),
-    ?assertEqual(415, Code3).
-%%------------------------------
+    ?assertEqual(201, Code3).
+    %%------------------------------
 
 % tests mimetype and valuetransferencoding properties, they are part of cdmi-object and cdmi-container
 % and should be changeble
 mimetype_and_encoding(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {_SpaceName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
+    {_SpaceName, _ShortTestDirName, TestDirName, TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -1167,7 +1190,7 @@ mimetype_and_encoding(Config) ->
 % tests reading&writing file at random ranges
 out_of_range(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {_SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {_SpaceName, _ShortTestDirName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -1438,12 +1461,12 @@ partial_upload(Config) ->
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse5_1)),
 
     % upload second chunk of file
-    RequestHeaders6 = [user_1_token_header(Config), {<<"content-range">>, <<"4-4">>}, {<<"X-CDMI-Partial">>, <<"true">>}],
+    RequestHeaders6 = [user_1_token_header(Config), {<<"content-range">>, <<"bytes 4-4/10">>}, {<<"X-CDMI-Partial">>, <<"true">>}],
     {ok, Code6, _Headers6, _Response6} = do_request(Workers, FileName2, put, RequestHeaders6, Chunk2),
     ?assertEqual(204, Code6),
 
     % upload third chunk of file
-    RequestHeaders7 = [user_1_token_header(Config), {<<"content-range">>, <<"5-9">>}, {<<"X-CDMI-Partial">>, <<"false">>}],
+    RequestHeaders7 = [user_1_token_header(Config), {<<"content-range">>, <<"bytes 5-9/10">>}, {<<"X-CDMI-Partial">>, <<"false">>}],
     {ok, Code7, _Headers7, _Response7} = do_request(Workers, FileName2, put, RequestHeaders7, Chunk3),
     ?assertEqual(204, Code7),
 
@@ -1473,10 +1496,10 @@ acl(Config) ->
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
     Read = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?read_mask)}
     ],
     ReadFull = [
         {<<"acetype">>, ?allow},
@@ -1485,10 +1508,10 @@ acl(Config) ->
         {<<"acemask">>, ?read}
     ],
     Write = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_mask)}
     ],
     ReadWriteVerbose = [
         {<<"acetype">>, ?allow},
@@ -1497,22 +1520,22 @@ acl(Config) ->
         {<<"acemask">>, <<(?read)/binary, ", ", (?write)/binary>>}
     ],
     Execute = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?execute_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?execute_mask)}
     ],
     WriteAcl = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_acl_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?write_acl_mask)}
     ],
     Delete = [
-        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
+        {<<"acetype">>, acl_logic:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
-        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?delete_mask)}
+        {<<"aceflags">>, acl_logic:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, acl_logic:bitmask_to_binary(?delete_mask)}
     ],
 
     MetadataAclReadFull = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [ReadFull, WriteAcl]}]}]),
@@ -1624,7 +1647,7 @@ acl(Config) ->
 % test error handling
 errors(Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {SpaceName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+    {SpaceName, _ShortTestDirName, TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
         create_test_dir_and_file(Config),
 
     %%---- unauthorized access -----
@@ -1729,11 +1752,74 @@ accept_header(Config) ->
     [_WorkerP1, WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
     AcceptHeader = {<<"Accept">>, <<"*/*">>},
 
+    % when
     {ok, Code1, _Headers1, _Response1} =
         do_request(WorkerP2, [], get,
             [user_1_token_header(Config), ?CDMI_VERSION_HEADER, AcceptHeader], []),
 
+    % then
     ?assertEqual(200, Code1).
+
+create_raw_file_with_cdmi_version_header_should_succeed(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/file1", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config)], <<"data">>
+        )),
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders2, _Response2},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/file2", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {<<"Content-type">>, <<"text/plain">>}],
+            <<"data2">>
+        )).
+
+create_raw_dir_with_cdmi_version_header_should_succeed(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/dir1/", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config)]
+        )),
+    ?assertMatch(
+        {ok, 201, _ResponseHeaders2, _Response2},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/dir2/", put,
+            [?CDMI_VERSION_HEADER, user_1_token_header(Config), {<<"Content-type">>, <<"application/json">>}],
+            <<"{}">>
+        )).
+
+create_cdmi_file_without_cdmi_version_header_should_fail(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 400, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/file1", put,
+            [user_1_token_header(Config), ?OBJECT_CONTENT_TYPE_HEADER], <<"{}">>
+        )).
+
+create_cdmi_dir_without_cdmi_version_header_should_fail(Config) ->
+    % given
+    Workers = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % when
+    ?assertMatch(
+        {ok, 400, _ResponseHeaders, _Response},
+        do_request(Workers, binary_to_list(SpaceName) ++ "/dir1/", put,
+            [user_1_token_header(Config), ?CONTAINER_CONTENT_TYPE_HEADER]
+        )).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1807,8 +1893,8 @@ cdmi_endpoint(Node) ->
 
 create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    TestDirName = "dir 1",
-    TestFileName = "file.txt",
+    TestDirName = get_random_string(),
+    TestFileName = get_random_string(),
     FullTestDirName = filename:join([binary_to_list(SpaceName), TestDirName]),
     FullTestFileName = filename:join(["/", binary_to_list(SpaceName), TestDirName, TestFileName]),
     TestFileContent = <<"test_file_content">>,
@@ -1824,7 +1910,7 @@ create_test_dir_and_file(Config) ->
         true -> ok
     end,
 
-    {binary_to_list(SpaceName), FullTestDirName, TestFileName, FullTestFileName, TestFileContent}.
+    {binary_to_list(SpaceName), TestDirName, FullTestDirName, TestFileName, FullTestFileName, TestFileContent}.
 
 object_exists(Config, Path) ->
     [WorkerP1, _WorkerP2] = _Workers = ?config(op_worker_nodes, Config),
@@ -1927,3 +2013,13 @@ mock_opening_file_without_perms(Config) ->
 unmock_opening_file_without_perms(Config) ->
     [_WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, onedata_file_api).
+
+get_random_string() ->
+    get_random_string(10, "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ").
+
+get_random_string(Length, AllowedChars) ->
+    lists:foldl(fun(_, Acc) ->
+        [lists:nth(rand:uniform(length(AllowedChars)),
+            AllowedChars)]
+        ++ Acc
+    end, [], lists:seq(1, Length)).

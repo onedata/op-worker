@@ -92,7 +92,7 @@ query_index(Req, State) ->
     Options = prepare_options(StateWithSpatial),
     {ok, Guids} = indexes:query_view(Id, Options),
     ObjectIds = lists:map(fun(Guid) ->
-        {ok, ObjectId} = cdmi_id:uuid_to_objectid(Guid),
+        {ok, ObjectId} = cdmi_id:guid_to_objectid(Guid),
         ObjectId
     end, Guids),
 

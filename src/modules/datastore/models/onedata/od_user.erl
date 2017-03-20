@@ -83,7 +83,7 @@ record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    run_and_update_user(fun datastore:save/2, [?STORE_LEVEL, Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,7 +93,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    run_and_update_user(fun datastore:update/4, [?STORE_LEVEL, ?MODULE, Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,7 +102,7 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+    run_and_update_user(fun datastore:create/2, [?STORE_LEVEL, Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -187,7 +187,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+    run_and_update_user(fun datastore:create_or_update/3, [?STORE_LEVEL, Doc, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -261,3 +261,18 @@ get_or_fetch(Auth, UserId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Run function and in case of success, update user's file_meta space structures.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_and_update_user(function(), list()) -> {ok, datastore:ext_key()} | datastore:update_error().
+run_and_update_user(Function, Args) ->
+    case apply(Function, Args) of
+        {ok, Uuid} ->
+            file_meta:setup_onedata_user(provider, Uuid),
+            {ok, Uuid};
+        Error ->
+            Error
+    end.

@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -26,99 +25,44 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates and open file. Returns handle to the file, its attributes
-%% and location.
+%% @equiv create_file_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?traverse_container, ?add_object]).
 create_file(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-    File = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-    SessId = user_ctx:get_session_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(File),
-    {StorageId, FileId} = sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_ctx
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
-    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
-    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(ParentFileCtx),
-    SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
-    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
-    {ok, HandleId} = save_handle(SessId, Handle),
-    #fuse_response{fuse_response = #file_attr{} = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, File),
-    FileGuid = file_ctx:get_guid_const(File),
-    FileLocation = #file_location{
-        uuid = FileGuid,
-        provider_id = oneprovider:get_provider_id(),
-        storage_id = StorageId,
-        file_id = FileId,
-        blocks = [#file_block{offset = 0, size = 0}],
-        space_id = SpaceId
-    },
-    ok = file_handles:register_open(FileUuid, SessId, 1), %todo pass file_ctx
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_created{
-            handle_id = HandleId,
-            file_attr = FileAttr,
-            file_location = FileLocation
-        }
-    }.
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container, ?add_object],
+        [UserCtx, ParentFileCtx, Name, Mode, _Flag],
+        fun create_file_insecure/5).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates file. Returns its attributes.
+%% @equiv make_file_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec make_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors, ?traverse_container, ?add_object]).
 make_file(UserCtx, ParentFileCtx, Name, Mode) ->
-    FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
-
-    SessId = user_ctx:get_session_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    sfm_utils:create_storage_file(SpaceId, FileUuid, SessId, Mode), %todo pass file_ctx
-
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
-    fslogic_times:update_mtime_ctime(ParentFileEntry, user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
-
-    attr_req:get_file_attr_insecure(UserCtx, FileCtx).
+    check_permissions:execute(
+        [traverse_ancestors, ?traverse_container, ?add_object],
+        [UserCtx, ParentFileCtx, Name, Mode],
+        fun make_file_insecure/4).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns file location.
+%% @equiv get_file_location_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors]).
 get_file_location(_UserCtx, FileCtx) ->
-    {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {#document{value = #file_location{
-        blocks = Blocks, file_id = FileId
-    }}, File3} = file_ctx:get_local_file_location_doc(FileCtx2),
-    FileGuid = file_ctx:get_guid_const(File3),
-    SpaceId = file_ctx:get_space_id_const(File3),
-
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = FileGuid,
-            provider_id = oneprovider:get_provider_id(),
-            storage_id = StorageId,
-            file_id = FileId,
-            blocks = Blocks,
-            space_id = SpaceId
-        })
-    }.
+    check_permissions:execute(
+        [traverse_ancestors],
+        [_UserCtx, FileCtx],
+        fun get_file_location_insecure/2).
 
 %%--------------------------------------------------------------------
-%% @equiv open_file(UserCtx, FileCtx, CreateHandle) with permission check
+%% @equiv open_file(UserCtx, FileCtx) with permission check
 %% depending on the open flag.
 %% @end
 %%--------------------------------------------------------------------
@@ -141,13 +85,90 @@ open_file(UserCtx, FileCtx, rdwr) ->
 release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = session:remove_handle(SessId, HandleId),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    ok = file_handles:register_release(FileUuid, SessId, 1), %todo pass file_ctx
+    ok = file_handles:register_release(FileCtx, SessId, 1),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates and open file. Returns handle to the file, its attributes
+%% and location.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
+    fslogic_worker:fuse_response().
+create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
+    FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    SessId = user_ctx:get_session_id(UserCtx),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
+    {{StorageId, FileId}, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
+    fslogic_times:update_mtime_ctime(ParentFileCtx),
+    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx2),
+    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
+    {ok, HandleId} = save_handle(SessId, Handle),
+    #fuse_response{fuse_response = #file_attr{} = FileAttr} =
+        attr_req:get_file_attr_insecure(UserCtx, FileCtx2),
+    FileLocation = #file_location{
+        uuid = file_ctx:get_uuid_const(FileCtx2),
+        provider_id = oneprovider:get_provider_id(),
+        storage_id = StorageId,
+        file_id = FileId,
+        blocks = [#file_block{offset = 0, size = 0}],
+        space_id = SpaceId
+    },
+    ok = file_handles:register_open(FileCtx2, SessId, 1),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_created{
+            handle_id = HandleId,
+            file_attr = FileAttr,
+            file_location = FileLocation
+        }
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates file. Returns its attributes.
+%% @end
+%%--------------------------------------------------------------------
+-spec make_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
+make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
+    FileCtx = create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    {_, FileCtx2} = sfm_utils:create_storage_file(UserCtx, FileCtx),
+    fslogic_times:update_mtime_ctime(ParentFileCtx),
+    attr_req:get_file_attr_insecure(UserCtx, FileCtx2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file location.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_location_insecure(_UserCtx, FileCtx) ->
+    {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    {[#document{value = #file_location{
+        blocks = Blocks, file_id = FileId
+    }}], FileCtx3} = file_ctx:get_local_file_location_docs(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    SpaceId = file_ctx:get_space_id_const(FileCtx3),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_location{
+            uuid = FileUuid,
+            provider_id = oneprovider:get_provider_id(),
+            storage_id = StorageId,
+            file_id = FileId,
+            blocks = Blocks,
+            space_id = SpaceId
+        }
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -164,8 +185,8 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
         mode = Mode,
         owner = user_ctx:get_user_id(UserCtx)
     }},
-    ParentFileEntry = file_ctx:get_uuid_entry_const(ParentFileCtx),
-    {ok, FileUuid} = file_meta:create(ParentFileEntry, File), %todo pass file_ctx
+    ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
     CTime = erlang:system_time(seconds),
     {ok, _} = times:create(#document{key = FileUuid, value = #times{
@@ -184,7 +205,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 -spec save_handle(session:id(), storage_file_manager:handle()) ->
     {ok, binary()}.
 save_handle(SessId, Handle) ->
-    HandleId = base64:encode(crypto:rand_bytes(20)),
+    HandleId = base64:encode(crypto:strong_rand_bytes(20)),
     case session:is_special(SessId) of
         true -> ok;
         _ -> session:add_handle(SessId, HandleId, Handle)
@@ -193,39 +214,42 @@ save_handle(SessId, Handle) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, read, CreateHandle)
-%% with permission check.
+%% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_read(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
--check_permissions([traverse_ancestors, ?read_object]).
 open_file_for_read(UserCtx, FileCtx) ->
-    open_file_insecure(UserCtx, FileCtx, read).
+    check_permissions:execute(
+        [traverse_ancestors, ?read_object],
+        [UserCtx, FileCtx, read],
+        fun open_file_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, write, CreateHandle)
-%% with permission check.
+%% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_write(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
--check_permissions([traverse_ancestors, ?write_object]).
 open_file_for_write(UserCtx, FileCtx) ->
-    open_file_insecure(UserCtx, FileCtx, write).
+    check_permissions:execute(
+        [traverse_ancestors, ?write_object],
+        [UserCtx, FileCtx, write],
+        fun open_file_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv open_file_insecure(UserCtx, FileCtx, rdwr, CreateHandle)
-%% with permission check.
+%% @equiv open_file_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_for_rdwr(user_ctx:ctx(), file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
--check_permissions([traverse_ancestors, ?read_object, ?write_object]).
 open_file_for_rdwr(UserCtx, FileCtx) ->
-    open_file_insecure(UserCtx, FileCtx, rdwr).
+    check_permissions:execute(
+        [traverse_ancestors, ?read_object, ?write_object],
+        [UserCtx, FileCtx, rdwr],
+        fun open_file_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -236,21 +260,11 @@ open_file_for_rdwr(UserCtx, FileCtx) ->
 -spec open_file_insecure(user_ctx:ctx(), FileCtx :: file_ctx:ctx(),
     fslogic_worker:open_flag()) -> no_return() | #fuse_response{}.
 open_file_insecure(UserCtx, FileCtx, Flag) ->
-    {StorageDoc, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx2),
-    {#document{value = #file_location{
-        file_id = FileId}
-    }, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2),
-    SpaceDirUuid = file_ctx:get_space_dir_uuid_const(FileCtx3),
     SessId = user_ctx:get_session_id(UserCtx),
-    ShareId = file_ctx:get_share_id_const(FileCtx3),
-
-    SFMHandle = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, StorageDoc, FileId, ShareId), %todo pass file_ctx
+    SFMHandle = storage_file_manager:new_handle(SessId, FileCtx),
     {ok, Handle} = storage_file_manager:open(SFMHandle, Flag),
     {ok, HandleId} = save_handle(SessId, Handle),
-
-    ok = file_handles:register_open(FileUuid, SessId, 1), %todo pass file_ctx
-
+    ok = file_handles:register_open(FileCtx, SessId, 1),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}

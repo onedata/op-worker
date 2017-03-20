@@ -183,6 +183,7 @@ posix_read_file_user_test(Config) ->
     {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/t1_file">>, 8#770)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#370)),
@@ -190,7 +191,8 @@ posix_read_file_user_test(Config) ->
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#470)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 posix_read_file_group_test(Config) ->
     % Setup
@@ -200,6 +202,7 @@ posix_read_file_group_test(Config) ->
     {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t2_file">>, 8#770)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, GUID}, 8#730)),
@@ -207,7 +210,8 @@ posix_read_file_group_test(Config) ->
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {guid, GUID}, 8#740)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 posix_write_file_user_test(Config) ->
     % Setup
@@ -222,11 +226,13 @@ posix_write_file_user_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#270)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Check if written data is present
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#770)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 posix_write_file_group_test(Config) ->
     % Setup
@@ -242,11 +248,13 @@ posix_write_file_group_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#720)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId4, {guid, GUID}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Check if written data is present
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {guid, GUID}, 8#770)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 posix_read_dir_user_test(Config) ->
     % Setup
@@ -333,7 +341,8 @@ posix_execute_dir_user_test(Config) ->
     ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId2, {guid, Dir2GUID}, 0, 5)),
     {_, H} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, FileGUID}, rdwr)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H, 0, <<255:8>>)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H)).
 
 posix_execute_dir_group_test(Config) ->
     % Setup
@@ -353,7 +362,9 @@ posix_execute_dir_group_test(Config) ->
     ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
     {_, H} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, rdwr)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H, 0, <<255:8>>)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H)).
+
 
 %%%-------------------------------------------------------------------
 %%% Acl tests
@@ -369,6 +380,7 @@ acl_read_object_user_test(Config) ->
     {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t11_file">>, 8#777)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?read_object_mask),
@@ -378,7 +390,8 @@ acl_read_object_user_test(Config) ->
     Ace2 = ?allow_user(UserId1, ?read_object_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 acl_read_object_group_test(Config) ->
     % Setup
@@ -390,6 +403,7 @@ acl_read_object_group_test(Config) ->
     {_, GUID} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/space_name2/t12_file">>, 8#777)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Verification
     Ace1 = ?deny_group(GroupId1, ?read_object_mask),
@@ -399,7 +413,8 @@ acl_read_object_group_test(Config) ->
     Ace2 = ?allow_group(GroupId1, ?read_object_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 acl_list_container_user_test(Config) ->
     % Setup
@@ -457,10 +472,12 @@ acl_write_object_user_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Check if written data is present
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 acl_write_object_group_test(Config) ->
     % Setup
@@ -480,10 +497,12 @@ acl_write_object_group_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {guid, GUID}, [?acl_all(UserId2), Ace2])),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, GUID}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Check if written data is present
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {guid, GUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 acl_add_object_user_test(Config) ->
     % Setup
@@ -660,6 +679,7 @@ acl_traverse_container_user_test(Config) ->
         lfm_proxy:create(W, SessId1, <<"/space_name3/t25_dir1/dir2/file">>, 8#777),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, FileGUID}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Verification
     Ace1 = ?deny_user(UserId3, ?traverse_container_mask),
@@ -671,7 +691,8 @@ acl_traverse_container_user_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace2])),
     ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 acl_traverse_container_group_test(Config) ->
     % Setup
@@ -686,6 +707,7 @@ acl_traverse_container_group_test(Config) ->
         lfm_proxy:create(W, SessId1, <<"/space_name3/t26_dir1/dir2/file">>, 8#777),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, FileGUID}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
+    ?assertEqual(ok, lfm_proxy:close(W, H1)),
 
     % Verification
     Ace1 = ?deny_group(GroupId3, ?traverse_container_mask),
@@ -697,7 +719,8 @@ acl_traverse_container_group_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, Dir1GUID}, [?acl_all(UserId1), Ace2])),
     ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {guid, Dir2GUID}, 0, 5)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {guid, FileGUID}, read)),
-    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
+    ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)),
+    ?assertEqual(ok, lfm_proxy:close(W, H2)).
 
 acl_delete_object_user_test(Config) ->
     % Setup

@@ -38,7 +38,7 @@ create(#file_read_subscription{time_threshold = TimeThr}) ->
         aggregation_rule = fun event_utils:aggregate_file_read_events/2,
         emission_time = make_emission_time(TimeThr),
         emission_rule = fun(_) -> false end,
-        event_handler = fun fslogic_event:handle_file_read_events/2
+        event_handler = fun fslogic_event_handler:handle_file_read_events/2
     };
 
 create(#file_written_subscription{time_threshold = TimeThr}) ->
@@ -46,7 +46,7 @@ create(#file_written_subscription{time_threshold = TimeThr}) ->
         aggregation_rule = fun event_utils:aggregate_file_written_events/2,
         emission_time = make_emission_time(TimeThr),
         emission_rule = fun(_) -> false end,
-        event_handler = fun fslogic_event:handle_file_written_events/2
+        event_handler = fun fslogic_event_handler:handle_file_written_events/2
     };
 
 create(#file_attr_changed_subscription{} = Sub) ->
@@ -116,7 +116,8 @@ create(#monitoring_subscription{time_threshold = TimeThr}) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns emission rule based on the counter threshold.
 %% @end
 %%--------------------------------------------------------------------
@@ -128,7 +129,8 @@ make_counter_emission_rule(CtrThr) when is_integer(CtrThr) ->
     fun(Meta) -> Meta >= CtrThr end.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns emission time based on the time threshold.
 %% @end
 %%--------------------------------------------------------------------
@@ -140,7 +142,8 @@ make_emission_time(TimeThr) when is_integer(TimeThr) ->
     TimeThr.
 
 %%--------------------------------------------------------------------
-%% @private @doc
+%% @private
+%% @doc
 %% Returns handler which sends events to the remote subscriber via sequencer stream.
 %% @end
 %%--------------------------------------------------------------------

@@ -163,7 +163,7 @@ create_and_get_view(Config) ->
     {ok, ViewId} = rpc:call(Worker, indexes, add_index, [<<"user1">>, <<"name">>, ViewFunction, <<"space_id1">>, false]),
     ?assertMatch({ok, #{name := <<"name">>, space_id := <<"space_id1">>, function := _}},
         rpc:call(Worker, indexes, get_index, [<<"user1">>, ViewId])),
-    {ok, GuidsBlue} = ?assertMatch({ok, [_ | _]}, rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"blue">>}]]), 5, timer:seconds(3)),
+    {ok, GuidsBlue} = ?assertMatch({ok, [_ | _]}, rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"blue">>}, {stale, false}]]), 10, timer:seconds(3)),
     {ok, GuidsRed} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"red">>}]]),
     {ok, GuidsOrange} = rpc:call(Worker, indexes, query_view, [ViewId, [{key, <<"orange">>}]]),
 

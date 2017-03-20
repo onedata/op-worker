@@ -56,7 +56,7 @@ get_configuration_test(Config) ->
 
     UserRootGuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId), undefined),
 
-    ?assertMatch(#configuration{subscriptions = [_ | _], root_uuid = UserRootGuid},
+    ?assertMatch(#configuration{subscriptions = [_ | _], root_guid = UserRootGuid},
         ?fcm_req(Worker, get_configuration, [SessId])).
 
 create_storage_test_file_test(Config) ->
@@ -65,24 +65,24 @@ create_storage_test_file_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
 
     Response1 = ?req(Worker, SessId, #create_storage_test_file{
         storage_id = StorageId,
-        file_uuid = FileGUID
+        file_guid = FileGuid
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?OK},
         fuse_response = #storage_test_file{}}, Response1),
 
     Response2 = ?req(Worker, SessId, #create_storage_test_file{
         storage_id = StorageId,
-        file_uuid = <<"unknown_id">>
+        file_guid = <<"unknown_id">>
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response2),
 
     Response3 = ?req(Worker, SessId, #create_storage_test_file{
         storage_id = <<"unknown_id">>,
-        file_uuid = FileGUID
+        file_guid = FileGuid
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response3).
 
@@ -95,12 +95,12 @@ verify_storage_test_file_test(Config) ->
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#600)),
-    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, <<"test">>)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 
-    FileId = rpc:call(Worker, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}]),
+    FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
+    {FileId, _} = rpc:call(Worker, file_ctx, get_raw_storage_path, [FileCtx]),
     SpaceId = <<"space_id1">>,
 
     Response1 = ?req(Worker, SessId, #verify_storage_test_file{

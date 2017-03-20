@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update/5, rename/3, fill_blocks_with_storage_info/2]).
+-export([update/4, rename/3]).
 
 %%%===================================================================
 %%% API
@@ -33,24 +33,24 @@
 %% Return value tells whether file size has been changed by this call.
 %% @end
 %%--------------------------------------------------------------------
--spec update(FileUUID :: file_meta:uuid(), Blocks :: fslogic_blocks:blocks(),
-    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean(), version_vector:version_vector()) ->
+-spec update(file_ctx:ctx(), fslogic_blocks:blocks(),
+    FileSize :: non_neg_integer() | undefined, BumpVersion :: boolean()) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
-    file_location:critical_section(FileUUID,
+update(FileCtx, Blocks, FileSize, BumpVersion) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    file_location:critical_section(FileUuid,
         fun() ->
-            Location = #document{value = #file_location{size = OldSize,
-                version_vector = Version}} =
-                fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
-            FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
-
-            warning_if_different_version(BaseVersion, Version, FileUUID),
-            UpdatedLocation = append(Location, FullBlocks, BumpVersion),
+            {[Location = #document{ %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
+                value = #file_location{
+                    size = OldSize
+                }
+            }], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)), % TODO - better reset in ALL critical sections
+            UpdatedLocation = append(Location, Blocks, BumpVersion),
 
             case FileSize of
                 undefined ->
                     file_location:save(UpdatedLocation),
-                    case fslogic_blocks:upper(FullBlocks) > OldSize of
+                    case fslogic_blocks:upper(Blocks) > OldSize of
                         true -> {ok, size_changed};
                         false -> {ok, size_not_changed}
                     end;
@@ -69,79 +69,31 @@ update(FileUUID, Blocks, FileSize, BumpVersion, BaseVersion) ->
 %% This function in synchronized on the file.
 %% @end
 %%--------------------------------------------------------------------
--spec rename(FileUUID :: file_meta:uuid(), TargetFileId :: helpers:file(),
+-spec rename(file_ctx:ctx(), TargetFileId :: helpers:file(),
     TargetSpaceId :: binary()) -> ok | {error, Reason :: term()}.
-rename(FileUUID, TargetFileId, TargetSpaceId) ->
-    file_location:critical_section(FileUUID,
+rename(FileCtx, TargetFileId, TargetSpaceId) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    file_location:critical_section(FileUuid,
         fun() ->
-            #document{value = #file_location{blocks = Blocks} = Location} = LocationDoc =
-                fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location, get location as argument, instead of operating on first one
-
+            {[LocationDoc], _FileCtx2} = file_ctx:get_local_file_location_docs(file_ctx:reset(FileCtx)),
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
 
-            UpdatedBlocks = lists:map(fun(Block) ->
-                Block#file_block{file_id = TargetFileId, storage_id = TargetStorageId}
-            end, Blocks),
 
-            fslogic_file_location:set_last_rename(
+            replica_changes:set_last_rename(
                 version_vector:bump_version(
-                    LocationDoc#document{value = Location#file_location{
+                    LocationDoc#document{value = LocationDoc#document.value#file_location{
                             file_id = TargetFileId,
                             space_id = TargetSpaceId,
-                            storage_id = TargetStorageId,
-                            blocks = UpdatedBlocks
+                            storage_id = TargetStorageId
                     }}
                 ), TargetFileId, TargetSpaceId
             )
         %todo VFS-2813 support multi location, reconcile other local replicas according to this one
         end).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Make sure that storage_id and file_id are set (assume defaults form location
-%% if not)
-%% @end
-%%--------------------------------------------------------------------
--spec fill_blocks_with_storage_info(fslogic_blocks:blocks(), file_location:doc()) ->
-    fslogic_blocks:blocks().
-fill_blocks_with_storage_info(Blocks, #document{value = #file_location{storage_id = DSID, file_id = DFID}}) ->
-    FilledBlocks = lists:map(
-        fun(#file_block{storage_id = SID, file_id = FID} = B) ->
-            NewSID =
-                case SID of
-                    undefined -> DSID;
-                    _ -> SID
-                end,
-            NewFID =
-                case FID of
-                    undefined -> DFID;
-                    _ -> FID
-                end,
-
-            B#file_block{storage_id = NewSID, file_id = NewFID}
-        end, Blocks),
-
-    fslogic_blocks:consolidate(lists:usort(FilledBlocks)).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Warns if we update file blocks and it has changed in the meantime.
-%% @end
-%%--------------------------------------------------------------------
--spec warning_if_different_version(version_vector:version_vector(),
-    version_vector:version_vector(), file_meta:uuid()) -> ok.
-warning_if_different_version(undefined, _ActualVersion, _FileUuid) ->
-    ok;
-warning_if_different_version(_ActualVersion, _ActualVersion, _FileUuid) ->
-    ok;
-warning_if_different_version(BaseVersion, ActualVersion, FileUuid) ->
-    ?warning("Applying transferred changes of file ~p on top of modified replica, version mismatch: ~p vs ~p",
-        [FileUuid, BaseVersion, ActualVersion]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -152,9 +104,9 @@ warning_if_different_version(BaseVersion, ActualVersion, FileUuid) ->
 -spec do_local_truncate(FileSize :: non_neg_integer(), file_location:doc()) -> file_location:doc().
 do_local_truncate(FileSize, Doc = #document{value = #file_location{size = FileSize}}) ->
     Doc;
-do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
-    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}], true);
-do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} = LocalLocation) when LocalSize > FileSize ->
+do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{size = LocalSize}}) when LocalSize < FileSize ->
+    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize}], true);
+do_local_truncate(FileSize, LocalLocation = #document{value = #file_location{size = LocalSize}}) when LocalSize > FileSize ->
     shrink(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}], FileSize).
 
 %%--------------------------------------------------------------------
@@ -173,7 +125,7 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
     case BumpVersion of
         true ->
             version_vector:bump_version(
-                fslogic_file_location:add_change(
+                replica_changes:add_change(
                     Doc#document{value =
                     Loc#file_location{blocks = NewBlocks, size = max(OldSize, NewSize)}},
                     Blocks
@@ -194,7 +146,7 @@ shrink(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
     version_vector:bump_version(
-        fslogic_file_location:add_change(
+        replica_changes:add_change(
             Doc#document{value =
             Loc#file_location{blocks = NewBlocks1, size = NewSize}},
             {shrink, NewSize}

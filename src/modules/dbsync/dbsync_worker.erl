@@ -30,7 +30,6 @@
 -define(DIRECT_REQUEST_PER_DOCUMENT_TIMEOUT, 10).
 -define(DIRECT_REQUEST_BASE_TIMEOUT, timer:seconds(5)).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
--define(ETS_CACHE_NAME, doc_cache).
 
 -type queue_id() :: binary().
 -type queue() :: global | {provider, oneprovider:id(), queue_id()}.
@@ -71,7 +70,6 @@ init(_Args) ->
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, infinity, global}}),
     {ok, Interval} = application:get_env(?APP_NAME, dbsync_flush_queue_interval),
     timer:send_after(Interval, whereis(dbsync_worker), {timer, {flush_queue, global}}),
-        catch ets:new(?ETS_CACHE_NAME, [named_table, set, public]),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -170,10 +168,11 @@ handle({clear_temp, Key}) ->
     dbsync_utils:temp_clear(Key);
 
 %% Append change to given queue
-handle({QueueKey, #change{seq = Seq, doc = #document{key = Key, rev = Rev} = Doc, model = Model} = Change}) ->
-    ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+handle({QueueKey, #change{seq = Seq, doc = #document{key = Key,
+    rev = {RNum, [Id | _IdsTail]}} = Doc, model = Model} = Change}) ->
+    ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Change]),
     dbsync_utils:temp_put(last_change, erlang:monotonic_time(milli_seconds), 0),
-    Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, Rev}) =:= true,
+    Rereplication = QueueKey =:= global andalso dbsync_utils:temp_get({replicated, Key, RNum, Id}) =:= true,
     case {has_sync_context(Doc), Rereplication} of
         {true, false} ->
             Ans = case get_space_id(Doc) of
@@ -281,8 +280,9 @@ handle({dbsync_request, SessId, DBSyncRequest}) ->
 %% Handle stream crashes
 %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
 handle({'EXIT', Stream, Reason}) ->
+    DBSyncPid = whereis(dbsync_worker),
     case state_get(changes_stream) of
-        Stream ->
+        Stream when is_pid(DBSyncPid) ->
             Since = state_get(global_resume_seq),
             state_update(changes_stream,
                 fun(OldStream) ->
@@ -290,27 +290,37 @@ handle({'EXIT', Stream, Reason}) ->
                         true ->
                             OldStream;
                         _ ->
+                            % sprawdzic whereis(dbsync_worker)
                             {ok, NewStream} = init_stream(Since, infinity, global),
                             NewStream
                     end
                 end);
-        _ ->
-            ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
+        _ when is_pid(DBSyncPid) ->
+            ?warning("Unknown stream crash ~p: ~p", [Stream, Reason]);
+        _ -> % Node is exiting
+            ok
     end;
 handle({async_init_stream, undefined, Until, Queue}) ->
     handle({async_init_stream, 0, Until, Queue});
 handle({async_init_stream, Since, Until, Queue}) ->
-    state_update(changes_stream, fun(OldStream) ->
-        case catch init_stream(Since, infinity, Queue) of
-            {ok, Pid} ->
-                    catch exit(OldStream, shutdown),
-                Pid;
-            Reason ->
-                ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
-                timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {sync_timer, {async_init_stream, Since, Until, Queue}}),
-                undefined
-        end
-    end);
+    case whereis(dbsync_worker) of
+        DBSyncPid when is_pid(DBSyncPid) ->
+            state_update(changes_stream, fun(OldStream) ->
+                case catch init_stream(Since, infinity, Queue) of
+                    {ok, Pid} ->
+                            catch exit(OldStream, shutdown),
+                        Pid;
+                    Reason ->
+                        ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p",
+                            [Queue, Since, Until, Reason]),
+                        timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, DBSyncPid,
+                            {sync_timer, {async_init_stream, Since, Until, Queue}}),
+                        undefined
+                end
+            end);
+        _ -> % Node is exiting
+            ok
+    end;
 %% Unknown request
 handle(_Request) ->
     ?log_bad_request(_Request).
@@ -475,21 +485,10 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 %% Gets current version of links' document.
 %% @end
 %%--------------------------------------------------------------------
--spec forign_links_get(model_behaviour:model_config(), datastore:ext_key()) ->
+-spec forign_links_get(model_behaviour:model_config(), datastore:ext_key(), datastore:ext_key()) ->
     {ok, datastore:document()} | {error, Reason :: any()}.
-forign_links_get(ModelConfig, Key) ->
-    case ets:lookup(?ETS_CACHE_NAME, Key) of
-        [] ->
-            case couchdb_datastore_driver:get(ModelConfig, couchdb_datastore_driver:default_bucket(), Key) of
-                {ok, Doc = #document{key = Key}} ->
-                    ets:insert_new(?ETS_CACHE_NAME, {Key, Doc}),
-                    {ok, Doc};
-                Error ->
-                    Error
-            end;
-        [{_, Doc}] ->
-            {ok, Doc}
-    end.
+forign_links_get(ModelConfig, Key, MainDocKey) ->
+    mnesia_cache_driver:get_link_doc(ModelConfig, couchdb_datastore_driver:default_bucket(), Key, MainDocKey).
 
 
 %%--------------------------------------------------------------------
@@ -497,45 +496,19 @@ forign_links_get(ModelConfig, Key) ->
 %% Saves links document received from other provider and returns current version of given document.
 %% @end
 %%--------------------------------------------------------------------
--spec forign_links_save(model_behaviour:model_config(), OldRevNum :: non_neg_integer(), datastore:document()) ->
-    {ok, datastore:document()} | {error, Reason :: any()}.
-forign_links_save(ModelConfig, OldRevNum, Doc = #document{key = Key, rev = {NewRevNum, _}}) ->
-    MaxCacheSize = ?CHANGES_STASH_MAX_SIZE_BYTES,
-    case ets:info(?ETS_CACHE_NAME, memory) of
-        V when V > MaxCacheSize ->
-            ets:delete_all_objects(?ETS_CACHE_NAME);
-        _ -> ok
-    end,
-
-
-    case couchdb_datastore_driver:force_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc) of
-        {ok, _} ->
-            case OldRevNum of
-                _ when OldRevNum > NewRevNum ->
-                    ok;
-                _ when OldRevNum < NewRevNum ->
-                    ets:insert(?ETS_CACHE_NAME, {Key, Doc});
-                _ ->
-                    ets:delete(?ETS_CACHE_NAME, Key)
-
-            end,
-            forign_links_get(ModelConfig, Key);
+-spec forign_links_save(model_behaviour:model_config(), datastore:document()) ->
+    #links{} | {error, Reason :: any()}.
+forign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{doc_key = MainDocKey} = Links}) ->
+    case mnesia_cache_driver:force_link_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc, MainDocKey) of
+        ok ->
+            case forign_links_get(ModelConfig, Key, MainDocKey) of
+                {error, {not_found, _}} -> Links#links{link_map = #{}, children = #{}};
+                {ok, #document{value = CurrentLinks}} -> CurrentLinks
+            end;
         Error ->
             ?error("Unable to save forign links document ~p due to ~p", [Doc, Error]),
             Error
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Normalizes revision number to simple integer format.
-%% @end
-%%--------------------------------------------------------------------
--spec rev_to_num(binary() | {non_neg_integer(), term()}) -> non_neg_integer().
-rev_to_num({Num, _}) ->
-    Num;
-rev_to_num(Rev) ->
-    [Num, _] = binary:split(Rev, <<"-">>),
-    binary_to_integer(Num).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -547,71 +520,39 @@ rev_to_num(Rev) ->
 apply_changes(_SpaceId, []) ->
     ok;
 apply_changes(SpaceId,
-    [#change{doc = #document{key = Key, value = Value, rev = Rev, deleted = Deleted} = Doc, model = ModelName} = Change | T]) ->
+    [#change{doc = #document{key = Key, value = Value, rev = {RNum, [Id | _IdsTail]}, deleted = Deleted} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
-
-        MainDocKey = case Value of
-            #links{} ->
-                MDK = Value#links.doc_key,
-
-                OldLinksMap = case forign_links_get(ModelConfig, Key) of
-                    {ok, #document{value = OldLinks0}} ->
-                        OldLinks0;
-                    {error, _} ->
+        MyProvId = oneprovider:get_provider_id(),
+        case Value of
+            #links{origin = MyProvId} ->
+                ?warning("Received private, local links change from other provider ~p", [Change]),
+                [];
+            #links{origin = Origin} ->
+                MainDocKey = Value#links.doc_key,
+                OldLinks = case forign_links_get(ModelConfig, Key, MainDocKey) of
+                    {ok, #document{value = OldLinks1}} ->
+                        OldLinks1;
+                    {error, _Reason0} ->
                         #links{link_map = #{}, model = ModelName}
                 end,
-                {AddedMap0, DeletedMap0} = links_utils:diff(OldLinksMap, Value),
-                HKs = maps:keys(maps:merge(AddedMap0, DeletedMap0)),
 
-                lists:foreach(fun(LName) ->
-                    ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MDK, LName)
-                end, HKs),
-                MDK;
+                CurrentLinks = #links{} = forign_links_save(ModelConfig, Doc),
+                {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
+                ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
+                maps:keys(AddedMap) ++ maps:keys(DeletedMap);
             _ ->
-                ok = caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key),
-                Key
-        end,
-        MyProvId = oneprovider:get_provider_id(),
-%%        ChangedLinks = datastore:run_transaction(ModelName, couchdb_datastore_driver:synchronization_link_key(ModelConfig, MainDocKey), fun() ->
-            ChangedLinks = case Value of
-                #links{origin = MyProvId} ->
-                    ?warning("Received private, local links change from other provider ~p", [Change]),
-                    [];
-                #links{origin = Origin} ->
-                    {OldLinks, OldRev} = case forign_links_get(ModelConfig, Key) of
-                        {ok, #document{value = OldLinks1, rev = RRev}} ->
-                            {OldLinks1, rev_to_num(RRev)};
-                        {error, _Reason0} ->
-                            {#links{link_map = #{}, model = ModelName}, 0}
-                    end,
-                    {ok, #document{value = CurrentLinks = #links{origin = Origin}}} = forign_links_save(ModelConfig, OldRev, Doc),
-                    {AddedMap, DeletedMap} = links_utils:diff(OldLinks, CurrentLinks),
-                    ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
-                    maps:keys(AddedMap) ++ maps:keys(DeletedMap);
-                _ ->
-                    case Deleted of
-                        true ->
-                            dbsync_state:verify_and_del_key(Key, ModelName);
-                        _ ->
-                            ok
-                    end,
-                    {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-                    []
-            end,
-%%        end),
-
-        case Value of
-            #links{} ->
-                lists:foreach(fun(LName) ->
-                    caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, LName),
-                    ok
-                end, ChangedLinks);
-            _ ->
-                ok = caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key)
+                case Deleted of
+                    true ->
+                        dbsync_state:verify_and_del_key(Key, ModelName);
+                    _ ->
+                        ok
+                end,
+                ok = mnesia_cache_driver:force_save(ModelConfig, Doc),
+                []
         end,
 
-        dbsync_utils:temp_put({replicated, Key, Rev}, true, timer:minutes(15)),
+        dbsync_utils:temp_put({replicated, Key, RNum, Id}, true, timer:minutes(15)),
 
         Master = self(),
         spawn(fun() ->
@@ -710,16 +651,16 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
 %%--------------------------------------------------------------------
 -spec get_sync_context(datastore:document()) ->
     datastore:key() | datastore:document().
-get_sync_context(#document{key = FileUUID, value = #times{}}) ->
-    FileUUID;
+get_sync_context(#document{key = FileUuid, value = #times{}}) ->
+    FileUuid;
 get_sync_context(#document{value = #file_meta{}} = Doc) ->
     Doc;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
 get_sync_context(#document{key = Key, value = #custom_metadata{}}) ->
     Key;
-get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
-    FileUUID.
+get_sync_context(#document{value = #file_location{uuid = FileUuid}}) ->
+    FileUuid.
 
 
 %%--------------------------------------------------------------------
@@ -757,9 +698,9 @@ get_space_id(#document{key = Key, value = V} = Doc) ->
                     ?debug_stacktrace("Cannot get spaceID from document ~p due to: ~p", [Doc, Reason]),
                     {ok, <<"">>}
             end;
-        {ok, ScopeUUID} ->
+        {ok, SpaceUuid} ->
             try
-                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid),
                 {ok, SpaceId}
             catch
                 _:Reason ->
@@ -889,7 +830,7 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
                             ok
                     end;
                 {error, space_not_supported_locally} ->
-                    ?info("Ignoring space ~p status since it's not supported locally."),
+                    ?info("Ignoring space ~p status since it's not supported locally.", [SpaceId]),
                     ok
             end;
         false ->
@@ -1061,7 +1002,7 @@ consume_batches(ProviderId, SpaceId, CurrentUntil, NewBranchSince, NewBranchUnti
 %%--------------------------------------------------------------------
 -spec is_valid_stream(term()) -> boolean().
 is_valid_stream(Stream) when is_pid(Stream) ->
-    try erlang:process_info(Stream) =/= undefined
+    try is_process_alive(Stream)
     catch _:_ -> node(Stream) =/= node() end;
 is_valid_stream(_) ->
     false.

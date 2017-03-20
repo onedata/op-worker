@@ -157,7 +157,7 @@
 
 -record(share, {
     share_id :: od_share:id(),
-    share_file_uuid :: od_share:share_guid()
+    share_file_guid :: od_share:share_guid()
 }).
 
 -type provider_response_type() ::

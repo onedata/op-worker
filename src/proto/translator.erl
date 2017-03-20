@@ -71,17 +71,17 @@ translate_handshake_error(_) ->
 %% COMMON
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
-translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
-    #file_block{offset = Off, size = S, file_id = FID, storage_id = SID};
+translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
+    #file_block{offset = Off, size = S};
 translate_from_protobuf(#'FileRenamedEntry'{} = Record) ->
     #file_renamed_entry{
-        old_uuid = Record#'FileRenamedEntry'.old_uuid,
-        new_uuid = Record#'FileRenamedEntry'.new_uuid,
-        new_parent_uuid = Record#'FileRenamedEntry'.new_parent_uuid,
+        old_guid = Record#'FileRenamedEntry'.old_uuid,
+        new_guid = Record#'FileRenamedEntry'.new_uuid,
+        new_parent_guid = Record#'FileRenamedEntry'.new_parent_uuid,
         new_name = Record#'FileRenamedEntry'.new_name
     };
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
-    #dir{uuid = UUID};
+    #dir{guid = UUID};
 
 
 %% EVENT
@@ -98,14 +98,14 @@ translate_from_protobuf(#'FlushEvents'{} = Record) ->
 translate_from_protobuf(#'FileReadEvent'{} = Record) ->
     #file_read_event{
         counter = Record#'FileReadEvent'.counter,
-        file_uuid = Record#'FileReadEvent'.file_uuid,
+        file_guid = Record#'FileReadEvent'.file_uuid,
         size = Record#'FileReadEvent'.size,
         blocks = [translate_from_protobuf(B) || B <- Record#'FileReadEvent'.blocks]
     };
 translate_from_protobuf(#'FileWrittenEvent'{} = Record) ->
     #file_written_event{
         counter = Record#'FileWrittenEvent'.counter,
-        file_uuid = Record#'FileWrittenEvent'.file_uuid,
+        file_guid = Record#'FileWrittenEvent'.file_uuid,
         size = Record#'FileWrittenEvent'.size,
         file_size = Record#'FileWrittenEvent'.file_size,
         blocks = [translate_from_protobuf(B) || B <- Record#'FileWrittenEvent'.blocks]
@@ -118,10 +118,10 @@ translate_from_protobuf(#'FileLocationChangedEvent'{file_location = FileLocation
     #file_location_changed_event{
         file_location = translate_from_protobuf(FileLocation)
     };
-translate_from_protobuf(#'FilePermChangedEvent'{file_uuid = FileUuid}) ->
-    #file_perm_changed_event{file_uuid = FileUuid};
-translate_from_protobuf(#'FileRemovedEvent'{file_uuid = FileUuid}) ->
-    #file_removed_event{file_uuid = FileUuid};
+translate_from_protobuf(#'FilePermChangedEvent'{file_uuid = FileGuid}) ->
+    #file_perm_changed_event{file_guid = FileGuid};
+translate_from_protobuf(#'FileRemovedEvent'{file_uuid = FileGuid}) ->
+    #file_removed_event{file_guid = FileGuid};
 translate_from_protobuf(#'FileRenamedEvent'{} = Record) ->
     #file_renamed_event{
         top_entry = translate_from_protobuf(Record#'FileRenamedEvent'.top_entry),
@@ -149,25 +149,25 @@ translate_from_protobuf(#'FileWrittenSubscription'{} = Record) ->
     };
 translate_from_protobuf(#'FileAttrChangedSubscription'{} = Record) ->
     #file_attr_changed_subscription{
-        file_uuid = Record#'FileAttrChangedSubscription'.file_uuid,
+        file_guid = Record#'FileAttrChangedSubscription'.file_uuid,
         time_threshold = Record#'FileAttrChangedSubscription'.time_threshold
     };
 translate_from_protobuf(#'FileLocationChangedSubscription'{} = Record) ->
     #file_location_changed_subscription{
-        file_uuid = Record#'FileLocationChangedSubscription'.file_uuid,
+        file_guid = Record#'FileLocationChangedSubscription'.file_uuid,
         time_threshold = Record#'FileLocationChangedSubscription'.time_threshold
     };
 translate_from_protobuf(#'FilePermChangedSubscription'{} = Record) ->
     #file_perm_changed_subscription{
-        file_uuid = Record#'FilePermChangedSubscription'.file_uuid
+        file_guid = Record#'FilePermChangedSubscription'.file_uuid
     };
 translate_from_protobuf(#'FileRemovedSubscription'{} = Record) ->
     #file_removed_subscription{
-        file_uuid = Record#'FileRemovedSubscription'.file_uuid
+        file_guid = Record#'FileRemovedSubscription'.file_uuid
     };
 translate_from_protobuf(#'FileRenamedSubscription'{} = Record) ->
     #file_renamed_subscription{
-        file_uuid = Record#'FileRenamedSubscription'.file_uuid
+        file_guid = Record#'FileRenamedSubscription'.file_uuid
     };
 translate_from_protobuf(#'QuotaExceededSubscription'{}) ->
     #quota_exceeded_subscription{};
@@ -222,8 +222,8 @@ translate_from_protobuf(#'ResolveGuid'{path = Path}) ->
     #resolve_guid{path = Path};
 translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}) ->
     #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
-translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileUuid}) ->
-    #create_storage_test_file{storage_id = Id, file_uuid = FileUuid};
+translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileGuid}) ->
+    #create_storage_test_file{storage_id = Id, file_guid = FileGuid};
 translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_id = SpaceId,
     file_id = FId, file_content = FContent}) ->
     #verify_storage_test_file{storage_id = SId, space_id = SpaceId,
@@ -246,8 +246,8 @@ translate_from_protobuf(#'UpdateTimes'{atime = ATime, mtime = MTime,
     #update_times{atime = ATime, mtime = MTime, ctime = CTime};
 translate_from_protobuf(#'ChangeMode'{mode = Mode}) ->
     #change_mode{mode = Mode};
-translate_from_protobuf(#'Rename'{target_parent_uuid = TargetParentUuid, target_name = TargetName}) ->
-    #rename{target_parent_uuid = TargetParentUuid, target_name = TargetName};
+translate_from_protobuf(#'Rename'{target_parent_uuid = TargetParentGuid, target_name = TargetName}) ->
+    #rename{target_parent_guid = TargetParentGuid, target_name = TargetName};
 translate_from_protobuf(#'CreateFile'{name = Name, mode = Mode, flag = Flag}) ->
     #create_file{name = Name, mode = Mode, flag = open_flag_translate_from_protobuf(Flag)};
 translate_from_protobuf(#'MakeFile'{name = Name, mode = Mode}) ->
@@ -276,11 +276,11 @@ translate_from_protobuf(#'FuseResponse'{status = Status}) ->
         status = translate_from_protobuf(Status),
         fuse_response = undefined
     };
-translate_from_protobuf(#'ChildLink'{uuid = UUID, name = Name}) ->
-    #child_link{uuid = UUID, name = Name};
+translate_from_protobuf(#'ChildLink'{uuid = FileGuid, name = Name}) ->
+    #child_link{guid = FileGuid, name = Name};
 translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
     #file_attr{
-        uuid = FileAttr#'FileAttr'.uuid,
+        guid = FileAttr#'FileAttr'.uuid,
         name = FileAttr#'FileAttr'.name,
         mode = FileAttr#'FileAttr'.mode,
         parent_uuid = FileAttr#'FileAttr'.parent_uuid,
@@ -302,14 +302,14 @@ translate_from_protobuf(#'FileChildren'{child_links = FileEntries}) ->
         end, FileEntries)};
 translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
-        uuid = Record#'FileLocation'.uuid,
+        uuid = fslogic_uuid:guid_to_uuid(Record#'FileLocation'.uuid),
         provider_id = Record#'FileLocation'.provider_id,
         space_id = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
         blocks = lists:map(
-            fun(Block) ->
-                translate_from_protobuf(Block)
+            fun(#'FileBlock'{offset = Offset, size = Size}) ->
+                #file_block{offset = Offset, size = Size}
             end, Record#'FileLocation'.blocks)
     };
 translate_from_protobuf(#'HelperParams'{helper_name = HelperName, helper_args = HelpersArgs}) ->
@@ -334,14 +334,14 @@ translate_from_protobuf(#'FileOpened'{} = Record) ->
     #file_opened{
         handle_id = Record#'FileOpened'.handle_id
     };
-translate_from_protobuf(#'FileRenamed'{new_uuid = NewUuid, child_entries = ChildEntries}) ->
+translate_from_protobuf(#'FileRenamed'{new_uuid = NewGuid, child_entries = ChildEntries}) ->
     #file_renamed{
-        new_uuid = NewUuid,
+        new_guid = NewGuid,
         child_entries = [translate_from_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
     };
-translate_from_protobuf(#'Uuid'{uuid = Uuid}) ->
-    #uuid{
-        uuid = Uuid
+translate_from_protobuf(#'Uuid'{uuid = Guid}) ->
+    #guid{
+        guid = Guid
     };
 
 
@@ -441,7 +441,7 @@ translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
 translate_from_protobuf(#'Mimetype'{value = Value}) ->
     #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
-    #acl{value = fslogic_acl:from_json_format_to_acl(json_utils:decode_map(Value))};
+    #acl{value = acl_logic:from_json_format_to_acl(json_utils:decode_map(Value))};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
 translate_from_protobuf(#'ProviderFileDistribution'{provider_id = ProviderId, blocks = Blocks}) ->
@@ -461,7 +461,7 @@ translate_from_protobuf(#'CreateShare'{name = Name}) ->
 translate_from_protobuf(#'RemoveShare'{}) ->
     #remove_share{};
 translate_from_protobuf(#'Share'{share_id = ShareId, share_file_uuid = ShareGuid}) ->
-    #share{share_id = ShareId, share_file_uuid = ShareGuid};
+    #share{share_id = ShareId, share_file_guid = ShareGuid};
 
 %% DBSYNC
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -503,16 +503,16 @@ translate_from_protobuf(undefined) ->
 %% COMMON
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
-translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
-    #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
+translate_to_protobuf(#file_block{offset = Off, size = S}) ->
+    #'FileBlock'{offset = Off, size = S};
 translate_to_protobuf(#file_renamed_entry{} = Record) ->
     #'FileRenamedEntry'{
-        old_uuid = Record#'file_renamed_entry'.old_uuid,
-        new_uuid = Record#'file_renamed_entry'.new_uuid,
-        new_parent_uuid = Record#'file_renamed_entry'.new_parent_uuid,
+        old_uuid = Record#'file_renamed_entry'.old_guid,
+        new_uuid = Record#'file_renamed_entry'.new_guid,
+        new_parent_uuid = Record#'file_renamed_entry'.new_parent_guid,
         new_name = Record#'file_renamed_entry'.new_name
     };
-translate_to_protobuf(#dir{uuid = UUID}) ->
+translate_to_protobuf(#dir{guid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 
 
@@ -528,14 +528,14 @@ translate_to_protobuf(#flush_events{provider_id = ProviderId,
 translate_to_protobuf(#file_read_event{} = Record) ->
     {file_read, #'FileReadEvent'{
         counter = Record#file_read_event.counter,
-        file_uuid = Record#file_read_event.file_uuid,
+        file_uuid = Record#file_read_event.file_guid,
         size = Record#file_read_event.size,
         blocks = [translate_to_protobuf(B) || B <- Record#file_read_event.blocks]
     }};
 translate_to_protobuf(#file_written_event{} = Record) ->
     {file_written, #'FileWrittenEvent'{
         counter = Record#file_written_event.counter,
-        file_uuid = Record#file_written_event.file_uuid,
+        file_uuid = Record#file_written_event.file_guid,
         size = Record#file_written_event.size,
         file_size = Record#file_written_event.file_size,
         blocks = [translate_to_protobuf(B) || B <- Record#file_written_event.blocks]
@@ -546,10 +546,10 @@ translate_to_protobuf(#file_attr_changed_event{file_attr = FileAttr}) ->
 translate_to_protobuf(#file_location_changed_event{file_location = FileLocation}) ->
     {_, Record} = translate_to_protobuf(FileLocation),
     {file_location_changed, #'FileLocationChangedEvent'{file_location = Record}};
-translate_to_protobuf(#file_perm_changed_event{file_uuid = FileUuid}) ->
-    {file_perm_changed, #'FilePermChangedEvent'{file_uuid = FileUuid}};
-translate_to_protobuf(#file_removed_event{file_uuid = FileUuid}) ->
-    {file_removed, #'FileRemovedEvent'{file_uuid = FileUuid}};
+translate_to_protobuf(#file_perm_changed_event{file_guid = FileGuid}) ->
+    {file_perm_changed, #'FilePermChangedEvent'{file_uuid = FileGuid}};
+translate_to_protobuf(#file_removed_event{file_guid = FileGuid}) ->
+    {file_removed, #'FileRemovedEvent'{file_uuid = FileGuid}};
 translate_to_protobuf(#file_renamed_event{top_entry = TopEntry, child_entries = ChildEntries}) ->
     {file_renamed, #'FileRenamedEvent'{
         top_entry = translate_to_protobuf(TopEntry),
@@ -573,25 +573,25 @@ translate_to_protobuf(#file_written_subscription{} = Sub) ->
     }};
 translate_to_protobuf(#file_attr_changed_subscription{} = Record) ->
     {file_attr_changed, #'FileAttrChangedSubscription'{
-        file_uuid = Record#file_attr_changed_subscription.file_uuid,
+        file_uuid = Record#file_attr_changed_subscription.file_guid,
         time_threshold = Record#file_attr_changed_subscription.time_threshold
     }};
 translate_to_protobuf(#file_location_changed_subscription{} = Record) ->
     {file_location_changed, #'FileLocationChangedSubscription'{
-        file_uuid = Record#file_location_changed_subscription.file_uuid,
+        file_uuid = Record#file_location_changed_subscription.file_guid,
         time_threshold = Record#file_location_changed_subscription.time_threshold
     }};
 translate_to_protobuf(#file_perm_changed_subscription{} = Record) ->
     {file_perm_changed, #'FilePermChangedSubscription'{
-        file_uuid = Record#file_perm_changed_subscription.file_uuid
+        file_uuid = Record#file_perm_changed_subscription.file_guid
     }};
 translate_to_protobuf(#file_removed_subscription{} = Record) ->
     {file_removed, #'FileRemovedSubscription'{
-        file_uuid = Record#file_removed_subscription.file_uuid
+        file_uuid = Record#file_removed_subscription.file_guid
     }};
 translate_to_protobuf(#file_renamed_subscription{} = Record) ->
     {file_renamed, #'FileRenamedSubscription'{
-        file_uuid = Record#file_renamed_subscription.file_uuid
+        file_uuid = Record#file_renamed_subscription.file_guid
     }};
 translate_to_protobuf(#quota_exceeded_subscription{}) ->
     {quota_exceeded, #'QuotaExceededSubscription'{}};
@@ -613,9 +613,9 @@ translate_to_protobuf(#pong{data = Data}) ->
     {pong, #'Pong'{data = Data}};
 translate_to_protobuf(#protocol_version{major = Major, minor = Minor}) ->
     {protocol_version, #'ProtocolVersion'{major = Major, minor = Minor}};
-translate_to_protobuf(#configuration{root_uuid = RootUuid, subscriptions = Subs, disabled_spaces = Spaces}) ->
+translate_to_protobuf(#configuration{root_guid = RootGuid, subscriptions = Subs, disabled_spaces = Spaces}) ->
     {configuration, #'Configuration'{
-        root_uuid = RootUuid,
+        root_uuid = RootGuid,
         subscriptions = lists:map(
             fun(Sub) ->
                 {_, Record} = translate_to_protobuf(Sub),
@@ -665,8 +665,8 @@ translate_to_protobuf(#update_times{atime = ATime, mtime = MTime, ctime = CTime}
     {update_times, #'UpdateTimes'{atime = ATime, mtime = MTime, ctime = CTime}};
 translate_to_protobuf(#change_mode{mode = Mode}) ->
     {change_mode, #'ChangeMode'{mode = Mode}};
-translate_to_protobuf(#rename{target_parent_uuid = TargetParentUuid, target_name = TargetName}) ->
-    {rename, #'Rename'{target_parent_uuid = TargetParentUuid, target_name = TargetName}};
+translate_to_protobuf(#rename{target_parent_guid = TargetParentGuid, target_name = TargetName}) ->
+    {rename, #'Rename'{target_parent_uuid = TargetParentGuid, target_name = TargetName}};
 translate_to_protobuf(#create_file{name = Name, mode = Mode, flag = Flag}) ->
     {create_file, #'CreateFile'{name = Name, mode = Mode,
         flag = open_flag_translate_to_protobuf(Flag)}};
@@ -693,11 +693,11 @@ translate_to_protobuf(#fuse_response{status = Status, fuse_response = FuseRespon
         status = StatProto,
         fuse_response = translate_to_protobuf(FuseResponse)
     }};
-translate_to_protobuf(#child_link{uuid = UUID, name = Name}) ->
-    #'ChildLink'{uuid = UUID, name = Name};
+translate_to_protobuf(#child_link{guid = FileGuid, name = Name}) ->
+    #'ChildLink'{uuid = FileGuid, name = Name};
 translate_to_protobuf(#file_attr{} = FileAttr) ->
     {file_attr, #'FileAttr'{
-        uuid = FileAttr#file_attr.uuid,
+        uuid = FileAttr#file_attr.guid,
         name = FileAttr#file_attr.name,
         mode = FileAttr#file_attr.mode,
         parent_uuid = FileAttr#file_attr.parent_uuid,
@@ -718,13 +718,18 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     end, FileEntries)}};
 translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
-        uuid = Record#file_location.uuid,
+        uuid = fslogic_uuid:uuid_to_guid(Record#file_location.uuid, Record#file_location.space_id),
         provider_id = Record#file_location.provider_id,
         space_id = Record#file_location.space_id,
         storage_id = Record#file_location.storage_id,
         file_id = Record#file_location.file_id,
-        blocks = lists:map(fun(Block) ->
-            translate_to_protobuf(Block)
+        blocks = lists:map(fun(#file_block{offset = Offset, size = Size}) ->
+            #'FileBlock'{
+                offset = Offset,
+                size = Size,
+                file_id = Record#file_location.file_id,
+                storage_id = Record#file_location.storage_id
+            }
         end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
@@ -754,14 +759,14 @@ translate_to_protobuf(#file_opened{} = Record) ->
     {file_opened, #'FileOpened'{
         handle_id = Record#file_opened.handle_id
     }};
-translate_to_protobuf(#file_renamed{new_uuid = NewUuid, child_entries = ChildEntries}) ->
+translate_to_protobuf(#file_renamed{new_guid = NewGuid, child_entries = ChildEntries}) ->
     {file_renamed, #'FileRenamed'{
-        new_uuid = NewUuid,
+        new_uuid = NewGuid,
         child_entries = [translate_to_protobuf(ChildEntry) || ChildEntry <- ChildEntries]
     }};
-translate_to_protobuf(#uuid{uuid = Uuid}) ->
+translate_to_protobuf(#guid{guid = Guid}) ->
     {uuid, #'Uuid'{
-        uuid = Uuid
+        uuid = Guid
     }};
 
 %% PROXYIO
@@ -860,7 +865,7 @@ translate_to_protobuf(#cdmi_completion_status{value = Value}) ->
 translate_to_protobuf(#mimetype{value = Value}) ->
     {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
-    {acl, #'Acl'{value = json_utils:encode_map(fslogic_acl:from_acl_to_json_format(Value))}};
+    {acl, #'Acl'{value = json_utils:encode_map(acl_logic:from_acl_to_json_format(Value))}};
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
 translate_to_protobuf(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
@@ -879,7 +884,7 @@ translate_to_protobuf(#create_share{name = Name}) ->
     {create_share, #'CreateShare'{name = Name}};
 translate_to_protobuf(#remove_share{}) ->
     {remove_share, #'RemoveShare'{}};
-translate_to_protobuf(#share{share_id = ShareId, share_file_uuid = ShareGuid}) ->
+translate_to_protobuf(#share{share_id = ShareId, share_file_guid = ShareGuid}) ->
     {share, #'Share'{share_id = ShareId, share_file_uuid = ShareGuid}};
 
 %% DBSYNC

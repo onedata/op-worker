@@ -29,6 +29,7 @@
     mkdir_and_rmdir_loop_test_base/3, echo_and_delete_file_loop_test_base/3,
     create_and_delete_file_loop_test_base/3
 ]).
+-export([init_env/1, teardown_env/1]).
 
 % for file consistency testing
 -export([create_doc/4, set_parent_link/4, set_link_to_parent/4, create_location/4, set_link_to_location/4,
@@ -96,15 +97,13 @@ permission_cache_invalidate_test_skeleton(Config, Attempts, CheckedModule, Inval
 
     StatAns = lfm_proxy:stat(Worker1, SessId1, {path, TestDir}),
     ?assertMatch({ok, #file_attr{}}, StatAns),
-    {ok, #file_attr{uuid = FileGUID}} = StatAns,
-    FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUUID})),
+    {ok, #file_attr{guid = FileGuid}} = StatAns,
+    FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+    ControllerUUID = base64:encode(term_to_binary({CheckedModule, FileUuid})),
 
     InvalidateFun(Worker1, SessId1, TestDir),
     lists:foreach(fun({Worker, SessId}) ->
-%%        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
-        % TODO - repair
-        ?assertEqual({error,{badmatch,{error,eacces}}}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
+        ?assertEqual({error, ?EACCES}, lfm_proxy:ls(Worker, SessId, {path, LastTreeDir}, 0, 10), Attempts)
     end, WS),
 
     lists:foreach(fun(Worker) ->
@@ -309,12 +308,16 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         verify(Config, fun(W2) ->
-%%            ct:print("Verify write ~p", [{Level2File, W2}]),
-            OpenAns2 = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
-            ?assertMatch({ok, _}, OpenAns2),
-            {ok, Handle2} = OpenAns2,
-            ?match({ok, NewAcc}, lfm_proxy:read(W2, Handle2, 0, 500), Attempts),
-            ?assertEqual(ok, lfm_proxy:close(W2, Handle2))
+            ct:print("Verify write ~p", [{Level2File, W2}]),
+            ?match({ok, NewAcc},
+                begin
+                    {ok, Handle2} = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
+                    try
+                        lfm_proxy:read(W2, Handle2, 0, 500)
+                    after
+                        lfm_proxy:close(W2, Handle2)
+                    end
+                end, Attempts)
         end),
         ct:print("Changes of file from node ~p verified", [W]),
         NewAcc
@@ -447,7 +450,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                     true ->
                         {ok, SpaceDoc};
                     _ ->
-                        erlang:apply(meck_util:original_name(file_meta), get_scope, [Arg])
+                        meck:passthrough([Arg])
                 end
             end),
 
@@ -466,11 +469,16 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
 
         ?match({ok, #file_attr{}},
             lfm_proxy:stat(Worker2, SessId(Worker2), {path, D3Path}), Attempts),
-        OpenAns = lfm_proxy:open(Worker2, SessId(Worker2), {path, D3Path}, rdwr),
-        ?assertMatch({ok, _}, OpenAns),
-        {ok, Handle} = OpenAns,
-        ?match({ok, <<"abc">>}, lfm_proxy:read(Worker2, Handle, 0, 10), Attempts),
-        ?assertEqual(ok, lfm_proxy:close(Worker2, Handle))
+
+        ?match({ok, <<"abc">>},
+            begin
+                {ok, Handle} = lfm_proxy:open(Worker2, SessId(Worker2), {path, D3Path}, rdwr),
+                try
+                    lfm_proxy:read(Worker2, Handle, 0, 10)
+                after
+                    lfm_proxy:close(Worker2, Handle)
+                end
+            end, Attempts)
     end,
 
     {ok, CacheDelay} = test_utils:get_env(Worker1, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms),
@@ -843,33 +851,60 @@ echo_and_delete_file_loop_test_base(Config0, IterationsNum, User) ->
     ok.
 
 
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_env(Config) ->
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+%%        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
+        % TODO - change to 2 seconds
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_pool_queue_flush_delay, 1000)
+    end, ?config(op_worker_nodes, Config)),
+
+    application:start(etls),
+    hackney:start(),
+    initializer:enable_grpca_based_communication(Config),
+    initializer:disable_quota_limit(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
+
+teardown_env(Config) ->
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:unload_quota_mocks(Config),
+    initializer:disable_grpca_based_communication(Config),
+    hackney:stop(),
+    application:stop(etls).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-get_links(W, FileUUID) ->
-    rpc:call(W, ?MODULE, get_links, [FileUUID]).
+get_links(W, FileUuid) ->
+    rpc:call(W, ?MODULE, get_links, [FileUuid]).
 
-get_links(FileUUID) ->
+get_links(FileUuid) ->
     try
         AccFun = fun(LN, LV, Acc) ->
             maps:put(LN, LV, Acc)
         end,
-        {ok, Links} = datastore:foreach_link(?GLOBALLY_CACHED_LEVEL, FileUUID, file_meta, AccFun, #{}),
+        {ok, Links} = datastore:foreach_link(?GLOBALLY_CACHED_LEVEL, FileUuid, file_meta, AccFun, #{}),
         Links
     catch
         _:_ ->
             #{}
     end.
 
-count_links(W, FileUUID) ->
-    Links = get_links(W, FileUUID),
+count_links(W, FileUuid) ->
+    Links = get_links(W, FileUuid),
     maps:size(Links).
 
-verify_locations(W, FileUUID) ->
-    IDs = get_locations(W, FileUUID),
+verify_locations(W, FileUuid) ->
+    IDs = get_locations(W, FileUuid),
     lists:foldl(fun(ID, Acc) ->
         case rpc:call(W, file_location, get, [ID]) of
             {ok, _} ->
@@ -878,8 +913,8 @@ verify_locations(W, FileUUID) ->
         end
     end, 0, IDs).
 
-get_locations(W, FileUUID) ->
-    Links = get_links(W, FileUUID),
+get_locations(W, FileUuid) ->
+    Links = get_links(W, FileUuid),
     get_locations_from_map(Links).
 
 get_locations_from_map(Map) ->
@@ -914,8 +949,8 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
-    FileId = fslogic_utils:gen_storage_file_id(FileUuid, Path, FDoc#file_meta.version),
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 3, file_id = FileId, storage_id = StorageId}],
+    FileId = Path,
+    Location = #file_location{blocks = [#file_block{offset = 0, size = 3}], size = 3,
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
         space_id = SpaceId},
 
@@ -923,10 +958,9 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     LSL = MC#model_config.link_store_level,
     {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
 
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    LeafLess = fslogic_path:dirname(FileId),
+    LeafLess = filename:dirname(FileId),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, LeafLess),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, LeafLess, undefined),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
@@ -934,7 +968,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     end,
 
 
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
+    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, FileId, undefined),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, 8#775),
     {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
@@ -1026,9 +1060,9 @@ verify_stats(Config, File, IsDir) ->
                     lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
         end,
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
-        {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-        {FileUUID, rpc:call(W, file_meta, get, [FileUUID])}
+        {ok, #file_attr{guid = FileGuid}} = StatAns,
+        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        {FileUuid, rpc:call(W, file_meta, get, [FileUuid])}
     end),
 
     NotFoundList = lists:filter(fun({_, {error, {not_found, _}}}) -> true; (_) -> false end, VerAns),
@@ -1036,8 +1070,8 @@ verify_stats(Config, File, IsDir) ->
 
     ?assertEqual(ProxyNodes - ProxyNodesWritten, length(NotFoundList)),
     ?assertEqual(SyncNodes + ProxyNodesWritten, length(OKList)),
-    [{FileUUIDAns, _} | _] = VerAns,
-    FileUUIDAns.
+    [{FileUuidAns, _} | _] = VerAns,
+    FileUuidAns.
 
 create_file_on_worker(Config, FileBeg, Offset, File, WriteWorker) ->
     SessId = ?config(session, Config),
@@ -1066,7 +1100,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
 
     Offset2 = Offset rem 5 + 1,
     Size = 2*Offset2,
-    FileUUID = verify_stats(Config, File, false),
+    FileUuid = verify_stats(Config, File, false),
 
     Beg = binary:part(FileBeg, 0, Offset2),
     End = binary:part(File, 0, Offset2),
@@ -1074,7 +1108,7 @@ verify_file(Config, FileBeg, {Offset, File}) ->
 
     VerifyLocation = fun() ->
         verify(Config, fun(W) ->
-            verify_locations(W, FileUUID)
+            verify_locations(W, FileUuid)
         end)
     end,
 
@@ -1083,11 +1117,15 @@ verify_file(Config, FileBeg, {Offset, File}) ->
 
     verify(Config, fun(W) ->
 %%            ct:print("Verify file ~p", [{File, W}]),
-        OpenAns = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
-        ?assertMatch({ok, _}, OpenAns),
-        {ok, Handle} = OpenAns,
-        ?match({ok, FileCheck}, lfm_proxy:read(W, Handle, 0, Size), Attempts),
-        ?assertEqual(ok, lfm_proxy:close(W, Handle))
+        ?match({ok, FileCheck},
+            begin
+                {ok, Handle} = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
+                try
+                    lfm_proxy:read(W, Handle, 0, Size)
+                after
+                    lfm_proxy:close(W, Handle)
+                end
+            end, Attempts)
     end),
 
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
@@ -1106,25 +1144,25 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     LocToAns = verify(Config, fun(W) ->
         StatAns = lfm_proxy:stat(W, SessId(W), {path, File}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
-        {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
+        {ok, #file_attr{guid = FileGuid}} = StatAns,
+        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
 
-        {W, get_locations(W, FileUUID)}
+        {W, get_locations(W, FileUuid)}
     end),
-    {File, FileUUID, LocToAns}.
+    {File, FileUuid, LocToAns}.
 
-verify_del(Config, {F, FileUUID, Locations}) ->
+verify_del(Config, {F, FileUuid, Locations}) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
 
     verify(Config, fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUUID, Locations}]),
+%%            ct:print("Del ~p", [{W, F,  FileUuid, Locations}]),
 %%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
         % TODO - match to chosen error (check perms may also result in ENOENT)
         ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
 
-        ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUUID]), Attempts)
-%%        ?match(0, count_links(W, FileUUID), Attempts),
+        ?match({error, {not_found, _}}, rpc:call(W, file_meta, get, [FileUuid]), Attempts)
+%%        ?match(0, count_links(W, FileUuid), Attempts),
 %%
 %%        lists:foreach(fun(Location) ->
 %%            ?match({error, {not_found, _}},
@@ -1148,9 +1186,9 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
         StatAns = lfm_proxy:stat(W, SessId(W), {path, DirToCheck}),
         ?assertMatch({ok, #file_attr{}}, StatAns),
-        {ok, #file_attr{uuid = FileGUID}} = StatAns,
-        FileUUID = fslogic_uuid:guid_to_uuid(FileGUID),
-        {W, FileUUID}
+        {ok, #file_attr{guid = FileGuid}} = StatAns,
+        FileUuid = fslogic_uuid:guid_to_uuid(FileGuid),
+        {W, FileUuid}
     end),
 
     AssertLinks = fun() ->

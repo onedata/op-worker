@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This test verifies if the nagios endpoint works as expected.
+%%% @doc This test verifies if the core cluster mechanisms such as nagios,
+%%% hasing and datastore models work as expected.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(core_mechanism_test_SUITE).
@@ -43,8 +44,16 @@ all() -> ?ALL([nagios_test, test_models]).
 %%%===================================================================
 
 test_models(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Models = ?call(Worker, datastore_config, models, []),
+
+    lists:foreach(fun(Worker) ->
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
+%%        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
+        % TODO - change to 2 seconds
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)),
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_pool_queue_flush_delay, 1000)
+    end, Workers),
 
     lists:foreach(fun(ModelName) ->
 %%        ct:print("Module ~p", [ModelName]),

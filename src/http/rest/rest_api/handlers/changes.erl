@@ -173,14 +173,14 @@ send_change(SendChunk, #change{seq = Seq, doc = #document{
             ok
     end;
 send_change(SendChunk, Change, RequestedSpaceId) ->
-    Scope =
+    SpaceDirUuid =
         case Change#change.doc#document.value#file_meta.is_scope of
             true ->
                 Change#change.doc#document.key;
             false ->
                 Change#change.doc#document.value#file_meta.scope
         end,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Scope),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
 
     case SpaceId =:= RequestedSpaceId of
         true ->
@@ -210,7 +210,7 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Guid =
         try
-            {ok, Val} = cdmi_id:uuid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid)),
+            {ok, Val} = cdmi_id:guid_to_objectid(fslogic_uuid:uuid_to_guid(Uuid, SpaceId)),
             Val
         catch
             _:Error1 ->
@@ -240,7 +240,8 @@ prepare_response(#change{seq = Seq, doc = FileDoc = #document{
         end,
     Size =
         try
-            fslogic_blocks:get_file_size(FileDoc)
+            FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
+            fslogic_blocks:get_file_size(FileCtx)
         catch
             _:Error4 ->
                 ?error("Cannot fetch size for changes, error: ~p", [Error4]),

@@ -18,10 +18,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
+-export([save/1, get/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([critical_section/2, save_and_bump_version/1, ensure_blocks_not_empty/1,
-    validate_block_data/3]).
+-export([critical_section/2, save_and_bump_version/1]).
 -export([record_struct/1, record_upgrade/2]).
 
 -type id() :: binary().
@@ -34,7 +33,8 @@
 %% Returns structure of the record in specified version.
 %% @end
 %%--------------------------------------------------------------------
--spec record_struct(datastore_json:record_version()) -> datastore_json:record_struct().
+-spec record_struct(datastore_json:record_version()) ->
+    datastore_json:record_struct().
 record_struct(1) ->
     {record, [
         {uuid, string},
@@ -75,8 +75,8 @@ record_upgrade(1, {?MODEL_NAME, Uuid, ProviderId, StorageId, FileId, Blocks,
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
-%% run at the same time.
+%% Runs given function within locked ResourceId. This function makes sure that
+%% 2 funs with same ResourceId won't run at the same time.
 %% @end
 %%--------------------------------------------------------------------
 -spec critical_section(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
@@ -92,44 +92,6 @@ critical_section(ResourceId, Fun) ->
 save_and_bump_version(FileLocationDoc) ->
     file_location:save(version_vector:bump_version(FileLocationDoc)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Ensures that blocks of file location contains at least one entry (so client
-%% will know the storageId and fileId of file). If blocks are empty, function adds
-%% one block with offset and size set to 0.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_blocks_not_empty(#file_location{}) -> #file_location{}.
-ensure_blocks_not_empty(Loc = #file_location{blocks = []}) ->
-    Loc#file_location{blocks = [#file_block{offset = 0, size = 0}]};
-ensure_blocks_not_empty(Loc) ->
-    Loc.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns valid fileId and storageId for given file. If provided values are
-%% already valid, they will not be changed, otherwise default values
-%% will be returned .
-%% @end
-%%--------------------------------------------------------------------
--spec validate_block_data(file_meta:uuid(), helpers:file(), storage:id()) ->
-    {helpers:file(), storage:id()}.
-validate_block_data(FileUUID, FileId, StorageId) ->
-    #document{value = #file_location{file_id = LocalFileId, storage_id = LocalStorageId}} =
-        fslogic_utils:get_local_file_location({uuid, FileUUID}), %todo VFS-2813 support multi location
-    %% file_location will probably contain lists instead of single values
-    LocalFileIds = [LocalFileId],
-    LocalStorageIds = [LocalStorageId],
-    ValidFileId = case lists:member(FileId, LocalFileIds) of
-        true -> FileId;
-        false -> lists:nth(1, LocalFileIds)
-    end,
-    ValidStorageId = case lists:member(StorageId, LocalStorageIds) of
-        true -> StorageId;
-        false -> lists:nth(1, LocalStorageIds)
-    end,
-    {ValidFileId, ValidStorageId}.
-
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
@@ -141,9 +103,12 @@ validate_block_data(FileUUID, FileId, StorageId) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(Document = #document{key = Key, value = #file_location{uuid = UUID, space_id = SpaceId}}) ->
+save(Document = #document{key = Key, value = #file_location{
+    uuid = FileUuid,
+    space_id = SpaceId
+}}) ->
     NewSize = count_bytes(Document),
-    UserId = get_user_id(UUID),
+    UserId = get_owner_id(FileUuid),
     case get(Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
@@ -181,9 +146,12 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document = #document{value = #file_location{uuid = UUID, space_id = SpaceId}}) ->
+create(Document = #document{value = #file_location{
+    uuid = FileUuid,
+    space_id = SpaceId
+}}) ->
     NewSize = count_bytes(Document),
-    UserId = get_user_id(UUID),
+    UserId = get_owner_id(FileUuid),
 
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
     monitoring_event:emit_storage_used_updated(SpaceId, UserId, NewSize),
@@ -207,9 +175,31 @@ get(Key) ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     case get(Key) of
-        {ok, #document{value = #file_location{uuid = UUID, space_id = SpaceId}} = Doc} ->
+        {ok, Doc = #document{value = #file_location{
+            uuid = Uuid,
+            space_id = SpaceId
+        }}} ->
             Size = count_bytes(Doc),
-            UserId = get_user_id(UUID),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
+            UserId = get_owner_id(Uuid),
+            monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
+        _ ->
+            ok
+    end,
+    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes doc and emits event for owner.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(datastore:key(), datastore:id()) -> ok | datastore:generic_error().
+delete(Key, UserId) ->
+    case get(Key) of
+        {ok, Doc = #document{value = #file_location{
+            space_id = SpaceId
+        }}} ->
+            Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
             monitoring_event:emit_storage_used_updated(SpaceId, UserId, -1 * Size);
         _ ->
@@ -285,8 +275,8 @@ count_bytes([#file_block{size = Size} | T], TotalSize) ->
 %% Return user id for given file uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(file_meta:uuid()) -> datastore:id().
-get_user_id(FileUUID) ->
+-spec get_owner_id(file_meta:uuid()) -> datastore:id().
+get_owner_id(FileUuid) ->
     {ok, #document{value = #file_meta{owner = UserId}}} =
-        file_meta:get({uuid, FileUUID}),
+        file_meta:get({uuid, FileUuid}),
     UserId.

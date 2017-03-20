@@ -14,7 +14,6 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([delete/3]).
@@ -25,20 +24,24 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes file.
+%% Deletes file, and check permissions.
 %% If parameter Silent is true, file_removed_event will not be emitted.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
--check_permissions([traverse_ancestors]).
 delete(UserCtx, FileCtx, Silent) ->
-    case file_ctx:is_dir(FileCtx) of
-        {true, FileCtx2} ->
-            delete_dir(UserCtx, FileCtx2, Silent);
-        {false, FileCtx2} ->
-            delete_file(UserCtx, FileCtx2, Silent)
-    end.
+    check_permissions:execute(
+        [traverse_ancestors],
+        [UserCtx, FileCtx, Silent],
+        fun(UserCtx, FileCtx, Silent) ->
+            case file_ctx:is_dir(FileCtx) of
+                {true, FileCtx2} ->
+                    delete_dir(UserCtx, FileCtx2, Silent);
+                {false, FileCtx2} ->
+                    delete_file(UserCtx, FileCtx2, Silent)
+            end
+        end).
 
 %%%===================================================================
 %%% Internal functions
@@ -46,25 +49,29 @@ delete(UserCtx, FileCtx, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check.
+%% @equiv check_if_empty_and_delete/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
--check_permissions([{?delete_subcontainer, parent}, ?delete, ?list_container]).
 delete_dir(UserCtx, FileCtx, Silent) ->
-    check_if_empty_and_delete(UserCtx, FileCtx, Silent).
+    check_permissions:execute(
+        [{?delete_subcontainer, parent}, ?delete, ?list_container],
+        [UserCtx, FileCtx, Silent],
+        fun check_if_empty_and_delete/3).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @equiv delete_insecure(UserCtx, FileCtx, Silent) with permission check.
+%% @equiv delete_insecure/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
--check_permissions([{?delete_object, parent}, ?delete]).
 delete_file(UserCtx, FileCtx, Silent) ->
-    delete_insecure(UserCtx, FileCtx, Silent).
+    check_permissions:execute(
+        [{?delete_object, parent}, ?delete],
+        [UserCtx, FileCtx, Silent],
+        fun delete_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private

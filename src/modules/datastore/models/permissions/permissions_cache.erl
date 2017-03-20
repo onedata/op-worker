@@ -231,9 +231,10 @@ invalidate_permissions_cache() ->
 %% permissions by other providers when change of a document is propagated.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate(Model :: model_behaviour:model_type(), Key :: datastore:ext_key()) -> ok.
-invalidate(Model, Key) ->
+-spec invalidate(Model :: model_behaviour:model_type(), FileCtx :: file_ctx:ctx()) -> ok.
+invalidate(Model, FileCtx) ->
     invalidate_permissions_cache(),
+    Key = file_ctx:get_uuid_const(FileCtx),
 
     MC = Model:model_init(),
     Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
@@ -263,7 +264,7 @@ invalidate(Model, Key) ->
 
     case dbsync_worker:has_sync_context(Document) of
         true ->
-            {ok, SpaceId} = dbsync_worker:get_space_id(Document),
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
             ok = change_propagation_controller:save_change(Model, Key, Rev, SpaceId, ?MODEL_NAME, remote_invalidation);
         _ ->
             ok

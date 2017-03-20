@@ -89,12 +89,13 @@ basic_operations_test_core(Config, LastLevel) ->
     #document{key = Level20Key} = UL20,
 
     space_info_mock(Workers, <<"Space 1">>),
-    {{A30, U30}, GenPathLevel1} = ?call_with_time(Worker1, fslogic_path, gen_path, [{uuid, U21}, ?ROOT_SESS_ID]),
-    {{A31, U31}, GenPathLevel2} = ?call_with_time(Worker2, fslogic_path, gen_path, [{uuid, U22}, ?ROOT_SESS_ID]),
-    {{A32, U32}, GenPathLevel3} = ?call_with_time(Worker2, fslogic_path, gen_path, [{uuid, U23}, ?ROOT_SESS_ID]),
-    ?assertMatch({ok, <<"/Space 1/dir2/file1">>}, {A30, U30}),
-    ?assertMatch({ok, <<"/Space 1/dir2/file2">>}, {A31, U31}),
-    ?assertMatch({ok, <<"/Space 1/dir2/file3">>}, {A32, U32}),
+    {U30, GenPathLevel1} = ?call_with_time(Worker1, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, U21]),
+    ct:print("Err ~p", [{U30, GenPathLevel1}]),
+    {U31, GenPathLevel2} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, U22]),
+    {U32, GenPathLevel3} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, U23]),
+    ?assertMatch(<<"/Space 1/dir2/file1">>, U30),
+    ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
+    ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
 
     {{A41, U41}, ResolveLevel2} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/">>]),
     {{A42, U42}, ResolveLevel3} = ?call_with_time(Worker1, resolve_path, [<<"/Space 1/dir2">>]),
@@ -104,8 +105,8 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch({ok, {#document{key = Level20Key}, _}}, {A43, U43}),
 
 
-    {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, fslogic_path, gen_path, [UL20, ?ROOT_SESS_ID]),
-    ?assertMatch({ok, Level20Path}, {AL20_2, UL20_2}),
+    {UL20_2, GenPathLevel20} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Level20Key]),
+    ?assertMatch(Level20Path, UL20_2),
     test_utils:mock_unload(Workers, [od_space, fslogic_uuid]),
 
     {{A9, U9}, GetScopeLevel0} = ?call_with_time(Worker1, get_scope, [U14]),
@@ -120,7 +121,7 @@ basic_operations_test_core(Config, LastLevel) ->
     {{AL20_3, UL20_3}, GetScopeLevel20} = ?call_with_time(Worker2, get_scope, [UL20]),
     ?assertMatch({ok, #document{key = U2}}, {AL20_3, UL20_3}),
 
-    ?assertMatch({ok, [#child_link{uuid = U2}]}, ?call(Worker1, list_children, [{path, <<"/">>}, 0, 10])),
+    ?assertMatch({ok, [#child_link_uuid{uuid = U2}]}, ?call(Worker1, list_children, [{path, <<"/">>}, 0, 10])),
     ?assertMatch({ok, []}, ?call(Worker1, list_children, [{path, <<"/Space 1/dir2/file3">>}, 0, 10])),
 
     {{A15, U15}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, 0, 20]),
@@ -167,7 +168,7 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/Space 1/dir2/file1">>}])),
     ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/Space 1/dir2/file2">>}])),
 
-    ?assertMatch({ok, [#child_link{uuid = U23}]}, ?call(Worker1, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [#child_link_uuid{uuid = U23}]}, ?call(Worker1, list_children, [{path, <<"/Space 1/dir2">>}, 0, 10])),
 
     BigDirDel(0),
 

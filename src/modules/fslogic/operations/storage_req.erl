@@ -19,12 +19,7 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
--include_lib("annotations/include/annotations.hrl").
 
--define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME,
-    storage_test_file_name_size, 32)).
--define(TEST_FILE_CONTENT_LEN, application:get_env(?APP_NAME,
-    storage_test_file_content_size, 100)).
 -define(REMOVE_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
     remove_storage_test_file_delay_seconds, 300))).
 -define(VERIFY_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
@@ -56,7 +51,7 @@ get_configuration(SessId) ->
         end
     end, Docs),
     #configuration{
-        root_uuid = fslogic_uuid:uuid_to_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
+        root_guid = fslogic_uuid:user_root_dir_guid(fslogic_uuid:user_root_dir_uuid(UserId)),
         subscriptions = Subs,
         disabled_spaces = space_quota:get_disabled_spaces()
     }.
@@ -85,9 +80,9 @@ get_helper_params(_UserCtx, _StorageId, false = _ForceProxy) ->
 -spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
-    File = file_ctx:new_by_guid(Guid),
+    FileCtx = file_ctx:new_by_guid(Guid),
     UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = case file_ctx:get_space_id_const(File) of
+    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
         undefined -> throw(?ENOENT);
         <<_/binary>> = Id -> Id
     end,
@@ -102,9 +97,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
                 StorageDoc, HelperName),
             HelperParams = helper:get_params(Helper, ClientStorageUserUserCtx),
 
-            {FileId, _NewFile} = file_ctx:get_storage_file_id(File),
-            Dirname = fslogic_path:dirname(FileId),
-            TestFileName = fslogic_utils:random_ascii_lowercase_sequence(?TEST_FILE_NAME_LEN),
+            {RawStoragePath, _NewFile} = file_ctx:get_raw_storage_path(FileCtx),
+            Dirname = filename:dirname(RawStoragePath),
+            TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
             FileContent = storage_detector:create_test_file(Helper, ServerStorageUserUserCtx, TestFileId),
 

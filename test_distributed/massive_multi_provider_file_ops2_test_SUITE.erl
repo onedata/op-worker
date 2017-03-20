@@ -21,7 +21,7 @@
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 -export([
     db_sync_basic_opts_test/1, db_sync_many_ops_test/1, db_sync_distributed_modification_test/1,
@@ -141,28 +141,23 @@ multi_space_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]} | Config].
+    Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
+end_per_suite(Config) ->
+    multi_provider_file_ops_test_base:teardown_env(Config).
+
+init_per_testcase(file_consistency_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_meta, [passthrough]),
+    init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
 init_per_testcase(_Case, Config) ->
-    lists:foreach(fun(Worker) ->
-        test_utils:set_env(Worker, ?APP_NAME, dbsync_flush_queue_interval, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2))
-    end, ?config(op_worker_nodes, Config)),
-
     ct:timetrap({minutes, 60}),
-    application:start(etls),
-    hackney:start(),
-    initializer:enable_grpca_based_communication(Config),
-    initializer:disable_quota_limit(Config),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    lfm_proxy:init(Config).
 
+end_per_testcase(file_consistency_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, file_meta),
+    end_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unload_quota_mocks(Config),
-    initializer:disable_grpca_based_communication(Config),
-    hackney:stop(),
-    application:stop(etls).
+    lfm_proxy:teardown(Config).

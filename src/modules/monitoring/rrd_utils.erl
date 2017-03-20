@@ -59,13 +59,14 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
                 case logical_file_manager:mkdir(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName, undefined) of
                     {ok, Guid_} -> Guid_;
                     {error, ?EEXIST} ->
-                        {ok, #file_attr{uuid = Guid_}} = logical_file_manager:get_child_attr(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName),
+                        {ok, #file_attr{guid = Guid_}} = logical_file_manager:get_child_attr(?ROOT_SESS_ID, SpaceDirGuid, RRDDirName),
                         Guid_
                 end,
             {ok, Guid} = logical_file_manager:create(?ROOT_SESS_ID, RRDDirGuid, RRDFileName, undefined),
 
             {ok, Handle} = logical_file_manager:open(?ROOT_SESS_ID, {guid, Guid}, write),
             {ok, Handle2, RRDSize} = logical_file_manager:write(Handle, 0, RRDFile),
+            ok = logical_file_manager:fsync(Handle2),
             ok = logical_file_manager:release(Handle2),
 
             {ok, _} = monitoring_state:save(#document{key = MonitoringId,
@@ -106,6 +107,7 @@ update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
 
     RRDSize = byte_size(UpdatedRRDFile),
     {ok, Handle3, RRDSize} = logical_file_manager:write(Handle2, 0, UpdatedRRDFile),
+    ok = logical_file_manager:fsync(Handle3),
     ok = logical_file_manager:release(Handle3),
 
     {ok, _} = monitoring_state:update(MonitoringId, #{last_update_time => UpdateTime}),

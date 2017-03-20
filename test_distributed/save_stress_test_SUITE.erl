@@ -96,6 +96,8 @@ single_dir_creation_test_base(Config) ->
             DelAvgTime = get_avg(DelOk, DelTime),
             DErrorAvgTime = get_avg(DError, DErrorTime),
 
+            ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]),
+
             get_final_ans(SaveOk, SaveAvgTime, SError, SErrorAvgTime, DelOk, DelAvgTime, DError, DErrorAvgTime, 0);
         _ ->
             timer:sleep(timer:seconds(60)),
@@ -238,6 +240,17 @@ many_files_creation_tree_test_base(Config) ->
             FinalAns = get_final_ans_tree(Worker, FilesSaved, FilesAvgTime, DirsSaved,
                 DirsAvgTime, OtherAns, OtherAvgTime, 0, Timeout),
 
+            Sum = case get(ok_sum) of
+                undefined ->
+                    0;
+                S ->
+                    S
+            end,
+            NewSum = Sum + FilesSaved + DirsSaved,
+            put(ok_sum, NewSum),
+
+            ct:print("Files num ~p, dirs num ~p, agg ~p", [FilesSaved, DirsSaved, NewSum]),
+
             case NewLevels of
                 StartList ->
                     [stop | FinalAns];
@@ -317,6 +330,13 @@ spawn_workers({Dir, Children}, Fun, Fun2, Level, EndSpawnLevel) ->
 gather_answers(Answers, 0) ->
     {ok, Answers};
 gather_answers(Answers, Num) ->
+    case Num rem 1000 of
+        0 ->
+            ct:print("Gather answers num ~p", [Num]);
+        _ ->
+            ok
+    end,
+
     receive
         {worker_ans, Ans, ToAddV} ->
             {K, _} = ToAdd = case proplists:lookup(Ans, Answers) of

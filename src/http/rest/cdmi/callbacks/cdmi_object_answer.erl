@@ -31,8 +31,8 @@ prepare([], _State) ->
     #{};
 prepare([<<"objectType">> | Tail], State) ->
     (prepare(Tail, State))#{<<"objectType">> => <<"application/cdmi-object">>};
-prepare([<<"objectID">> | Tail], #{guid := Uuid} = State) ->
-    {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
+prepare([<<"objectID">> | Tail], #{guid := Guid} = State) ->
+    {ok, Id} = cdmi_id:guid_to_objectid(Guid),
     (prepare(Tail, State))#{<<"objectID">> => Id};
 prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
     (prepare(Tail, State))#{<<"objectName">> => filename:basename(Path)};
@@ -44,28 +44,28 @@ prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
 prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
     (prepare(Tail, State))#{<<"parentID">> => <<>>};
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
-    {ok, #file_attr{uuid = Uuid}} =
+    {ok, #file_attr{guid = Guid}} =
         onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
-    {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
+    {ok, Id} = cdmi_id:guid_to_objectid(Guid),
     (prepare(Tail, State))#{<<"parentID">> => Id};
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     (prepare(Tail, State))#{<<"capabilitiesURI">> => ?dataobject_capability_path};
-prepare([<<"completionStatus">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
-    CompletionStatus = cdmi_metadata:get_cdmi_completion_status(Auth, {guid, Uuid}),
+prepare([<<"completionStatus">> | Tail], #{auth := Auth, guid := Guid} = State) ->
+    CompletionStatus = cdmi_metadata:get_cdmi_completion_status(Auth, {guid, Guid}),
     (prepare(Tail, State))#{<<"completionStatus">> => CompletionStatus};
-prepare([<<"mimetype">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
-    Mimetype = cdmi_metadata:get_mimetype(Auth, {guid, Uuid}),
+prepare([<<"mimetype">> | Tail], #{auth := Auth, guid := Guid} = State) ->
+    Mimetype = cdmi_metadata:get_mimetype(Auth, {guid, Guid}),
     (prepare(Tail, State))#{<<"mimetype">> => Mimetype};
-prepare([<<"metadata">> | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
-    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, <<>>, Attrs)};
-prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
-    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Prefix, Attrs)};
-prepare([<<"metadata">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
-    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid})};
-prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, guid := Uuid} = State) ->
-    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Prefix)};
-prepare([<<"valuetransferencoding">> | Tail], #{auth := Auth, guid := Uuid} = State) ->
-    Encoding = cdmi_metadata:get_encoding(Auth, {guid, Uuid}),
+prepare([<<"metadata">> | Tail], #{auth := Auth, attributes := Attrs = #file_attr{guid = Guid}} = State) ->
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Guid}, <<>>, Attrs)};
+prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, attributes := Attrs = #file_attr{guid = Guid}} = State) ->
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Guid}, Prefix, Attrs)};
+prepare([<<"metadata">> | Tail], #{auth := Auth, guid := Guid} = State) ->
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Guid})};
+prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, guid := Guid} = State) ->
+    (prepare(Tail, State))#{<<"metadata">> => cdmi_metadata:prepare_metadata(Auth, {guid, Guid}, Prefix)};
+prepare([<<"valuetransferencoding">> | Tail], #{auth := Auth, guid := Guid} = State) ->
+    Encoding = cdmi_metadata:get_encoding(Auth, {guid, Guid}),
     (prepare(Tail, State))#{<<"valuetransferencoding">> => Encoding};
 prepare([<<"value">> | Tail], State) ->
     (prepare(Tail, State))#{<<"value">> => {range, default}};

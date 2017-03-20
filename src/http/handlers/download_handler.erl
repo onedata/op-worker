@@ -129,7 +129,7 @@ handle_http_download(Req, FileId) ->
 %% by cowboy to send data (file content) to receiving socket.
 %% @end
 %%--------------------------------------------------------------------
--spec cowboy_file_stream_fun(FileHandle :: lfm_context:handle(), Size :: integer()) ->
+-spec cowboy_file_stream_fun(FileHandle :: lfm_context:ctx(), Size :: integer()) ->
     fun((any(), module()) -> ok).
 cowboy_file_stream_fun(FileHandle, Size) ->
     fun(Socket, Transport) ->
@@ -154,7 +154,7 @@ cowboy_file_stream_fun(FileHandle, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_file(Socket :: term(), Transport :: atom(),
-    FileHandle :: lfm_context:handle(), Size :: integer(), BufSize :: integer()) -> ok.
+    FileHandle :: lfm_context:ctx(), Size :: integer(), BufSize :: integer()) -> ok.
 stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
     stream_file(Socket, Transport, FileHandle, Size, 0, BufSize).
 
@@ -167,7 +167,7 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stream_file(Socket :: term(), Transport :: atom(),
-    FileHandle :: lfm_context:handle(), Size :: integer(),
+    FileHandle :: lfm_context:ctx(), Size :: integer(),
     Sent :: integer(), BufSize :: integer()) -> ok.
 stream_file(_, _, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
     ok = logical_file_manager:release(FileHandle);

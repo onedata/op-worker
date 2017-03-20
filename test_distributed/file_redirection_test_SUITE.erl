@@ -70,17 +70,17 @@ redirect_event_test(Config) ->
         blocks = [#file_block{offset = 0, size = 1}]},
 
     ?assertEqual(ok, rpc:call(W1, event, emit, [BaseEvent#file_written_event{
-        file_uuid = TargetGuid
+        file_guid = TargetGuid
     }, SessId1])),
     {_, [TargetEvent]} = ?assertReceivedMatch({events, [#file_written_event{
-        file_uuid = TargetGuid
+        file_guid = TargetGuid
     }]}, ?TIMEOUT),
 
     ?assertEqual(ok, rpc:call(W2, event, emit, [BaseEvent#file_written_event{
-        file_uuid = RedirectionGuid
+        file_guid = RedirectionGuid
     }, SessId2])),
     {_, [RedirectedEvent]} = ?assertReceivedMatch({events, [#file_written_event{
-        file_uuid = TargetGuid
+        file_guid = TargetGuid
     }]}, ?TIMEOUT),
 
     ?assertEqual(TargetEvent, RedirectedEvent),

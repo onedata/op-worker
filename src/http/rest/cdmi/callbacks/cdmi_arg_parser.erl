@@ -28,7 +28,7 @@
 %% API
 -export([malformed_request/2, malformed_capability_request/2,
     malformed_objectid_request/2, get_ranges/2, parse_body/1,
-    parse_byte_range/2]).
+    parse_content_range/2, parse_byte_range/2]).
 
 %% Test API
 -export([get_supported_version/1, parse_content/1]).
@@ -110,18 +110,46 @@ parse_body(Req) ->
     {ok, Body, Req1}.
 
 %%--------------------------------------------------------------------
+%% @doc Parses byte ranges from 'content-range' http header format to erlang
+%% range tuple, i. e. <<"bytes 1-5/10">> will produce -> {1,5}
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_content_range(binary() | list(), non_neg_integer()) ->
+    invalid | {Range :: {From :: integer(), To :: integer()}, ExpectedSize :: integer() | undefined}.
+parse_content_range(RawHeaderRange, Size) when is_binary(RawHeaderRange) ->
+    try
+        [<<"bytes">>, RawRangeWithSize] = binary:split(RawHeaderRange, <<" ">>, [global]),
+        [RawRange, RawExpectedSize] = binary:split(RawRangeWithSize, <<"/">>, [global]),
+        [Range] = parse_byte_range([RawRange], Size),
+        case RawExpectedSize of
+            <<"*">> ->
+                {Range, undefined};
+            _ ->
+                {Range, binary_to_integer(RawExpectedSize)}
+        end
+    catch
+        _:_ ->
+            invalid
+    end.
+
+%%--------------------------------------------------------------------
 %% @doc Parses byte ranges from 'Range' http header format to list of
-%% erlang range tuples, i. e. <<"1-5,-3">> for a file with length 10
+%% erlang range tuples, i. e. <<"bytes=1-5,-3">> for a file with length 10
 %% will produce -> [{1,5},{7,9}]
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_byte_range(binary() | list(), non_neg_integer()) -> list(Range) | invalid when
     Range :: {From :: integer(), To :: integer()} | invalid.
 parse_byte_range(Range, Size) when is_binary(Range) ->
-    Ranges = parse_byte_range(binary:split(Range, <<",">>, [global]), Size),
-    case lists:member(invalid, Ranges) of
-        true -> invalid;
-        false -> Ranges
+    case binary:split(Range, <<"=">>, [global]) of
+        [<<"bytes">>, RawRange] ->
+            Ranges = parse_byte_range(binary:split(RawRange, <<",">>, [global]), Size),
+            case lists:member(invalid, Ranges) of
+                true -> invalid;
+                false -> Ranges
+            end;
+        _ ->
+            invalid
     end;
 parse_byte_range([], _) ->
     [];
@@ -222,21 +250,21 @@ add_objectid_path_to_state(Req, State) ->
     {Id, Req2} = cowboy_req:binding(id, Req),
     {Path, Req3} = cdmi_path:get_path_of_id_request(Req2),
 
-    % get uuid from objectid
-    Uuid =
-        case cdmi_id:objectid_to_uuid(Id) of
-            {ok, Uuid_} -> Uuid_;
+    % get GUID from objectid
+    Guid =
+        case cdmi_id:objectid_to_guid(Id) of
+            {ok, Guid_} -> Guid_;
             _ -> throw(?ERROR_INVALID_OBJECTID)
         end,
 
-    % get path of object with that uuid
+    % get path of object with that GUID
     {BasePath, Req4} =
         case is_capability_object(Req3) of
             {true, Req3_1} ->
                 {proplists:get_value(Id, ?CapabilityPathById), Req3_1};
             {false, Req3_1} ->
                 {Auth, Req3_2} = try_authenticate(Req3_1),
-                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Uuid),
+                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Guid),
                 {NewPath, Req3_2}
         end,
 

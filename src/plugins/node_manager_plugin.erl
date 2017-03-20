@@ -23,7 +23,7 @@
 %% node_manager_plugin_behaviour callbacks
 -export([before_init/1, after_init/1, on_terminate/2, on_code_change/3,
     handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
-    modules_with_args/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0,
+    modules_with_args/0, modules_hooks/0, listeners/0, cm_nodes/0, db_nodes/0, check_node_ip_address/0,
     app_name/0, clear_memory/1, renamed_models/0]).
 
 %%%===================================================================
@@ -80,8 +80,8 @@ listeners() -> node_manager:cluster_worker_listeners() ++ [
 -spec modules_with_args() -> Models :: [{atom(), [any()]}].
 modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     {session_manager_worker, [
-        {supervisor_spec, session_manager_worker:supervisor_spec()},
-        {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
+        {supervisor_flags, session_manager_worker:supervisor_flags()},
+        {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
     ]},
     {subscriptions_worker, []},
     {fslogic_worker, []},
@@ -90,6 +90,15 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
     {fslogic_deletion_worker, []},
     {space_sync_worker, []}
 ].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link node_manager_plugin_behaviour} callback modules_hooks/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_hooks() -> Hooks :: [{{Module :: atom(), early_init | init},
+    {HookedModule :: atom(), Fun :: atom(), Args :: list()}}].
+modules_hooks() -> node_manager:modules_hooks().
 
 %%--------------------------------------------------------------------
 %% @doc

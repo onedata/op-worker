@@ -15,7 +15,6 @@
 
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -42,7 +41,7 @@ get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
                 status = #status{code = ?OK},
                 provider_response = #xattr{
                     name = ?ACL_KEY,
-                    value = fslogic_acl:from_acl_to_json_format(Acl)
+                    value = acl_logic:from_acl_to_json_format(Acl)
                 }
             };
         Other ->
@@ -140,7 +139,7 @@ get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
 -spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
 set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}) ->
-    acl_req:set_acl(UserCtx, FileCtx, #acl{value = fslogic_acl:from_json_format_to_acl(Acl)});
+    acl_req:set_acl(UserCtx, FileCtx, #acl{value = acl_logic:from_json_format_to_acl(Acl)});
 set_xattr(UserCtx, FileCtx, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}) ->
     cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Mimetype);
 set_xattr(UserCtx, FileCtx, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}) ->
@@ -159,19 +158,45 @@ set_xattr(UserCtx, FileCtx, Xattr) ->
     set_custom_xattr(UserCtx, FileCtx, Xattr).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Removes file's extended attribute by key.
+%% @equiv remove_xattr_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?write_metadata]).
-remove_xattr(UserCtx, FileCtx, XattrName) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:delete_by_name(FileUuid, XattrName) of %todo pass file_ctx
+remove_xattr(_UserCtx, FileCtx, XattrName) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_metadata],
+        [_UserCtx, FileCtx, XattrName],
+        fun remove_xattr_insecure/3).
+
+%%--------------------------------------------------------------------
+%% @equiv list_xattr_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
+    ShowInternal :: boolean()) -> fslogic_worker:provider_response().
+list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
+    check_permissions:execute(
+        [traverse_ancestors],
+        [_UserCtx, FileCtx, Inherited, ShowInternal],
+        fun list_xattr_insecure/4).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file's extended attribute by key.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
+    fslogic_worker:provider_response().
+remove_xattr_insecure(_UserCtx, FileCtx, XattrName) ->
+    case xattr:delete_by_name(FileCtx, XattrName) of
         ok ->
-            fslogic_times:update_ctime({uuid, FileUuid},
-                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
@@ -182,14 +207,12 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 %% Returns complete list of extended attributes' keys of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
+-spec list_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
     ShowInternal :: boolean()) -> fslogic_worker:provider_response().
--check_permissions([traverse_ancestors]).
-list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
+list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
     case file_ctx:file_exists_const(FileCtx) of
         true ->
-            {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-            {ok, XattrList} = xattr:list(FileUuid, Inherited),
+            {ok, XattrList} = xattr:list(FileCtx, Inherited),
             FilteredXattrList = case ShowInternal of
                 true ->
                     XattrList;
@@ -209,9 +232,31 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
             #provider_response{status = #status{code = ?ENOENT}}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+%%--------------------------------------------------------------------
+%% @private
+%% @equiv get_custom_xattr_insecure/4 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
+    Inherited :: boolean()) -> fslogic_worker:provider_response().
+get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?read_metadata],
+        [_UserCtx, FileCtx, XattrName, Inherited],
+        fun get_custom_xattr_insecure/4).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @equiv set_custom_xattr_insecure/3 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
+    fslogic_worker:provider_response().
+set_custom_xattr(_UserCtx, FileCtx, Xattr) ->
+    check_permissions:execute(
+        [traverse_ancestors, ?write_metadata],
+        [_UserCtx, FileCtx, Xattr],
+        fun set_custom_xattr_insecure/3).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -219,12 +264,10 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
+-spec get_custom_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
     Inherited :: boolean()) -> fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?read_metadata]).
-get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:get_by_name(FileUuid, XattrName, Inherited) of %todo pass file_ctx
+get_custom_xattr_insecure(_UserCtx, FileCtx, XattrName, Inherited) ->
+    case xattr:get_by_name(FileCtx, XattrName, Inherited) of
         {ok, XattrValue} ->
             #provider_response{
                 status = #status{code = ?OK},
@@ -240,15 +283,12 @@ get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
+-spec set_custom_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
     fslogic_worker:provider_response().
--check_permissions([traverse_ancestors, ?write_metadata]).
-set_custom_xattr(UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
-    {uuid, FileUuid} = file_ctx:get_uuid_entry_const(FileCtx),
-    case xattr:save(FileUuid, XattrName, XattrValue) of %todo pass file_ctx
+set_custom_xattr_insecure(_UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
+    case xattr:save(FileCtx, XattrName, XattrValue) of
         {ok, _} ->
-            fslogic_times:update_ctime({uuid, FileUuid},
-                user_ctx:get_user_id(UserCtx)), %todo pass file_ctx
+            fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOENT}}
