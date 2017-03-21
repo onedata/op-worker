@@ -16,9 +16,14 @@
 -include_lib("public_key/include/public_key.hrl").
 
 % Record containing macaroons for user authorization in OZ.
+-record(macaroon_auth, {
+    macaroon = <<"">> :: binary(),
+    disch_macaroons = [] :: [binary()]
+}).
+
+% Record containing a (generic) token for user authorization in OZ.
 -record(token_auth, {
-    macaroon :: macaroon:macaroon(),
-    disch_macaroons = [] :: [macaroon:macaroon()]
+    token = <<"">> :: binary()
 }).
 
 % Record containing HTTP basic auth headers for user authorization in OZ.
@@ -27,7 +32,7 @@
     credentials = <<"">> :: binary()
 }).
 
--record(certificate, {
+-record(certificate_auth, {
     otp_cert :: #'OTPCertificate'{},
     chain :: [#'OTPCertificate'{}]
 }).

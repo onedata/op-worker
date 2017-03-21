@@ -1110,12 +1110,12 @@ get_provider_id(Node) ->
 
 create_rest_session(Node, UserID) ->
     ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_rest_session, [
-        #user_identity{user_id = UserID}, #token_auth{}
+        #user_identity{user_id = UserID}, #macaroon_auth{}
     ])).
 
 create_fuse_session(Node, SessionID, UserID) ->
     ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_fuse_session, [
-        SessionID, #user_identity{user_id = UserID}, #token_auth{}, self()
+        SessionID, #user_identity{user_id = UserID}, #macaroon_auth{}, self()
     ])).
 
 expectation(Users, ResumeAt, Missing) ->

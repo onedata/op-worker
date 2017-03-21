@@ -57,8 +57,7 @@
 
 all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
--define(MACAROON, macaroon:create("a", "b", "c")).
--define(MACAROON_TOKEN, element(2, token_utils:serialize62(?MACAROON))).
+-define(MACAROON, <<"DUMMY-MACAROON">>).
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
@@ -504,7 +503,7 @@ python_client_test_base(Config) ->
 
     HandshakeMessage = #'ClientMessage'{message_body = {handshake_request,
         #'HandshakeRequest'{session_id = <<"session_id">>, token = #'Token'{
-            value = ?MACAROON_TOKEN
+            value = ?MACAROON
         }}
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
@@ -655,7 +654,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body = {handshake_request,
         #'HandshakeRequest'{session_id = SessId, token = #'Token'{
-            value = ?MACAROON_TOKEN
+            value = ?MACAROON
         }}
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
@@ -719,10 +718,9 @@ spawn_ssl_echo_client(NodeToConnect) ->
     {ok, {Sock, SessionId}}.
 
 mock_identity(Workers) ->
-    Macaroon = ?MACAROON,
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{macaroon = M}) when M =:= Macaroon ->
+        fun(#macaroon_auth{macaroon = ?MACAROON}) ->
             {ok, #document{value = #user_identity{}}}
         end
     ).

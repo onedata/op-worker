@@ -34,7 +34,7 @@
 %% current user.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_auth() -> #token_auth{}.
+-spec get_user_auth() -> #macaroon_auth{}.
 get_user_auth() ->
     {ok, Auth} = session:get_auth(gui_session:get_session_id()),
     Auth.

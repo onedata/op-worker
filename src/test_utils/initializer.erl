@@ -35,92 +35,94 @@
 -export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
+-define(DUMMY_MACAROON(__UserId), <<"DUMMY-MACAROON-", UserId/binary>>).
+
 -record(user_config, {
     id :: od_user:id(),
     name :: binary(),
     default_space :: binary(),
     spaces :: [],
     groups :: [],
-    macaroon :: macaroon:macaroon()
+    macaroon :: binary()
 }).
 
 -define(TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_GLOBAL_SETUP, [
-        {<<"users">>, [
-            {<<"user1">>, [
-                {<<"default_space">>, <<"space_id1">>}
-            ]},
-            {<<"user2">>, [
-                {<<"default_space">>, <<"space_id2">>}
-            ]},
-            {<<"user3">>, [
-                {<<"default_space">>, <<"space_id3">>}
-            ]},
-            {<<"user4">>, [
-                {<<"default_space">>, <<"space_id4">>}
-            ]}
+    {<<"users">>, [
+        {<<"user1">>, [
+            {<<"default_space">>, <<"space_id1">>}
         ]},
-        {<<"groups">>, [
-            {<<"group1">>, [
-                {<<"users">>, [<<"user1">>]}
-            ]},
-            {<<"group2">>, [
-                {<<"users">>, [<<"user1">>, <<"user2">>]}
-            ]},
-            {<<"group3">>, [
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]}
-            ]},
-            {<<"group4">>, [
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]}
-            ]}
+        {<<"user2">>, [
+            {<<"default_space">>, <<"space_id2">>}
         ]},
-        {<<"spaces">>, [
-            {<<"space_id1">>, [
-                {<<"displayed_name">>, <<"space_name1">>},
-                {<<"users">>, [<<"user1">>]},
-                {<<"groups">>, [<<"group1">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+        {<<"user3">>, [
+            {<<"default_space">>, <<"space_id3">>}
+        ]},
+        {<<"user4">>, [
+            {<<"default_space">>, <<"space_id4">>}
+        ]}
+    ]},
+    {<<"groups">>, [
+        {<<"group1">>, [
+            {<<"users">>, [<<"user1">>]}
+        ]},
+        {<<"group2">>, [
+            {<<"users">>, [<<"user1">>, <<"user2">>]}
+        ]},
+        {<<"group3">>, [
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]}
+        ]},
+        {<<"group4">>, [
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]}
+        ]}
+    ]},
+    {<<"spaces">>, [
+        {<<"space_id1">>, [
+            {<<"displayed_name">>, <<"space_name1">>},
+            {<<"users">>, [<<"user1">>]},
+            {<<"groups">>, [<<"group1">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
-                    ]}
                 ]}
-            ]},
-            {<<"space_id2">>, [
-                {<<"displayed_name">>, <<"space_name2">>},
-                {<<"users">>, [<<"user1">>, <<"user2">>]},
-                {<<"groups">>, [<<"group1">>, <<"group2">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+            ]}
+        ]},
+        {<<"space_id2">>, [
+            {<<"displayed_name">>, <<"space_name2">>},
+            {<<"users">>, [<<"user1">>, <<"user2">>]},
+            {<<"groups">>, [<<"group1">>, <<"group2">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
 
-                    ]}
                 ]}
-            ]},
-            {<<"space_id3">>, [
-                {<<"displayed_name">>, <<"space_name3">>},
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]},
-                {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+            ]}
+        ]},
+        {<<"space_id3">>, [
+            {<<"displayed_name">>, <<"space_name3">>},
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]},
+            {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
-                    ]}
                 ]}
-            ]},
-            {<<"space_id4">>, [
-                {<<"displayed_name">>, <<"space_name4">>},
-                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]},
-                {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"supported_size">>, 1000000000}
+            ]}
+        ]},
+        {<<"space_id4">>, [
+            {<<"displayed_name">>, <<"space_name4">>},
+            {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]},
+            {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
+            {<<"providers">>, [
+                {<<"p1">>, [
+                    {<<"supported_size">>, 1000000000}
 %%                        {<<"storage">>, <<"/mnt/st1">>}
-                    ]}
                 ]}
             ]}
         ]}
+    ]}
 ]).
 
 %%%===================================================================
@@ -268,7 +270,8 @@ setup_session(Worker, [], Config) ->
 setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     macaroon = Macaroon, groups = Groups, name = UserName}} | R], Config) ->
 
-    Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
+    Name = fun(Text, User) ->
+        list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
 
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     UserId = UserId,
@@ -281,11 +284,11 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
         end
     end, Spaces),
 
-    Auth = #token_auth{macaroon = Macaroon},
+    Auth = #macaroon_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth, []])),
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
-    {ok, _} = rpc:call(Worker, od_user, fetch, [#token_auth{macaroon = Macaroon}]),
+    {ok, _} = rpc:call(Worker, od_user, fetch, [#macaroon_auth{macaroon = Macaroon}]),
     ?assertReceivedMatch(onedata_user_after, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -389,7 +392,7 @@ space_storage_mock(Workers, StorageId) ->
         {ok, #document{
             value = #space_strategies{
                 storage_strategies =
-                    maps:put(StorageId, #storage_strategies{}, #{})
+                maps:put(StorageId, #storage_strategies{}, #{})
             }
         }}
     end).
@@ -401,7 +404,7 @@ space_storage_mock(Workers, StorageId) ->
 %%--------------------------------------------------------------------
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
-    catch test_utils:mock_new(Workers, communicator),
+        catch test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
 
@@ -415,8 +418,8 @@ enable_grpca_based_communication(Config) ->
     CertMappings = lists:map(fun({ProvKey, Domain}) ->
         CertPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "cert.pem"),
         KeyPath0 = ?TEST_FILE(Config, binary_to_list(ProvKey) ++ "_" ++ "key.pem"),
-        CertPath = re:replace(CertPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return,list}]),
-        KeyPath = re:replace(KeyPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return,list}]),
+        CertPath = re:replace(CertPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return, list}]),
+        KeyPath = re:replace(KeyPath0, ".*/test_distributed/", "../../build/test_distributed/", [{return, list}]),
 
 
         test_utils:mock_expect(get_same_domain_workers(Config, Domain), oz_plugin, get_cert_file,
@@ -435,7 +438,7 @@ enable_grpca_based_communication(Config) ->
         fun(CertToCheck) ->
             case lists:keyfind(CertToCheck, 1, CertMappings) of
                 false -> false;
-                _     -> true
+                _ -> true
             end
         end),
 
@@ -491,7 +494,7 @@ mock_test_file_context(Config, UuidPrefix) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_ctx),
     test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
-        fun (FileCtx) ->
+        fun(FileCtx) ->
             Uuid = file_ctx:get_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> false;
@@ -499,7 +502,7 @@ mock_test_file_context(Config, UuidPrefix) ->
             end
         end),
     test_utils:mock_expect(Workers, file_ctx, file_exists_const,
-        fun (FileCtx) ->
+        fun(FileCtx) ->
             Uuid = file_ctx:get_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> true;
@@ -538,7 +541,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
-    catch test_utils:mock_new(AllWorkers, oneprovider),
+        catch test_utils:mock_new(AllWorkers, oneprovider),
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
@@ -557,7 +560,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         MWorker
     end, Domains),
 
-    catch test_utils:mock_new(AllWorkers, oz_providers),
+        catch test_utils:mock_new(AllWorkers, oz_providers),
 
     %% Setup storage
     lists:foreach(fun({SpaceId, _}) ->
@@ -597,11 +600,10 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         end),
 
 
-
     Spaces = lists:map(fun({SpaceId, SpaceConfig}) ->
         DisplayName = proplists:get_value(<<"displayed_name">>, SpaceConfig),
         {SpaceId, DisplayName}
-        end, SpacesSetup),
+    end, SpacesSetup),
 
     Groups = [{GroupId, GroupId} || {GroupId, _} <- proplists:get_value(<<"groups">>, GlobalSetup)],
 
@@ -644,16 +646,17 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        Macaroon = macaroon:create(<<"test">>, <<"key">>, UserId),
-        Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
+        Macaroon = ?DUMMY_MACAROON(UserId),
+        Name = fun(Text, User) ->
+            list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{Macaroon, #user_config{
-                id = UserId,
-                name = Name("name", UserId),
-                spaces = Spaces,
-                macaroon = Macaroon,
-                default_space = DefaultSpaceId,
-                groups = maps:get(UserId, UserToGroups, [])
-            }}
+            id = UserId,
+            name = Name("name", UserId),
+            spaces = Spaces,
+            macaroon = Macaroon,
+            default_space = DefaultSpaceId,
+            groups = maps:get(UserId, UserToGroups, [])
+        }}
         ]
     end, [], UserToSpaces),
 
@@ -718,8 +721,17 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
+    % Macaroon can be given in X-Auth-Token or Macaroon header
+    AuthToMacaroon = fun(Auth) ->
+        Macaroon = case Auth of
+            #macaroon_auth{macaroon = M} -> M;
+            #token_auth{token = T} -> T
+        end
+    end,
+
     test_utils:mock_new(Workers, oz_users),
-    test_utils:mock_expect(Workers, oz_users, get_details, fun(#token_auth{macaroon = Macaroon}) ->
+    test_utils:mock_expect(Workers, oz_users, get_details, fun(Auth) ->
+        Macaroon = AuthToMacaroon(Auth),
         {_, #user_config{name = UName, id = UID}} = lists:keyfind(Macaroon, 1, Users),
         {ok, #user_details{
             id = UID,
@@ -730,19 +742,22 @@ oz_users_mock_setup(Workers, Users) ->
         }}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_spaces, fun(#token_auth{macaroon = Macaroon}) ->
+    test_utils:mock_expect(Workers, oz_users, get_spaces, fun(Auth) ->
+        Macaroon = AuthToMacaroon(Auth),
         {_, #user_config{spaces = Spaces, default_space = DefaultSpaceId}} = lists:keyfind(Macaroon, 1, Users),
         {SpaceIds, _} = lists:unzip(Spaces),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_groups, fun(#token_auth{macaroon = Macaroon}) ->
+    test_utils:mock_expect(Workers, oz_users, get_groups, fun(Auth) ->
+        Macaroon = AuthToMacaroon(Auth),
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun(#token_auth{macaroon = Macaroon}) ->
+    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun(Auth) ->
+        Macaroon = AuthToMacaroon(Auth),
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
@@ -855,7 +870,7 @@ od_user_mock_setup(Workers) ->
 maybe_mount_in_root(ProviderConfig) ->
     case proplists:get_value(<<"mounted_in_root">>, ProviderConfig) of
         <<"true">> -> true;
-        _ ->  false
+        _ -> false
     end.
 
 %%--------------------------------------------------------------------
@@ -883,7 +898,7 @@ setup_storage(Worker, SpaceId, Domain, ProviderConfig, Config) ->
                     {ok, Storage} = ?assertMatch({ok, _},
                         rpc:call(Worker, storage, select, [StorageName])),
                     rpc:call(Worker, storage, get_id, [Storage]);
-                StId->
+                StId ->
                     StId
             end,
             add_space_storage(Worker, SpaceId, StorageId,

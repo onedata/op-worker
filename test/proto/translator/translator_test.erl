@@ -318,7 +318,7 @@ get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
 
 get_token(Val) ->
     {ok, M} = token_utils:deserialize(Val),
-    {#token_auth{macaroon = M}, #'Token'{value = Val}}.
+    {#macaroon_auth{macaroon = M}, #'Token'{value = Val}}.
 
 get_handshake_request(TokenVal, SessionId) ->
     {IntToken, PBToken} = get_token(TokenVal),

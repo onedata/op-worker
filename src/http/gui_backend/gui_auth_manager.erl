@@ -24,24 +24,24 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Authorizes a user via Global Registry. Upon success, returns
-%% the #token_auth{} record that can be used to perform operations
+%% the #macaroon_auth{} record that can be used to perform operations
 %% on behalf of the user.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Macaroon :: macaroon:macaroon()) ->
-    {ok, #token_auth{}} | {error, term()}.
-authenticate(Macaroon) ->
+-spec authenticate(MacaroonBin :: binary()) ->
+    {ok, #macaroon_auth{}} | {error, term()}.
+authenticate(MacaroonBin) ->
     try
+        {ok, Macaroon} = token_utils:deserialize(MacaroonBin),
         Caveats = macaroon:third_party_caveats(Macaroon),
-        DischMacaroons = lists:map(
+        DischMacaroonsBin = lists:map(
             fun({_, CaveatId}) ->
-                {ok, SrlzdDM} = oz_users:authorize(CaveatId),
-                {ok, DM} = token_utils:deserialize(SrlzdDM),
-                DM
+                {ok, DischMacaroonBin} = oz_users:authorize(CaveatId),
+                DischMacaroonBin
             end, Caveats),
-        {ok, #token_auth{
-            macaroon = Macaroon,
-            disch_macaroons = DischMacaroons}}
+        {ok, #macaroon_auth{
+            macaroon = MacaroonBin,
+            disch_macaroons = DischMacaroonsBin}}
     catch
         T:M ->
             ?error_stacktrace("Cannot authorize user with macaroon ~p - ~p:~p",

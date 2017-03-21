@@ -156,7 +156,7 @@ delete_record(<<"user">>, _Id) ->
 %% Returns a client-compliant user record based on space id.
 %% @end
 %%--------------------------------------------------------------------
--spec user_record(Auth :: #token_auth{}, UserId :: od_user:id()) ->
+-spec user_record(Auth :: #macaroon_auth{}, UserId :: od_user:id()) ->
     proplists:proplist().
 user_record(Auth, UserId) ->
     {ok, #document{value = #od_user{
@@ -210,7 +210,7 @@ user_record(Auth, UserId) ->
 %%      <<"handleServices">>
 %% @end
 %%--------------------------------------------------------------------
--spec push_modified_user(Auth :: #token_auth{}, UserId :: od_user:id(),
+-spec push_modified_user(Auth :: #macaroon_auth{}, UserId :: od_user:id(),
     RelationType :: binary(), AddOrRemove :: add | remove,
     Ids :: binary() | [binary()]) -> ok.
 push_modified_user(UserAuth, UserId, RelationType, AddOrRemove, Id) when is_binary(Id) ->

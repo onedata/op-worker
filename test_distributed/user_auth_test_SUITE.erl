@@ -27,8 +27,7 @@
 
 -export([token_authentication/1]).
 
--define(MACAROON, macaroon:create("a", "b", "c")).
--define(MACAROON_TOKEN, element(2, token_utils:serialize62(?MACAROON))).
+-define(MACAROON, <<"DUMMY-MACAROON">>).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
@@ -45,7 +44,7 @@ token_authentication(Config) ->
     SessionId = <<"SessionId">>,
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?MACAROON_TOKEN, SessionId),
+    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
 
     % then
     ?assertMatch(
@@ -58,7 +57,7 @@ token_authentication(Config) ->
     ),
     ?assertMatch(
         {ok, #document{value = #user_identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, user_identity, get, [#token_auth{macaroon = ?MACAROON}])
+        rpc:call(Worker1, user_identity, get, [#macaroon_auth{macaroon = ?MACAROON}])
     ),
     test_utils:mock_validate_and_unload(Workers, oz_endpoint),
     ok = etls:close(Sock).
@@ -168,11 +167,16 @@ mock_oz_certificates(Config) ->
     test_utils:mock_expect(Workers, oz_endpoint, provider_request,
         fun
         % @todo for now, in rest we only use the root macaroon
-            (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                {ok, SrlzdMacaroon} = token_utils:serialize62(Macaroon),
+            (#macaroon_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, OzRestApiUrl ++ URN, Headers#{
                     <<"content-type">> => <<"application/json">>,
-                    <<"macaroon">> => SrlzdMacaroon}, Body, [SSLOpts, insecure | Options]);
+                    <<"macaroon">> => Macaroon
+                }, Body, [SSLOpts, insecure | Options]);
+            (#token_auth{token = Token}, URN, Method, Headers, Body, Options) ->
+                http_client:request(Method, OzRestApiUrl ++ URN, Headers#{
+                    <<"content-type">> => <<"application/json">>,
+                    <<"x-auth-token">> => Token
+                }, Body, [SSLOpts, insecure | Options]);
             (_, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, OzRestApiUrl ++ URN,
                     Headers#{<<"content-type">> => <<"application/json">>},

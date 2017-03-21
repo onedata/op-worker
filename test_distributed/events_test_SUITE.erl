@@ -248,7 +248,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #user_identity{user_id = <<"user1">>},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, fuse, Iden, #token_auth{}, [Self]]
+        reuse_or_create_session, [SessId, fuse, Iden, #macaroon_auth{}, [Self]]
     )),
     {ok, SessId}.
 
