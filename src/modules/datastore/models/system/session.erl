@@ -500,14 +500,9 @@ remove_handle(SessionId, HandleID) ->
 -spec get_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | datastore:generic_error().
 get_handle(SessionId, HandleID) ->
-    case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
-        {ok, {HandleKey, sfm_handle}} ->
-            case sfm_handle:get(HandleKey) of
-                {ok, #document{value = Handle}} ->
-                    {ok, Handle};
-                Error ->
-                    Error
-            end;
+    case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+        {ok, #document{value = Handle}} ->
+            {ok, Handle};
         {error, Reason} ->
             {error, Reason}
     end.

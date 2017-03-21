@@ -22,7 +22,7 @@
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, write/3, write_without_events/3,
     read/3, read_without_events/3, silent_read/3, truncate/3, release/1,
-    get_file_distribution/2]).
+    get_file_distribution/2, create_and_open/5, create_and_open/4]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -155,6 +155,58 @@ create(SessId, ParentGuid, Name, Mode) ->
         #make_file{name = Name, mode = Mode},
         fun(#file_attr{guid = Guid}) ->
             {ok, Guid}  %todo consider returning file_attr
+        end
+    ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new file and opens it
+%% @end
+%%--------------------------------------------------------------------
+-spec create_and_open(session:id(), Path :: file_meta:path(),
+    Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
+    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
+    | logical_file_manager:error_reply().
+create_and_open(SessId, Path, Mode, OpenFlag) ->
+    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    remote_utils:call_fslogic(SessId, fuse_request,
+        #resolve_guid{path = ParentPath},
+        fun(#guid{guid = ParentGuid}) ->
+            lfm_files:create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag)
+        end).
+
+-spec create_and_open(session:id(), ParentGuid :: fslogic_worker:file_guid(),
+    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions(),
+    fslogic_worker:open_flag()) ->
+    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
+    | logical_file_manager:error_reply().
+create_and_open(SessId, ParentGuid, Name, undefined, OpenFlag) ->
+    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+    create_and_open(SessId, ParentGuid, Name, DefaultMode, OpenFlag);
+create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid,
+        #create_file{name = Name, mode = Mode, flag = OpenFlag},
+        fun(#file_created{
+            file_attr = #file_attr{
+                guid = FileGuid
+            },
+            file_location = #file_location{
+                provider_id = ProviderId,
+                file_id = FileId,
+                storage_id = StorageId
+            },
+            handle_id = HandleId
+        }) ->
+            Handle = lfm_context:new(
+                HandleId,
+                ProviderId,
+                SessId,
+                FileGuid,
+                OpenFlag,
+                FileId,
+                StorageId
+            ),
+            {ok, {FileGuid, Handle}}
         end
     ).
 

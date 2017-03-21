@@ -136,7 +136,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         status = #status{code = ?OK},
         fuse_response = #file_opened{handle_id = HandleId}
     } = rpc:call(Node, file_req, open_file_insecure,
-        [user_ctx:new(?ROOT_SESS_ID), FileCtx2, rdwr]),
+        [UserCtx, FileCtx2, rdwr]),
 
     #fuse_response{fuse_response = #file_attr{} = FileAttr} =
         attr_req:get_file_attr_insecure(UserCtx, FileCtx2),
