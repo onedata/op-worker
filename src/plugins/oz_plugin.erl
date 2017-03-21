@@ -109,12 +109,14 @@ get_cacerts_dir() ->
 %% when request is done.
 %% @end
 %%--------------------------------------------------------------------
--spec auth_to_rest_client(Auth :: term()) -> file:name_all().
+-spec auth_to_rest_client(Auth :: term()) -> {user, token, binary()} |
+{user, macaroon, {Macaroon :: binary(), DischargeMacaroons :: [binary()]}} |
+{user, basic, binary()} | provider.
 auth_to_rest_client(#macaroon_auth{macaroon = Mac, disch_macaroons = DMacs}) ->
     {user, macaroon, {Mac, DMacs}};
 
 auth_to_rest_client(#token_auth{token = Token}) ->
-    {user, macaroon, Token};
+    {user, token, Token};
 
 auth_to_rest_client(#basic_auth{credentials = Credentials}) ->
     {user, basic, Credentials};
