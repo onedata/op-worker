@@ -215,12 +215,11 @@ release(Handle) ->
 -spec fsync(FileHandle :: logical_file_manager:handle()) ->
     ok | logical_file_manager:error_reply().
 fsync(Handle) ->
-%%    SFMHandle = lfm_context:get_sfm_handle(Handle), %todo send via fslogic
     SessionId = lfm_context:get_session_id(Handle),
     FileGuid = lfm_context:get_guid(Handle),
     ProviderId = lfm_context:get_provider_id(Handle),
 
-%%    ok = storage_file_manager:fsync(SFMHandle),
+    %todo fsync via fslogic
     lfm_event_utils:flush_event_queue(SessionId, ProviderId,
         fslogic_uuid:guid_to_uuid(FileGuid)).
 
