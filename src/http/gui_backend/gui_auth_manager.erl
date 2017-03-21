@@ -45,6 +45,6 @@ authenticate(MacaroonBin) ->
     catch
         T:M ->
             ?error_stacktrace("Cannot authorize user with macaroon ~p - ~p:~p",
-                [Macaroon, T, M]),
+                [MacaroonBin, T, M]),
             {error, M}
     end.
