@@ -151,8 +151,9 @@ run_bfs_scan(#space_strategy_job{data = Data} = Job) ->
         storage_id := StorageId
     } = Data,
     StorageFilePath = filename_mapping:to_storage_path(SpaceId, StorageId, StorageLogicalFileId),
+    {ok, Storage} = storage:get(StorageId),
     SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
-        undefined, StorageId, StorageLogicalFileId, undefined, oneprovider:get_provider_id()),
+        undefined, Storage, StorageLogicalFileId, undefined),
     case storage_file_manager:stat(SFMHandle) of
         {ok, FileStats = #statbuf{
             st_mode = Mode,
