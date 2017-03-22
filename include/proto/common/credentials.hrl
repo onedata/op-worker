@@ -34,7 +34,7 @@
 
 -record(certificate_auth, {
     otp_cert :: #'OTPCertificate'{},
-    chain :: [#'OTPCertificate'{}]
+    chain = [] :: [#'OTPCertificate'{}]
 }).
 
 -endif.
