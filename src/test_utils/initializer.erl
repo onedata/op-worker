@@ -35,7 +35,7 @@
 -export([enable_grpca_based_communication/1, disable_grpca_based_communication/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 
--define(DUMMY_MACAROON(__UserId), <<"DUMMY-MACAROON-", UserId/binary>>).
+-define(DUMMY_MACAROON(__UserId), <<"DUMMY-MACAROON-", __UserId/binary>>).
 
 -record(user_config, {
     id :: od_user:id(),
