@@ -25,7 +25,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -44,7 +44,34 @@ record_struct(1) ->
         {file_conflict_resolution, {atom, #{atom => term}}},
         {file_caching, {atom, #{atom => term}}},
         {enoent_handling, {atom, #{atom => term}}}
+    ]};
+record_struct(2) ->
+    {record, [
+        {storage_strategies, #{string => {record, 1, [
+            {filename_mapping, {atom, #{atom => term}}},
+            {storage_import, {atom, #{atom => term}}},
+            {storage_update, {atom, #{atom => term}}},
+            {last_import_time, integer}
+        ]}}},
+        {file_conflict_resolution, {atom, #{atom => term}}},
+        {file_caching, {atom, #{atom => term}}},
+        {enoent_handling, {atom, #{atom => term}}}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, R = {?MODEL_NAME, StorageStrategies, _,  _, _}) ->
+    NewStorageStrategies = maps:map(fun(_, {storage_strategies,_, _,
+        {storage_update, StorageUpdateStrategies}, _}
+    ) ->
+        #storage_strategies{storage_update = hd(StorageUpdateStrategies)}
+    end, StorageStrategies),
+    {2, R#space_strategies{storage_strategies = NewStorageStrategies}}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -112,7 +139,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_strategies_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    Config = ?MODEL_CONFIG(space_strategies_bucket, [], ?GLOBALLY_CACHED_LEVEL),
+    Config#model_config{version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -134,6 +162,7 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
 
 %%%===================================================================
 %%% API
@@ -212,7 +241,7 @@ set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
             storage_import ->
                 OldSS#storage_strategies{storage_import = {StrategyName, StrategyArgs}};
             storage_update ->
-                OldSS#storage_strategies{storage_update = [{StrategyName, StrategyArgs}]}
+                OldSS#storage_strategies{storage_update = {StrategyName, StrategyArgs}}
         end,
 
         {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}

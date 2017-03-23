@@ -65,7 +65,7 @@
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_local_file_location_docs/1, get_file_location_docs/1,
-    get_file_location_ids/1, get_acl/1, get_raw_storage_path/1]).
+    get_file_location_ids/1, get_acl/1, get_raw_storage_path/1, get_parent_by_path/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -273,6 +273,16 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     {Parent, FileCtx2#file_ctx{parent = Parent}};
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns parent file_ctx of file under CanonicalPath
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent_by_path(file_meta:path()) -> ctx().
+get_parent_by_path(CanonicalPath) ->
+    {_Basename, Parent} = fslogic_path:basename_and_parent(CanonicalPath),
+    file_ctx:new_by_canonical_path(user_ctx:new(?ROOT_SESS_ID), Parent).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -38,8 +38,8 @@
 -define(TEST_CASES, [
     create_directory_import_test,
     create_file_import_test,
-    delete_directory_import_test,
-    delete_file_import_test,
+%%    delete_directory_import_test,
+%%    delete_file_import_test,
     append_file_import_test,
     copy_file_import_test,
     move_file_import_test,
@@ -299,9 +299,9 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     W1MountPoint = ?config(w1_mount_point, Config),
+    disable_storage_sync(Config),
     rpc:multicall(Workers, os, cmd, ["rm -rf " ++ binary_to_list(W1MountPoint) ++ "/*"]),
     os:cmd("rm -rf " ++ binary_to_list(W1MountPoint) ++ "/*"),
-    disable_storage_sync(Config),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),

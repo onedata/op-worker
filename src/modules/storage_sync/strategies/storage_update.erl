@@ -33,7 +33,7 @@
 -export([strategy_merge_result/2, strategy_merge_result/3]).
 
 %% API
--export([]).
+-export([start/5]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -104,3 +104,24 @@ strategy_merge_result(Job, LocalResult, ChildrenResult) ->
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function responsible for starting storage import.
+%% @end
+%%--------------------------------------------------------------------
+-spec start(od_space:id(), storage:id(), integer() | undefined,
+    file_meta:path(), non_neg_integer()) ->
+    [space_strategy:job_result()] | space_strategy:job_result().
+start(SpaceId, StorageId, LastImportTime, StorageLogicalFileId, MaxDepth) ->
+    CanonicalPath = fslogic_path:logical_to_canonical_path(StorageLogicalFileId, SpaceId),
+    InitialImportJobData = #{
+        last_import_time => LastImportTime,
+        space_id => SpaceId,
+        storage_id => StorageId,
+        storage_logical_file_id => StorageLogicalFileId,
+        max_depth => MaxDepth,
+        parent_ctx => file_ctx:get_parent_by_path(CanonicalPath)
+    },
+    ImportInit = space_sync_worker:init(?MODULE, SpaceId, StorageId, InitialImportJobData),
+    space_sync_worker:run(ImportInit).

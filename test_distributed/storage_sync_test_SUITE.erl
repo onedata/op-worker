@@ -39,10 +39,10 @@
     create_directory_export_test,
     create_file_import_test,
     create_file_export_test,
-    delete_directory_import_test,
-    delete_directory_export_test,
-    delete_file_import_test,
-    delete_file_export_test,
+%%    delete_directory_import_test,
+%%    delete_directory_export_test,
+%%    delete_file_import_test,
+%%    delete_file_export_test,
     append_file_import_test,
     append_file_export_test,
     copy_file_import_test,
@@ -78,6 +78,12 @@ all() -> ?ALL(?TEST_CASES).
 
 -define(TEST_DATA, <<"test_data">>).
 -define(TEST_DATA2, <<"test_data2">>).
+
+-define(W1_STORAGE(Config),
+    atom_to_binary(?config(host_path, ?config('/mnt/st2', ?config(posix, ?config(storages, Config)))), latin1)).
+
+-define(STORAGE(Config, Mnt),
+    atom_to_binary(?config(host_path, ?config(Mnt, ?config(posix, ?config(storages, Config)))), latin1)).
 
 %%%==================================================================
 %%% Test functions
@@ -394,7 +400,11 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     W1MountPoint = ?config(w1_mount_point, Config),
-    rpc:multicall(Workers, os, cmd, ["rm -rf " ++ binary_to_list(W1MountPoint) ++ "/*"]),
+    disable_storage_sync(Config),
+    rpc:multicall(Workers, os, cmd, ["rm -r " ++ binary_to_list(W1MountPoint) ++ "/space1/*"]), %todo hardcoded path
+    rpc:multicall(Workers, os, cmd, ["rm -r " ++ "/mnt/st1" ++ "/space1/*"]),
+    os:cmd("rm -r " ++ binary_to_list(?STORAGE(Config, '/mnt/st2'))++ "/space1"),
+    os:cmd("rm -r " ++ binary_to_list(?STORAGE(Config, '/mnt/st1'))++ "/space1"),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -410,7 +420,7 @@ end_per_testcase(_Case, Config) ->
 enable_storage_sync(Config) ->
     case ?config(w1_mount_point, Config) of
         undefined ->
-            [W1, _] = ?config(op_worker_nodes, Config),
+            [W1| _] = ?config(op_worker_nodes, Config),
             SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
             {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_INIT_FILE_PATH, 8#777),
             {ok, [W1Storage | _]} = rpc:call(W1, storage, list, []),
@@ -418,11 +428,19 @@ enable_storage_sync(Config) ->
             %% Enable import
             #document{value = #storage{helpers = [W1Helpers]}} = W1Storage,
             {ok, _ } = rpc:call(W1, storage_sync, start_storage_import, [?SPACE_ID, 10]),
+            {ok, _ } = rpc:call(W1, storage_sync, start_storage_update, [?SPACE_ID, 10]),
             #{<<"mountPoint">> := W1MountPoint} = helper:get_args(W1Helpers),
             [{w1_mount_point, W1MountPoint} | Config];
         _ ->
             Config
     end.
+
+disable_storage_sync(Config) ->
+    [W1, _] = ?config(op_worker_nodes, Config),
+    %% Disable import
+    {ok, _ } = rpc:call(W1, storage_sync, stop_storage_import, [?SPACE_ID]),
+    {ok, _ } = rpc:call(W1, storage_sync, stop_storage_update, [?SPACE_ID]).
+
 
 mkdir(Worker, DirPath) ->
     rpc:call(Worker, file, make_dir, [DirPath]).

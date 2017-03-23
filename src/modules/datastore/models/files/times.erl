@@ -21,7 +21,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([get_or_default/1]).
+-export([get_or_default/1, update_record/4]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -175,6 +175,28 @@ model_init() ->
     ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates #times{} record by choosing max from current and new
+%% timestamp.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_record(time(), time(), time(), #times{}) -> #times{}.
+update_record(NewATime, MTime, NewCTime,
+    Times = #times{
+        atime = ATime,
+        mtime = MTime,
+        ctime = CTime
+}) ->
+    Times#times{
+        atime = max(ATime, NewATime),
+        mtime = max(MTime, MTime),
+        ctime = max(CTime, NewCTime)
+    }.
+
+
 
 %%%===================================================================
 %%% Internal functions
