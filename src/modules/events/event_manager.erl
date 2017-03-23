@@ -255,21 +255,10 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
 handle_locally(Request, undefined, State) ->
     handle_locally(Request, State);
 
-handle_locally(Request, {file, FileCtx}, State) ->
-    case file_ctx:file_exists_const(FileCtx) of
-        false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            case file_meta:get_guid_from_phantom_file(FileUuid) of
-                {ok, NewFileGuid} ->
-                    NewFileCtx = file_ctx:new_by_guid(NewFileGuid),
-                    NewRequest = update_context(Request, {file, NewFileCtx}),
-                    handle_cast(NewRequest, State);
-                {error, {not_found, _}} ->
-                    {noreply, State}
-            end;
-        true ->
-            handle_locally(Request, State)
-    end.
+handle_locally(Request, {file, _FileCtx}, State) ->
+    %todo do we need to skip deleted files?
+    handle_locally(Request, State).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -399,22 +388,6 @@ get_context(#subscription{} = Sub) ->
 
 get_context(_) ->
     undefined.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates request file context.
-%% @end
-%%--------------------------------------------------------------------
--spec update_context(Request :: term(), Ctx :: ctx()) -> NewRequest :: term().
-update_context(#event{} = Evt, Ctx) ->
-    event_type:update_context(Evt, Ctx);
-
-update_context(#subscription{} = Sub, Ctx) ->
-    subscription_type:update_context(Sub, Ctx);
-
-update_context(Request, _Ctx) ->
-    Request.
 
 %%--------------------------------------------------------------------
 %% @private

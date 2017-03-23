@@ -273,9 +273,10 @@
     is_scope = false :: boolean(),
     scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
-    %% symlink_value for symlinks, file_guid for phantom files (redirection)
-    link_value :: undefined | file_meta:symlink_value() | fslogic_worker:file_guid(),
-    shares = [] :: [od_share:id()]
+    %% symlink_value for symlinks
+    link_value :: undefined | file_meta:symlink_value(),
+    shares = [] :: [od_share:id()],
+    deleted = false :: boolean()
 }).
 
 -record(storage, {

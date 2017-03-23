@@ -172,7 +172,7 @@ register_open(FileCtx, SessId, Count) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
         (#file_handles{is_removed = true}) ->
-            {error, phantom_file};
+            {error, removed};
         (#file_handles{descriptors = Fds} = Handle) ->
             case maps:get(SessId, Fds, 0) of
                 0 -> case session:add_open_file(SessId, FileGuid) of
@@ -200,7 +200,7 @@ register_open(FileCtx, SessId, Count) ->
                     register_open(FileCtx, SessId, Count);
                 {error, Reason} -> {error, Reason}
             end;
-        {error, phantom_file} -> {error, {not_found, ?MODEL_NAME}};
+        {error, removed} -> {error, {not_found, ?MODEL_NAME}};
         {error, Reason} -> {error, Reason}
     end.
 
@@ -222,7 +222,7 @@ register_release(FileCtx, SessId, Count) ->
                 ok ->
                     Fds2 = maps:remove(SessId, Fds),
                     case {Removed, maps:size(Fds2)} of
-                        {true, 0} -> {error, phantom_file};
+                        {true, 0} -> {error, removed};
                         _ -> {ok, Handle#file_handles{descriptors = Fds2}}
                     end;
                 {error, Reason} -> {error, Reason}
@@ -236,7 +236,7 @@ register_release(FileCtx, SessId, Count) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case update(FileUuid, Diff) of
         {ok, _} -> maybe_delete(FileUuid);
-        {error, phantom_file} ->
+        {error, removed} ->
             fslogic_deletion_worker:request_open_file_deletion(FileCtx),
             delete(FileUuid);
         {error, {not_found, _}} -> ok;

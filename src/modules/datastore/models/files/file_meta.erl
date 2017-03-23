@@ -40,12 +40,11 @@
 
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
-    get_parent_uuid/2, rename/2, setup_onedata_user/2, get_name/1]).
+    get_parent_uuid/2, rename/2, setup_onedata_user/2, get_name/1, get_even_when_deleted/1]).
 -export([get_ancestors/1, attach_location/3, get_local_locations/1,
     get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
 -export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
--export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2]).
--export([create_phantom_file/3, get_guid_from_phantom_file/1]).
+-export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2, delete_child_link/2]).
 -export([hidden_file_name/1]).
 -export([add_share/2, remove_share/2]).
 -export([get_uuid/1]).
@@ -58,7 +57,7 @@
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | datastore:document().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?PHANTOM_TYPE.
+-type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE.
 -type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
@@ -104,6 +103,21 @@ record_struct(2) ->
         {provider_id, string},
         {link_value, string},
         {shares, [string]}
+    ]};
+record_struct(3) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {owner, string},
+        {size, integer},
+        {version, integer},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {link_value, string},
+        {shares, [string]},
+        {deleted, boolean}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -116,7 +130,12 @@ record_struct(2) ->
 record_upgrade(1, {?MODEL_NAME, Name, Type, Mode, Uid, Size, Version, IsScope, Scope, ProviderId, LinkValue, Shares}) ->
     {2, #file_meta{name = Name, type = Type, mode = Mode, owner = Uid, size = Size,
         version = Version, is_scope = IsScope, scope = Scope,
-        provider_id = ProviderId, link_value = LinkValue, shares = Shares}}.
+        provider_id = ProviderId, link_value = LinkValue, shares = Shares}};
+record_upgrade(2, {?MODEL_NAME, Name, Type, Mode, Uid, Size, Version, IsScope, Scope, ProviderId, LinkValue, Shares}) ->
+    {3, #file_meta{name = Name, type = Type, mode = Mode, owner = Uid, size = Size,
+        version = Version, is_scope = IsScope, scope = Scope,
+        provider_id = ProviderId, link_value = LinkValue, shares = Shares,
+        deleted = false}}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -287,6 +306,21 @@ fix_parent_links(Parent, Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Delete link from parent to child
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_child_link(ParentDoc :: doc(), ChildDoc :: doc()) -> ok.
+delete_child_link(ParentDoc, #document{value = #file_meta{
+    name = ChildName,
+    version = V
+}}) ->
+    datastore:run_transaction(fun() ->
+        ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentDoc, ChildName),
+        ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentDoc, snapshot_name(ChildName, V))
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -304,7 +338,21 @@ get(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
     #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, owner = ?ROOT_USER_ID}}};
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    case get_even_when_deleted(Key) of
+        {ok, #document{value = #file_meta{deleted = true}}} ->
+            {error, {not_found, ?MODULE}};
+        Other ->
+            Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_meta doc even if its marked as deleted
+%% @end
+%%--------------------------------------------------------------------
+-spec get_even_when_deleted(uuid()) -> {ok, datastore:document()} | datastore:get_error().
+get_even_when_deleted(FileUuid) ->
+    datastore:get(?STORE_LEVEL, ?MODULE, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -368,7 +416,16 @@ exists({path, Path}) ->
             false
     end;
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    case get(Key) of
+        {ok, #document{value = #file_meta{deleted = false}}} ->
+            true;
+        {ok, _} ->
+            false;
+        {error, {not_found, _}} ->
+            false;
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -410,7 +467,7 @@ get_child(Doc, Name) ->
 model_init() ->
     Config = ?MODEL_CONFIG(files, [], ?GLOBALLY_CACHED_LEVEL,
         ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id(), true),
-    Config#model_config{sync_enabled = true, version = 2}.
+    Config#model_config{sync_enabled = true, version = 3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -837,52 +894,6 @@ to_uuid({path, Path}) ->
 -spec is_root_dir(datastore:document()) -> boolean().
 is_root_dir(#document{key = Key}) ->
     Key =:= ?ROOT_DIR_UUID.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates phantom file serving as redirection to file that has
-%% recently changed its GUID.
-%% @end
-%%--------------------------------------------------------------------
--spec create_phantom_file(uuid(), uuid(), fslogic_worker:file_guid()) ->
-    {ok, uuid()} | datastore:generic_error().
-create_phantom_file(OldUuid, OldScope, NewGUID) ->
-    {ok, PhantomUuid} = save(#document{key = fslogic_uuid:uuid_to_phantom_uuid(OldUuid),
-        value = #file_meta{type = ?PHANTOM_TYPE, scope = OldScope, link_value = NewGUID}}),
-    CreationTime = erlang:system_time(seconds),
-    task_manager:start_task(fun() ->
-        TimeSinceCreation = erlang:system_time(seconds) - CreationTime,
-        {ok, PhantomLifespan} = application:get_env(?APP_NAME, phantom_lifespan_seconds),
-        case TimeSinceCreation > PhantomLifespan of
-            false ->
-                timer:sleep(timer:seconds(PhantomLifespan));
-            true ->
-                ok
-        end,
-        case file_meta:delete(PhantomUuid) of
-            ok ->
-                ?debug("Deleted phantom file redirecting to ~p", [NewGUID]),
-                ok;
-            Error ->
-                ?debug("Error deleting phantom file redirecting to ~p: ~p", [NewGUID, Error]),
-                Error
-        end
-    end, ?NODE_LEVEL),
-    {ok, PhantomUuid}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves new GUID from phantom file basing on missing file UUID.
-%% @end
-%%--------------------------------------------------------------------
--spec get_guid_from_phantom_file(uuid()) ->
-    {ok, fslogic_worker:file_guid()} | datastore:get_error().
-get_guid_from_phantom_file(OldUuid) ->
-    case get(fslogic_uuid:uuid_to_phantom_uuid(OldUuid)) of
-        {ok, #document{value = #file_meta{link_value = NewGuid, type = ?PHANTOM_TYPE}}} ->
-            {ok, NewGuid};
-        {error, Reason} -> {error, Reason}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

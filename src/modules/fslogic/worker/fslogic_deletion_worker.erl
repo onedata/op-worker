@@ -97,14 +97,7 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_handles:exists(FileUuid) of
         true ->
-            {ParentFile, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
-            NewName = <<?HIDDEN_FILE_PREFIX, FileUuid/binary>>,
-
-            #fuse_response{status = #status{code = ?OK}} = rename_req:rename(
-                UserCtx, FileCtx2, ParentFile, NewName),
-            ok = file_handles:mark_to_remove(FileCtx),
-            fslogic_event_emitter:emit_file_renamed_to_client(
-                file_ctx:reset(FileCtx2), NewName, UserCtx);
+            ok = file_handles:mark_to_remove(FileCtx);
         false ->
             remove_file_and_file_meta(FileCtx, UserCtx, Silent)
     end,
@@ -146,7 +139,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
             type = Type,
             shares = Shares
         }
-    }, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    }, FileCtx2} = file_ctx:get_file_doc_even_when_deleted(FileCtx),
     {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
     ok = delete_shares(UserCtx, Shares),
 

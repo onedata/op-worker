@@ -278,5 +278,5 @@ count_bytes([#file_block{size = Size} | T], TotalSize) ->
 -spec get_owner_id(file_meta:uuid()) -> datastore:id().
 get_owner_id(FileUuid) ->
     {ok, #document{value = #file_meta{owner = UserId}}} =
-        file_meta:get({uuid, FileUuid}),
+        file_meta:get_even_when_deleted(FileUuid),
     UserId.

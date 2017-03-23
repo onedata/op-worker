@@ -195,7 +195,7 @@ mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, logical_file_manager:mkdir(SessId, Path, Mode)).
 
 -spec ls(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), integer(), integer()) ->
-    {ok, [{fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), file_meta:name()}]} | logical_file_manager:error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(Worker, SessId, FileKey, Offset, Limit) ->
     ?EXEC(Worker, logical_file_manager:ls(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit)).
 
