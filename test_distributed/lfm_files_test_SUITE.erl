@@ -32,6 +32,9 @@
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
+    lfm_basic_rdwr_test/1,
+    lfm_basic_rdwr_opens_file_once_test/1,
+    lfm_basic_rdwr_after_file_delete_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
     lfm_synch_stat_test/1,
@@ -58,6 +61,9 @@
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
+    lfm_basic_rdwr_test,
+    lfm_basic_rdwr_opens_file_once_test,
+    lfm_basic_rdwr_after_file_delete_test,
     lfm_write_test,
     lfm_stat_test,
     lfm_synch_stat_test,
@@ -302,7 +308,7 @@ ls_with_stats_test_base(Config) ->
                     spawn(fun() ->
                         Fun(ProcDirs),
                         Master ! run_parallel_ok
-                          end)
+                    end)
                 end, Dirs),
                 check_run_parallel_ans(ProcNum)
         end
@@ -546,6 +552,51 @@ lfm_create_and_unlink_test(Config) ->
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, 8#755)).
+
+lfm_basic_rdwr_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
+
+    ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
+
+lfm_basic_rdwr_opens_file_once_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+    test_utils:mock_new(W, storage_file_manager, [passthrough]),
+    test_utils:mock_assert_num_calls(W, storage_file_manager, open, 2, 0),
+
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+    test_utils:mock_assert_num_calls(W, storage_file_manager, open, 2, 1),
+
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle, 0, <<"11111">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle, 5, <<"22222">>)),
+    ?assertEqual({ok, <<"1111122222">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual({ok, <<"11111">>}, lfm_proxy:read(W, Handle, 0, 5)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)),
+    test_utils:mock_assert_num_calls(W, storage_file_manager, open, 2, 1),
+    test_utils:mock_validate_and_unload(W, storage_file_manager).
+
+lfm_basic_rdwr_after_file_delete_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
+    {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+
+    %remove file
+    FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
+    SfmHandle = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
+    ok = rpc:call(W, storage_file_manager, unlink, [SfmHandle]),
+
+    %read opened file
+    ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
+    ?assertEqual({ok, <<"test_data">>}, lfm_proxy:read(W, Handle, 0, 100)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
 lfm_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

@@ -168,10 +168,6 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec register_open(file_ctx:ctx(), session:id(), pos_integer()) ->
     ok | {error, Reason :: term()}.
-register_open(_, ?ROOT_SESS_ID, _) ->
-    ok;
-register_open(_, ?GUEST_SESS_ID, _) ->
-    ok;
 register_open(FileCtx, SessId, Count) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
@@ -217,10 +213,6 @@ register_open(FileCtx, SessId, Count) ->
 %%--------------------------------------------------------------------
 -spec register_release(file_ctx:ctx(), session:id(), pos_integer() | infinity) ->
     ok | {error, Reason :: term()}.
-register_release(_, ?ROOT_SESS_ID, _) ->
-    ok;
-register_release(_, ?GUEST_SESS_ID, _) ->
-    ok;
 register_release(FileCtx, SessId, Count) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun(#file_handles{is_removed = Removed, descriptors = Fds} = Handle) ->
