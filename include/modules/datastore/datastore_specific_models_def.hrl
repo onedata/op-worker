@@ -259,9 +259,7 @@
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
-    is_local = false :: boolean(),
-    provider_id :: undefined | oneprovider:id(),
-    file_size :: undefined | non_neg_integer(), %% Available only if file is_local
+    file_size :: undefined | non_neg_integer(),
     share_id :: undefined | od_share:id()
 }).
 

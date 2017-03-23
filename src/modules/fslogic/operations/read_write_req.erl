@@ -80,7 +80,7 @@ write(UserCtx, FileCtx, HandleId, StorageId, FileId, ByteSequences) ->
 -spec get_handle(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
     StorageId :: storage:id(), FileId :: helpers:file(), OpenFlag :: helpers:open_flag()) ->
     {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
-get_handle(UserCtx, FileCtx, undefined, StorageId, FileId, OpenFlag)->
+get_handle(UserCtx, FileCtx, undefined, StorageId, FileId, OpenFlag) ->
     SessId = user_ctx:get_session_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -89,7 +89,7 @@ get_handle(UserCtx, FileCtx, undefined, StorageId, FileId, OpenFlag)->
     SFMHandle =
         storage_file_manager:new_handle(SessId, SpaceId, FileUuid, Storage, FileId, ShareId),
     storage_file_manager:open(SFMHandle, OpenFlag);
-get_handle(UserCtx, _FileCtx, HandleId, _StorageId, _FileId, _OpenFlag)->
+get_handle(UserCtx, _FileCtx, HandleId, _StorageId, _FileId, _OpenFlag) ->
     SessId = user_ctx:get_session_id(UserCtx),
     session:get_handle(SessId, HandleId).
 

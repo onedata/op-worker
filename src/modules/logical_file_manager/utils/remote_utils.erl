@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
@@ -27,7 +28,8 @@
 %% in fslogic's response.
 %% @end
 %%--------------------------------------------------------------------
--spec call_fslogic(SessId :: session:id(), RequestType :: file_request | provider_request,
+-spec call_fslogic(SessId :: session:id(),
+    RequestType :: file_request | provider_request | proxyio_request,
     ContextEntry :: fslogic_worker:file_guid() | undefined, Request :: term(),
     OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
@@ -43,14 +45,37 @@ call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
             {error, Code}
     end.
 
--spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request,
+-spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request | proxyio_request,
     Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
+call_fslogic(SessId, fuse_request, Request = #file_request{
+    context_guid = FileGuid,
+    file_request = FileReq
+}, OKHandle) when is_record(FileReq, open_file) orelse is_record(FileReq, release) ->
+    Node = consistent_hasing:get_node(FileGuid),
+
+    case worker_proxy:call({fslogic_worker, Node}, {fuse_request, SessId,
+        #fuse_request{fuse_request = Request}}) of
+        {ok, #fuse_response{status = #status{code = ?OK}, fuse_response = Response}} ->
+            OKHandle(Response);
+        {ok, #fuse_response{status = #status{code = Code}}} ->
+            {error, Code}
+    end;
 call_fslogic(SessId, fuse_request, Request, OKHandle) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
         #fuse_request{fuse_request = Request}}) of
         {ok, #fuse_response{status = #status{code = ?OK}, fuse_response = Response}} ->
             OKHandle(Response);
         {ok, #fuse_response{status = #status{code = Code}}} ->
+            {error, Code}
+    end;
+call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
+    parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
+}, OKHandle) ->
+    Node = consistent_hasing:get_node(FileGuid),
+    case worker_proxy:call({fslogic_worker, Node}, {proxyio_request, SessId, Request}) of
+        {ok, #proxyio_response{status = #status{code = ?OK}, proxyio_response = Response}} ->
+            OKHandle(Response);
+        {ok, #proxyio_response{status = #status{code = Code}}} ->
             {error, Code}
     end.
