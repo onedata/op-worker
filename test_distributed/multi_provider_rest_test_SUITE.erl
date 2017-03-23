@@ -1128,9 +1128,13 @@ rest_endpoint(Node) ->
 
 
 user_1_token_header(Config) ->
-    #token_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
-    {ok, Srlzd} = token_utils:serialize62(Macaroon),
-    {<<"X-Auth-Token">>, Srlzd}.
+    #macaroon_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
+    % Macaroon can be given in X-Auth-Token or Macaroon header, check if both
+    % possibilities work
+    case rand:uniform(2) of
+        1 -> {<<"X-Auth-Token">>, Macaroon};
+        2 -> {<<"Macaroon">>, Macaroon}
+    end.
 
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).

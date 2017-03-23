@@ -32,7 +32,8 @@
 %% todo split this model to:
 %% todo globally cached - #certificate{} -> #user_identity{},
 %% todo and locally cached - #token{} | #certificate_info{} -> #user_identity{}
--type credentials() :: #token_auth{} | #basic_auth{} | #'OTPCertificate'{}.
+-type credentials() :: #macaroon_auth{} | #token_auth{} | #basic_auth{} |
+#certificate_auth{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -134,7 +135,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec fetch(user_identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(#'OTPCertificate'{}) ->
+fetch(#certificate_auth{}) ->
     {error, cannot_fetch};
 fetch(Auth) ->
     try

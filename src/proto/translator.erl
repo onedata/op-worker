@@ -178,10 +178,8 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 %% HANDSHAKE
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
-translate_from_protobuf(#'Token'{value = Val, secondary_values = SecValues}) ->
-    {ok, Macaroon} = token_utils:deserialize(Val),
-    DischargeMacaroons = [R || {ok, R} <- [token_utils:deserialize(SecValue) || SecValue <- SecValues]],
-    #token_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
+translate_from_protobuf(#'Token'{value = Macaroon, secondary_values = DischargeMacaroons}) ->
+    #macaroon_auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 
 
 %% DIAGNOSTIC
@@ -602,10 +600,8 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
 %% HANDSHAKE
 translate_to_protobuf(#handshake_response{status = Status}) ->
     {handshake_response, #'HandshakeResponse'{status = Status}};
-translate_to_protobuf(#token_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
-    {ok, Token} = token_utils:serialize62(Macaroon),
-    SecValues = [R || {ok, R} <- [token_utils:serialize62(DMacaroon) || DMacaroon <- DMacaroons]],
-    #'Token'{value = Token, secondary_values = SecValues};
+translate_to_protobuf(#macaroon_auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
+    #'Token'{value = Macaroon, secondary_values = DMacaroons};
 
 
 %% DIAGNOSTIC

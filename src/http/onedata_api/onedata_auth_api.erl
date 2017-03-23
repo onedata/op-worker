@@ -17,7 +17,7 @@
 %% API
 -export([is_authorized/2, authenticate/1]).
 
-% opaque type of auth token that is neccessary to perform operations on files.
+% opaque type of auth token that is necessary to perform operations on files.
 -type auth() :: any().
 
 -export_type([auth/0]).
@@ -38,7 +38,7 @@ is_authorized(Req, State) ->
 %% Authenticates user basing on request headers
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Req :: req()) -> {{ok, auth()} | {error, term()}, req()}.
+-spec authenticate(Req :: req()) -> {ok, auth()} | {error, term()}.
 authenticate(Req) ->
     rest_auth:authenticate(Req).
 
