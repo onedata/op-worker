@@ -61,12 +61,7 @@
 
 user_1_token_header(Config) ->
     #macaroon_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
-    % Macaroon can be given in X-Auth-Token or Macaroon header, check if both
-    % possibilities work
-    case rand:uniform(2) of
-        1 -> {<<"X-Auth-Token">>, Macaroon};
-        2 -> {<<"Macaroon">>, Macaroon}
-    end.
+    {<<"Macaroon">>, Macaroon}.
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
