@@ -721,17 +721,8 @@ teardown_storage(Worker, Config) ->
         DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
-    % Macaroon can be given in X-Auth-Token or Macaroon header
-    AuthToMacaroon = fun(Auth) ->
-        Macaroon = case Auth of
-            #macaroon_auth{macaroon = M} -> M;
-            #token_auth{token = T} -> T
-        end
-    end,
-
     test_utils:mock_new(Workers, oz_users),
-    test_utils:mock_expect(Workers, oz_users, get_details, fun(Auth) ->
-        Macaroon = AuthToMacaroon(Auth),
+    test_utils:mock_expect(Workers, oz_users, get_details, fun(#macaroon_auth{macaroon = Macaroon}) ->
         {_, #user_config{name = UName, id = UID}} = lists:keyfind(Macaroon, 1, Users),
         {ok, #user_details{
             id = UID,
@@ -742,22 +733,19 @@ oz_users_mock_setup(Workers, Users) ->
         }}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_spaces, fun(Auth) ->
-        Macaroon = AuthToMacaroon(Auth),
+    test_utils:mock_expect(Workers, oz_users, get_spaces, fun(#macaroon_auth{macaroon = Macaroon}) ->
         {_, #user_config{spaces = Spaces, default_space = DefaultSpaceId}} = lists:keyfind(Macaroon, 1, Users),
         {SpaceIds, _} = lists:unzip(Spaces),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_groups, fun(Auth) ->
-        Macaroon = AuthToMacaroon(Auth),
+    test_utils:mock_expect(Workers, oz_users, get_groups, fun(#macaroon_auth{macaroon = Macaroon}) ->
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun(Auth) ->
-        Macaroon = AuthToMacaroon(Auth),
+    test_utils:mock_expect(Workers, oz_users, get_effective_groups, fun(#macaroon_auth{macaroon = Macaroon}) ->
         {_, #user_config{groups = Groups}} = lists:keyfind(Macaroon, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
