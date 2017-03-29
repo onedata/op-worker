@@ -5,6 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
+%%% @todo simplify rename logic
 %%% @doc
 %%% Functions responsible for adding and removing changes from file_location
 %%% documents.
@@ -147,7 +148,8 @@ rename_or_delete(FileCtx, #document{value = #file_location{
 rename_or_delete(FileCtx,
     Doc = #document{
         value = Loc = #file_location{
-            uuid = FileUuid
+            uuid = FileUuid,
+            file_id = SourceFileId
         }},
     {{RemoteTargetFileId, TargetSpaceId}, _} = LastRename
 ) ->
@@ -156,9 +158,8 @@ rename_or_delete(FileCtx,
     }} = od_space:get_or_fetch(?ROOT_SESS_ID, TargetSpaceId),
     case lists:member(oneprovider:get_provider_id(), Providers) of
         true ->
-            {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get(FileUuid),
-            ok = sfm_utils:rename_storage_file(?ROOT_SESS_ID, Loc, RemoteTargetFileId, TargetSpaceId, Mode),
-
+            {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),
+            ok = sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId, Storage, FileUuid, SourceFileId, RemoteTargetFileId),
             NewFileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(FileUuid, TargetSpaceId)),
             {#document{key = TargetStorageId}, NewFileCtx2} = file_ctx:get_storage_doc(NewFileCtx),
 

@@ -320,7 +320,6 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = undefined}) ->
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}) ->
     {StorageFileId, FileCtx}.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns raw path on storage.

@@ -28,9 +28,6 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
-%% Separator used in filename for specifying snapshot version.
--define(SNAPSHOT_SEPARATOR, "::").
-
 %% Prefix for link name for #file_location link
 -define(LOCATION_PREFIX, "location_").
 
@@ -40,14 +37,13 @@
 
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
-    get_parent_uuid/2, rename/2, setup_onedata_user/2, get_name/1, get_even_when_deleted/1]).
+    get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_even_when_deleted/1]).
 -export([get_ancestors/1, attach_location/3, get_local_locations/1,
-    get_locations/1, get_locations_by_uuid/1, get_space_dir/1, location_ref/1]).
--export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1]).
+    get_locations/1, get_locations_by_uuid/1, location_ref/1, rename/5]).
+-export([to_uuid/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2, delete_child_link/2]).
 -export([hidden_file_name/1]).
 -export([add_share/2, remove_share/2]).
--export([get_uuid/1]).
 -export([record_struct/1, record_upgrade/2]).
 -export([make_space_exist/1]).
 
@@ -212,7 +208,7 @@ create({path, Path}, File, AllowConflicts) ->
     end);
 create(#document{} = Parent, #file_meta{} = File, AllowConflicts) ->
     create(Parent, #document{value = File}, AllowConflicts);
-create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name = FileName, version = V} = FM} = FileDoc0, AllowConflicts) ->
+create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name = FileName} = FM} = FileDoc0, AllowConflicts) ->
     ?run(begin
         {ok, Scope} = get_scope(Parent),
         FM1 = FM#file_meta{scope = Scope#document.key, provider_id = oneprovider:get_provider_id()},
@@ -224,7 +220,6 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
                 _ ->
                     FileDoc0#document{value = FM1}
             end,
-        false = is_snapshot(FileName),
         critical_section:run_on_mnesia([?MODEL_NAME, ParentUuid],
             fun() ->
                 Exists = case AllowConflicts of
@@ -245,7 +240,6 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
                                 {ok, Uuid} ->
                                     SavedDoc = FileDoc#document{key = Uuid},
                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
                                     ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
                                     {ok, Uuid};
                                 {error, Reason} ->
@@ -295,11 +289,10 @@ fix_parent_links(Entry) ->
     ok | no_return().
 fix_parent_links(Parent, Entry) ->
     {ok, #document{} = ParentDoc} = get(Parent),
-    {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
+    {ok, #document{value = #file_meta{name = FileName}} = FileDoc} = get(Entry),
     {ok, Scope} = get_scope(Parent),
     datastore:run_transaction(fun() ->
         ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
-        ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
         ok = datastore:set_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}])
     end),
     ok = set_scope(FileDoc, Scope#document.key).
@@ -309,15 +302,9 @@ fix_parent_links(Parent, Entry) ->
 %% Delete link from parent to child
 %% @end
 %%--------------------------------------------------------------------
--spec delete_child_link(ParentDoc :: doc(), ChildDoc :: doc()) -> ok.
-delete_child_link(ParentDoc, #document{value = #file_meta{
-    name = ChildName,
-    version = V
-}}) ->
-    datastore:run_transaction(fun() ->
-        ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentDoc, ChildName),
-        ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentDoc, snapshot_name(ChildName, V))
-    end).
+-spec delete_child_link(ParentDoc :: doc(), ChildName :: name()) -> ok.
+delete_child_link(ParentDoc, ChildName) ->
+    ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentDoc, ChildName).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -362,12 +349,11 @@ get_even_when_deleted(FileUuid) ->
 -spec delete(uuid() | entry()) -> ok | datastore:generic_error().
 delete({uuid, Key}) ->
     delete(Key);
-delete(#document{value = #file_meta{name = FileName, version = Version}, key = Key} = Doc) ->
+delete(#document{value = #file_meta{name = FileName}, key = Key} = Doc) ->
     ?run(begin
         case datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent) of
             {ok, {ParentKey, ?MODEL_NAME}} ->
-                ok = delete_child_link_in_parent(ParentKey, FileName, Key),
-                ok = delete_child_link_in_parent(ParentKey, snapshot_name(FileName, Version), Key);
+                ok = delete_child_link_in_parent(ParentKey, FileName, Key);
             _ ->
                 ok
         end,
@@ -509,7 +495,7 @@ list_children(Entry, Offset, Count) ->
                     Acc;
                 (LinkName, {_V, [{_, _, _Key, ?MODEL_NAME} | _] = Targets}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
                     TargetCount = length(Targets),
-                    case is_snapshot(LinkName) orelse is_hidden(LinkName) of
+                    case is_hidden(LinkName) of
                         true ->
                             {Skip, Count1, Acc};
                         false when TargetCount > Skip ->
@@ -527,7 +513,7 @@ list_children(Entry, Offset, Count) ->
                     TargetCount = length(Targets),
                     TargetsTagged = tag_children(LinkName, Targets),
                     SelectedTargetsTagged = lists:sublist(TargetsTagged, min(Count, TargetCount)),
-                    case is_snapshot(LinkName) orelse is_hidden(LinkName) of
+                    case is_hidden(LinkName) of
                         true ->
                             {0, Count1, Acc};
                         false ->
@@ -637,6 +623,17 @@ get_locations_by_uuid(Uuid) ->
                     AccIn
             end, [])
     end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Rename file_meta and change link targets
+%% @end
+%%--------------------------------------------------------------------
+-spec rename(doc(), doc(), doc(), name(), name()) -> ok.
+rename(TargetDoc, SourceParentDoc, TargetParentDoc, SourceName, TargetName) ->
+    ok = file_meta:delete_child_link(SourceParentDoc, SourceName),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, TargetParentDoc, {TargetName, TargetDoc}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, TargetDoc, [{parent, TargetParentDoc}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -757,26 +754,6 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Moves given file to specific location. Move operation ({path, _}) is more generic, but
-%% rename using simple file name ({name, _}) is faster because it does not change parent of the file.
-%% @end
-%%--------------------------------------------------------------------
--spec rename(entry(), {name, name()} | {path, path()}) -> ok | datastore:generic_error().
-rename({path, Path}, Op) ->
-    ?run(begin
-        {ok, {Subj, KeyPath}} = resolve_path(Path),
-        [_ | [ParentUuid | _]] = lists:reverse(KeyPath),
-        rename3(Subj, ParentUuid, Op)
-    end);
-rename(Entry, Op) ->
-    ?run(begin
-        {ok, Subj} = get(Entry),
-        {ok, {ParentUuid, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Subj, parent),
-        rename3(Subj, ParentUuid, Op)
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Gets "scope" document of given document. "Scope" document is the nearest ancestor with #file_meta.is_scope == true.
 %% @end
 %%--------------------------------------------------------------------
@@ -861,14 +838,6 @@ attach_location(Entry, LocId, ProviderId) ->
     end).
 
 %%--------------------------------------------------------------------
-%% @doc Get space dir document for given SpaceId
-%%--------------------------------------------------------------------
--spec get_space_dir(SpaceId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_space_dir(SpaceId) ->
-    get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
-
-%%--------------------------------------------------------------------
 %% @doc
 %% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
 %% @end
@@ -885,15 +854,6 @@ to_uuid({path, Path}) ->
         {ok, {Doc, _}} = resolve_path(Path),
         to_uuid(Doc)
     end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if given file doc represents root directory with empty path.
-%% @end
-%%--------------------------------------------------------------------
--spec is_root_dir(datastore:document()) -> boolean().
-is_root_dir(#document{key = Key}) ->
-    Key =:= ?ROOT_DIR_UUID.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -981,92 +941,6 @@ delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
         Error -> Error
     end.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Internal helper function for rename/2.
-%% @end
-%%--------------------------------------------------------------------
--spec rename3(Subject :: datastore:document(), ParentUuid :: uuid(),
-    {name, NewName :: name()} | {path, NewPath :: path()}) ->
-    ok | datastore:generic_error().
-rename3(#document{key = FileUuid, value = #file_meta{name = OldName, version = V}} = Subject, ParentUuid, {name, NewName}) ->
-    ?run(begin
-        critical_section:run_on_mnesia([?MODEL_NAME, ParentUuid], fun() ->
-            {ok, FileUuid} = update(Subject, #{name => NewName}),
-            ok = update_links_in_parents(ParentUuid, ParentUuid, OldName, NewName, V, {uuid, FileUuid})
-        end)
-    end);
-
-rename3(#document{key = FileUuid, value = #file_meta{name = OldName, version = V}} = Subject, OldParentUuid, {path, NewPath}) ->
-    ?run(begin
-        NewTokens = fslogic_path:split(NewPath),
-        [NewName | NewParentTokens] = lists:reverse(NewTokens),
-        NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
-        {ok, #document{key = NewParentUuid} = NewParent} = get({path, NewParentPath}),
-        case NewParentUuid =:= OldParentUuid of
-            true ->
-                rename3(Subject, OldParentUuid, {name, NewName});
-            false ->
-                %% Sort keys to avoid deadlock with rename from target to source
-                [Key1, Key2] = lists:sort([OldParentUuid, NewParentUuid]),
-
-                critical_section:run_on_mnesia([?MODEL_NAME, Key1], fun() ->
-                    critical_section:run_on_mnesia([?MODEL_NAME, Key2], fun() ->
-                        {ok, #document{key = NewScopeUuid} = NewScope} = get_scope(NewParent),
-                        {ok, FileUuid} = update(Subject, #{name => NewName, scope => NewScopeUuid}),
-                        ok = datastore:set_links(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, {parent, NewParent}),
-                        ok = update_links_in_parents(OldParentUuid, NewParentUuid, OldName, NewName, V, {uuid, FileUuid}),
-
-                        ok = update_scopes(Subject, NewScope)
-                    end)
-                end)
-        end
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove snapshot child links from old parent to entry and
-%% create snapshot child links from new parent to entry using new name.
-%% If entry is current snapshot of the file, do the same for non-snapshot
-%% child links.
-%% @end
-%%--------------------------------------------------------------------
--spec update_links_in_parents(OldParentUuid :: uuid(), NewParentUuid :: uuid(), OldName :: name(),
-    NewName :: name(), Version :: non_neg_integer(), Subject :: entry()) -> ok.
-update_links_in_parents(OldParentUuid, NewParentUuid, OldName, NewName, Version, Subject) ->
-    {ok, #document{key = SubjectUuid} = SubjectDoc} = get(Subject),
-    case get_current_snapshot(SubjectDoc) =:= SubjectDoc of
-        true ->
-            ok = delete_child_link_in_parent(OldParentUuid, OldName, SubjectUuid),
-            ok = delete_child_link_in_parent(OldParentUuid, snapshot_name(OldName, Version), SubjectUuid),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUuid, ?MODEL_NAME,
-                {snapshot_name(NewName, Version), {SubjectUuid, ?MODEL_NAME}}),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUuid, ?MODEL_NAME,
-                {NewName, {SubjectUuid, ?MODEL_NAME}});
-        false ->
-            ok = delete_child_link_in_parent(OldParentUuid, OldName, SubjectUuid),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUuid, ?MODEL_NAME,
-                {snapshot_name(NewName, Version), {SubjectUuid, ?MODEL_NAME}})
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Force set "scope" document for given file_meta:entry() and all its children recursively but only if
-%% given file_meta:entry() has different "scope" document.
-%% @end
-%%--------------------------------------------------------------------
--spec update_scopes(Entry :: entry(), NewScope :: datastore:document()) -> ok | datastore:generic_error().
-update_scopes(Entry, #document{key = NewScopeUuid} = NewScope) ->
-    ?run(begin
-        {ok, #document{key = OldScopeUuid}} = get_scope(Entry),
-        case OldScopeUuid of
-            NewScopeUuid -> ok;
-            _ ->
-                set_scopes(Entry, NewScope)
-        end
-    end).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Sets scope for single entry
@@ -1084,82 +958,6 @@ set_scope(Entry, Scope) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Force set "scope" document for given file_meta:entry() and all its children recursively.
-%% @end
-%%--------------------------------------------------------------------
--spec set_scopes(entry(), datastore:document()) -> ok | datastore:generic_error().
-set_scopes(Entry, #document{key = NewScopeUuid}) ->
-    ?run(begin
-        SetterFun =
-            fun(CurrentEntry, ScopeUuid) ->
-                case CurrentEntry of
-                    Entry ->
-                        ok;
-                    _ ->
-                        set_scope(CurrentEntry, ScopeUuid)
-                end
-            end,
-
-        Master = self(),
-        ReceiverFun =
-            fun Receiver() ->
-                receive
-                    {Entry0, ScopeUuid0} ->
-                        SetterFun(Entry0, ScopeUuid0),
-                        Receiver();
-                    exit ->
-                        ok,
-                        Master ! scope_setting_done
-                end
-            end,
-        Setters = [spawn_link(ReceiverFun) || _ <- lists:seq(1, ?SET_SCOPER_WORKERS)],
-
-        Res =
-            try set_scopes6(Entry, NewScopeUuid, Setters, [], 0, ?SET_SCOPE_BATCH_SIZE) of
-                Result -> Result
-            catch
-                _:Reason ->
-                    {error, Reason}
-            end,
-
-        lists:foreach(fun(Setter) ->
-            Setter ! exit,
-            receive
-                scope_setting_done -> ok
-            after 2000 ->
-                ?error("set_scopes error for entry: ~p", [Entry])
-            end
-        end, Setters),
-        Res
-    end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Internal helper fo set_scopes/2. Dispatch all set_scope jobs across all worker proceses.
-%% @end
-%%--------------------------------------------------------------------
--spec set_scopes6(Entry :: entry() | [entry()], NewScopeUuid :: uuid(), [pid()], [pid()],
-    Offset :: non_neg_integer(), BatchSize :: non_neg_integer()) -> ok | no_return().
-set_scopes6(Entry, NewScopeUuid, [], SettersBak, Offset, BatchSize) -> %% Empty workers list -> restore from busy workers list
-    set_scopes6(Entry, NewScopeUuid, SettersBak, [], Offset, BatchSize);
-set_scopes6([], _NewScopeUuid, _Setters, _SettersBak, _Offset, _BatchSize) ->
-    ok; %% Nothing to do
-set_scopes6([Entry | R], NewScopeUuid, [Setter | Setters], SettersBak, Offset, BatchSize) ->  %% set_scopes for all given entries
-    ok = set_scopes6(Entry, NewScopeUuid, [Setter | Setters], SettersBak, Offset, BatchSize), %% set_scopes for current entry
-    ok = set_scopes6(R, NewScopeUuid, Setters, [Setter | SettersBak], Offset, BatchSize);     %% set_scopes for other entries
-set_scopes6(Entry, NewScopeUuid, [Setter | Setters], SettersBak, Offset, BatchSize) -> %% set_scopes for current entry
-    {ok, ChildLinks} = list_children(Entry, Offset, BatchSize), %% Apply this fuction for all children
-    case length(ChildLinks) < BatchSize of
-        true ->
-            Setter ! {Entry, NewScopeUuid}; %% Send job to first available process;
-        false ->
-            ok = set_scopes6(Entry, NewScopeUuid, Setters, [Setter | SettersBak], Offset + BatchSize, BatchSize)
-    end,
-    ok = set_scopes6([{uuid, Uuid} || #child_link_uuid{uuid = Uuid} <- ChildLinks], NewScopeUuid, Setters, [Setter | SettersBak], 0, BatchSize).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Check if given term is valid path()
 %% @end
 %%--------------------------------------------------------------------
@@ -1173,65 +971,10 @@ is_valid_filename(<<"..">>) ->
 is_valid_filename(FileName) when not is_binary(FileName) ->
     false;
 is_valid_filename(FileName) when is_binary(FileName) ->
-    DirSep =
-        case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
-            [] -> true;
-            _ -> false
-        end,
-    SnapSep =
-        case binary:matches(FileName, <<?SNAPSHOT_SEPARATOR>>) of
-            [] -> true;
-            _ -> false
-        end,
-
-    SnapSep andalso DirSep.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns filename than explicity points at given version of snaphot.
-%% @end
-%%--------------------------------------------------------------------
--spec snapshot_name(FileName :: name(), Version :: non_neg_integer()) -> binary().
-snapshot_name(FileName, Version) ->
-    <<FileName/binary, ?SNAPSHOT_SEPARATOR, (integer_to_binary(Version))/binary>>.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns current version of given file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_current_snapshot(Entry :: entry()) -> entry().
-get_current_snapshot(Entry) ->
-    %% TODO: VFS-1965
-    %% TODO: VFS-1966
-    {ok, CurrentSnapshot} = get(Entry),
-    CurrentSnapshot.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if given filename explicity points at specific version of snaphot.
-%% @end
-%%--------------------------------------------------------------------
--spec is_snapshot(FileName :: name()) -> boolean().
-is_snapshot(FileName0) ->
-    try
-        FileName = case binary:split(FileName0, <<"##">>) of
-            [FileName1, _] -> FileName1;
-            [FileName1] -> FileName1
-        end,
-        case binary:split(FileName, <<?SNAPSHOT_SEPARATOR>>) of
-            [FN, VR] ->
-                _ = binary_to_integer(VR),
-                is_valid_filename(FN);
-            _ ->
-                false
-        end
-    catch
-        _:_ ->
-            false
+    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
+        [] -> true;
+        _ -> false
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1263,28 +1006,6 @@ is_hidden(FileName) ->
         <<?HIDDEN_FILE_PREFIX, _/binary>> -> true;
         _ -> false
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get uuid of file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_uuid(uuid() | entry()) -> {ok, uuid()} | datastore:get_file_error().
-get_uuid({uuid, Key}) ->
-    {ok, Key};
-get_uuid(#document{key = Uuid, value = #file_meta{}}) ->
-    {ok, Uuid};
-get_uuid({path, Path}) ->
-    case get({path, Path}) of
-        {ok, #document{key = Uuid}} ->
-            {ok, Uuid};
-        Error ->
-            Error
-    end;
-get_uuid(?ROOT_DIR_UUID) ->
-    {ok, ?ROOT_DIR_UUID};
-get_uuid(Uuid) ->
-    {ok, Uuid}.
 
 %%--------------------------------------------------------------------
 %% @private

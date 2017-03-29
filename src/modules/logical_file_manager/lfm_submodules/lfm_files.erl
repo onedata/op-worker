@@ -79,7 +79,17 @@ mv(SessId, FileKey, TargetPath) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 cp(SessId, FileKey, TargetPath) ->
     {guid, Guid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    copy_utils:copy(SessId, {guid, Guid}, TargetPath).
+    {TargetName, TargetParentPath} = fslogic_path:basename_and_parent(TargetPath),
+    remote_utils:call_fslogic(SessId, fuse_request,
+        #resolve_guid{path = TargetParentPath},
+        fun(#guid{guid = TargetParentGuid}) ->
+            case copy_utils:copy(SessId, Guid, TargetParentGuid, TargetName) of
+                {ok, Guid, _} ->
+                    {ok, Guid};
+                Error ->
+                    Error
+            end
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc
