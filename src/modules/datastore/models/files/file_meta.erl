@@ -408,9 +408,8 @@ get_child(Doc, Name) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    Config = ?MODEL_CONFIG(files, [{od_user, create}, {od_user, create_or_update}, {od_user, save}, {od_user, update}],
-        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL, true, false,
-        oneprovider:get_provider_id(), true),
+    Config = ?MODEL_CONFIG(files, [], ?GLOBALLY_CACHED_LEVEL,
+        ?GLOBALLY_CACHED_LEVEL, true, false, oneprovider:get_provider_id(), true),
     Config#model_config{sync_enabled = true, version = 2}.
 
 %%--------------------------------------------------------------------
@@ -422,14 +421,6 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(od_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
-    setup_onedata_user(provider, Uuid);
-'after'(od_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
-    setup_onedata_user(provider, Uuid);
-'after'(od_user, update, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
-    setup_onedata_user(provider, Uuid);
-'after'(od_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
-    setup_onedata_user(provider, Uuid);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 

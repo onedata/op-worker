@@ -42,7 +42,7 @@ all() -> ?ALL([
     custom_error_when_handler_throws_error
 ]).
 
--define(MACAROON, element(2, token_utils:serialize62(macaroon:create("a", "b", "c")))).
+-define(MACAROON, <<"DUMMY-MACAROON">>).
 -define(BASIC_AUTH_HEADER, <<"Basic ", (base64:encode(<<"user:password">>))/binary>>).
 
 %%%===================================================================
@@ -254,15 +254,17 @@ mock_oz_certificates(Config) ->
     test_utils:mock_expect(Workers, oz_endpoint, provider_request,
         fun
         % @todo for now, in rest we only use the root macaroon
-            (#token_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
-                {ok, SrlzdMacaroon} = token_utils:serialize62(Macaroon),
-                AuthorizationHeader = {<<"macaroon">>, SrlzdMacaroon},
+            (#macaroon_auth{macaroon = Macaroon}, URN, Method, Headers, Body, Options) ->
                 do_request(Method, OzRestApiUrl ++ URN, Headers#{
-                    <<"macaroon">> => SrlzdMacaroon,
+                    <<"macaroon">> => Macaroon,
+                    <<"content-type">> => <<"application/json">>
+                }, Body, [SSLOpts | Options]);
+            (#token_auth{token = Token}, URN, Method, Headers, Body, Options) ->
+                do_request(Method, OzRestApiUrl ++ URN, Headers#{
+                    <<"x-auth-token">> => Token,
                     <<"content-type">> => <<"application/json">>
                 }, Body, [SSLOpts | Options]);
             (#basic_auth{credentials = Credentials}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {<<"Authorization">>, Credentials},
                 do_request(Method, OzRestApiUrl ++ URN, Headers#{
                     <<"Authorization">> => Credentials,
                     <<"content-type">> => <<"application/json">>

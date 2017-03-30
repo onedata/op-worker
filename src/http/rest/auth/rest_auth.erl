@@ -34,12 +34,12 @@
 -spec is_authorized(req(), maps:map()) -> {true | {false, binary()} | halt, req(), maps:map()}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {{ok, Auth}, NewReq} ->
-            {true, NewReq, State#{auth => Auth}};
-        {{error, {not_found, _}}, NewReq} ->
+        {ok, Auth} ->
+            {true, Req, State#{auth => Auth}};
+        {error, {not_found, _}} ->
             GrUrl = oz_plugin:get_oz_url(),
             ProviderId = oneprovider:get_provider_id(),
-            {_, NewReq2} = cowboy_req:host(NewReq),
+            {_, NewReq2} = cowboy_req:host(Req),
             {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
 
             {ok, NewReq4} = cowboy_req:reply(
@@ -52,34 +52,32 @@ is_authorized(Req, State) ->
                 NewReq3
             ),
             {halt, NewReq4, State};
-        {{error, Error}, NewReq} ->
+        {error, Error} ->
             ?debug("Authentication error ~p", [Error]),
-            {{false, <<"authentication_error">>}, NewReq, State}
+            {{false, <<"authentication_error">>}, Req, State}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user based on request headers
+%% Authenticates user based on request headers or certificate.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Req :: req()) -> {{ok, session:id()} | {error, term()}, req()}.
+-spec authenticate(Req :: req()) -> {ok, session:id()} | {error, term()}.
 authenticate(Req) ->
-    case cowboy_req:header(<<"x-auth-token">>, Req) of
-        {undefined, Req2} ->
-            case cowboy_req:header(<<"macaroon">>, Req2) of
-                {undefined, Req3} ->
-                    case cowboy_req:header(<<"authorization">>, Req3) of
-                        {undefined, Req4} ->
-                            authenticate_using_cert(Req4);
-                        {BasicAuthHeader, Req4} ->
-                            authenticate_using_basic_auth(Req4, BasicAuthHeader)
-                    end;
-                {Token, Req3} ->
-                    authenticate_using_token(Req3, Token)
-            end;
-        {Token, Req2} ->
-            authenticate_using_token(Req2, Token)
+    case resolve_auth(Req) of
+        {error, Reason} ->
+            {error, Reason};
+        Auth ->
+            case user_identity:get_or_fetch(Auth) of
+                {ok, #document{value = Iden}} ->
+                    {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
+                    {ok, SessId};
+                Error ->
+                    Error
+            end
     end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -87,62 +85,59 @@ authenticate(Req) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user based on provided token.
+%% Resolves authorization carried by request (if any). Types of authorization
+%% supported:
+%% - macaroon
+%% - token
+%% - basic auth
+%% - certificate
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(req(), Token :: binary()) ->
-    {{ok, session:id()} | {error, term()}, req()}.
-authenticate_using_token(Req, Token) ->
-    case token_utils:deserialize(Token) of
-        {ok, Macaroon} ->
-            Auth = #token_auth{macaroon = Macaroon},
-            case user_identity:get_or_fetch(Auth) of
-                {ok, #document{value = Iden}} ->
-                    {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
-                    {{ok, SessId}, Req};
-                Error ->
-                    {Error, Req}
-            end;
-        Error ->
-            {Error, Req}
-    end.
+-spec resolve_auth(Req :: req()) -> user_identity:credentials() | {error, term()}.
+resolve_auth(Req) ->
+    resolve_auth(macaroon, Req).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authenticates user based on basic auth header.
+%% Resolves authorization carried by request (if any). Tries all possible types
+%% of authorization, starting with macaroon.
+%% Types of authorization supported:
+%% - macaroon
+%% - token
+%% - basic auth
+%% - certificate
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_basic_auth(req(), BasicAuthHeader :: binary()) ->
-    {{ok, session:id()} | {error, term()}, req()}.
-authenticate_using_basic_auth(Req, BasicAuthHeader) ->
-    Auth = #basic_auth{credentials = BasicAuthHeader},
-    case user_identity:get_or_fetch(Auth) of
-        {ok, #document{value = Iden}} ->
-            {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
-            {{ok, SessId}, Req};
-        Error ->
-            {Error, Req}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Authenticates user based on onedata-internal certificate headers.
-%% @end
-%%--------------------------------------------------------------------
--spec authenticate_using_cert(req()) ->
-    {{ok, session:id()} | {error, term()}, req()}.
-authenticate_using_cert(Req) ->
+-spec resolve_auth(Type :: macaroon | token | basic | certificate, Req :: req()) ->
+    user_identity:credentials() | {error, term()}.
+resolve_auth(macaroon, Req) ->
+    case cowboy_req:header(<<"macaroon">>, Req) of
+        {undefined, _} ->
+            resolve_auth(token, Req);
+        {Macaroon, _} ->
+            #macaroon_auth{macaroon = Macaroon}
+    end;
+resolve_auth(token, Req) ->
+    case cowboy_req:header(<<"x-auth-token">>, Req) of
+        {undefined, _} ->
+            resolve_auth(basic, Req);
+        {Token, _} ->
+            #token_auth{token = Token}
+    end;
+resolve_auth(basic, Req) ->
+    case cowboy_req:header(<<"authorization">>, Req) of
+        {undefined, _} ->
+            resolve_auth(certificate, Req);
+        {BasicAuthHeader, _} ->
+            #basic_auth{credentials = BasicAuthHeader}
+    end;
+resolve_auth(certificate, Req) ->
     Socket = cowboy_req:get(socket, Req),
     case etls:peercert(Socket) of
         {ok, Der} ->
             Certificate = public_key:pkix_decode_cert(Der, otp),
-            case user_identity:get_or_fetch(Certificate) of
-                {ok, #document{value = Iden}} ->
-                    {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden),
-                    {{ok, SessId}, Req};
-                Error ->
-                    {Error, Req}
-            end;
-        Error ->
-            {Error, Req}
+            #certificate_auth{otp_cert = Certificate};
+        {error, Reason} ->
+            {error, Reason}
     end.

@@ -38,9 +38,8 @@ page_init() ->
         true ->
             ok;
         false ->
-            SrlzdMacaroon = gui_ctx:get_url_param(<<"code">>),
-            {ok, Macaroon} = token_utils:deserialize(SrlzdMacaroon),
-            {ok, Auth = #token_auth{}} = gui_auth_manager:authenticate(Macaroon),
+            MacaroonBin = gui_ctx:get_url_param(<<"code">>),
+            {ok, Auth = #macaroon_auth{}} = gui_auth_manager:authenticate(MacaroonBin),
             {ok, #document{value = #user_identity{user_id = UserId} = Identity}} =
                 user_identity:get_or_fetch(Auth),
             {ok, _} = gui_session:log_in(UserId, [Identity, Auth])
