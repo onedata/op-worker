@@ -561,12 +561,14 @@ apply_changes(SpaceId,
                 Master ! {change_replicated_ok, Key}
             catch
                 E1:E2 ->
-                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
+                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2]),
+                    Master ! {change_replication_error, Key}
             end
         end),
         receive
             {change_replicated_ok, Key} -> ok;
-            {file_consistency_wait, Key} -> ok
+            {file_consistency_wait, Key} -> ok;
+            {change_replication_error, Key} -> ok
         after
             500 -> ok
         end,
