@@ -81,12 +81,11 @@ all() ->
         errors_test,
         accept_header_test,
         move_copy_conflict_test,
-        move_test
-%%        copy_test %todo implement copy
+        move_test,
+        copy_test
 ]).
 
 -define(TIMEOUT, timer:seconds(5)).
-
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
@@ -95,7 +94,6 @@ all() ->
 -define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
 -define(INFINITY, 9999).
-
 
 %%%===================================================================
 %%% Test functions
@@ -207,7 +205,6 @@ end_per_suite(Config) ->
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->

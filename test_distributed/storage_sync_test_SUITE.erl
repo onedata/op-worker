@@ -39,17 +39,17 @@
     create_directory_export_test,
     create_file_import_test,
     create_file_export_test,
-%%    delete_directory_import_test,
+%%    delete_directory_import_test, %todo uncomment after resolving VFS-3096
 %%    delete_directory_export_test,
 %%    delete_file_import_test,
 %%    delete_file_export_test,
     append_file_import_test,
     append_file_export_test,
     copy_file_import_test,
-    move_file_import_test,
-    truncate_file_import_test,
-    chmod_file_import_test,
-    update_timestamps_file_import_test
+    move_file_import_test
+%%    truncate_file_import_test,
+%%    chmod_file_import_test,
+%%    update_timestamps_file_import_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).

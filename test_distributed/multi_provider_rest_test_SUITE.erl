@@ -1128,9 +1128,8 @@ rest_endpoint(Node) ->
 
 
 user_1_token_header(Config) ->
-    #token_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
-    {ok, Srlzd} = token_utils:serialize62(Macaroon),
-    {<<"X-Auth-Token">>, Srlzd}.
+    #macaroon_auth{macaroon = Macaroon} = ?config({auth, <<"user1">>}, Config),
+    {<<"Macaroon">>, Macaroon}.
 
 domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).

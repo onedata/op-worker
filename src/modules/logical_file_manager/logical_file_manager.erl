@@ -46,7 +46,7 @@
 -export([mv/3, cp/3, get_file_path/2, rm_recursive/2, unlink/3, replicate_file/3]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, fsync/1, write/3, read/3,
-    truncate/3, release/1, get_file_distribution/2]).
+    truncate/3, release/1, get_file_distribution/2, create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -197,7 +197,7 @@ replicate_file(SessId, FileKey, ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(session:id(), Path :: file_meta:path()) ->
-    {ok, file_meta:uuid()} | error_reply().
+    {ok, file_meta:file_guid()} | error_reply().
 create(SessId, Path) ->
     ?run(fun() -> lfm_files:create(SessId, Path) end).
 
@@ -212,6 +212,26 @@ create(SessId, Path, Mode) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, ParentGuid, Name, Mode) ->
     ?run(fun() -> lfm_files:create(SessId, ParentGuid, Name, Mode) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates and opens a new file
+%% @end
+%%--------------------------------------------------------------------
+-spec create_and_open(session:id(), Path :: file_meta:path(),
+    Mode :: file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
+    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
+    | error_reply().
+create_and_open(SessId, Path, Mode, OpenFlag) ->
+    ?run(fun() -> lfm_files:create_and_open(SessId, Path, Mode, OpenFlag) end).
+
+-spec create_and_open(session:id(), ParentGuid :: fslogic_worker:file_guid(),
+    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions(),
+    fslogic_worker:open_flag()) ->
+    {ok, {fslogic_worker:file_guid(), logical_file_manager:handle()}}
+    | error_reply().
+create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
+    ?run(fun() -> lfm_files:create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) end).
 
 %%--------------------------------------------------------------------
 %% @doc

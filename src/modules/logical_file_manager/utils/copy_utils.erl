@@ -76,9 +76,8 @@ copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, LogicalTargetPath) 
 -spec copy_file(session:id(), #file_attr{}, LogicalTargetPath :: file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, LogicalTargetPath) ->
-    {ok, TargetGuid} = logical_file_manager:create(SessId, LogicalTargetPath),
+    {ok, {TargetGuid, TargetHandle}} = logical_file_manager:create_and_open(SessId, LogicalTargetPath, Mode, write),
     {ok, SourceHandle} = logical_file_manager:open(SessId, {guid, SourceGuid}, read),
-    {ok, TargetHandle} = logical_file_manager:open(SessId, {guid, TargetGuid}, write),
     {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(SourceHandle, TargetHandle, 0),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
     ok = logical_file_manager:fsync(TargetHandle),

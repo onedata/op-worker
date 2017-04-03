@@ -39,7 +39,7 @@
 -type model() :: #session{}.
 -type doc() :: #document{value :: model()}.
 -type ttl() :: non_neg_integer().
--type auth() :: #token_auth{} | #basic_auth{}.
+-type auth() :: #macaroon_auth{} | #token_auth{} | #basic_auth{}.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 -type status() :: active | inactive.
 -type identity() :: #user_identity{}.
@@ -356,7 +356,7 @@ remove_connection(SessId, Con) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns #token_auth{} record associated with session.
+%% Returns auth record associated with session.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth

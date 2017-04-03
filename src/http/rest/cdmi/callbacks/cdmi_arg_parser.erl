@@ -263,9 +263,9 @@ add_objectid_path_to_state(Req, State) ->
             {true, Req3_1} ->
                 {proplists:get_value(Id, ?CapabilityPathById), Req3_1};
             {false, Req3_1} ->
-                {Auth, Req3_2} = try_authenticate(Req3_1),
+                Auth = try_authenticate(Req3_1),
                 {ok, NewPath} = onedata_file_api:get_file_path(Auth, Guid),
-                {NewPath, Req3_2}
+                {NewPath, Req3_1}
         end,
 
     % concatenate BasePath and Path to FullPath
@@ -380,11 +380,11 @@ is_capability_object(Req) ->
 %%--------------------------------------------------------------------
 %% @doc Authenticate user or throw ERROR_UNAUTHORIZED in case of error
 %%--------------------------------------------------------------------
--spec try_authenticate(cowboy_req:req()) -> {onedata_auth_api:auth(), cowboy_req:req()}.
+-spec try_authenticate(cowboy_req:req()) -> onedata_auth_api:auth().
 try_authenticate(Req) ->
     case onedata_auth_api:authenticate(Req) of
-        {{ok, Auth}, Req2} ->
-            {Auth, Req2};
+        {ok, Auth} ->
+            Auth;
         _ ->
             throw(?ERROR_UNAUTHORIZED)
     end.
