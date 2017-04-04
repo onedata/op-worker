@@ -203,47 +203,18 @@ code_change(_OldVsn, State, _Extra) ->
     no_return().
 get_provider(#flush_events{provider_id = ProviderId}, State, _ProxyVia) ->
     {ProviderId, undefined, State};
-get_provider(Req = #event{type = #file_attr_changed_event{}}, _State, ProxyVia) ->
+get_provider(Req = #event{type = Type}, State, ProxyVia)
+    when is_record(Type, file_attr_changed_event)
+    orelse is_record(Type, file_location_changed_event)
+    orelse is_record(Type, file_perm_changed_event)
+    orelse is_record(Type, file_removed_event)
+    orelse is_record(Type, file_renamed_event)
+    orelse is_record(Type, quota_exceeded_event) ->
     RequestCtx = get_context(Req),
     {
         utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
         RequestCtx,
-        _State
-    };
-get_provider(Req = #event{type = #file_location_changed_event{}}, _State, ProxyVia) ->
-    RequestCtx = get_context(Req),
-    {
-        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
-        RequestCtx,
-        _State
-    };
-get_provider(Req = #event{type = #file_perm_changed_event{}}, _State, ProxyVia) ->
-    RequestCtx = get_context(Req),
-    {
-        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
-        RequestCtx,
-        _State
-    };
-get_provider(Req = #event{type = #file_removed_event{}}, _State, ProxyVia) ->
-    RequestCtx = get_context(Req),
-    {
-        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
-        RequestCtx,
-        _State
-    };
-get_provider(Req = #event{type = #file_renamed_event{}}, _State, ProxyVia) ->
-    RequestCtx = get_context(Req),
-    {
-        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
-        RequestCtx,
-        _State
-    };
-get_provider(Req = #event{type = #quota_exceeded_event{}}, _State, ProxyVia) ->
-    RequestCtx = get_context(Req),
-    {
-        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
-        RequestCtx,
-        _State
+        State
     };
 get_provider(Req, State, _ProxyVia) ->
     get_provider(Req, State).
