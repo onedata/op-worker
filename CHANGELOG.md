@@ -4,6 +4,15 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc14
+
+* Dbsync uses datastore_pool to dump documents to db
+* Update cluster_worker reference
+* Do not fail dbsync posthook when we cannot chown file on storage.
+* Refactor event_manager:get_provider function.
+* Fix event proxying.
+
+
 ### 3.0.0-rc13
 
 * VFS-3118 Change default env value for custom gui root
