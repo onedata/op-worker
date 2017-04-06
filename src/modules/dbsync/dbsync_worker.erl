@@ -542,12 +542,15 @@ apply_changes(SpaceId,
                 ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
                 maps:keys(AddedMap) ++ maps:keys(DeletedMap);
             _ ->
-                case Deleted of
-                    true ->
-                        dbsync_state:verify_and_del_key(Key, ModelName);
-                    _ ->
-                        ok
-                end,
+                % TODO - delete old state
+%%                case Deleted of
+%%                    true ->
+%%                        spawn(fun() ->
+%%                            dbsync_state:verify_and_del_key(Key, ModelName)
+%%                        end);
+%%                    _ ->
+%%                        ok
+%%                end,
                 ok = mnesia_cache_driver:force_save(ModelConfig, Doc),
                 []
         end,

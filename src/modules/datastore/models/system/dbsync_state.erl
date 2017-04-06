@@ -15,6 +15,7 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -124,10 +125,11 @@ model_init() ->
     ReturnValue :: term()) -> ok.
 'after'(change_propagation_controller = ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred], _ReturnValue) ->
     verify_and_del_key(Key, ModelName);
-'after'(_ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred], _ReturnValue) ->
-    verify_and_del_key(Key, file_meta);
-'after'(ModelName, delete_links, ?DISK_ONLY_LEVEL, [Key, _Links], _ReturnValue) ->
-    verify_and_del_key(Key, ModelName);
+% TODO - delete old state
+%%'after'(_ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred], _ReturnValue) ->
+%%    verify_and_del_key(Key, file_meta);
+%%'after'(ModelName, delete_links, ?DISK_ONLY_LEVEL, [Key, _Links], _ReturnValue) ->
+%%    verify_and_del_key(Key, ModelName);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -221,14 +223,7 @@ verify_and_del_key(Key, ModelName, Checks) ->
 save_space_id(ModelName, Key) ->
     MInit = ModelName:model_init(),
     % Use data store driver explicit (otherwise hooks loop will appear)
-    GetAns = case erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?GLOBAL_ONLY_LEVEL)),
-        get, [MInit, Key]) of
-        {error, {not_found, _}} ->
-            erlang:apply(datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
-                get, [MInit, Key]);
-        Ans ->
-            Ans
-    end,
+    GetAns = mnesia_cache_driver:get(MInit, Key),
 
     case GetAns of
         {ok, Doc} ->
