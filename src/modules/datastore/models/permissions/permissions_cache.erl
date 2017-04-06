@@ -307,7 +307,7 @@ active_rev_check(_Key, _SpaceId, _Model, _Rev, _, ok) ->
     ok;
 active_rev_check(Key, SpaceId, Model, Rev, Num, _) ->
     timer:sleep(2000),
-    file_consistency:check_and_add_components(Key, SpaceId, [Model]),
+    file_consistency:check_and_add_components(Key, SpaceId, [file_meta]),
     Check = file_consistency:verify_revision(Key, Model, Rev),
     active_rev_check(Key, SpaceId, Model, Rev, Num - 1, Check).
 
