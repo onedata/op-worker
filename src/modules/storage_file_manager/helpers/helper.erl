@@ -227,7 +227,7 @@ get_params(Helper, UserCtx) ->
 %% Returns proxy helper parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec get_proxy_params(helpers:helper(), storage:id()) -> params().
+-spec get_proxy_params(helpers:helper() | undefined, storage:id()) -> params().
 get_proxy_params(Helper, StorageId) ->
     Timeout = get_timeout(Helper),
     {ok, Latency} = application:get_env(?APP_NAME, proxy_helper_latency_milliseconds),
@@ -245,15 +245,17 @@ get_proxy_params(Helper, StorageId) ->
 %% Returns timeout for storage helper async operations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_timeout(helpers:helper()) -> Timeout :: timeout().
+-spec get_timeout(helpers:helper() | undefined) -> Timeout :: timeout().
+get_timeout(undefined) ->
+    {ok, Value} = application:get_env(?APP_NAME,
+        helpers_async_operation_timeout_milliseconds),
+    Value;
 get_timeout(#helper{args = Args}) ->
     case maps:find(<<"timeout">>, Args) of
         {ok, Value} ->
             erlang:binary_to_integer(Value);
         error ->
-            {ok, Value} = application:get_env(?APP_NAME,
-                helpers_async_operation_timeout_milliseconds),
-            Value
+            get_timeout(undefined)
     end.
 
 %%--------------------------------------------------------------------

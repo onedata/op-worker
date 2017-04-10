@@ -21,7 +21,7 @@
 
 %% API
 -export([wait/4, wait/5, add_components_and_notify/2, check_and_add_components/3,
-    check_missing_components/2, check_missing_components/3]).
+    check_missing_components/2, check_missing_components/3, verify_revision/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
