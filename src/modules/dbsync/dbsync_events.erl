@@ -16,6 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -63,7 +64,7 @@ change_replicated_internal(SpaceId, #change{
     }
 }, _Master) ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
-    case mnesia_cache_driver:exists(file_meta:model_init(), FileUuid) of
+    case ?MEMORY_DRIVER:exists(file_meta:model_init(), FileUuid) of
         {ok, false} ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
             FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
@@ -197,14 +198,14 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                     case NewTargetsAdd of
                         [] -> ok;
                         _ ->
-                            ok = mnesia_cache_driver:add_links(MC, MainDocKey, [{K, {Version, NewTargetsAdd}}],
+                            ok = ?MEMORY_DRIVER:add_links(MC, MainDocKey, [{K, {Version, NewTargetsAdd}}],
                                 ?DEFAULT_LINK_REPLICA_SCOPE)
                     end,
 
                     %% Handle links marked as deleted
                     lists:foreach(
                         fun({Scope0, {deleted, VH0}, _, _}) ->
-                            ok = mnesia_cache_driver:delete_links(MC, MainDocKey,
+                            ok = ?MEMORY_DRIVER:delete_links(MC, MainDocKey,
                                 [links_utils:make_scoped_link_name(K, Scope0, VH0, size(Scope0))])
                         end, NewTargetsDel)
 

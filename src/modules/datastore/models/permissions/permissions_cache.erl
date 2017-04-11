@@ -236,16 +236,16 @@ invalidate(Model, FileCtx) ->
     invalidate_permissions_cache(),
     Key = file_ctx:get_uuid_const(FileCtx),
 
-    MC = Model:model_init(),
+    #model_config{store_level = SL} = MC = Model:model_init(),
     Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
-    {Rev, Document} = case MC#model_config.store_level of
+    {Rev, Document} = case SL of
         ?DISK_ONLY_LEVEL ->
             {ok, Doc} = erlang:apply(Driver, get, [MC, Key]),
             {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
         _ ->
             A1 = erlang:apply(Driver, get, [MC, Key]),
             Driver2 = datastore:driver_to_module(datastore:level_to_driver(
-                caches_controller:cache_to_datastore_level(Model))),
+                memory_store_driver:main_level(SL))),
             A2 = erlang:apply(Driver2, get, [MC, Key]),
             case {A1, A2} of
                 {{ok, Doc}, {ok, Doc2}} ->
