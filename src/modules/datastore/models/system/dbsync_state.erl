@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_engine.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -223,7 +224,7 @@ verify_and_del_key(Key, ModelName, Checks) ->
 save_space_id(ModelName, Key) ->
     MInit = ModelName:model_init(),
     % Use data store driver explicit (otherwise hooks loop will appear)
-    GetAns = mnesia_cache_driver:get(MInit, Key),
+    GetAns = ?MEMORY_DRIVER:get(MInit, Key),
 
     case GetAns of
         {ok, Doc} ->
