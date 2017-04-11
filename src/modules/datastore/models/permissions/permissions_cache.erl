@@ -278,6 +278,10 @@ invalidate(Model, FileCtx) ->
 -spec remote_invalidation(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(),
     Rev :: non_neg_integer(), SpaceId :: binary()) -> ok.
 remote_invalidation(Model, Key, Rev, SpaceId) ->
+    % TODO - tmp solution before memory store manages processes
+    spawn(fun() ->
+        active_rev_check(Key, SpaceId, Model, Rev, 15, not_checked)
+    end),
     ok = file_consistency:wait(Key, SpaceId, [{rev, Model, Rev}],
         {?MODULE, remote_invalidation, [Model, Key, Rev, SpaceId]}),
     invalidate_permissions_cache().
@@ -286,6 +290,27 @@ remote_invalidation(Model, Key, Rev, SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Active check if revison appeared.
+%% @end
+%%--------------------------------------------------------------------
+-spec active_rev_check(Key :: datastore:ext_key(), SpaceId :: binary(),
+    Model :: model_behaviour:model_type(), Rev :: non_neg_integer(),
+    Num :: non_neg_integer(), Status :: ok | younger_revision | not_found
+    | not_checked) -> ok.
+active_rev_check(_Key, _SpaceId, _Model, _Rev, 0, _) ->
+    ok;
+active_rev_check(_Key, _SpaceId, _Model, _Rev, _, ok) ->
+    ok;
+active_rev_check(Key, SpaceId, Model, Rev, Num, _) ->
+    timer:sleep(2000),
+    file_consistency:check_and_add_components(Key, SpaceId, [file_meta]),
+    Check = file_consistency:verify_revision(Key, Model, Rev),
+    active_rev_check(Key, SpaceId, Model, Rev, Num - 1, Check).
+
 
 %%--------------------------------------------------------------------
 %% @private

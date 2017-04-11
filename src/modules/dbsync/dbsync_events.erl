@@ -64,7 +64,7 @@ change_replicated_internal(SpaceId, #change{
     }
 }, _Master) ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
-    case couchdb_datastore_driver:exists(file_meta:model_init(), FileUuid) of
+    case mnesia_cache_driver:exists(file_meta:model_init(), FileUuid) of
         {ok, false} ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
             FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
