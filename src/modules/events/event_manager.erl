@@ -117,10 +117,11 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(Request, State) ->
+handle_cast(Request, State = #state{session_id = SessId}) ->
     try
         ProviderId = oneprovider:get_provider_id(),
-        case get_provider(Request, State) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
+        case get_provider(Request, State, ProxyVia) of
             {ProviderId, RequestCtx, NewState} ->
                 handle_locally(Request, RequestCtx, NewState);
             {RemoteProviderId, _RequestCtx, NewState} ->
@@ -189,6 +190,36 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @todo remove and use get_provider/2
+%% @private
+%% @doc
+%% Returns ID of a provider responsible for request handling in given context.
+%% Handles cases of events that should be handled even if file is not supported
+%% locally
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider(Request :: term(), State :: #state{}, oneprovider:id() | undefined) ->
+    {ProviderId :: oneprovider:id(), Ctx :: ctx(), NewState :: #state{}} |
+    no_return().
+get_provider(#flush_events{provider_id = ProviderId}, State, _ProxyVia) ->
+    {ProviderId, undefined, State};
+get_provider(Req = #event{type = Type}, State, ProxyVia)
+    when is_record(Type, file_attr_changed_event)
+    orelse is_record(Type, file_location_changed_event)
+    orelse is_record(Type, file_perm_changed_event)
+    orelse is_record(Type, file_removed_event)
+    orelse is_record(Type, file_renamed_event)
+    orelse is_record(Type, quota_exceeded_event) ->
+    RequestCtx = get_context(Req),
+    {
+        utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
+        RequestCtx,
+        State
+    };
+get_provider(Req, State, _ProxyVia) ->
+    get_provider(Req, State).
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Returns ID of a provider responsible for request handling in given context.
@@ -197,9 +228,6 @@ code_change(_OldVsn, State, _Extra) ->
 -spec get_provider(Request :: term(), State :: #state{}) ->
     {ProviderId :: oneprovider:id(), Ctx :: ctx(), NewState :: #state{}} |
     no_return().
-get_provider(#flush_events{provider_id = ProviderId}, State) ->
-    {ProviderId, undefined, State};
-
 get_provider(Request, #state{providers = Providers} = State) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
@@ -252,13 +280,8 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
 %%--------------------------------------------------------------------
 -spec handle_locally(Request :: term(), Ctx :: ctx(), State :: #state{}) ->
     {noreply, NewState :: #state{}}.
-handle_locally(Request, undefined, State) ->
+handle_locally(Request, _Ctx, State) ->
     handle_locally(Request, State);
-
-handle_locally(Request, {file, _FileCtx}, State) ->
-    %todo do we need to skip deleted files?
-    handle_locally(Request, State).
-
 
 %%--------------------------------------------------------------------
 %% @private

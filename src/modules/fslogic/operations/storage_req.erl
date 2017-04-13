@@ -64,8 +64,12 @@ get_configuration(SessId) ->
 -spec get_helper_params(user_ctx:ctx(), storage:id(),
     ForceCL :: boolean()) -> #fuse_response{}.
 get_helper_params(_UserCtx, StorageId, true = _ForceProxy) ->
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
+    {ok, Helper} = case storage:get(StorageId) of
+        {ok, StorageDoc} ->
+            fslogic_storage:select_helper(StorageDoc);
+        {error,{not_found,storage}} ->
+            {ok, undefined}
+    end,
     HelperParams = helper:get_proxy_params(Helper, StorageId),
     #fuse_response{status = #status{code = ?OK}, fuse_response = HelperParams};
 get_helper_params(_UserCtx, _StorageId, false = _ForceProxy) ->

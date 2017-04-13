@@ -17,6 +17,7 @@
 -include("modules/dbsync/common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -488,7 +489,7 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 -spec forign_links_get(model_behaviour:model_config(), datastore:ext_key(), datastore:ext_key()) ->
     {ok, datastore:document()} | {error, Reason :: any()}.
 forign_links_get(ModelConfig, Key, MainDocKey) ->
-    mnesia_cache_driver:get_link_doc(ModelConfig, couchdb_datastore_driver:default_bucket(), Key, MainDocKey).
+    ?MEMORY_DRIVER:get_link_doc(ModelConfig, couchdb_datastore_driver:default_bucket(), Key, MainDocKey).
 
 
 %%--------------------------------------------------------------------
@@ -499,7 +500,7 @@ forign_links_get(ModelConfig, Key, MainDocKey) ->
 -spec forign_links_save(model_behaviour:model_config(), datastore:document()) ->
     #links{} | {error, Reason :: any()}.
 forign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{doc_key = MainDocKey} = Links}) ->
-    case mnesia_cache_driver:force_link_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc, MainDocKey) of
+    case ?MEMORY_DRIVER:force_link_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc, MainDocKey) of
         ok ->
             case forign_links_get(ModelConfig, Key, MainDocKey) of
                 {error, {not_found, _}} -> Links#links{link_map = #{}, children = #{}};
@@ -542,13 +543,16 @@ apply_changes(SpaceId,
                 ok = dbsync_events:links_changed(Origin, ModelName, MainDocKey, AddedMap, DeletedMap),
                 maps:keys(AddedMap) ++ maps:keys(DeletedMap);
             _ ->
-                case Deleted of
-                    true ->
-                        dbsync_state:verify_and_del_key(Key, ModelName);
-                    _ ->
-                        ok
-                end,
-                ok = mnesia_cache_driver:force_save(ModelConfig, Doc),
+                % TODO - delete old state
+%%                case Deleted of
+%%                    true ->
+%%                        spawn(fun() ->
+%%                            dbsync_state:verify_and_del_key(Key, ModelName)
+%%                        end);
+%%                    _ ->
+%%                        ok
+%%                end,
+                ok = ?MEMORY_DRIVER:force_save(ModelConfig, Doc),
                 []
         end,
 
@@ -561,12 +565,14 @@ apply_changes(SpaceId,
                 Master ! {change_replicated_ok, Key}
             catch
                 E1:E2 ->
-                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2])
+                    ?error_stacktrace("Change ~p post-processing failed: ~p:~p", [Change, E1, E2]),
+                    Master ! {change_replication_error, Key}
             end
         end),
         receive
             {change_replicated_ok, Key} -> ok;
-            {file_consistency_wait, Key} -> ok
+            {file_consistency_wait, Key} -> ok;
+            {change_replication_error, Key} -> ok
         after
             500 -> ok
         end,
