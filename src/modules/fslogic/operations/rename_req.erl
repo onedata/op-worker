@@ -39,7 +39,7 @@
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     case file_ctx:get_space_id_const(SourceFileCtx) =:= file_ctx:get_space_id_const(TargetParentFileCtx) of
         false ->
-            copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+            rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
         true ->
             rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
     end.
@@ -51,12 +51,49 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Renames file between spaces, the operation removes target if it is of the
+%% same type as source, copies source into target, and removes source.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_between_spaces(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
+rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
+    {TargetFileType, TargetGuid} = remotely_get_child_type(SessId, TargetParentGuid, TargetName),
+    case file_ctx:get_guid_const(SourceFileCtx) =:= TargetGuid of
+        true ->
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = #file_renamed{
+                    new_guid = TargetGuid,
+                    child_entries = []
+                }
+            };
+        false ->
+            case {SourceFileType, TargetFileType} of
+                {_, undefined} ->
+                    copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
+                {TheSameType, TheSameType} ->
+                    ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
+                    copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
+                {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
+                    throw(?EISDIR);
+                {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
+                    throw(?ENOTDIR)
+            end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Copies source file/dir into target dir (to different space) and then removes
 %% source file/dir.
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_and_remove(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
+TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
@@ -96,11 +133,37 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 -spec rename_within_space(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    case file_ctx:is_dir(SourceFileCtx) of
-        {true, SourceFileCtx2} ->
-            rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
-        {false, SourceFileCtx2} ->
-            rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName)
+    {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
+    {TargetFileType, TargetFileCtx, TargetParentFileCtx2} = get_child_type(TargetParentFileCtx, TargetName, UserCtx),
+
+    case TargetFileCtx =/= undefined andalso file_ctx:equals(SourceFileCtx2, TargetFileCtx) of
+        true ->
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = #file_renamed{
+                    new_guid = file_ctx:get_guid_const(SourceFileCtx2),
+                    child_entries = []
+                }
+            };
+        false ->
+            case {SourceFileType, TargetFileType} of
+                {?DIRECTORY_TYPE, undefined} ->
+                    rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                {?REGULAR_FILE_TYPE, undefined} ->
+                    rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                {?DIRECTORY_TYPE, ?DIRECTORY_TYPE} ->
+                    #fuse_response{status = #status{code = ?OK}} =
+                        delete_req:delete(UserCtx, TargetFileCtx, false),
+                    rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE} ->
+                    #fuse_response{status = #status{code = ?OK}} =
+                        delete_req:delete(UserCtx, TargetFileCtx, false),
+                    rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
+                    throw(?ENOTDIR);
+                {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
+                    throw(?EISDIR)
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -142,9 +205,11 @@ rename_dir(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 -spec rename_file_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    {ok, SourceFileCtx2, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName),
+    {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserCtx),
+    {ok, SourceFileCtx3, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName),
     replica_updater:rename(SourceFileCtx, TargetFileId),
-    FileGuid = file_ctx:get_guid_const(SourceFileCtx2),
+    FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
+    update_parent_times(SourceParentFileCtx, TargetParentFileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -162,13 +227,15 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 -spec rename_dir_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    {RenameAns, SourceFileCtx2, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName),
+    {SourceParentFileCtx, SourceFileCtx2} = file_ctx:get_parent(SourceFileCtx, UserCtx),
+    {RenameAns, SourceFileCtx3, TargetFileId} = rename_meta_and_storage_file(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName),
     case RenameAns of
         ok -> ok;
         {error, ?ENOENT} -> ok
     end,
-    ChildEntries = rename_child_locations(UserCtx, SourceFileCtx2, TargetFileId, 0),
-    FileGuid = file_ctx:get_guid_const(SourceFileCtx2),
+    ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId, 0),
+    FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
+    update_parent_times(SourceParentFileCtx, TargetParentFileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -178,6 +245,7 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     }.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Renames file_meta and file on storage.
 %% @end
@@ -193,14 +261,10 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
 
     FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
     {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
-    {SourceDoc = #document{value = SourceMeta = #file_meta{
-        name = SourceName
-    }}, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    TargetDoc = SourceDoc#document{value = SourceMeta#file_meta{name = TargetName}},
-    {ok, _} = file_meta:update(FileUuid, #{name => TargetName}),
+    {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, _SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, _SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
-    file_meta:rename(TargetDoc, SourceParentDoc, ParentDoc, SourceName, TargetName),
+    file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx2),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
@@ -208,6 +272,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
     {Ans, SourceFileCtx2, TargetFileId}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Renames location of all child files, returns rename result as a list.
 %% @end
@@ -242,3 +307,70 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, Offset) ->
             ChildEntries ++ rename_child_locations(UserCtx, FileCtx2,
                 ParentStorageFileId, Offset + length(Children))
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns type of file, together with updated file context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_type(file_ctx:ctx()) -> {file_meta:type(), file_ctx:ctx()}.
+get_type(FileCtx) ->
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {?DIRECTORY_TYPE, FileCtx2};
+        {false, FileCtx2} ->
+            {?REGULAR_FILE_TYPE, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns type of child file with given name, together with child file context
+%% and updated parent file context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_type(ParentFileCtx :: file_ctx:ctx(), ChildName :: file_meta:name(), user_ctx:ctx()) ->
+    {file_meta:type(), ChildFileCtx :: file_ctx:ctx(), ParentFileCtx :: file_ctx:ctx()} |
+    {undefined, undefined, ParentFileCtx :: file_ctx:ctx()}.
+get_child_type(ParentFileCtx, ChildName, UserCtx) ->
+    try file_ctx:get_child(ParentFileCtx, ChildName, UserCtx) of
+        {ChildCtx, ParentFileCtx2} ->
+            {ChildType, ChildCtx2} = get_type(ChildCtx),
+            {ChildType, ChildCtx2, ParentFileCtx2}
+    catch
+        throw:?ENOENT ->
+            {undefined, undefined, ParentFileCtx}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns type of child file with given name, may send requests to other
+%% providers if the current one does not support file's space.
+%% @end
+%%--------------------------------------------------------------------
+-spec remotely_get_child_type(session:id(), ParentGuid :: fslogic_worker:file_guid(),
+    ChildName :: file_meta:name()) ->
+    {file_meta:type(), ChildGuid :: fslogic_worker:file_guid()} |
+    {undefined, undefined}.
+remotely_get_child_type(SessId, ParentGuid, ChildName) ->
+    case logical_file_manager:get_child_attr(SessId, ParentGuid, ChildName) of
+        {ok, #file_attr{type = Type, guid = ChildGuid}} ->
+            {Type, ChildGuid};
+        {error, ?ENOENT} ->
+            {undefined, undefined}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Update mtime and ctime of parent files to the current time.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_parent_times(SourceParentFileCtx :: file_ctx:ctx(),
+    TargetParentFileCtx :: file_ctx:ctx()) -> ok.
+update_parent_times(SourceParentFileCtx, TargetParentFileCtx) ->
+    CurrentTime = erlang:system_time(seconds),
+    fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
+    fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime).

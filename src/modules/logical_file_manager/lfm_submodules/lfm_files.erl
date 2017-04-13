@@ -84,8 +84,8 @@ cp(SessId, FileKey, TargetPath) ->
         #resolve_guid{path = TargetParentPath},
         fun(#guid{guid = TargetParentGuid}) ->
             case copy_utils:copy(SessId, Guid, TargetParentGuid, TargetName) of
-                {ok, Guid, _} ->
-                    {ok, Guid};
+                {ok, NewGuid, _} ->
+                    {ok, NewGuid};
                 Error ->
                     Error
             end

@@ -1198,7 +1198,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 %%        ct:print("Links ~lp", [{DSize, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-        SList = lists:filter(fun(S) -> S == 2*DSize + 1 end, VerAns),
+        SList = lists:filter(fun(S) -> S == DSize + 1 end, VerAns),
         {length(ZerosList), length(SList)}
     end,
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},

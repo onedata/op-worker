@@ -178,6 +178,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 -spec get_file_location_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_location_insecure(_UserCtx, FileCtx) ->
+    throw_if_not_exists(FileCtx),
     {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
     {[#document{value = #file_location{
         blocks = Blocks, file_id = FileId
@@ -274,3 +275,17 @@ open_file_for_rdwr(UserCtx, FileCtx) ->
         [traverse_ancestors, ?read_object, ?write_object],
         [UserCtx, FileCtx, rdwr],
         fun open_file_insecure/3).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Throws ?ENOENT if file does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec throw_if_not_exists(file_ctx:ctx()) -> ok | no_return().
+throw_if_not_exists(FileCtx) ->
+    case file_ctx:file_exists_const(FileCtx) of
+        true ->
+            ok;
+        false ->
+            throw(?ENOENT)
+    end.

@@ -281,7 +281,7 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
 -spec handle_locally(Request :: term(), Ctx :: ctx(), State :: #state{}) ->
     {noreply, NewState :: #state{}}.
 handle_locally(Request, _Ctx, State) ->
-    handle_locally(Request, State);
+    handle_locally(Request, State).
 
 %%--------------------------------------------------------------------
 %% @private

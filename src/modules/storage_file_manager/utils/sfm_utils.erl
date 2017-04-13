@@ -52,8 +52,8 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
 %% Renames file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_storage_file(session:id(), od_space:id(), storage:id(),
-    file_meta:uuid(), helpers:file_id(), helpers:file_id()) -> ok.
+-spec rename_storage_file(session:id(), od_space:id(), storage:doc(),
+    file_meta:uuid(), helpers:file_id(), helpers:file_id()) -> ok | {error, term()}.
 rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFileId) ->
     %create target dir
     TargetDir = filename:dirname(TargetFileId),
@@ -70,18 +70,12 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
 
     SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
         FileUuid, Storage, SourceFileId, undefined),
-    TargetHandle = storage_file_manager:new_handle(SessId,
-        SpaceId, FileUuid, Storage, TargetFileId, undefined),
-    case storage_file_manager:stat(TargetHandle) of
-        {ok, _} ->
-            ok;
-        _ ->
-            case SourceFileId =/= TargetFileId of
-                true ->
-                    storage_file_manager:mv(SourceHandle, TargetFileId);
-                false ->
-                    ok
-            end
+
+    case SourceFileId =/= TargetFileId of
+        true ->
+            storage_file_manager:mv(SourceHandle, TargetFileId);
+        false ->
+            ok
     end.
 
 %%--------------------------------------------------------------------

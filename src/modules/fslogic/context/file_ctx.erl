@@ -58,6 +58,7 @@
     get_guid_const/1, get_uuid_const/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
+-export([equals/2]).
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1, get_file_doc_even_when_deleted/1,
@@ -675,6 +676,15 @@ is_in_user_space_const(FileCtx, UserCtx) ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             lists:keymember(SpaceId, 1, Spaces)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns true if contexts point to the file with the same GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec equals(ctx(), ctx()) -> boolean().
+equals(FileCtx1, FileCtx2) ->
+    get_guid_const(FileCtx1) =:= get_guid_const(FileCtx2).
 
 %%--------------------------------------------------------------------
 %% @doc

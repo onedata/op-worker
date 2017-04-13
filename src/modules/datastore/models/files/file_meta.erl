@@ -39,7 +39,7 @@
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
     get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_even_when_deleted/1]).
 -export([get_ancestors/1, attach_location/3, get_local_locations/1,
-    get_locations/1, get_locations_by_uuid/1, location_ref/1, rename/5]).
+    get_locations/1, get_locations_by_uuid/1, location_ref/1, rename/4]).
 -export([to_uuid/1]).
 -export([fix_parent_links/2, fix_parent_links/1, exists_local_link_doc/1, get_child/2, delete_child_link/2]).
 -export([hidden_file_name/1]).
@@ -629,8 +629,18 @@ get_locations_by_uuid(Uuid) ->
 %% Rename file_meta and change link targets
 %% @end
 %%--------------------------------------------------------------------
--spec rename(doc(), doc(), doc(), name(), name()) -> ok.
-rename(TargetDoc, SourceParentDoc, TargetParentDoc, SourceName, TargetName) ->
+-spec rename(doc(), doc(), doc(), name()) -> ok.
+rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
+    #document{
+        key = FileUuid,
+        value = SourceFileMeta = #file_meta{
+            name = SourceName
+        }
+    } = SourceDoc,
+    TargetDoc = SourceDoc#document{
+        value = SourceFileMeta#file_meta{name = TargetName}
+    },
+    {ok, _} = file_meta:update(FileUuid, #{name => TargetName}),
     ok = file_meta:delete_child_link(SourceParentDoc, SourceName),
     ok = datastore:add_links(?LINK_STORE_LEVEL, TargetParentDoc, {TargetName, TargetDoc}),
     ok = datastore:add_links(?LINK_STORE_LEVEL, TargetDoc, [{parent, TargetParentDoc}]).
