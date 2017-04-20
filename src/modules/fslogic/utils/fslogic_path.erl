@@ -20,7 +20,7 @@
 
 %% API
 -export([split_skipping_dots/1]).
--export([split/1, join/1, basename_and_parent/1]).
+-export([split/1, join/1, basename_and_parent/1, logical_to_canonical_path/2]).
 
 %%%===================================================================
 %%% API functions
@@ -95,6 +95,16 @@ basename_and_parent(Path) ->
             {Leaf, join([<<?DIRECTORY_SEPARATOR>> | lists:reverse(Tokens)])};
         _ -> {<<"">>, <<?DIRECTORY_SEPARATOR>>}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts logical to canonical path.
+%% @end
+%%--------------------------------------------------------------------
+-spec logical_to_canonical_path(file_meta:path(), od_space:id()) -> file_meta:path().
+logical_to_canonical_path(LogicalPath, SpaceId) ->
+    [<<"/">>, _SpaceName | Rest] = split(LogicalPath),
+    join([<<"/">>, SpaceId | Rest]).
 
 %%%===================================================================
 %%% Internal functions

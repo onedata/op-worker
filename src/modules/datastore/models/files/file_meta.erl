@@ -50,7 +50,7 @@
 -export([add_share/2, remove_share/2]).
 -export([get_uuid/1]).
 -export([record_struct/1, record_upgrade/2]).
--export([make_space_exist/1]).
+-export([make_space_exist/1, new_doc/5]).
 
 -type doc() :: datastore:document().
 -type uuid() :: datastore:key().
@@ -214,7 +214,7 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
                         case resolve_path(ParentUuid, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
                             {error, {not_found, _}} ->
                                 false;
-                            {ok, _} ->
+                            {ok, _Value} ->
                                 true
                         end
                 end,
@@ -326,7 +326,7 @@ delete(#document{value = #file_meta{name = FileName, version = Version}, key = K
         case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, location_ref(oneprovider:get_provider_id())) of
             {ok, {LocKey, LocationModel}} ->
                 LocationModel:delete(LocKey);
-            _ ->
+            _Other ->
                 ok
         end,
         datastore:delete(?STORE_LEVEL, ?MODULE, Key)
@@ -675,7 +675,7 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                                 Err
                         end;
                     {error, link_not_found} -> %% Map links errors to document errors
-                        {error, {not_found, ?MODEL_NAME}}; %todo fails when resolving guid of /space1, due to race with od_user:fetch
+                        {error, {not_found, ?MODEL_NAME}};
                     {error, Reason} ->
                         {error, Reason}
                 end;
@@ -940,6 +940,23 @@ make_space_exist(SpaceId) ->
                     ok
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return file_meta doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_doc(undefined | file_meta:name(), undefined | file_meta:type(),
+    file_meta:posix_permissions(),  undefined | od_user:id(),
+    undefined | file_meta:size()) -> datastore:document().
+new_doc(FileName, FileType, Mode, Owner, Size) ->
+    #document{value = #file_meta{
+        name = FileName,
+        type = FileType,
+        mode = Mode,
+        owner = Owner,
+        size = Size
+    }}.
 
 %%%===================================================================
 %%% Internal functions

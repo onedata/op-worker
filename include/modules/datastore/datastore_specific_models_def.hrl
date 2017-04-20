@@ -314,13 +314,13 @@
 
 -define(DEFAULT_FILENAME_MAPPING_STRATEGY, {simple, #{}}).
 -define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGIES, [{no_import, #{}}]).
+-define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_import, #{}}).
 
 %% Model that maps space to storage strategies
 -record(storage_strategies, {
     filename_mapping = ?DEFAULT_FILENAME_MAPPING_STRATEGY :: space_strategy:config(),
     storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
-    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGIES :: [space_strategy:config()],
+    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config(),
     last_import_time :: integer() | undefined
 }).
 

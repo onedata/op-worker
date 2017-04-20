@@ -274,6 +274,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns GUID of parent or undefined when the file is a root dir.
@@ -405,7 +406,14 @@ get_child(FileCtx, Name, UserCtx) ->
                 {SpaceId, _} ->
                     Child = new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
                     {Child, FileCtx};
-                false -> throw(?ENOENT)
+                false ->
+                    case user_ctx:is_root(UserCtx) of
+                        true ->
+                            Child = new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(Name)),
+                            {Child, FileCtx};
+                        _ ->
+                            throw(?ENOENT)
+                    end
             end;
         _ ->
             SpaceId = get_space_id_const(FileCtx),
