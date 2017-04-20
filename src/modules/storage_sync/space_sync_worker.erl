@@ -21,6 +21,8 @@
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+
 
 -define(INFINITY, 9999999999999999999999).
 -define(SYNC_JOB_TIMEOUT,  timer:hours(24)).
@@ -56,8 +58,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     start_pools(),
-    timer:apply_after(?SPACE_STRATEGIES_CHECK_INTERVAL, worker_proxy, cast,
-        [?MODULE, check_strategies]),
+    schedule_check_strategy(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -78,8 +79,7 @@ handle(healthcheck) ->
 handle(check_strategies) ->
     ?debug("Check strategies"),
     check_strategies(),
-    timer:apply_after(?SPACE_STRATEGIES_CHECK_INTERVAL, worker_proxy, cast,
-        [?MODULE, check_strategies]);
+    schedule_check_strategy();
 handle(Request = {run_job, _, Job = #space_strategy_job{}}) ->
     ?debug("Run job: ~p", [Request]),
     run_job(Job);
@@ -229,17 +229,57 @@ maybe_start_storage_import_and_update(SpaceId, StorageId, StorageStrategies) ->
 -spec start_storage_import_and_update(od_space:id(), storage:id(),
     integer() | undefined) -> ok.
 start_storage_import_and_update(SpaceId, StorageId, LastImportTime) ->
-    StorageLogicalFileId = <<"/", SpaceId/binary>>,
-    ImportRes = storage_import:start(SpaceId, StorageId, LastImportTime,
-        StorageLogicalFileId, ?INFINITY),
-    %% @todo: do smth with this result and save new last_import_time
-    ?debug("space_sync_worker ImportRes ~p", [ImportRes]),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
+    {RootDirCtx, _} = file_ctx:get_parent(SpaceCtx, user_ctx:new(?ROOT_SESS_ID)),
+
+    ImportAns = storage_import:start(SpaceId, StorageId, LastImportTime,
+        RootDirCtx, SpaceId, ?INFINITY),
+    log_import_answer(ImportAns, SpaceId, StorageId),
+
+    UpdateAns = storage_update:start(SpaceId, StorageId, LastImportTime,
+        RootDirCtx, SpaceId, ?INFINITY),
+    log_update_answer(UpdateAns, SpaceId, StorageId).
 
 
-    UpdateRes = storage_update:start(SpaceId, StorageId, LastImportTime,
-        StorageLogicalFileId, ?INFINITY),
-    %% @todo: do smth with this result
-    ?debug("space_sync_worker UpdateRes ~p", [UpdateRes]).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @equiv log_answer(Answer, SpaceId, StorageId, import).
+%% @end
+%%--------------------------------------------------------------------
+-spec log_import_answer([space_strategy:job_result()] | space_strategy:job_result(),
+    od_space:id(), storage:id()) -> ok.
+log_import_answer(Answer, SpaceId, StorageId) ->
+    log_answer(Answer, SpaceId, StorageId, import).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @equiv log_answer(Answer, SpaceId, StorageId, update).
+%% @end
+%%--------------------------------------------------------------------
+-spec log_update_answer([space_strategy:job_result()] | space_strategy:job_result(),
+    od_space:id(), storage:id()) -> ok.
+log_update_answer(Answer, SpaceId, StorageId) ->
+    log_answer(Answer, SpaceId, StorageId, update).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is responsible for logging output of storage_import:start
+%% or storage_
+%% @end
+%%--------------------------------------------------------------------
+-spec log_answer([space_strategy:job_result()] | space_strategy:job_result(),
+    od_space:id(), storage:id(), atom()) -> ok.
+log_answer({error, Reason}, SpaceId, StorageId, Strategy) ->
+    ?warning("~p of storage: ~p  supporting space: ~p failed due to: ~p",
+        [Strategy, StorageId, SpaceId, Reason]);
+log_answer(Answer, SpaceId, StorageId, Strategy) ->
+    ?debug("~p of storage: ~p  supporting space: ~p finished with: ~p",
+        [Strategy, StorageId, SpaceId, Answer]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -412,7 +452,6 @@ start_pools() ->
         start_pool(PoolName, WorkersNumKey)
     end, ?SPACE_SYNC_WORKER_POOLS).
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -446,3 +485,16 @@ stop_pools() ->
 pool_name(storage_import) -> ?STORAGE_IMPORT_POOL_NAME;
 pool_name(storage_update) -> ?STORAGE_UPDATE_POOL_NAME;
 pool_name(_) -> ?GENERIC_STRATEGY_POOL_NAME.
+
+
+%%%-------------------------------------------------------------------
+%%% @private
+%%% @doc
+%%% Schedules next check_strategies.
+%%% @end
+%%%-------------------------------------------------------------------
+-spec schedule_check_strategy() -> {ok, term()}.
+schedule_check_strategy() ->
+    {ok, Interval} = application:get_env(?APP_NAME, ?SPACE_STRATEGIES_CHECK_INTERVAL),
+    timer:apply_after(timer:seconds(Interval), worker_proxy, cast,
+        [?MODULE, check_strategies]).

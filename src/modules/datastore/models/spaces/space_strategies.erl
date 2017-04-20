@@ -20,7 +20,7 @@
 
 %% API
 -export([new/1, add_storage/2, add_storage/3]).
--export([set_strategy/4, set_strategy/5]).
+-export([set_strategy/4, set_strategy/5, update_last_import_time/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -66,10 +66,18 @@ record_struct(2) ->
 -spec record_upgrade(datastore_json:record_version(), tuple()) ->
     {datastore_json:record_version(), tuple()}.
 record_upgrade(1, R = {?MODEL_NAME, StorageStrategies, _,  _, _}) ->
-    NewStorageStrategies = maps:map(fun(_, {storage_strategies,_, _,
-        {storage_update, StorageUpdateStrategies}, _}
-    ) ->
-        #storage_strategies{storage_update = hd(StorageUpdateStrategies)}
+    NewStorageStrategies = maps:map(fun(_, {storage_strategies,
+        {filename_mapping, FilenameMappingStrategy},
+        {storage_import, StorageImportStrategy},
+        {storage_update, StorageUpdateStrategies},
+        {last_import_time, LastImportTime}
+    }) ->
+        #storage_strategies{
+            filename_mapping = FilenameMappingStrategy,
+            storage_import = StorageImportStrategy,
+            storage_update = hd(StorageUpdateStrategies),
+            last_import_time = LastImportTime
+        }
     end, StorageStrategies),
     {2, R#space_strategies{storage_strategies = NewStorageStrategies}}.
 
@@ -246,6 +254,21 @@ set_strategy(SpaceId, StorageId, StrategyType, StrategyName, StrategyArgs) ->
 
         {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}
     end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets last_import_time to new value.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_last_import_time(od_space:id(), storage:id(), integer() | undefined) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update_last_import_time(SpaceId, StorageId, NewLastImportTime) ->
+    update(SpaceId, fun(#space_strategies{storage_strategies = Strategies} = OldValue) ->
+        OldSS = maps:get(StorageId, Strategies),
+        NewSS = OldSS#storage_strategies{last_import_time = NewLastImportTime},
+        {ok, OldValue#space_strategies{storage_strategies = maps:put(StorageId, NewSS, Strategies)}}
+    end).
+
 
 %%%===================================================================
 %%% Internal functions

@@ -7,10 +7,9 @@
 %%% This file contains definitions of macros used in space_sync_worker.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Jakub Kudzia").
 
 %% Interval between successive check strategies.
--define(SPACE_STRATEGIES_CHECK_INTERVAL, timer:seconds(10)).
+-define(SPACE_STRATEGIES_CHECK_INTERVAL, check_strategies_interval).
 
 -define(STORAGE_IMPORT_POOL_NAME, storage_import_worker_pool).
 -define(STORAGE_IMPORT_WORKERS_NUM, storage_import_workers_num).

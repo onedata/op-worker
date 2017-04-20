@@ -946,7 +946,7 @@ make_space_exist(SpaceId) ->
 %% Return file_meta doc.
 %% @end
 %%--------------------------------------------------------------------
--spec new_doc(undefined | file_meta:name(), undefined | file_meta:name(),
+-spec new_doc(undefined | file_meta:name(), undefined | file_meta:type(),
     file_meta:posix_permissions(),  undefined | od_user:id(),
     undefined | file_meta:size()) -> datastore:document().
 new_doc(FileName, FileType, Mode, Owner, Size) ->

@@ -4,13 +4,53 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc14
+
+* Dbsync uses datastore_pool to dump documents to db
+* Update cluster_worker reference
+* Do not fail dbsync posthook when we cannot chown file on storage.
+* Refactor event_manager:get_provider function.
+* Fix event proxying.
+
+
+### 3.0.0-rc13
+
+* VFS-3118 Change default env value for custom gui root
+* VFS-3025 Add create_and_open operation to sfm and use it during file copying.
+* VFS-3097 Do not deserialize macaroons when it is not necessary
+* VFS-3025 Do not open file in logical_file_manager, use provided handle.
+* VFS-2961 Refactor functions duplicating code in od_user module.
+
+
 ### 3.0.0-rc12
 
+* Update datastore caching mechanism - use dedicated processed instead of transactions
+* VFS-2991 Add consistent_hashing library.
+* VFS-2719 Introduce limits to the frequency of reconnect attempts in subscriptions websocket client
+* VFS-2496 Fix a bug causing user updates not to include new spaces / groups
+* VFS-2496 Make sure new spaces and groups appear after creation despite not being yet synchronized from onezone
+* VFS-2496 Change relations in space-user|group-permissions models
+* VFS-2910 Reduce number of helper system threads
+* VFS-2910 Update storage detection logic
+* VFS-2496 Allow updating default space in user data backend
+* VFS-2496 Migrate to fully relational model in gui backend
+* VFS-2909 Adjust code to updated ceph lib
+* VFS-2871 Update file_consistency and dbsync
+* VFS-2835 Update change propagation controller
+* VFS-2793 Implement several simple space strategies
+* VFS-2808 Integrate new helpers.
+* VFS-2522 Do not fail when trash file index is found.
+* VFS-2829 Exclude root and guest sessions from file handles
+* VFS-2829 Use hidden file prefix for rename
+* VFS-2696 Add better error logging to backend for file acl update
+* VFS-2696 Rework file ACL model in GUI backend
+* VFS-2696 Fix a bug in GUI file rename that was breaking file paths
+* VFS-2723 Fix events routing for file subscriptions
+* VFS-2755 Send SyncResponse message with checksum and file_location instead of sending solely checksum.
 * VFS-2860 Updating frontend to 3.0.0-rc12
 * VFS-2934 Enable storage helper buffering configuration
 * VFS-2856 Improve caching of rules result, inject modified file context into function arguments.
 * VFS-2856 Permission refactoring.
-* VFS-2856 Remove cache of users, acls and files from check_permissions module.
 * VFS-2856 Configure new log layout in lager.
 * VFS-2496 Push update of user record on every relation update
 * VFS-2496 Change relations in group-user|group-permissions models

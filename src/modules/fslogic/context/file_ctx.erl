@@ -65,7 +65,7 @@
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
     get_storage_doc/1, get_file_location_with_filled_gaps/2,
     get_local_file_location_docs/1, get_file_location_docs/1,
-    get_file_location_ids/1, get_acl/1, get_raw_storage_path/1, get_parent_by_path/1]).
+    get_file_location_ids/1, get_acl/1, get_raw_storage_path/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -274,15 +274,6 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns parent file_ctx of file under CanonicalPath
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent_by_path(file_meta:path()) -> ctx().
-get_parent_by_path(CanonicalPath) ->
-    {_Basename, Parent} = fslogic_path:basename_and_parent(CanonicalPath),
-    file_ctx:new_by_canonical_path(user_ctx:new(?ROOT_SESS_ID), Parent).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -415,7 +406,14 @@ get_child(FileCtx, Name, UserCtx) ->
                 {SpaceId, _} ->
                     Child = new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
                     {Child, FileCtx};
-                false -> throw(?ENOENT)
+                false ->
+                    case user_ctx:is_root(UserCtx) of
+                        true ->
+                            Child = new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(Name)),
+                            {Child, FileCtx};
+                        _ ->
+                            throw(?ENOENT)
+                    end
             end;
         _ ->
             SpaceId = get_space_id_const(FileCtx),

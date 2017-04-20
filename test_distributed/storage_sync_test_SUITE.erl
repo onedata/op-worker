@@ -39,17 +39,17 @@
     create_directory_export_test,
     create_file_import_test,
     create_file_export_test,
-%%    delete_directory_import_test, %todo uncomment after resolving VFS-3096
-%%    delete_directory_export_test,
-%%    delete_file_import_test,
-%%    delete_file_export_test,
+    %%    delete_directory_import_test, %todo uncomment after resolving VFS-3096
+    %%    delete_directory_export_test,
+    %%    delete_file_import_test,
+    %%    delete_file_export_test,
     append_file_import_test,
     append_file_export_test,
     copy_file_import_test,
-    move_file_import_test
-%%    truncate_file_import_test,
-%%    chmod_file_import_test,
-%%    update_timestamps_file_import_test
+    move_file_import_test,
+    truncate_file_import_test,
+    chmod_file_import_test,
+    update_timestamps_file_import_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -78,9 +78,6 @@ all() -> ?ALL(?TEST_CASES).
 
 -define(TEST_DATA, <<"test_data">>).
 -define(TEST_DATA2, <<"test_data2">>).
-
--define(W1_STORAGE(Config),
-    atom_to_binary(?config(host_path, ?config('/mnt/st2', ?config(posix, ?config(storages, Config)))), latin1)).
 
 -define(STORAGE(Config, Mnt),
     atom_to_binary(?config(host_path, ?config(Mnt, ?config(posix, ?config(storages, Config)))), latin1)).
@@ -271,14 +268,14 @@ copy_file_import_test(Config) ->
     ok = write_file(W1, StorageTestFilePath, ?TEST_DATA),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-    lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-    lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, rdwr)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, rdwr)),
     ?assertMatch({ok, ?TEST_DATA},
-    lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     %% Copy file
     copy(W1, StorageTestFilePath, StorageTestFilePath2),
-    %% Check if appended bytes were imported
+    %% Check if file was copied
     {ok, Handle2} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2}, rdwr), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
@@ -372,12 +369,13 @@ update_timestamps_file_import_test(Config) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, rdwr)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    ?assertMatch({ok, #file_attr{mode = 8#666}},
+    ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
-    %% Change file permissions
-    change_time(W1, StorageTestFilePath, 1, 1),
+    %% Change file timestamps
+    NewTime = os:system_time(milli_seconds),
+    change_time(W1, StorageTestFilePath, NewTime, NewTime),
     %% Check if timestamps were changed
-    ?assertMatch({ok, #file_attr{atime = 1, mtime = 1}},
+    ?assertMatch({ok, #file_attr{atime = NewTime, mtime = NewTime}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 
@@ -398,13 +396,8 @@ init_per_testcase(_Case, Config) ->
     enable_storage_sync(ConfigWithProxy).
 
 end_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    W1MountPoint = ?config(w1_mount_point, Config),
     disable_storage_sync(Config),
-    rpc:multicall(Workers, os, cmd, ["rm -r " ++ binary_to_list(W1MountPoint) ++ "/space1/*"]), %todo hardcoded path
-    rpc:multicall(Workers, os, cmd, ["rm -r " ++ "/mnt/st1" ++ "/space1/*"]),
-    os:cmd("rm -r " ++ binary_to_list(?STORAGE(Config, '/mnt/st2'))++ "/space1"),
-    os:cmd("rm -r " ++ binary_to_list(?STORAGE(Config, '/mnt/st1'))++ "/space1"),
+    clean_storage(Config),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -418,22 +411,20 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 enable_storage_sync(Config) ->
-    case ?config(w1_mount_point, Config) of
-        undefined ->
-            [W1| _] = ?config(op_worker_nodes, Config),
-            SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-            {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_INIT_FILE_PATH, 8#777),
-            {ok, [W1Storage | _]} = rpc:call(W1, storage, list, []),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    {ok, _} = lfm_proxy:create(W1, SessId, ?SPACE_INIT_FILE_PATH, 8#777),
+    {ok, [W1Storage | _]} = rpc:call(W1, storage, list, []),
+    {ok, [W2Storage | _]} = rpc:call(W2, storage, list, []),
 
-            %% Enable import
-            #document{value = #storage{helpers = [W1Helpers]}} = W1Storage,
-            {ok, _ } = rpc:call(W1, storage_sync, start_storage_import, [?SPACE_ID, 10]),
-            {ok, _ } = rpc:call(W1, storage_sync, start_storage_update, [?SPACE_ID, 10]),
-            #{<<"mountPoint">> := W1MountPoint} = helper:get_args(W1Helpers),
-            [{w1_mount_point, W1MountPoint} | Config];
-        _ ->
-            Config
-    end.
+    %% Enable import
+    #document{value = #storage{helpers = [W1Helpers]}} = W1Storage,
+    #document{value = #storage{helpers = [W2Helpers]}} = W2Storage,
+    {ok, _ } = rpc:call(W1, storage_sync, start_storage_import, [?SPACE_ID, 10]),
+    {ok, _ } = rpc:call(W1, storage_sync, start_storage_update, [?SPACE_ID, 10]),
+    #{<<"mountPoint">> := W1MountPoint} = helper:get_args(W1Helpers),
+    #{<<"mountPoint">> := W2MountPoint} = helper:get_args(W2Helpers),
+    [{w1_mount_point, W1MountPoint}, {w2_mount_point, W2MountPoint} | Config].
 
 disable_storage_sync(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -441,6 +432,15 @@ disable_storage_sync(Config) ->
     {ok, _ } = rpc:call(W1, storage_sync, stop_storage_import, [?SPACE_ID]),
     {ok, _ } = rpc:call(W1, storage_sync, stop_storage_update, [?SPACE_ID]).
 
+
+clean_storage(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    W1MountPoint = ?config(w1_mount_point, Config),
+    W2MountPoint = ?config(w2_mount_point, Config),
+    rpc:multicall(Workers, os, cmd, ["rm -r " ++ binary_to_list(W1MountPoint) ++ "/space1/*"]),
+    rpc:multicall(Workers, os, cmd, ["rm -r " ++ binary_to_list(W2MountPoint) ++ "/space1/*"]),
+    os:cmd("rm -r " ++ binary_to_list(?STORAGE(Config, binary_to_atom(W1MountPoint, latin1))) ++ "/space1"),
+    os:cmd("rm -r " ++ binary_to_list(?STORAGE(Config, binary_to_atom(W2MountPoint, latin1))) ++ "/space1").
 
 mkdir(Worker, DirPath) ->
     rpc:call(Worker, file, make_dir, [DirPath]).
@@ -471,10 +471,10 @@ append(Worker, FilePath, Bytes) ->
         {ok, IoDevice} = file:open(FilePath, [append]),
         ok = file:write(IoDevice, Bytes)
     end,
-    ?assertMatch(ok, rpc:call(Worker, erlang, apply, [Append, []] )).
+    ?assertMatch(ok, rpc:call(Worker, erlang, apply, [Append, []])).
 
 copy(Worker, SourcePath, DestinationPath) ->
-    rpc:call(Worker, file, copy, [SourcePath, DestinationPath]).
+    {ok, _} = rpc:call(Worker, file, copy, [SourcePath, DestinationPath]).
 
 move(Worker, SourcePath, DestinationPath) ->
     rpc:call(Worker, file, rename, [SourcePath, DestinationPath]).
@@ -482,7 +482,7 @@ move(Worker, SourcePath, DestinationPath) ->
 truncate(Worker, FilePath, NewSize) ->
     Truncate = fun() ->
         {ok, IoDevice} = file:open(FilePath, [read, write]),
-        {ok, NewSize} =  file:position(IoDevice, NewSize),
+        {ok, NewSize} = file:position(IoDevice, NewSize),
         ok = file:truncate(IoDevice)
     end,
     ?assertMatch(ok, rpc:call(Worker, erlang, apply, [Truncate, []])).
@@ -492,4 +492,4 @@ chmod(Worker, FilePath, NewMode) ->
 
 change_time(Worker, FilePath, Atime, Mtime) ->
     rpc:call(Worker, file, write_file_info, [FilePath,
-        #file_info{atime=Atime, mtime=Mtime}, [{time, posix}]]).
+        #file_info{atime = Atime, mtime = Mtime}, [{time, posix}]]).
