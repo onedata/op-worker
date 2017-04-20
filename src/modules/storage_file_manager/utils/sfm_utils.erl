@@ -64,7 +64,7 @@ rename_storage_file(SessId, SpaceId, Storage, FileUuid, SourceFileId, TargetFile
     of
         ok ->
             ok;
-        {error, eexist} ->
+        {error, ?EEXIST} ->
             ok
     end,
 

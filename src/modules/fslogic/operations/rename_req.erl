@@ -17,6 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -146,23 +147,41 @@ rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
                 }
             };
         false ->
-            case {SourceFileType, TargetFileType} of
-                {?DIRECTORY_TYPE, undefined} ->
-                    rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                {?REGULAR_FILE_TYPE, undefined} ->
-                    rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                {?DIRECTORY_TYPE, ?DIRECTORY_TYPE} ->
-                    #fuse_response{status = #status{code = ?OK}} =
-                        delete_req:delete(UserCtx, TargetFileCtx, false),
-                    rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE} ->
-                    #fuse_response{status = #status{code = ?OK}} =
-                        delete_req:delete(UserCtx, TargetFileCtx, false),
-                    rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
-                    throw(?ENOTDIR);
-                {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
-                    throw(?EISDIR)
+            case file_ctx:get_storage_doc(SourceFileCtx2) of
+                {#document{value = #storage{helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}}, SourceFileCtx3} ->
+                    case {SourceFileType, TargetFileType} of
+                        {?DIRECTORY_TYPE, undefined} ->
+                            rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                        {?REGULAR_FILE_TYPE, undefined} ->
+                            rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                        {?DIRECTORY_TYPE, ?DIRECTORY_TYPE} ->
+                            #fuse_response{status = #status{code = ?OK}} =
+                                delete_req:delete(UserCtx, TargetFileCtx, false),
+                            rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                        {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE} ->
+                            #fuse_response{status = #status{code = ?OK}} =
+                                delete_req:delete(UserCtx, TargetFileCtx, false),
+                            rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
+                            throw(?ENOTDIR);
+                        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
+                            throw(?EISDIR)
+                    end;
+                {_, SourceFileCtx3} ->
+                    case {SourceFileType, TargetFileType} of
+                        {_, undefined} ->
+                            copy_and_remove(UserCtx, SourceFileCtx3, TargetParentFileCtx, TargetName);
+                        {TheSameType, TheSameType} ->
+                            SessId = user_ctx:get_session_id(UserCtx),
+                            TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
+                            ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
+                            copy_and_remove(UserCtx, SourceFileCtx3, TargetParentFileCtx, TargetName);
+                        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
+                            throw(?EISDIR);
+                        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
+                            throw(?ENOTDIR)
+                    end
+
             end
     end.
 
