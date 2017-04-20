@@ -236,16 +236,16 @@ invalidate(Model, FileCtx) ->
     invalidate_permissions_cache(),
     Key = file_ctx:get_uuid_const(FileCtx),
 
-    MC = Model:model_init(),
+    #model_config{store_level = SL} = MC = Model:model_init(),
     Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
-    {Rev, Document} = case MC#model_config.store_level of
+    {Rev, Document} = case SL of
         ?DISK_ONLY_LEVEL ->
             {ok, Doc} = erlang:apply(Driver, get, [MC, Key]),
             {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
         _ ->
             A1 = erlang:apply(Driver, get, [MC, Key]),
             Driver2 = datastore:driver_to_module(datastore:level_to_driver(
-                caches_controller:cache_to_datastore_level(Model))),
+                memory_store_driver:main_level(SL))),
             A2 = erlang:apply(Driver2, get, [MC, Key]),
             case {A1, A2} of
                 {{ok, Doc}, {ok, Doc2}} ->
@@ -278,6 +278,10 @@ invalidate(Model, FileCtx) ->
 -spec remote_invalidation(Model :: model_behaviour:model_type(), Key :: datastore:ext_key(),
     Rev :: non_neg_integer(), SpaceId :: binary()) -> ok.
 remote_invalidation(Model, Key, Rev, SpaceId) ->
+    % TODO - tmp solution before memory store manages processes
+    spawn(fun() ->
+        active_rev_check(Key, SpaceId, Model, Rev, 15, not_checked)
+    end),
     ok = file_consistency:wait(Key, SpaceId, [{rev, Model, Rev}],
         {?MODULE, remote_invalidation, [Model, Key, Rev, SpaceId]}),
     invalidate_permissions_cache().
@@ -286,6 +290,27 @@ remote_invalidation(Model, Key, Rev, SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Active check if revison appeared.
+%% @end
+%%--------------------------------------------------------------------
+-spec active_rev_check(Key :: datastore:ext_key(), SpaceId :: binary(),
+    Model :: model_behaviour:model_type(), Rev :: non_neg_integer(),
+    Num :: non_neg_integer(), Status :: ok | younger_revision | not_found
+    | not_checked) -> ok.
+active_rev_check(_Key, _SpaceId, _Model, _Rev, 0, _) ->
+    ok;
+active_rev_check(_Key, _SpaceId, _Model, _Rev, _, ok) ->
+    ok;
+active_rev_check(Key, SpaceId, Model, Rev, Num, _) ->
+    timer:sleep(2000),
+    file_consistency:check_and_add_components(Key, SpaceId, [file_meta]),
+    Check = file_consistency:verify_revision(Key, Model, Rev),
+    active_rev_check(Key, SpaceId, Model, Rev, Num - 1, Check).
+
 
 %%--------------------------------------------------------------------
 %% @private

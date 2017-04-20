@@ -629,9 +629,11 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
 -spec delete_helpers_on_this_node(SessId :: id()) ->
     ok | datastore:generic_error().
 delete_helpers_on_this_node(SessId) ->
-    datastore:foreach_link(?HELPER_LINK_LEVEL, SessId, ?MODEL_NAME,
-        fun(_LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, _) ->
-            helper_handle:delete(HelperKey)
+    datastore:foreach_link(?HELPER_LINK_LEVEL, SessId, ?MODEL_NAME, fun
+        (_LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, _) ->
+            helper_handle:delete(HelperKey);
+        (_, _, _) ->
+            ok
         end, undefined),
     ok.
 

@@ -90,7 +90,7 @@ chown_file(FileCtx) ->
     {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx4} =
         file_ctx:get_file_doc(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx4),
-    ok = storage_file_manager:chown(SFMHandle, OwnerUserId, SpaceId),
+    (catch storage_file_manager:chown(SFMHandle, OwnerUserId, SpaceId)), %todo implement chown in s3/ceph and remove this catch
     FileCtx4.
 
 %%%===================================================================

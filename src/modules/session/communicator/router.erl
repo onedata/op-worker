@@ -39,6 +39,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec route_proxy_message(Msg :: #client_message{}, TargetSessionId :: session:id()) -> ok.
+route_proxy_message(#client_message{message_body = #events{events = Events}} = Msg, TargetSessionId) ->
+    ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
+    lists:foreach(fun(Evt) ->
+        event:emit(Evt, TargetSessionId)
+    end, Events);
 route_proxy_message(#client_message{message_body = #event{} = Evt} = Msg, TargetSessionId) ->
     ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
     event:emit(Evt, TargetSessionId),
