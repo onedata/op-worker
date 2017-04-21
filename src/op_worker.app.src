@@ -30,7 +30,9 @@
             hackney,
             web_client,
             cowboy,
-            cluster_worker
+            cluster_worker,
+            exometer_core,
+            exometer_lager
         ]},
         {mod, {op_worker_app, []}},
         {env, []}

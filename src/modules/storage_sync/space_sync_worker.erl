@@ -23,7 +23,6 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
-
 -define(INFINITY, 9999999999999999999999).
 -define(SYNC_JOB_TIMEOUT,  timer:hours(24)).
 -define(ASYNC_JOB_TIMEOUT,  timer:seconds(10)).
@@ -58,6 +57,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     start_pools(),
+    space_sync_monitoring:start_reporter(),
     schedule_check_strategy(),
     {ok, #{}}.
 
@@ -97,6 +97,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     stop_pools(),
+    space_sync_monitoring:delete_reporter(),
     ok.
 
 %%%===================================================================
@@ -135,6 +136,7 @@ run(JobsWithMerge) when is_list(JobsWithMerge) ->
 run({_, []}) ->
     ok;
 run({merge_all, Jobs}) ->
+    maybe_increase_jobs_counter(Jobs),
     run_and_merge_all(Jobs);
 run({return_first, Jobs}) ->
     run_and_return_first(Jobs);
@@ -328,6 +330,7 @@ run_and_merge_all(Jobs = [
         worker_proxy:call_pool(?MODULE, {run_job, undefined, Job},
             PoolName, ?SYNC_JOB_TIMEOUT)
     end, Jobs),
+    maybe_decrease_jobs_counter(Jobs),
     StrategyType:strategy_merge_result(Jobs, Responses).
 
 %%--------------------------------------------------------------------
@@ -498,3 +501,30 @@ schedule_check_strategy() ->
     {ok, Interval} = application:get_env(?APP_NAME, ?SPACE_STRATEGIES_CHECK_INTERVAL),
     timer:apply_after(timer:seconds(Interval), worker_proxy, cast,
         [?MODULE, check_strategies]).
+
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Increases jobs counter if job's type is storage_import.
+%%% @end
+%%%-------------------------------------------------------------------
+-spec maybe_increase_jobs_counter([space_strategy:job()]) -> ok.
+maybe_increase_jobs_counter(JobsQueue = [#space_strategy_job{
+    strategy_type = storage_import,
+    data = #{space_id := SpaceId, storage_id := StorageId}
+} | _Rest])  ->
+    space_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId,
+        length(JobsQueue));
+maybe_increase_jobs_counter(_)  -> ok.
+
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Decreases jobs counter if job's type is storage_import.
+%%% @end
+%%%-------------------------------------------------------------------
+-spec maybe_decrease_jobs_counter([space_strategy:job()]) -> ok.
+maybe_decrease_jobs_counter(JobsQueue = [#space_strategy_job{
+    strategy_type = storage_import,
+    data = #{space_id := SpaceId, storage_id := StorageId}
+} | _Rest])  ->
+    space_sync_monitoring:update_files_to_import_counter(SpaceId, StorageId, -length(JobsQueue));
+maybe_decrease_jobs_counter(_)  -> ok.

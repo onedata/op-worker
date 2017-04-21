@@ -12,14 +12,17 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
 -export([start_storage_import/2, start_storage_import/3, start_storage_import/4,
     stop_storage_import/2, stop_storage_import/1,
     start_storage_update/2, start_storage_update/3, start_storage_update/4,
-    stop_storage_update/2, stop_storage_update/1
-    , start_storage_import_and_update/2, start_storage_import_and_update/3, start_storage_import_and_update/4, stop_storage_import_and_update/1, stop_storage_import_and_update/2]).
+    stop_storage_update/2, stop_storage_update/1,
+    start_storage_import_and_update/2, start_storage_import_and_update/3,
+    start_storage_import_and_update/4,
+    stop_storage_import_and_update/1, stop_storage_import_and_update/2]).
 
 -define(DEFAULT_STRATEGY_NAME, bfs_scan).
 
@@ -54,6 +57,8 @@ start_storage_import(SpaceId, ScanInterval, StrategyName) ->
     storage:id()) -> {ok, datastore:ext_key()} | datastore:update_error().
 start_storage_import(SpaceId, ScanInterval, StrategyName, StorageId) ->
     file_meta:make_space_exist(SpaceId),
+    ok = space_sync_monitoring:start_imported_files_counter(SpaceId, StorageId),
+    ok = space_sync_monitoring:start_files_to_import_counter(SpaceId, StorageId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import,
         StrategyName, #{scan_interval => ScanInterval}).
 
@@ -146,6 +151,8 @@ stop_storage_import(SpaceId) ->
 -spec stop_storage_import(od_space:id(), storage:id()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 stop_storage_import(SpaceId, StorageId) ->
+    space_sync_monitoring:stop_imported_files_counter(SpaceId, StorageId),
+    space_sync_monitoring:stop_files_to_import_counter(SpaceId, StorageId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import, no_import, #{}).
 
 %%--------------------------------------------------------------------

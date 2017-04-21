@@ -371,6 +371,9 @@ import_file(StorageId, SpaceId, StatBuf, StorageFileId, FileName, ParentCtx) ->
         _ ->
             ok
     end,
+
+    space_sync_monitoring:increase_imported_files_counter(SpaceId, StorageId),
+
     FileCtx = file_ctx:new_by_doc(FileMetaDoc#document{key=FileUuid}, SpaceId, undefined),
     ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
     {ok, FileCtx}.
