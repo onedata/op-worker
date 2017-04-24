@@ -193,98 +193,52 @@ route_and_send_answer(#client_message{
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
-    session_id = OriginSessId,
     message_body = #get_configuration{}
 }) ->
-    spawn(fun() ->
-        Configuration = storage_req:get_configuration(effective_session_id(Msg)),
-        communicator:send(#server_message{
-            message_id = Id, message_body = Configuration
-        }, OriginSessId)
-    end),
-    ok;
+    Configuration = storage_req:get_configuration(effective_session_id(Msg)),
+    {ok, #server_message{message_id = Id, message_body = Configuration}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
-    session_id = OriginSessId,
     message_body = FuseRequest = #fuse_request{
          fuse_request = #file_request{
              context_guid = FileGuid,
              file_request = Req
         }}
 }) when is_record(Req, open_file) orelse is_record(Req, release) ->
-    ?debug("Fuse request: ~p ~p", [FuseRequest, effective_session_id(Msg)]),
-    spawn(fun() ->
-        Node = consistent_hasing:get_node(FileGuid),
-        {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
-            {fuse_request, effective_session_id(Msg), FuseRequest}),
-        ?debug("Fuse response: ~p", [FuseResponse]),
-        communicator:send(#server_message{
-            message_id = Id, message_body = FuseResponse
-        }, OriginSessId)
-    end),
-    ok;
+    Node = consistent_hasing:get_node(FileGuid),
+    {ok, FuseResponse} = worker_proxy:call({fslogic_worker, Node},
+        {fuse_request, effective_session_id(Msg), FuseRequest}),
+    {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
-    session_id = OriginSessId,
     message_body = FuseRequest = #fuse_request{}
 }) ->
-    ?debug("Fuse request: ~p ~p", [FuseRequest, effective_session_id(Msg)]),
-    spawn(fun() ->
-        {ok, FuseResponse} = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
-        ?debug("Fuse response: ~p", [FuseResponse]),
-        communicator:send(#server_message{
-            message_id = Id, message_body = FuseResponse
-        }, OriginSessId)
-    end),
-    ok;
+    {ok, FuseResponse} = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
+    {ok, #server_message{message_id = Id, message_body = FuseResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
-    session_id = OriginSessId,
     message_body = ProviderRequest = #provider_request{}
 }) ->
-    ?debug("Provider request ~p ~p", [ProviderRequest, effective_session_id(Msg)]),
-    spawn(fun() ->
-        {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
-            {provider_request, effective_session_id(Msg), ProviderRequest}),
-        ?debug("Provider response ~p", [ProviderResponse]),
-        communicator:send(#server_message{message_id = Id,
-            message_body = ProviderResponse}, OriginSessId)
-    end),
-    ok;
+    {ok, ProviderResponse} = worker_proxy:call(fslogic_worker,
+        {provider_request, effective_session_id(Msg), ProviderRequest}),
+    {ok, #server_message{message_id = Id, message_body = ProviderResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
-    session_id = OriginSessId,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
     }
 }) ->
-    ?debug("ProxyIO request ~p", [ProxyIORequest]),
-    spawn(fun() ->
-        Node = consistent_hasing:get_node(FileGuid),
-        {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
-            {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
-
-        ?debug("ProxyIO response ~p", [ProxyIOResponse]),
-        communicator:send(#server_message{message_id = Id,
-            message_body = ProxyIOResponse
-        }, OriginSessId)
-    end),
-    ok;
+    Node = consistent_hasing:get_node(FileGuid),
+    {ok, ProxyIOResponse} = worker_proxy:call({fslogic_worker, Node},
+        {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
+    {ok, #server_message{message_id = Id, message_body = ProxyIOResponse}};
 route_and_send_answer(Msg = #client_message{
     message_id = Id,
-    session_id = OriginSessId,
     message_body = #dbsync_request{} = DBSyncRequest
 }) ->
-    ?debug("DBSync request ~p", [DBSyncRequest]),
-    spawn(fun() ->
-        {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
-            {dbsync_request, effective_session_id(Msg), DBSyncRequest}),
-
-        ?debug("DBSync response ~p", [DBSyncResponse]),
-        communicator:send(#server_message{message_id = Id,
-            message_body = DBSyncResponse}, OriginSessId)
-    end),
-    ok.
+    {ok, DBSyncResponse} = worker_proxy:call(dbsync_worker,
+        {dbsync_request, effective_session_id(Msg), DBSyncRequest}),
+    {ok, #server_message{message_id = Id, message_body = DBSyncResponse}}.
 
 %%--------------------------------------------------------------------
 %% @doc

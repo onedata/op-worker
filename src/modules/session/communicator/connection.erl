@@ -311,7 +311,6 @@ terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     session:remove_connection(SessId, self()),
     etls:close(Socket),
-    etls:close(State#state.socket),
     ok.
 
 %%--------------------------------------------------------------------
