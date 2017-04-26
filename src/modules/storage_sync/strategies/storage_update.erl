@@ -33,7 +33,7 @@
 -export([strategy_merge_result/2, strategy_merge_result/3]).
 
 %% API
--export([]).
+-export([start/6]).
 
 %%%===================================================================
 %%% space_strategy_behaviour callbacks
@@ -67,8 +67,8 @@ strategy_init_jobs(bfs_scan, #{scan_interval := ScanIntervalSeconds} = Args,
         false ->
             []
     end;
-strategy_init_jobs(StrategyName, StartegyArgs, InitData) ->
-    ?error("Invalid import strategy init: ~p", [{StrategyName, StartegyArgs, InitData}]).
+strategy_init_jobs(StrategyName, StrategyArgs, InitData) ->
+    ?error("Invalid import strategy init: ~p", [{StrategyName, StrategyArgs, InitData}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -104,3 +104,23 @@ strategy_merge_result(Job, LocalResult, ChildrenResult) ->
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function responsible for starting storage update.
+%% @end
+%%--------------------------------------------------------------------
+-spec start(od_space:id(), storage:id(), integer() | undefined, file_ctx:ctx(),
+    file_meta:path(), non_neg_integer()) ->
+    [space_strategy:job_result()] | space_strategy:job_result().
+start(SpaceId, StorageId, LastImportTime, ParentCtx, FileName, MaxDepth) ->
+    InitialImportJobData = #{
+        last_import_time => LastImportTime,
+        space_id => SpaceId,
+        storage_id => StorageId,
+        file_name => FileName,
+        max_depth => MaxDepth,
+        parent_ctx => ParentCtx
+    },
+    ImportInit = space_sync_worker:init(?MODULE, SpaceId, StorageId, InitialImportJobData),
+    space_sync_worker:run(ImportInit).

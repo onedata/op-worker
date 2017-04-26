@@ -19,7 +19,7 @@
 
 %% API
 -export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
-    get_child_attr/3, chmod/3, update_times/5]).
+    get_child_attr/3, chmod/3, update_times/5, chmod_attrs_only_insecure/2]).
 
 %%%===================================================================
 %%% API
@@ -143,17 +143,25 @@ get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     ok = sfm_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
-
     % remove acl
     xattr:delete_by_name(FileCtx, ?ACL_KEY),
+    chmod_attrs_only_insecure(FileCtx, Mode),
+    fslogic_times:update_ctime(FileCtx),
+
+    #fuse_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Changes file permissions (only file_attrs, not on storage)
+%% @end
+%%--------------------------------------------------------------------
+-spec chmod_attrs_only_insecure(file_ctx:ctx(), fslogic_worker:posix_permissions())
+        -> ok | {error, term()}.
+chmod_attrs_only_insecure(FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update({uuid, FileUuid}, #{mode => Mode}),
     ok = permissions_cache:invalidate(file_meta, FileCtx),
-
-    fslogic_times:update_ctime(FileCtx),
-    fslogic_event_emitter:emit_file_perm_changed(FileCtx),
-
-    #fuse_response{status = #status{code = ?OK}}.
+    fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc

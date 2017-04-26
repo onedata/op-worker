@@ -42,10 +42,10 @@
 %%    delete_file_import_test,
     append_file_import_test,
     copy_file_import_test,
-    move_file_import_test
-%%    truncate_file_import_test,
-%%    chmod_file_import_test,
-%%    update_timestamps_file_import_test
+    move_file_import_test,
+    truncate_file_import_test,
+    chmod_file_import_test,
+    update_timestamps_file_import_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -59,18 +59,15 @@ all() -> ?ALL(?TEST_CASES).
 -define(TEST_DIR, <<"test_dir">>).
 -define(TEST_FILE, <<"test_file">>).
 -define(TEST_FILE2, <<"test_file2">>).
--define(INIT_FILE, <<"___init_file">>).
 -define(STORAGE_TEST_DIR_PATH(MountPath), filename:join([MountPath, ?TEST_DIR])).
 -define(STORAGE_TEST_FILE_PATH(MountPath), filename:join([MountPath, ?TEST_FILE])).
 -define(STORAGE_TEST_FILE_PATH2(MountPath), filename:join([MountPath, ?TEST_FILE2])).
 -define(STORAGE_TEST_FILE_IN_DIR_PATH(MountPath),
     filename:join([?STORAGE_TEST_DIR_PATH(MountPath), ?TEST_FILE2])).
--define(STORAGE_INIT_FILE_PATH(MountPath), filename:join([MountPath, ?INIT_FILE])).
 -define(SPACE_TEST_DIR_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_DIR])).
 -define(SPACE_TEST_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_FILE])).
 -define(SPACE_TEST_FILE_PATH2, filename:join(["/", ?SPACE_NAME, ?TEST_FILE2])).
 -define(SPACE_TEST_FILE_IN_DIR_PATH, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE2])).
--define(SPACE_INIT_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?INIT_FILE])).
 
 -define(W1_STORAGE(Config),
     atom_to_binary(?config(host_path, ?config('/mnt/st2', ?config(posix, ?config(storages, Config)))), latin1)).
@@ -173,11 +170,11 @@ copy_file_import_test(Config) ->
     ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-    lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-    lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
-    lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
+        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     %% Copy file
     file:copy(StorageTestFilePath, StorageTestFilePath2),
     %% Check if appended bytes were imported
@@ -250,10 +247,10 @@ chmod_file_import_test(Config) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    ?assertMatch({ok, #file_attr{mode = 8#666}},
+    ?assertMatch({ok, #file_attr{mode = 8#644}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
     %% Change file permissions
-    file:change_mode(StorageTestFilePath, NewMode),
+    ok = file:change_mode(StorageTestFilePath, NewMode),
     %% Check if file permissions were changed
     ?assertMatch({ok, #file_attr{mode = NewMode}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
@@ -272,12 +269,13 @@ update_timestamps_file_import_test(Config) ->
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    ?assertMatch({ok, #file_attr{mode = 8#666}},
+    ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
-    %% Change file permissions
-    change_time(StorageTestFilePath, 1, 1),
+    %% Change file timestamps
+    NewTime = os:system_time(milli_seconds),
+    change_time(StorageTestFilePath, NewTime, NewTime),
     %% Check if timestamps were changed
-    ?assertMatch({ok, #file_attr{atime = 1, mtime = 1}},
+    ?assertMatch({ok, #file_attr{atime = NewTime, mtime = NewTime}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
 
 %===================================================================
@@ -299,9 +297,9 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     W1MountPoint = ?config(w1_mount_point, Config),
+    disable_storage_sync(Config),
     rpc:multicall(Workers, os, cmd, ["rm -rf " ++ binary_to_list(W1MountPoint) ++ "/*"]),
     os:cmd("rm -rf " ++ binary_to_list(W1MountPoint) ++ "/*"),
-    timer:sleep(timer:seconds(3)), %todo VFS-3096
     disable_storage_sync(Config),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
@@ -320,7 +318,7 @@ enable_storage_sync(Config) ->
         undefined ->
             [W1, _] = ?config(op_worker_nodes, Config),
             %% Enable import
-            {ok, _ } = rpc:call(W1, storage_sync, start_storage_import, [?SPACE_ID, 10]),
+            {ok, _ } = rpc:call(W1, storage_sync, start_storage_import_and_update, [?SPACE_ID, 10]),
             W1MountPoint = ?W1_STORAGE(Config),
             [{w1_mount_point, W1MountPoint} | Config];
         _ ->
@@ -330,7 +328,7 @@ enable_storage_sync(Config) ->
 disable_storage_sync(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     %% Disable import
-    {ok, _ } = rpc:call(W1, storage_sync, stop_storage_import, [?SPACE_ID]).
+    {ok, _ } = rpc:call(W1, storage_sync, stop_storage_import_and_update, [?SPACE_ID]).
 
 append(FilePath, Bytes) ->
     {ok, IoDevice} = file:open(FilePath, [append]),
