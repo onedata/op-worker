@@ -224,7 +224,8 @@ verify_and_del_key(Key, ModelName, Checks) ->
 save_space_id(ModelName, Key) ->
     MInit = ModelName:model_init(),
     % Use data store driver explicit (otherwise hooks loop will appear)
-    GetAns = ?MEMORY_DRIVER:get(MInit, Key),
+    GetAns = model:execute_with_default_context(MInit, get,
+        [Key], [{hooks_config, no_hooks}]),
 
     case GetAns of
         {ok, Doc} ->

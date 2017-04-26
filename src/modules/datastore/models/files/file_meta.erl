@@ -130,7 +130,7 @@ record_upgrade(1, {?MODEL_NAME, Name, Type, Mode, Uid, Size, Version, IsScope, S
 -spec save(datastore:document()) ->
     {ok, uuid()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, save, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -149,7 +149,7 @@ update({path, Path}, Diff) ->
         update(Document, Diff)
     end);
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -161,7 +161,7 @@ update(Key, Diff) ->
 create(#document{value = #file_meta{name = FileName}} = Document) ->
     case is_valid_filename(FileName) of
         true ->
-            datastore:create(?STORE_LEVEL, Document);
+            model:execute_with_default_context(?MODULE, create, [Document]);
         false ->
             {error, invalid_filename}
     end.
@@ -225,9 +225,9 @@ create(#document{key = ParentUuid} = Parent, #document{value = #file_meta{name =
                             case create(FileDoc) of
                                 {ok, Uuid} ->
                                     SavedDoc = FileDoc#document{key = Uuid},
-                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                    ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
-                                    ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
+                                    ok = model:execute_with_default_context(?MODULE, add_links, [Parent, {FileName, SavedDoc}]),
+                                    ok = model:execute_with_default_context(?MODULE, add_links, [Parent, {snapshot_name(FileName, V), SavedDoc}]),
+                                    ok = model:execute_with_default_context(?MODULE, add_links, [SavedDoc, [{parent, Parent}]]),
                                     {ok, Uuid};
                                 {error, Reason} ->
                                     {error, Reason}
@@ -279,9 +279,9 @@ fix_parent_links(Parent, Entry) ->
     {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
     {ok, Scope} = get_scope(Parent),
     datastore:run_transaction(fun() ->
-        ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
-        ok = datastore:set_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
-        ok = datastore:set_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}])
+        ok = model:execute_with_default_context(?MODULE, set_links, [ParentDoc, {FileName, FileDoc}]),
+        ok = model:execute_with_default_context(?MODULE, set_links, [ParentDoc, {snapshot_name(FileName, V), FileDoc}]),
+        ok = model:execute_with_default_context(?MODULE, set_links, [FileDoc, [{parent, ParentDoc}]])
     end),
     ok = set_scope(FileDoc, Scope#document.key).
 
@@ -304,7 +304,7 @@ get(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
     #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, owner = ?ROOT_USER_ID}}};
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -316,20 +316,21 @@ delete({uuid, Key}) ->
     delete(Key);
 delete(#document{value = #file_meta{name = FileName, version = Version}, key = Key} = Doc) ->
     ?run(begin
-        case datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent) of
+        case model:execute_with_default_context(?MODULE, fetch_link, [Key, parent]) of
             {ok, {ParentKey, ?MODEL_NAME}} ->
                 ok = delete_child_link_in_parent(ParentKey, FileName, Key),
                 ok = delete_child_link_in_parent(ParentKey, snapshot_name(FileName, Version), Key);
             _ ->
                 ok
         end,
-        case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, location_ref(oneprovider:get_provider_id())) of
+        case model:execute_with_default_context(?MODULE, fetch_link,
+            [Doc, location_ref(oneprovider:get_provider_id())]) of
             {ok, {LocKey, LocationModel}} ->
                 LocationModel:delete(LocKey);
             _Other ->
                 ok
         end,
-        datastore:delete(?STORE_LEVEL, ?MODULE, Key)
+        model:execute_with_default_context(?MODULE, delete, [Key])
     end);
 delete({path, Path}) ->
     ?run(begin
@@ -368,7 +369,7 @@ exists({path, Path}) ->
             false
     end;
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -377,7 +378,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec exists_local_link_doc(uuid()) -> datastore:exists_return().
 exists_local_link_doc(Key) ->
-    ?RESPONSE(datastore:exists_link_doc(?LINK_STORE_LEVEL, Key, ?MODULE, oneprovider:get_provider_id())).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists_link_doc,
+        [Key, oneprovider:get_provider_id()])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -394,7 +396,7 @@ get_child({uuid, Uuid}, Name) ->
             Error
     end;
 get_child(Doc, Name) ->
-    case datastore:fetch_full_link(?LINK_STORE_LEVEL, Doc, Name) of
+    case model:execute_with_default_context(?MODULE, fetch_full_link, [Doc, Name]) of
         {ok, {_, Targets}} ->
             {ok, [Uuid || {_, _, Uuid, _} <- Targets]};
         Other ->
@@ -446,7 +448,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 list_children(Entry, Offset, Count) ->
     ?run(begin
         {ok, #document{} = File} = get(Entry),
-        Res = datastore:foreach_link(?LINK_STORE_LEVEL, File,
+        Res = model:execute_with_default_context(?MODULE, foreach_link, [File,
             fun
                 (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
                     Acc;
@@ -482,7 +484,7 @@ list_children(Entry, Offset, Count) ->
                     end;
                 (_LinkName, _LinkTarget, AccIn) ->
                     AccIn
-            end, {Offset, Count, []}),
+            end, {Offset, Count, []}]),
         case Res of
             {ok, {_, _, Uuids}} ->
                 {ok, lists:reverse(Uuids)};
@@ -554,13 +556,13 @@ get_locations(Entry) ->
             {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
                 {ok, []};
             {ok, File} ->
-                datastore:foreach_link(?LINK_STORE_LEVEL, File,
+                model:execute_with_default_context(?MODULE, foreach_link, [File,
                     fun
                         (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
                             [Key | AccIn];
                         (_LinkName, _LinkTarget, AccIn) ->
                             AccIn
-                    end, [])
+                    end, []])
         end
     end).
 
@@ -572,13 +574,13 @@ get_locations(Entry) ->
 -spec get_locations_by_uuid(uuid()) -> {ok, [file_location:id()]} | datastore:get_error().
 get_locations_by_uuid(Uuid) ->
     ?run(begin
-        datastore:foreach_link(?LINK_STORE_LEVEL, Uuid, ?MODULE,
+        model:execute_with_default_context(?MODULE, foreach_link, [Uuid,
             fun
                 (<<?LOCATION_PREFIX, _/binary>>, {_V, [{_, _, Key, file_location}]}, AccIn) ->
                     [Key | AccIn];
                 (_LinkName, _LinkTarget, AccIn) ->
                     AccIn
-            end, [])
+            end, []])
     end).
 
 %%--------------------------------------------------------------------
@@ -594,7 +596,8 @@ get_parent(Entry) ->
                 RootResp;
             {ok, #document{key = Key}} ->
                 {ok, {ParentKey, ?MODEL_NAME}} =
-                    datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+                    model:execute_with_default_context(?MODULE, fetch_link, [
+                        Key, parent]),
                 get({uuid, ParentKey})
         end
     end).
@@ -612,7 +615,8 @@ get_parent_uuid(Entry) ->
                 {ok, ?ROOT_DIR_UUID};
             {ok, #document{key = Key}} ->
                 {ok, {ParentKey, ?MODEL_NAME}} =
-                    datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+                    model:execute_with_default_context(?MODULE, fetch_link, [
+                        Key, parent]),
                 {ok, ParentKey}
         end
     end).
@@ -627,7 +631,8 @@ get_parent_uuid(?ROOT_DIR_UUID, _SpaceId) ->
     {ok, ?ROOT_DIR_UUID};
 get_parent_uuid(FileUuid, _SpaceId) ->
     {ok, {ParentKey, ?MODEL_NAME}} =
-        datastore:fetch_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, parent),
+        model:execute_with_default_context(?MODULE, fetch_link, [
+            FileUuid, parent]),
     {ok, ParentKey}.
 
 %%--------------------------------------------------------------------
@@ -644,7 +649,9 @@ get_ancestors(FileUuid) ->
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(Key, Acc) ->
-    {ok, {ParentKey, ?MODEL_NAME}} = datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+    {ok, {ParentKey, ?MODEL_NAME}} =
+        model:execute_with_default_context(?MODULE, fetch_link, [
+            Key, parent]),
     get_ancestors2(ParentKey, [ParentKey | Acc]).
 
 %%--------------------------------------------------------------------
@@ -665,7 +672,8 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
             [] ->
                 {ok, {Root, [RootUuid]}};
             [First | Rest] when RootUuid =:= ?ROOT_DIR_UUID ->
-                case datastore:fetch_link_target(?LINK_STORE_LEVEL, Root, First) of
+                case model:execute_with_default_context(?MODULE,
+                    fetch_link_target, [Root, First]) of
                     {ok, NewRoot} ->
                         NewPath = fslogic_path:join(Rest),
                         case resolve_path(NewRoot, <<?DIRECTORY_SEPARATOR, NewPath/binary>>) of
@@ -680,10 +688,12 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                         {error, Reason}
                 end;
             Tokens ->
-                case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
+                case model:execute_with_default_context(?MODULE, link_walk,
+                    [Root, Tokens, get_leaf]) of
                     {ok, {Leaf, KeyPath}} ->
                         [_ | [RealParentUuid | _]] = lists:reverse([RootUuid | KeyPath]),
-                        {ok, {ParentUuid, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
+                        {ok, {ParentUuid, _}} = model:execute_with_default_context(
+                            ?MODULE, fetch_link, [Leaf, parent]),
                         case ParentUuid of
                             RealParentUuid ->
                                 {ok, {Leaf, [RootUuid | KeyPath]}};
@@ -714,7 +724,8 @@ rename({path, Path}, Op) ->
 rename(Entry, Op) ->
     ?run(begin
         {ok, Subj} = get(Entry),
-        {ok, {ParentUuid, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Subj, parent),
+        {ok, {ParentUuid, _}} = model:execute_with_default_context(
+            ?MODULE, fetch_link, [Subj, parent]),
         rename3(Subj, ParentUuid, Op)
     end).
 
@@ -799,8 +810,10 @@ attach_location(Entry, #document{key = LocId}, ProviderId) ->
 attach_location(Entry, LocId, ProviderId) ->
     {ok, #document{key = FileId} = FDoc} = get(Entry),
     datastore:run_transaction(fun() ->
-        ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
-        ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}})
+        ok = model:execute_with_default_context(?MODULE, add_links, [
+            FDoc, {location_ref(ProviderId), {LocId, file_location}}]),
+        ok = model:execute_with_default_context(?MODULE, add_links, [
+            LocId, {file_meta, {FileId, file_meta}}])
     end).
 
 %%--------------------------------------------------------------------
@@ -971,14 +984,16 @@ new_doc(FileName, FileType, Mode, Owner, Size) ->
 -spec delete_child_link_in_parent(ParentUuid :: uuid(), ChildName :: name(), ChildUuid :: uuid()) ->
     ok | {error, Reason :: any()}.
 delete_child_link_in_parent(ParentUuid, ChildName, ChildUuid) ->
-    case datastore:fetch_full_link(?LINK_STORE_LEVEL, ParentUuid, ?MODEL_NAME, ChildName) of
+    case model:execute_with_default_context(?MODULE, fetch_full_link,
+        [ParentUuid, ChildName]) of
         {ok, {_, ParentTargets}} ->
             lists:foreach(
                 fun({Scope0, VHash0, Key0, _}) ->
                     case Key0 of
                         ChildUuid ->
-                            ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUuid, ?MODEL_NAME,
-                                [links_utils:make_scoped_link_name(ChildName, Scope0, VHash0, size(Scope0))]);
+                            ok = model:execute_with_default_context(?MODULE, delete_links,
+                                [ParentUuid, [links_utils:make_scoped_link_name(ChildName,
+                                    Scope0, VHash0, size(Scope0))]]);
                         _ -> ok
                     end
                 end, ParentTargets);
@@ -1021,7 +1036,7 @@ rename3(#document{key = FileUuid, value = #file_meta{name = OldName, version = V
                     critical_section:run_on_mnesia([?MODEL_NAME, Key2], fun() ->
                         {ok, #document{key = NewScopeUuid} = NewScope} = get_scope(NewParent),
                         {ok, FileUuid} = update(Subject, #{name => NewName, scope => NewScopeUuid}),
-                        ok = datastore:set_links(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME, {parent, NewParent}),
+                        ok = model:execute_with_default_context(?MODULE, set_links, [FileUuid, {parent, NewParent}]),
                         ok = update_links_in_parents(OldParentUuid, NewParentUuid, OldName, NewName, V, {uuid, FileUuid}),
 
                         ok = update_scopes(Subject, NewScope)
@@ -1046,14 +1061,14 @@ update_links_in_parents(OldParentUuid, NewParentUuid, OldName, NewName, Version,
         true ->
             ok = delete_child_link_in_parent(OldParentUuid, OldName, SubjectUuid),
             ok = delete_child_link_in_parent(OldParentUuid, snapshot_name(OldName, Version), SubjectUuid),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUuid, ?MODEL_NAME,
-                {snapshot_name(NewName, Version), {SubjectUuid, ?MODEL_NAME}}),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUuid, ?MODEL_NAME,
-                {NewName, {SubjectUuid, ?MODEL_NAME}});
+            ok = model:execute_with_default_context(?MODULE, add_links, [NewParentUuid,
+                {snapshot_name(NewName, Version), {SubjectUuid, ?MODEL_NAME}}]),
+            ok = model:execute_with_default_context(?MODULE, add_links, [NewParentUuid,
+                {NewName, {SubjectUuid, ?MODEL_NAME}}]);
         false ->
             ok = delete_child_link_in_parent(OldParentUuid, OldName, SubjectUuid),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, NewParentUuid, ?MODEL_NAME,
-                {snapshot_name(NewName, Version), {SubjectUuid, ?MODEL_NAME}})
+            ok = model:execute_with_default_context(?MODULE, add_links, [NewParentUuid,
+                {snapshot_name(NewName, Version), {SubjectUuid, ?MODEL_NAME}}])
     end.
 
 %%--------------------------------------------------------------------

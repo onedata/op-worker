@@ -83,7 +83,8 @@ record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    run_and_update_user(fun datastore:save/2, [?STORE_LEVEL, Document]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, save, [Document]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,7 +94,8 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    run_and_update_user(fun datastore:update/4, [?STORE_LEVEL, ?MODULE, Key, Diff]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, update, [Key, Diff]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,7 +104,8 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    run_and_update_user(fun datastore:create/2, [?STORE_LEVEL, Document]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, create, [Document]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,25 +118,25 @@ get(?ROOT_USER_ID) ->
 get(?GUEST_USER_ID) ->
     {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>, space_aliases = []}}};
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
+-spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
+-spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -187,7 +190,8 @@ before(_ModelName, _Method, _Level, _Context) ->
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
-    run_and_update_user(fun datastore:create_or_update/3, [?STORE_LEVEL, Doc, Diff]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, create_or_update, [Doc, Diff]]).
 
 %%--------------------------------------------------------------------
 %% @doc

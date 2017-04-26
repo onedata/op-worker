@@ -98,19 +98,19 @@ record_upgrade(1, {?MODEL_NAME, Name, Helpers}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, save, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -121,20 +121,21 @@ update(Key, Diff) ->
     {ok, datastore:key()} | datastore:create_error().
 create(#document{value = #storage{name = Name}} = Document) ->
     critical_section:run_on_mnesia([?MODEL_NAME, ?STORAGE_LOCK_ID], fun() ->
-        case datastore:fetch_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, Name) of
+        case model:execute_with_default_context(?MODULE, fetch_link, [?ROOT_STORAGE, Name]) of
             {ok, _} ->
                 {error, already_exists};
             {error, link_not_found} ->
                 datastore:run_transaction(fun() ->
-                    datastore:create(?STORE_LEVEL, #document{
-                        key = ?ROOT_STORAGE, value = #storage{name = ?ROOT_STORAGE}
-                    }),
-                    case datastore:create(?STORE_LEVEL, Document) of
+                    model:execute_with_default_context(?MODULE, create,
+                        [#document{
+                            key = ?ROOT_STORAGE, value = #storage{name = ?ROOT_STORAGE}
+                        }]),
+                    case model:execute_with_default_context(?MODULE, create, [Document]) of
                         {error, Reason} ->
                             {error, Reason};
                         {ok, Key} ->
-                            ok = datastore:add_links(?LINK_STORE_LEVEL,
-                                ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
+                            ok = model:execute_with_default_context(?MODULE,
+                                add_links, [?ROOT_STORAGE, {Name, {Key, ?MODEL_NAME}}]),
                             {ok, Key}
                     end
                 end)
@@ -146,27 +147,27 @@ create(#document{value = #storage{name = Name}} = Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
+-spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
+-spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -205,11 +206,11 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:foreach_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME,
+    model:execute_with_default_context(?MODULE, foreach_link, [?ROOT_STORAGE,
         fun(_LinkName, {_V, [{_, _, Key, storage}]}, AccIn) ->
             {ok, Doc} = storage:get(Key),
             [Doc | AccIn]
-        end, []).
+        end, []]).
 
 %%%===================================================================
 %%% API functions
