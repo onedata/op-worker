@@ -122,9 +122,9 @@ handle_cast(Request, State = #state{session_id = SessId}) ->
         ProviderId = oneprovider:get_provider_id(),
         {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessId),
         case get_provider(Request, State, ProxyVia) of
-            {ProviderId, RequestCtx, NewState} ->
-                handle_locally(Request, RequestCtx, NewState);
-            {RemoteProviderId, _RequestCtx, NewState} ->
+            {ProviderId, NewState} ->
+                handle_locally(Request, NewState);
+            {RemoteProviderId, NewState} ->
                 handle_remotely(Request, RemoteProviderId, NewState)
         end
     catch
@@ -199,21 +199,19 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider(Request :: term(), State :: #state{}, oneprovider:id() | undefined) ->
-    {ProviderId :: oneprovider:id(), Ctx :: ctx(), NewState :: #state{}} |
+    {ProviderId :: oneprovider:id(), NewState :: #state{}} |
     no_return().
 get_provider(#flush_events{provider_id = ProviderId}, State, _ProxyVia) ->
-    {ProviderId, undefined, State};
-get_provider(Req = #event{type = Type}, State, ProxyVia)
+    {ProviderId, State};
+get_provider(#event{type = Type}, State, ProxyVia)
     when is_record(Type, file_attr_changed_event)
     orelse is_record(Type, file_location_changed_event)
     orelse is_record(Type, file_perm_changed_event)
     orelse is_record(Type, file_removed_event)
     orelse is_record(Type, file_renamed_event)
     orelse is_record(Type, quota_exceeded_event) ->
-    RequestCtx = get_context(Req),
     {
         utils:ensure_defined(ProxyVia, undefined, oneprovider:get_provider_id()),
-        RequestCtx,
         State
     };
 get_provider(Req, State, _ProxyVia) ->
@@ -226,21 +224,21 @@ get_provider(Req, State, _ProxyVia) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider(Request :: term(), State :: #state{}) ->
-    {ProviderId :: oneprovider:id(), Ctx :: ctx(), NewState :: #state{}} |
+    {ProviderId :: oneprovider:id(), NewState :: #state{}} |
     no_return().
 get_provider(Request, #state{providers = Providers} = State) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
         undefined ->
-            {oneprovider:get_provider_id(), undefined, State};
+            {oneprovider:get_provider_id(), State};
         {file, FileCtx} ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
             case maps:find(FileGuid, Providers) of
                 {ok, Provider} ->
-                    {Provider, RequestCtx, State};
+                    {Provider, State};
                 error ->
                     Provider = get_provider_for_file(FileCtx, State),
-                    {Provider, RequestCtx, State#state{
+                    {Provider, State#state{
                         providers = maps:put(FileGuid, Provider, Providers)
                     }}
             end
@@ -271,17 +269,6 @@ get_provider_for_file(FileCtx, #state{session_id = SessId}) ->
                 {[], _} -> throw(unsupported_space)
             end
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles request locally and if necessary changes request file context.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_locally(Request :: term(), Ctx :: ctx(), State :: #state{}) ->
-    {noreply, NewState :: #state{}}.
-handle_locally(Request, _Ctx, State) ->
-    handle_locally(Request, State).
 
 %%--------------------------------------------------------------------
 %% @private

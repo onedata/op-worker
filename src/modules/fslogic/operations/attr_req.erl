@@ -61,7 +61,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
         shares = Shares}}, FileCtx2
     } = case AllowDeletedFiles of
         true ->
-            file_ctx:get_file_doc_even_when_deleted(FileCtx);
+            file_ctx:get_file_doc_including_deleted(FileCtx);
         false ->
             file_ctx:get_file_doc(FileCtx)
     end,

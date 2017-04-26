@@ -37,7 +37,7 @@
 
 -export([resolve_path/1, resolve_path/2, create/2, create/3, get_scope/1,
     get_scope_id/1, list_children/3, get_parent/1, get_parent_uuid/1,
-    get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_even_when_deleted/1]).
+    get_parent_uuid/2, setup_onedata_user/2, get_name/1, get_including_deleted/1]).
 -export([get_ancestors/1, attach_location/3, get_local_locations/1,
     get_locations/1, get_locations_by_uuid/1, location_ref/1, rename/4]).
 -export([to_uuid/1]).
@@ -325,7 +325,7 @@ get(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
     #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, owner = ?ROOT_USER_ID}}};
 get(Key) ->
-    case get_even_when_deleted(Key) of
+    case get_including_deleted(Key) of
         {ok, #document{value = #file_meta{deleted = true}}} ->
             {error, {not_found, ?MODULE}};
         Other ->
@@ -337,8 +337,8 @@ get(Key) ->
 %% Returns file_meta doc even if its marked as deleted
 %% @end
 %%--------------------------------------------------------------------
--spec get_even_when_deleted(uuid()) -> {ok, datastore:document()} | datastore:get_error().
-get_even_when_deleted(FileUuid) ->
+-spec get_including_deleted(uuid()) -> {ok, datastore:document()} | datastore:get_error().
+get_including_deleted(FileUuid) ->
     datastore:get(?STORE_LEVEL, ?MODULE, FileUuid).
 
 %%--------------------------------------------------------------------
@@ -403,10 +403,8 @@ exists({path, Path}) ->
     end;
 exists(Key) ->
     case get(Key) of
-        {ok, #document{value = #file_meta{deleted = false}}} ->
-            true;
-        {ok, _} ->
-            false;
+        {ok, #document{value = #file_meta{deleted = Deleted}}} ->
+            not Deleted;
         {error, {not_found, _}} ->
             false;
         Error ->

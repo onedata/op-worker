@@ -61,7 +61,7 @@
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_file_doc/1, get_file_doc_even_when_deleted/1,
+-export([get_canonical_path/1, get_file_doc/1, get_file_doc_including_deleted/1,
     get_parent/2, get_storage_file_id/1,
     get_aliased_name/2, get_posix_storage_user_context/1, get_times/1,
     get_parent_guid/2, get_child/3, get_file_children/4, get_logical_path/2,
@@ -244,10 +244,10 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %% Returns file's file_meta document even if its marked as deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_doc_even_when_deleted(ctx()) -> {file_meta:doc(), ctx()}.
-get_file_doc_even_when_deleted(FileCtx) ->
+-spec get_file_doc_including_deleted(ctx()) -> {file_meta:doc(), ctx()}.
+get_file_doc_including_deleted(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
-    {ok, Doc} = file_meta:get_even_when_deleted(FileUuid),
+    {ok, Doc} = file_meta:get_including_deleted(FileUuid),
     case Doc#document.value#file_meta.deleted of
         true ->
             {Doc, FileCtx};
@@ -263,7 +263,7 @@ get_file_doc_even_when_deleted(FileCtx) ->
 -spec get_parent(ctx(), user_ctx:ctx() | undefined) ->
     {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
 get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
-    {Doc, FileCtx2} = get_file_doc_even_when_deleted(FileCtx),
+    {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
         case is_root_dir_uuid(ParentUuid) of
@@ -391,7 +391,7 @@ get_posix_storage_user_context(FileCtx) ->
             luma:get_posix_user_ctx(?ROOT_USER_ID, SpaceId);
         false ->
             {#document{value = #file_meta{owner = OwnerId}}, FileCtx2} =
-                file_ctx:get_file_doc_even_when_deleted(FileCtx),
+                file_ctx:get_file_doc_including_deleted(FileCtx),
             luma:get_posix_user_ctx(OwnerId, SpaceId)
     end,
     {UserCtx, FileCtx2#file_ctx{storage_posix_user_context = UserCtx}}.
@@ -702,7 +702,7 @@ equals(FileCtx1, FileCtx2) ->
 -spec is_dir(ctx()) -> {boolean(), ctx()}.
 is_dir(FileCtx) ->
     {#document{value = #file_meta{type = Type}}, FileCtx2} =
-        get_file_doc_even_when_deleted(FileCtx),
+        get_file_doc_including_deleted(FileCtx),
     {Type =:= ?DIRECTORY_TYPE, FileCtx2}.
 
 %%%===================================================================
@@ -776,7 +776,7 @@ generate_canonical_path(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_name_of_nonspace_file(ctx()) -> {file_meta:name(), ctx()} | no_return().
 get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = undefined}) ->
-    {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_even_when_deleted(FileCtx),
+    {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     {Name, FileCtx2#file_ctx{file_name = Name}};
 get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
     {FileName, FileCtx}.

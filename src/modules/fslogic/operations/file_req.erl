@@ -284,8 +284,6 @@ open_file_for_rdwr(UserCtx, FileCtx) ->
 -spec throw_if_not_exists(file_ctx:ctx()) -> ok | no_return().
 throw_if_not_exists(FileCtx) ->
     case file_ctx:file_exists_const(FileCtx) of
-        true ->
-            ok;
-        false ->
-            throw(?ENOENT)
+        true -> ok;
+        false -> throw(?ENOENT)
     end.

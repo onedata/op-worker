@@ -38,11 +38,15 @@
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    case file_ctx:get_space_id_const(SourceFileCtx) =:= file_ctx:get_space_id_const(TargetParentFileCtx) of
+    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
+    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
+    case SourceSpaceId =:= TargetSpaceId of
         false ->
-            rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+            rename_between_spaces(
+                UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
         true ->
-            rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
+            rename_within_space(
+                UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
     end.
 
 %%%===================================================================
@@ -57,33 +61,24 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_between_spaces(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    no_return() | #fuse_response{}.
 rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
     TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
     {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
-    {TargetFileType, TargetGuid} = remotely_get_child_type(SessId, TargetParentGuid, TargetName),
-    case file_ctx:get_guid_const(SourceFileCtx) =:= TargetGuid of
-        true ->
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_renamed{
-                    new_guid = TargetGuid,
-                    child_entries = []
-                }
-            };
-        false ->
-            case {SourceFileType, TargetFileType} of
-                {_, undefined} ->
-                    copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
-                {TheSameType, TheSameType} ->
-                    ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
-                    copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
-                {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
-                    throw(?EISDIR);
-                {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
-                    throw(?ENOTDIR)
-            end
+    {TargetFileType, TargetGuid} =
+        remotely_get_child_type(SessId, TargetParentGuid, TargetName),
+    case {SourceFileType, TargetFileType} of
+        {_, undefined} ->
+            copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
+        {TheSameType, TheSameType} ->
+            ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
+            copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
+        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
+            throw(?EISDIR);
+        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
+            throw(?ENOTDIR)
     end.
 
 %%--------------------------------------------------------------------
@@ -94,7 +89,8 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_and_remove(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
+TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    no_return() | #fuse_response{}.
 copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
     SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
@@ -103,14 +99,15 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
         {ok, NewGuid, ChildEntries} ->
             case logical_file_manager:rm_recursive(SessId, {guid, SourceGuid}) of
                 ok ->
-                    RenameChildEntries = lists:map(fun({OldGuid, NewGuid, NewParentGuid, NewName}) ->
-                        #file_renamed_entry{
-                            old_guid = OldGuid,
-                            new_guid = NewGuid,
-                            new_parent_guid = NewParentGuid,
-                            new_name = NewName
-                        }
-                    end, ChildEntries),
+                    RenameChildEntries = lists:map(
+                        fun({OldGuid, NewGuid, NewParentGuid, NewName}) ->
+                            #file_renamed_entry{
+                                old_guid = OldGuid,
+                                new_guid = NewGuid,
+                                new_parent_guid = NewParentGuid,
+                                new_name = NewName
+                            }
+                        end, ChildEntries),
 
                     #fuse_response{
                         status = #status{code = ?OK},
@@ -132,58 +129,138 @@ copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_within_space(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    no_return() | #fuse_response{}.
 rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
-    {TargetFileType, TargetFileCtx, TargetParentFileCtx2} = get_child_type(TargetParentFileCtx, TargetName, UserCtx),
+    {TargetFileType, TargetFileCtx, TargetParentFileCtx2} =
+        get_child_type(TargetParentFileCtx, TargetName, UserCtx),
 
-    case TargetFileCtx =/= undefined andalso file_ctx:equals(SourceFileCtx2, TargetFileCtx) of
+    SourceEqualsTarget = TargetFileCtx =/= undefined
+        andalso file_ctx:equals(SourceFileCtx2, TargetFileCtx),
+    case SourceEqualsTarget of
         true ->
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #file_renamed{
-                    new_guid = file_ctx:get_guid_const(SourceFileCtx2),
-                    child_entries = []
-                }
-            };
+            rename_into_itself(file_ctx:get_guid_const(SourceFileCtx2));
         false ->
-            case file_ctx:get_storage_doc(SourceFileCtx2) of
-                {#document{value = #storage{helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}}, SourceFileCtx3} ->
-                    case {SourceFileType, TargetFileType} of
-                        {?DIRECTORY_TYPE, undefined} ->
-                            rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                        {?REGULAR_FILE_TYPE, undefined} ->
-                            rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                        {?DIRECTORY_TYPE, ?DIRECTORY_TYPE} ->
-                            #fuse_response{status = #status{code = ?OK}} =
-                                delete_req:delete(UserCtx, TargetFileCtx, false),
-                            rename_dir(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                        {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE} ->
-                            #fuse_response{status = #status{code = ?OK}} =
-                                delete_req:delete(UserCtx, TargetFileCtx, false),
-                            rename_file(UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
-                        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
-                            throw(?ENOTDIR);
-                        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
-                            throw(?EISDIR)
-                    end;
-                {_, SourceFileCtx3} ->
-                    case {SourceFileType, TargetFileType} of
-                        {_, undefined} ->
-                            copy_and_remove(UserCtx, SourceFileCtx3, TargetParentFileCtx, TargetName);
-                        {TheSameType, TheSameType} ->
-                            SessId = user_ctx:get_session_id(UserCtx),
-                            TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
-                            ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
-                            copy_and_remove(UserCtx, SourceFileCtx3, TargetParentFileCtx, TargetName);
-                        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
-                            throw(?EISDIR);
-                        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE} ->
-                            throw(?ENOTDIR)
-                    end
-
-            end
+            rename_into_different_place_within_space(
+                UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName,
+                SourceFileType, TargetFileType, TargetFileCtx)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Source and target files are the same, reutrns success and does nothing more.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_into_itself(FileGuid :: fslogic_worker:file_guid()) ->
+    #fuse_response{}.
+rename_into_itself(FileGuid) ->
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_renamed{
+            new_guid = FileGuid,
+            child_entries = []
+        }
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames file into different place in the same space.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_into_different_place_within_space(user_ctx:ctx(),
+    SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
+    TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
+    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    no_return() | #fuse_response{}.
+rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName,
+    SourceFileType, TargetFileType, TargetFileCtx) ->
+    case file_ctx:get_storage_doc(SourceFileCtx) of
+        {#document{value = #storage{helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}}, SourceFileCtx2} ->
+            rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx2,
+                TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
+                TargetFileCtx);
+        {_, SourceFileCtx2} ->
+            rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx2,
+                TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
+                TargetFileCtx)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames file into different place in the same space. The space must be
+%% supported with posix storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_into_different_place_within_posix_space(user_ctx:ctx(),
+    SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
+    TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
+    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    no_return() | #fuse_response{}.
+rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
+    TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE, undefined, _
+) ->
+    rename_dir(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
+    TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, undefined, _
+) ->
+    rename_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
+    TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE, ?DIRECTORY_TYPE,
+    TargetFileCtx
+) ->
+    #fuse_response{status = #status{code = ?OK}} =
+        delete_req:delete(UserCtx, TargetFileCtx, false),
+    rename_dir(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
+    TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, TargetFileCtx
+) ->
+    #fuse_response{status = #status{code = ?OK}} =
+        delete_req:delete(UserCtx, TargetFileCtx, false),
+    rename_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+rename_into_different_place_within_posix_space(_, _, _, _,
+    ?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, _
+) ->
+    throw(?ENOTDIR);
+rename_into_different_place_within_posix_space(_, _, _, _,
+    ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, _
+) ->
+    throw(?EISDIR).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renames file into different place in the same space. The space does not have
+%% a support from posix storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec rename_into_different_place_within_non_posix_space(user_ctx:ctx(),
+    SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
+    TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
+    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    no_return() | #fuse_response{}.
+rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
+    TargetParentFileCtx, TargetName, _, undefined, _
+) ->
+    copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
+    TargetParentFileCtx, TargetName, TheSameType, TheSameType, TargetFileCtx
+) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
+    ok = logical_file_manager:unlink(SessId, {guid, TargetGuid}, false),
+    copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+rename_into_different_place_within_non_posix_space(_, _, _, _,
+    ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, _
+) ->
+    throw(?EISDIR);
+rename_into_different_place_within_non_posix_space(_, _, _, _,
+    ?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, _
+) ->
+    throw(?ENOTDIR).
 
 %%--------------------------------------------------------------------
 %% @private

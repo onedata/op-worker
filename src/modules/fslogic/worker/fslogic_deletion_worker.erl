@@ -139,7 +139,7 @@ remove_file_and_file_meta(FileCtx, UserCtx, Silent) ->
             type = Type,
             shares = Shares
         }
-    }, FileCtx2} = file_ctx:get_file_doc_even_when_deleted(FileCtx),
+    }, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
     ok = delete_shares(UserCtx, Shares),
 
