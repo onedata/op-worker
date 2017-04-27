@@ -58,7 +58,7 @@ record_struct(1) ->
 save(#document{key = #monitoring_id{} = MonitoringIdRecord} = Document) ->
     monitoring_state:save(Document#document{key = encode_id(MonitoringIdRecord)});
 save(#document{} = Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, save, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,7 +71,7 @@ save(#document{} = Document) ->
 update(#monitoring_id{} = MonitoringIdRecord, Diff) ->
     monitoring_state:update(encode_id(MonitoringIdRecord), Diff);
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,7 +83,7 @@ update(Key, Diff) ->
 create(#document{key = #monitoring_id{} = MonitoringIdRecord} = Document) ->
     monitoring_state:create(Document#document{key = encode_id(MonitoringIdRecord)});
 create(#document{} = Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, create, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,7 +96,7 @@ create(#document{} = Document) ->
 get(#monitoring_id{} = MonitoringIdRecord) ->
     monitoring_state:get(encode_id(MonitoringIdRecord));
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,7 +105,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,7 +116,7 @@ list() ->
 delete(#monitoring_id{} = MonitoringIdRecord) ->
     monitoring_state:delete(encode_id(MonitoringIdRecord));
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -127,7 +127,7 @@ delete(Key) ->
 exists(#monitoring_id{} = MonitoringIdRecord) ->
     monitoring_state:exists(encode_id(MonitoringIdRecord));
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc

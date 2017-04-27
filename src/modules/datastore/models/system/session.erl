@@ -57,9 +57,9 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(#document{value = Sess} = Document) ->
-    datastore:save(?STORE_LEVEL, Document#document{value = Sess#session{
+    model:execute_with_default_context(?MODULE, save, [Document#document{value = Sess#session{
         accessed = erlang:system_time(seconds)
-    }}).
+    }}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -69,9 +69,9 @@ save(#document{value = Sess} = Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) when is_map(Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{
+    model:execute_with_default_context(?MODULE, update, [Key, Diff#{
         accessed => erlang:system_time(seconds)
-    });
+    }]);
 update(Key, Diff) when is_function(Diff) ->
     NewDiff = fun(Sess) ->
         case Diff(Sess) of
@@ -81,7 +81,7 @@ update(Key, Diff) when is_function(Diff) ->
             {error, Reason} -> {error, Reason}
         end
     end,
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, NewDiff).
+    model:execute_with_default_context(?MODULE, update, [Key, NewDiff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,19 +90,18 @@ update(Key, Diff) when is_function(Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(#document{value = Sess} = Document) ->
-    datastore:create(?STORE_LEVEL, Document#document{value = Sess#session{
+    model:execute_with_default_context(?MODULE, create, [Document#document{value = Sess#session{
         accessed = erlang:system_time(seconds)
-    }}).
+    }}]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback get/1.
-%% Sets access time to current time for user session and returns old value.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -111,7 +110,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -132,7 +131,7 @@ delete(Key) ->
         _ -> ok
     end,
 
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -141,7 +140,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -193,7 +192,7 @@ all_with_user() ->
         (_X, Acc) ->
             {next, Acc}
     end,
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, Filter, []).
+    model:execute_with_default_context(?MODULE, list, [Filter, []]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -465,7 +464,8 @@ add_transfer(SessionId, TransferId) ->
 add_handle(SessionId, HandleID, Handle) ->
     case sfm_handle:create(#document{value = Handle}) of
         {ok, Key} ->
-            datastore:add_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [{HandleID, {Key, sfm_handle}}]);
+            model:execute_with_default_context(?MODULE, add_links, [SessionId,
+                [{HandleID, {Key, sfm_handle}}]]);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -478,11 +478,13 @@ add_handle(SessionId, HandleID, Handle) ->
 -spec remove_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
     ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
-    case datastore:fetch_link(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+    case model:execute_with_default_context(?MODULE, fetch_link,
+        [SessionId, HandleID]) of
         {ok, {HandleKey, sfm_handle}} ->
             case sfm_handle:delete(HandleKey) of
                 ok ->
-                    datastore:delete_links(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, [HandleID]);
+                    model:execute_with_default_context(?MODULE, delete_links,
+                        [SessionId, [HandleID]]);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -500,7 +502,8 @@ remove_handle(SessionId, HandleID) ->
 -spec get_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | datastore:generic_error().
 get_handle(SessionId, HandleID) ->
-    case datastore:fetch_link_target(?LINK_STORE_LEVEL, SessionId, ?MODEL_NAME, HandleID) of
+    case model:execute_with_default_context(?MODULE, fetch_link_target,
+        [SessionId, HandleID]) of
         {ok, #document{value = Handle}} ->
             {ok, Handle};
         {error, Reason} ->
@@ -574,8 +577,8 @@ is_guest(_) ->
     {ok, helpers:helper_handle()} | datastore:generic_error().
 fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, InCriticalSection) ->
     StorageId = storage:get_id(StorageDoc),
-    FetchResult = datastore:fetch_link_target(?HELPER_LINK_LEVEL, SessionId,
-        ?MODEL_NAME, link_key(SpaceId, StorageId)),
+    FetchResult = model:execute_with_default_context(?MODULE, fetch_link_target,
+        [SessionId, link_key(SpaceId, StorageId)], [{level, ?HELPER_LINK_LEVEL}]),
 
     case {FetchResult, InCriticalSection} of
         {{ok, #document{value = Handle}}, _} ->
@@ -609,9 +612,9 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
     {ok, #document{key = Key, value = HelperHandle}} =
         helper_handle:create(UserId, SpaceId, StorageDoc),
 
-    case datastore:add_links(?HELPER_LINK_LEVEL, SessionId, ?MODEL_NAME,
-        [{link_key(StorageId, SpaceId),
-            {Key, helper_handle}}]) of
+    case model:execute_with_default_context(?MODULE, add_links,
+        [SessionId, [{link_key(StorageId, SpaceId), {Key, helper_handle}}]],
+        [{level, ?HELPER_LINK_LEVEL}]) of
         ok ->
             {ok, HelperHandle};
 
@@ -629,12 +632,13 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
 -spec delete_helpers_on_this_node(SessId :: id()) ->
     ok | datastore:generic_error().
 delete_helpers_on_this_node(SessId) ->
-    datastore:foreach_link(?HELPER_LINK_LEVEL, SessId, ?MODEL_NAME, fun
-        (_LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, _) ->
-            helper_handle:delete(HelperKey);
-        (_, _, _) ->
-            ok
-        end, undefined),
+    model:execute_with_default_context(?MODULE, foreach_link,
+        [SessId, fun
+            (_LinkName, {_V, [{_, _, HelperKey, helper_handle}]}, _) ->
+                helper_handle:delete(HelperKey);
+            (_, _, _) ->
+                ok
+        end, undefined], [{level, ?HELPER_LINK_LEVEL}]),
     ok.
 
 %%--------------------------------------------------------------------
