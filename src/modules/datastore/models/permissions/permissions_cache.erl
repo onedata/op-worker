@@ -239,16 +239,16 @@ invalidate(Model, FileCtx) ->
     invalidate_permissions_cache(),
     Key = file_ctx:get_uuid_const(FileCtx),
 
-    #model_config{store_level = SL} = Model:model_init(),
+    #model_config{store_level = SL} = MC = Model:model_init(),
     {Rev, Document} = case SL of
         ?DISK_ONLY_LEVEL ->
-            {ok, Doc} = model:execute_with_default_context(?MODULE, get, [Key],
+            {ok, Doc} = model:execute_with_default_context(MC, get, [Key],
                 ?OVERRIDE(?DISK_ONLY_LEVEL)),
             {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
         _ ->
-            A1 = model:execute_with_default_context(?MODULE, get, [Key],
+            A1 = model:execute_with_default_context(MC, get, [Key],
                 ?OVERRIDE(?DISK_ONLY_LEVEL)),
-            A2 = model:execute_with_default_context(?MODULE, get, [Key],
+            A2 = model:execute_with_default_context(MC, get, [Key],
                 ?OVERRIDE(SL)),
             case {A1, A2} of
                 {{ok, Doc}, {ok, Doc2}} ->

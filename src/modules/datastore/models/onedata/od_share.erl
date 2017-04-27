@@ -70,7 +70,7 @@ record_struct(1) ->
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
 {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
