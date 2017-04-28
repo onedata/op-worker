@@ -501,8 +501,8 @@ forign_links_get(ModelConfig, Key, MainDocKey) ->
 -spec forign_links_save(model_behaviour:model_config(), datastore:document()) ->
     #links{} | {error, Reason :: any()}.
 forign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{doc_key = MainDocKey} = Links}) ->
-    case model:execute_with_default_context(ModelConfig, force_link_save,
-        [couchdb_datastore_driver:default_bucket(), Doc, MainDocKey], [{hooks_config, no_hooks}]) of
+    case model:execute_with_default_context(ModelConfig, save,
+        [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, {links, MainDocKey}}]) of
         ok ->
             case forign_links_get(ModelConfig, Key, MainDocKey) of
                 {error, {not_found, _}} -> Links#links{link_map = #{}, children = #{}};
@@ -554,8 +554,8 @@ apply_changes(SpaceId,
 %%                    _ ->
 %%                        ok
 %%                end,
-                ok = model:execute_with_default_context(ModelConfig, force_save,
-                    [Doc], [{hooks_config, no_hooks}]),
+                ok = model:execute_with_default_context(ModelConfig, save,
+                    [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, doc}]),
                 []
         end,
 

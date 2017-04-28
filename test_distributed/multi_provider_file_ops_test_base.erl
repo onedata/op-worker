@@ -892,7 +892,8 @@ get_links(FileUuid) ->
         AccFun = fun(LN, LV, Acc) ->
             maps:put(LN, LV, Acc)
         end,
-        {ok, Links} = datastore:foreach_link(?GLOBALLY_CACHED_LEVEL, FileUuid, file_meta, AccFun, #{}),
+        {ok, Links} = model:execute_with_default_context(file_meta, foreach_link,
+            [FileUuid, AccFun, #{}]),
         Links
     catch
         _:_ ->
@@ -935,13 +936,13 @@ create_doc(Doc, _ParentDoc, _LocId, _Path) ->
 set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     FDoc = Doc#document.value,
     MC = file_meta:model_init(),
-    LSL = MC#model_config.link_store_level,
-    ok = datastore:add_links(LSL, ParentDoc, {FDoc#file_meta.name, Doc}).
+    ok = model:execute_with_default_context(MC, add_links,
+        [ParentDoc, {FDoc#file_meta.name, Doc}]).
 
 set_link_to_parent(Doc, ParentDoc, _LocId, _Path) ->
     MC = file_meta:model_init(),
-    LSL = MC#model_config.link_store_level,
-    ok = datastore:add_links(LSL, Doc, {parent, ParentDoc}).
+    ok = model:execute_with_default_context(MC, add_links,
+        [Doc, {parent, ParentDoc}]).
 
 create_location(Doc, _ParentDoc, LocId, Path) ->
     FDoc = Doc#document.value,
@@ -955,8 +956,8 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
         space_id = SpaceId},
 
     MC = file_location:model_init(),
-    LSL = MC#model_config.link_store_level,
-    {ok, _} = datastore:save(LSL, #document{key = LocId, value = Location}),
+    {ok, _} = model:execute_with_default_context(MC, save,
+        [#document{key = LocId, value = Location}]),
 
     LeafLess = filename:dirname(FileId),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
@@ -979,9 +980,10 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
     FileUuid = Doc#document.key,
     MC = file_meta:model_init(),
-    LSL = MC#model_config.link_store_level,
-    ok = datastore:add_links(LSL, Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}),
-    ok = datastore:add_links(LSL, LocId, file_location, {file_meta, {FileUuid, file_meta}}).
+    ok = model:execute_with_default_context(MC, add_links,
+        [Doc, {file_meta:location_ref(oneprovider:get_provider_id()), {LocId, file_location}}]),
+    ok = model:execute_with_default_context(file_location, add_links,
+        [LocId, {file_meta, {FileUuid, file_meta}}]).
 
 add_dbsync_state(Doc, _ParentDoc, _LocId, _Path) ->
     {ok, SID} = dbsync_worker:get_space_id(Doc),

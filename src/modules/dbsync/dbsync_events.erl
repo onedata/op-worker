@@ -200,8 +200,9 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                         [] -> ok;
                         _ ->
                             ok = model:execute_with_default_context(MC, add_links,
-                                [MainDocKey, [{K, {Version, NewTargetsAdd}}],
-                                    ?DEFAULT_LINK_REPLICA_SCOPE], [{hooks_config, no_hooks}])
+                                [MainDocKey, [{K, {Version, NewTargetsAdd}}]],
+                                [{hooks_config, no_hooks}, {link_replica_scope,
+                                    ?DEFAULT_LINK_REPLICA_SCOPE}])
                     end,
 
                     %% Handle links marked as deleted
@@ -224,8 +225,8 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                         {deleted, VH1} ->
                             ok; %% Ignore deletion of deleted link
                         VH1 ->
-                            ok = datastore:delete_links(?GLOBALLY_CACHED_LEVEL, MainDocKey, MC,
-                                [links_utils:make_scoped_link_name(K, S, VH1, size(S))])
+                            ok = model:execute_with_default_context(MC, delete_links,
+                                [MainDocKey, [links_utils:make_scoped_link_name(K, S, VH1, size(S))]])
                     end
                 end, DelTargets)
         end, [], DeletedMap),
