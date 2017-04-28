@@ -82,6 +82,8 @@ all() ->
 
 
 -define(rpc(Module, Function, Args), rpc:call(W1, Module, Function, Args)).
+-define(call_store(Model, F, A), ?rpc(
+    model, execute_with_default_context, [Model, F, A])).
 
 %%%===================================================================
 %%% Test functions
@@ -1056,12 +1058,10 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
 
     % delete grandparent file_meta
     FileMetaModelConfig = ?rpc(file_meta, model_init, []),
-    FileMetaStoreLevel = FileMetaModelConfig#model_config.store_level,
-    {ok, #document{value = Dir1Meta}} = ?rpc(datastore, get, [FileMetaStoreLevel, file_meta, Dir1Uuid]),
+    {ok, #document{value = Dir1Meta}} = ?call_store(file_meta, get, [Dir1Uuid]),
     TimesModelConfig = ?rpc(times, model_init, []),
-    TimesStoreLevel = TimesModelConfig#model_config.store_level,
-    {ok, #document{value = Dir1Times}} = ?rpc(datastore, get, [TimesStoreLevel, times, Dir1Uuid]),
-    ok = ?rpc(datastore, delete, [FileMetaStoreLevel, file_meta, Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
+    {ok, #document{value = Dir1Times}} = ?call_store(times, get, [Dir1Uuid]),
+    ok = ?call_store(file_meta, delete, [Dir1Uuid, ?PRED_ALWAYS, [ignore_links]]),
     timer:sleep(1000), % wait for posthook that deletes file_consistency record
 
     %when
@@ -1073,8 +1073,8 @@ external_file_location_notification_should_wait_for_grandparent_file_meta(Config
     %trigger file_meta change after some time
     timer:sleep(timer:seconds(5)),
     ?assertMatch({ok, []}, ?rpc(file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, _} = ?rpc(datastore, save, [FileMetaStoreLevel, #document{key = Dir1Uuid, value = Dir1Meta}]),
-    {ok, _} = ?rpc(datastore, save, [FileMetaStoreLevel, #document{key = Dir1Uuid, value = Dir1Times}]),
+    {ok, _} = ?call_store(file_meta, save, [#document{key = Dir1Uuid, value = Dir1Meta}]),
+    {ok, _} = ?call_store(times, save, [#document{key = Dir1Uuid, value = Dir1Times}]),
     ?rpc(dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = Dir1Uuid, value = Dir1Meta}}]),
     timer:sleep(timer:seconds(2)),

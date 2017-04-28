@@ -156,13 +156,13 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(?MODEL_NAME, create, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, create, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, create_or_update, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, save, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, save, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, update, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

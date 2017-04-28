@@ -125,7 +125,7 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(change_propagation_controller = ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred], _ReturnValue) ->
+'after'(change_propagation_controller = ModelName, delete, _, [Key, _Pred], _ReturnValue) ->
     verify_and_del_key(Key, ModelName);
 % TODO - delete old state
 %%'after'(_ModelName, delete, ?DISK_ONLY_LEVEL, [Key, _Pred], _ReturnValue) ->

@@ -114,6 +114,8 @@ list() ->
     Filter = fun
         ('$end_of_table', Acc) ->
             {abort, Acc};
+        (#document{key = ?STATUS_UUID}, Acc) ->
+            {next, Acc};
         (#document{key = Uuid}, Acc) ->
             {next, [Uuid | Acc]}
     end,

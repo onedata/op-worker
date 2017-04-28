@@ -173,11 +173,11 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(od_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
+'after'(od_user, create, _, _, {ok, Uuid}) ->
     chown_pending_files(Uuid);
-'after'(od_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
+'after'(od_user, save, _, _, {ok, Uuid}) ->
     chown_pending_files(Uuid);
-'after'(od_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, Uuid}) ->
+'after'(od_user, create_or_update, _, _, {ok, Uuid}) ->
     chown_pending_files(Uuid);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

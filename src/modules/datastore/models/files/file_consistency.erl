@@ -427,7 +427,7 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 % TODO - check if it is not done too fast (VFS-2411)
-'after'(file_meta, delete, ?GLOBAL_ONLY_LEVEL, [Key, _], ok) ->
+'after'(file_meta, delete, _, [Key, _], ok) ->
     file_consistency:delete(Key);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
