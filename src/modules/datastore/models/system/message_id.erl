@@ -42,9 +42,10 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(#document{} = Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+-spec save(datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
+save(Document) ->
+    model:execute_with_default_context(?MODULE, save, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -54,26 +55,26 @@ save(#document{} = Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(#document{} = Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+-spec create(datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
+create(Document) ->
+    model:execute_with_default_context(?MODULE, create, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback get/1.
-%% Sets access time to current time for user session and returns old value.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -82,7 +83,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+    model:execute_with_default_context(?MODULE, list, [?GET_ALL, []]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,7 +92,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,7 +101,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc

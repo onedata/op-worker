@@ -29,6 +29,9 @@
 %% Key of document that keeps information about whole cache status.
 -define(STATUS_UUID, <<"status">>).
 
+% override parameters for direct driver calls
+-define(OVERRIDE(Level), [{level, Level}, {hooks_config, no_hooks}]).
+
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
@@ -38,9 +41,10 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
+-spec save(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, save, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,16 +54,17 @@ save(Document) ->
 -spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
+-spec create(datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, create, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,9 +73,9 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -79,7 +84,7 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -88,7 +93,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -97,7 +102,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,7 +119,7 @@ list() ->
         (#document{key = Uuid}, Acc) ->
             {next, [Uuid | Acc]}
     end,
-    datastore:list(?STORE_LEVEL, ?MODULE, Filter, []).
+    model:execute_with_default_context(?MODULE, list, [Filter, []]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -237,16 +242,16 @@ invalidate(Model, FileCtx) ->
     Key = file_ctx:get_uuid_const(FileCtx),
 
     #model_config{store_level = SL} = MC = Model:model_init(),
-    Driver = datastore:driver_to_module(datastore:level_to_driver(?DISK_ONLY_LEVEL)),
     {Rev, Document} = case SL of
         ?DISK_ONLY_LEVEL ->
-            {ok, Doc} = erlang:apply(Driver, get, [MC, Key]),
+            {ok, Doc} = model:execute_with_default_context(MC, get, [Key],
+                ?OVERRIDE(?DISK_ONLY_LEVEL)),
             {couchdb_datastore_driver:rev_to_number(Doc#document.rev), Doc};
         _ ->
-            A1 = erlang:apply(Driver, get, [MC, Key]),
-            Driver2 = datastore:driver_to_module(datastore:level_to_driver(
-                memory_store_driver:main_level(SL))),
-            A2 = erlang:apply(Driver2, get, [MC, Key]),
+            A1 = model:execute_with_default_context(MC, get, [Key],
+                ?OVERRIDE(?DISK_ONLY_LEVEL)),
+            A2 = model:execute_with_default_context(MC, get, [Key],
+                ?OVERRIDE(SL)),
             case {A1, A2} of
                 {{ok, Doc}, {ok, Doc2}} ->
                     case Doc2#document.value =:= Doc#document.value of

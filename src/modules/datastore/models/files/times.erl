@@ -81,7 +81,7 @@ get_or_default(FileUuid) ->
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, save, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,7 +91,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+    model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,7 +101,7 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+    model:execute_with_default_context(?MODULE, create, [Document]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,7 +110,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,7 +119,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,7 +128,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -137,9 +137,9 @@ exists(Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | datastore:generic_error().
 create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+    model:execute_with_default_context(?MODULE, create_or_update, [Doc, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -159,7 +159,7 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(file_meta, delete, ?GLOBAL_ONLY_LEVEL, [Key, _], ok) ->
+'after'(file_meta, delete, _, [Key, _], ok) ->
     delete(Key);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

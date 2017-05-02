@@ -83,7 +83,8 @@ record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    run_and_update_user(fun datastore:save/2, [?STORE_LEVEL, Document]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, save, [Document]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,7 +94,8 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    run_and_update_user(fun datastore:update/4, [?STORE_LEVEL, ?MODULE, Key, Diff]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, update, [Key, Diff]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,7 +104,8 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    run_and_update_user(fun datastore:create/2, [?STORE_LEVEL, Document]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, create, [Document]]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,7 +118,7 @@ get(?ROOT_USER_ID) ->
 get(?GUEST_USER_ID) ->
     {ok, #document{key = ?GUEST_USER_ID, value = #od_user{name = <<"nobody">>, space_aliases = []}}};
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, get, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,7 +127,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    model:execute_with_default_context(?MODULE, delete, [Key]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -133,7 +136,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -153,13 +156,13 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(?MODEL_NAME, create, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, create, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, create_or_update, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, save, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, save, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
-'after'(?MODEL_NAME, update, ?GLOBAL_ONLY_LEVEL, _, {ok, _}) ->
+'after'(?MODEL_NAME, update, _, _, {ok, _}) ->
     ok = permissions_cache:invalidate_permissions_cache();
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -185,9 +188,10 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | datastore:generic_error().
 create_or_update(Doc, Diff) ->
-    run_and_update_user(fun datastore:create_or_update/3, [?STORE_LEVEL, Doc, Diff]).
+    run_and_update_user(fun model:execute_with_default_context/3,
+        [?MODULE, create_or_update, [Doc, Diff]]).
 
 %%--------------------------------------------------------------------
 %% @doc
