@@ -57,9 +57,11 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(#document{value = Sess} = Document) ->
-    model:execute_with_default_context(?MODULE, save, [Document#document{value = Sess#session{
-        accessed = erlang:system_time(seconds)
-    }}]).
+    model:execute_with_default_context(?MODULE, save, [
+        Document#document{value = Sess#session{
+            accessed = erlang:system_time(seconds)
+        }}
+    ]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,9 +92,11 @@ update(Key, Diff) when is_function(Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(#document{value = Sess} = Document) ->
-    model:execute_with_default_context(?MODULE, create, [Document#document{value = Sess#session{
-        accessed = erlang:system_time(seconds)
-    }}]).
+    model:execute_with_default_context(?MODULE, create, [
+        Document#document{value = Sess#session{
+            accessed = erlang:system_time(seconds)
+        }}
+    ]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -464,8 +468,9 @@ add_transfer(SessionId, TransferId) ->
 add_handle(SessionId, HandleID, Handle) ->
     case sfm_handle:create(#document{value = Handle}) of
         {ok, Key} ->
-            model:execute_with_default_context(?MODULE, add_links, [SessionId,
-                [{HandleID, {Key, sfm_handle}}]]);
+            model:execute_with_default_context(
+                ?MODULE, add_links, [SessionId, [{HandleID, {Key, sfm_handle}}]]
+            );
         {error, Reason} ->
             {error, Reason}
     end.
@@ -478,13 +483,15 @@ add_handle(SessionId, HandleID, Handle) ->
 -spec remove_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
     ok | datastore:generic_error().
 remove_handle(SessionId, HandleID) ->
-    case model:execute_with_default_context(?MODULE, fetch_link,
-        [SessionId, HandleID]) of
+    case model:execute_with_default_context(
+        ?MODULE, fetch_link, [SessionId, HandleID]
+    ) of
         {ok, {HandleKey, sfm_handle}} ->
             case sfm_handle:delete(HandleKey) of
                 ok ->
-                    model:execute_with_default_context(?MODULE, delete_links,
-                        [SessionId, [HandleID]]);
+                    model:execute_with_default_context(
+                        ?MODULE, delete_links, [SessionId, [HandleID]]
+                    );
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -502,8 +509,9 @@ remove_handle(SessionId, HandleID) ->
 -spec get_handle(SessionId :: id(), HandleID :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | datastore:generic_error().
 get_handle(SessionId, HandleID) ->
-    case model:execute_with_default_context(?MODULE, fetch_link_target,
-        [SessionId, HandleID]) of
+    case model:execute_with_default_context(
+        ?MODULE, fetch_link_target, [SessionId, HandleID]
+    ) of
         {ok, #document{value = Handle}} ->
             {ok, Handle};
         {error, Reason} ->
@@ -577,8 +585,10 @@ is_guest(_) ->
     {ok, helpers:helper_handle()} | datastore:generic_error().
 fetch_lock_fetch_helper(SessionId, SpaceId, StorageDoc, InCriticalSection) ->
     StorageId = storage:get_id(StorageDoc),
-    FetchResult = model:execute_with_default_context(?MODULE, fetch_link_target,
-        [SessionId, link_key(SpaceId, StorageId)], [{level, ?HELPER_LINK_LEVEL}]),
+    FetchResult = model:execute_with_default_context(
+        ?MODULE, fetch_link_target, [SessionId, link_key(SpaceId, StorageId)],
+        [{level, ?HELPER_LINK_LEVEL}]
+    ),
 
     case {FetchResult, InCriticalSection} of
         {{ok, #document{value = Handle}}, _} ->
@@ -612,9 +622,11 @@ add_missing_helper(SessionId, SpaceId, StorageDoc) ->
     {ok, #document{key = Key, value = HelperHandle}} =
         helper_handle:create(UserId, SpaceId, StorageDoc),
 
-    case model:execute_with_default_context(?MODULE, add_links,
+    case model:execute_with_default_context(
+        ?MODULE, add_links,
         [SessionId, [{link_key(StorageId, SpaceId), {Key, helper_handle}}]],
-        [{level, ?HELPER_LINK_LEVEL}]) of
+        [{level, ?HELPER_LINK_LEVEL}]
+    ) of
         ok ->
             {ok, HelperHandle};
 
@@ -638,7 +650,9 @@ delete_helpers_on_this_node(SessId) ->
                 helper_handle:delete(HelperKey);
             (_, _, _) ->
                 ok
-        end, undefined], [{level, ?HELPER_LINK_LEVEL}]),
+        end, undefined],
+        [{level, ?HELPER_LINK_LEVEL}]
+    ),
     ok.
 
 %%--------------------------------------------------------------------
