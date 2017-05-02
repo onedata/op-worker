@@ -125,7 +125,7 @@ get(Key) ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     model:execute_with_default_context(?MODULE, delete, [Key]).
 
@@ -134,7 +134,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 
@@ -188,7 +188,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+    {ok, datastore:key()} | datastore:generic_error().
 create_or_update(Doc, Diff) ->
     run_and_update_user(fun model:execute_with_default_context/3,
         [?MODULE, create_or_update, [Doc, Diff]]).

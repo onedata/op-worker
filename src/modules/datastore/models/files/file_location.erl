@@ -134,8 +134,8 @@ save(Document = #document{key = Key, value = #file_location{
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
     model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
@@ -163,7 +163,7 @@ create(Document = #document{value = #file_location{
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     model:execute_with_default_context(?MODULE, get, [Key]).
 
@@ -212,7 +212,7 @@ delete(Key, UserId) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 

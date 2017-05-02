@@ -68,7 +68,7 @@ generate_id(Seed) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
-  {ok, datastore:ext_key()} | datastore:generic_error().
+    {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
   model:execute_with_default_context(?MODULE, save, [Document]).
 
@@ -77,8 +77,8 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-  {ok, datastore:ext_key()} | datastore:update_error().
+-spec update(datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
   model:execute_with_default_context(?MODULE, update, [Key, Diff]).
 
@@ -101,7 +101,7 @@ create(#subscription{id = Id} = Sub) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
   model:execute_with_default_context(?MODULE, get, [Key]).
 
@@ -119,7 +119,7 @@ list() ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
+-spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
   model:execute_with_default_context(?MODULE, delete, [Key]).
 
@@ -128,7 +128,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:ext_key()) -> datastore:exists_return().
+-spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
   ?RESPONSE(model:execute_with_default_context(?MODULE, exists, [Key])).
 

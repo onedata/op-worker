@@ -99,7 +99,7 @@ create(#document{value = Sess} = Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     model:execute_with_default_context(?MODULE, get, [Key]).
 
