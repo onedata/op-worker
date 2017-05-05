@@ -489,7 +489,8 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 -spec forign_links_get(model_behaviour:model_config(), datastore:ext_key(), datastore:ext_key()) ->
     {ok, datastore:document()} | {error, Reason :: any()}.
 forign_links_get(ModelConfig, Key, MainDocKey) ->
-    ?MEMORY_DRIVER:get_link_doc(ModelConfig, couchdb_datastore_driver:default_bucket(), Key, MainDocKey).
+    model:execute_with_default_context(ModelConfig, get_link_doc,
+        [couchdb_datastore_driver:default_bucket(), Key, MainDocKey], [{hooks_config, no_hooks}]).
 
 
 %%--------------------------------------------------------------------
@@ -500,7 +501,8 @@ forign_links_get(ModelConfig, Key, MainDocKey) ->
 -spec forign_links_save(model_behaviour:model_config(), datastore:document()) ->
     #links{} | {error, Reason :: any()}.
 forign_links_save(ModelConfig, Doc = #document{key = Key, value = #links{doc_key = MainDocKey} = Links}) ->
-    case ?MEMORY_DRIVER:force_link_save(ModelConfig, couchdb_datastore_driver:default_bucket(), Doc, MainDocKey) of
+    case model:execute_with_default_context(ModelConfig, save,
+        [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, {links, MainDocKey}}]) of
         ok ->
             case forign_links_get(ModelConfig, Key, MainDocKey) of
                 {error, {not_found, _}} -> Links#links{link_map = #{}, children = #{}};
@@ -552,7 +554,8 @@ apply_changes(SpaceId,
 %%                    _ ->
 %%                        ok
 %%                end,
-                ok = ?MEMORY_DRIVER:force_save(ModelConfig, Doc),
+                ok = model:execute_with_default_context(ModelConfig, save,
+                    [Doc], [{hooks_config, no_hooks}, {resolve_conflicts, doc}]),
                 []
         end,
 
@@ -683,8 +686,7 @@ get_space_id(#document{value = #monitoring_state{monitoring_id = MonitoringId}})
 get_space_id(#document{value = #change_propagation_controller{space_id = SpaceId}}) ->
     {ok, SpaceId};
 get_space_id(#document{value = #links{doc_key = DocKey, model = change_propagation_controller}}) ->
-    #model_config{store_level = StoreLevel} = change_propagation_controller:model_init(),
-    case datastore:get(StoreLevel, change_propagation_controller, DocKey) of
+    case change_propagation_controller:get(DocKey) of
         {ok, #document{value = #change_propagation_controller{space_id = SpaceId}}} ->
             {ok, SpaceId};
         {error, {not_found, _}} ->

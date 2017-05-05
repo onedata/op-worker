@@ -64,7 +64,9 @@ change_replicated_internal(SpaceId, #change{
     }
 }, _Master) ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
-    case ?MEMORY_DRIVER:exists(file_meta:model_init(), FileUuid) of
+    case model:execute_with_default_context(
+        file_meta, exists, [FileUuid], [{hooks_config, no_hooks}]
+    ) of
         {ok, false} ->
             FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
             FileLocationId = sfm_utils:delete_storage_file_without_location(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
@@ -198,15 +200,24 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                     case NewTargetsAdd of
                         [] -> ok;
                         _ ->
-                            ok = ?MEMORY_DRIVER:add_links(MC, MainDocKey, [{K, {Version, NewTargetsAdd}}],
-                                ?DEFAULT_LINK_REPLICA_SCOPE)
+                            ok = model:execute_with_default_context(
+                                MC, add_links,
+                                [MainDocKey, [{K, {Version, NewTargetsAdd}}]],
+                                [{hooks_config, no_hooks}, {link_replica_scope,
+                                    ?DEFAULT_LINK_REPLICA_SCOPE}
+                                ]
+                            )
                     end,
 
                     %% Handle links marked as deleted
                     lists:foreach(
                         fun({Scope0, {deleted, VH0}, _, _}) ->
-                            ok = ?MEMORY_DRIVER:delete_links(MC, MainDocKey,
-                                [links_utils:make_scoped_link_name(K, Scope0, VH0, size(Scope0))])
+                            ok = model:execute_with_default_context(
+                                MC, delete_links,
+                                [MainDocKey, [links_utils:make_scoped_link_name(K,
+                                    Scope0, VH0, size(Scope0))]],
+                                [{hooks_config, no_hooks}]
+                            )
                         end, NewTargetsDel)
 
             end
@@ -221,8 +232,11 @@ links_changed(_Origin, ModelName, MainDocKey, AddedMap, DeletedMap) ->
                         {deleted, VH1} ->
                             ok; %% Ignore deletion of deleted link
                         VH1 ->
-                            ok = datastore:delete_links(?GLOBALLY_CACHED_LEVEL, MainDocKey, MC,
-                                [links_utils:make_scoped_link_name(K, S, VH1, size(S))])
+                            ok = model:execute_with_default_context(
+                                MC, delete_links,
+                                [MainDocKey, [links_utils:make_scoped_link_name(K,
+                                    S, VH1, size(S))]]
+                            )
                     end
                 end, DelTargets)
         end, [], DeletedMap),

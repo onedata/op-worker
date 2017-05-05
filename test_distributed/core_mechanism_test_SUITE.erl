@@ -23,6 +23,8 @@
 
 -define(TIMEOUT, timer:minutes(5)).
 -define(call_store(N, F, A), ?call(N, datastore, F, A)).
+-define(call_store(N, Model, F, A), ?call(N,
+    model, execute_with_default_context, [Model, F, A])).
 -define(call(N, M, F, A), ?call(N, M, F, A, ?TIMEOUT)).
 -define(call(N, M, F, A, T), rpc:call(N, M, F, A, T)).
 
@@ -70,8 +72,8 @@ test_models(Config) ->
             key = Key,
             value = MC#model_config.defaults
         },
-        ?assertMatch({ok, _}, ?call_store(Worker, save, [SL, Doc])),
-        ?assertMatch({ok, true}, ?call_store(Worker, exists, [SL, ModelName, Key])),
+        ?assertMatch({ok, _}, ?call_store(Worker, ModelName, save, [Doc])),
+        ?assertMatch({ok, true}, ?call_store(Worker, ModelName, exists, [Key])),
 
 %%        ct:print("Module ok ~p", [ModelName]),
 
