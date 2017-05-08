@@ -304,7 +304,7 @@ fix_parent_links(Parent, Entry) ->
 %%--------------------------------------------------------------------
 -spec delete_child_link(ParentDoc :: doc(), ChildName :: name()) -> ok.
 delete_child_link(ParentDoc, ChildName) ->
-    ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentDoc, ChildName).
+    ok = model:execute_with_default_context(?MODULE, delete_links, [ParentDoc, ChildName]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -339,7 +339,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, datastore:document()} | datastore:get_error().
 get_including_deleted(FileUuid) ->
-    model:execute_with_default_context(?MODULE, get, [Key]).
+    model:execute_with_default_context(?MODULE, get, [FileUuid]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -648,9 +648,7 @@ rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
     ]),
     ok = model:execute_with_default_context(?MODULE, add_links, [
         TargetDoc, [{parent, TargetParentDoc}]
-    ]),
-    ok = model:execute_with_default_context(?LINK_STORE_LEVEL, TargetParentDoc, {TargetName, TargetDoc}),
-    ok = model:execute_with_default_context(?LINK_STORE_LEVEL, TargetDoc, [{parent, TargetParentDoc}]).
+    ]).
 
 %%--------------------------------------------------------------------
 %% @doc
