@@ -151,12 +151,17 @@ session_details() ->
         value = #od_provider{
             client_name = ProviderName
         }}} = od_provider:get_or_fetch(ProviderId),
+    {_AppId, _AppName, AppVersion} = lists:keyfind(
+        ?APP_NAME, 1, application:loaded_applications()
+    ),
     Res = [
         {<<"userId">>, gui_session:get_user_id()},
         {<<"providerId">>, ProviderId},
         {<<"providerName">>, ProviderName},
         {<<"manageProvidersURL">>,
-            str_utils:to_binary(oneprovider:get_oz_providers_page())}
+            str_utils:to_binary(oneprovider:get_oz_providers_page())
+        },
+        {<<"serviceVersion">>, str_utils:to_binary(AppVersion)}
     ],
     {ok, Res}.
 
