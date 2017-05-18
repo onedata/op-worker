@@ -97,7 +97,8 @@ handle({fslogic_deletion_request, UserCtx, FileCtx, Silent}) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_handles:exists(FileUuid) of
         true ->
-            ok = file_handles:mark_to_remove(FileCtx);
+            ok = file_handles:mark_to_remove(FileCtx),
+            fslogic_event_emitter:emit_file_removed(FileCtx, [user_ctx:get_session_id(UserCtx)]);
         false ->
             remove_file_and_file_meta(FileCtx, UserCtx, Silent)
     end,
