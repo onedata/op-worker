@@ -158,6 +158,9 @@ session_details() ->
         {<<"userId">>, gui_session:get_user_id()},
         {<<"providerId">>, ProviderId},
         {<<"providerName">>, ProviderName},
+        {<<"onezoneURL">>,
+            str_utils:to_binary(oneprovider:get_oz_url())
+        },
         {<<"manageProvidersURL">>,
             str_utils:to_binary(oneprovider:get_oz_providers_page())
         },
