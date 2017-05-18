@@ -35,7 +35,7 @@ encode_value(Value, index) ->
 %%--------------------------------------------------------------------
 -spec decode_value(binary(), index) -> indexes:index().
 decode_value(Value, index) ->
-    json_utils:decode(Value).
+    json_utils:decode_map(Value).
 
 %%%===================================================================
 %%% Internal functions
