@@ -35,7 +35,15 @@ encode_value(Value, index) ->
 %%--------------------------------------------------------------------
 -spec decode_value(binary(), index) -> indexes:index().
 decode_value(Value, index) ->
-    json_utils:decode(Value).
+    Map = json_utils:decode_map(Value),
+    List = maps:to_list(Map),
+    UpdatedList = lists:map(fun
+        ({K,V}) when is_binary(K) ->
+            {binary_to_atom(K, utf8), V};
+        (Other) ->
+            Other
+    end, List),
+    maps:from_list(UpdatedList).
 
 %%%===================================================================
 %%% Internal functions
