@@ -80,8 +80,10 @@ get(FileCtx, Names, true) ->
 -spec set(file_ctx:ctx(), custom_metadata:json(), [binary()]) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set(FileCtx, JsonToInsert, Names) ->
+    {ok, FileObjectid} = cdmi_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
     ToCreate = #document{key = file_ctx:get_uuid_const(FileCtx), value = #custom_metadata{
         space_id = file_ctx:get_space_id_const(FileCtx),
+        file_objectid = FileObjectid,
         value = #{?JSON_METADATA_KEY => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)}
     }},
     custom_metadata:create_or_update(ToCreate, fun(Meta = #custom_metadata{value = MetaValue}) ->
