@@ -25,6 +25,7 @@
 %%%===================================================================
 %%% Types
 %%%===================================================================
+
 -type fuse_request() :: #fuse_request{}.
 -type provider_request() :: #provider_request{}.
 -type proxyio_request() :: #proxyio_request{}.
@@ -42,8 +43,8 @@
 -type file_guid() :: binary().
 -type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
--export_type([file/0, ext_file/0, open_flag/0, posix_permissions/0,
-    file_guid/0, file_guid_or_path/0]).
+-export_type([request/0, response/0, file/0, ext_file/0, open_flag/0,
+    posix_permissions/0, file_guid/0, file_guid_or_path/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -105,9 +106,9 @@ handle({provider_request, SessId, ProviderRequest}) ->
     ?debug("provider_response: ~p", [Response]),
     {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?debug("proxyio_request(~p): ~p", [SessId, ProxyIORequest]),
+    ?debug("proxyio_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
-    ?debug("proxyio_response: ~p", [Response]),
+    ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
 handle(_Request) ->
     ?log_bad_request(_Request),
