@@ -76,12 +76,11 @@ init(_Args) ->
 
             lists:foreach(fun(#document{key = FileUuid}) ->
                 ok = file_handles:delete(FileUuid)
-            end, Docs),
-            {ok, #{}};
+            end, Docs);
         Error ->
-            ?error_stacktrace("Cannot clean open files descriptors - ~p", [Error]),
-            {ok, #{}}
-    end.
+            ?error_stacktrace("Cannot clean open files descriptors - ~p", [Error])
+    end,
+    {ok, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
