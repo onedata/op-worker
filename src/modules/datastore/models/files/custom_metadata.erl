@@ -27,7 +27,7 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     create_or_update/2, 'after'/5, before/4]).
--export([record_struct/1]).
+-export([record_struct/1, record_upgrade/2]).
 
 % Metadata types
 -type type() :: json | rdf.
@@ -64,7 +64,24 @@ record_struct(1) ->
     {record, [
         {space_id, string},
         {value, {custom_value, {json_utils, encode_map, decode_map}}}
+    ]};
+record_struct(2) ->
+    {record, [
+        {space_id, string},
+        {file_objectid, string},
+        {value, {custom_value, {json_utils, encode_map, decode_map}}}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades record from specified version.
+%% @end
+%%--------------------------------------------------------------------
+-spec record_upgrade(datastore_json:record_version(), tuple()) ->
+    {datastore_json:record_version(), tuple()}.
+record_upgrade(1, {?MODEL_NAME, SpaceId, Value}) ->
+    {2, #custom_metadata{space_id = SpaceId, file_objectid = undefined, value = Value}}.
+
 
 %%%===================================================================
 %%% API
@@ -174,9 +191,13 @@ exists_xattr_metadata(FileUuid, Name) ->
     {ok, file_meta:uuid()} | datastore:generic_error().
 set_xattr_metadata(FileUuid, SpaceId, Name, Value) ->
     Map = maps:put(Name,Value, #{}),
+    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid, SpaceId),
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
     NewDoc = #document{key = FileUuid, value = #custom_metadata{
         space_id = SpaceId,
-        value = Map}},
+        file_objectid = FileObjectId,
+        value = Map
+    }},
     create_or_update(NewDoc, fun(Meta = #custom_metadata{value = MetaValue}) ->
         NewMetaValue = maps:put(Name, Value, MetaValue),
         {ok, Meta#custom_metadata{value = NewMetaValue}}
@@ -261,7 +282,8 @@ create_or_update(Doc, Diff) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(custom_metadata_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL)#model_config{sync_enabled = true}.
+    ModelConfig = ?MODEL_CONFIG(custom_metadata_bucket, [{file_meta, delete}], ?GLOBALLY_CACHED_LEVEL),
+    ModelConfig#model_config{sync_enabled = true, version = 2}.
 
 %%--------------------------------------------------------------------
 %% @doc

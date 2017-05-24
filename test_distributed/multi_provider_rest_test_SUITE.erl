@@ -34,6 +34,9 @@
     get_simple_file_distribution/1,
     replicate_file/1,
     replicate_dir/1,
+    replicate_file_by_id/1,
+    replicate_to_missing_provider/1,
+    replicate_to_nunsupporting_provider/1,
     posix_mode_get/1,
     posix_mode_put/1,
     attributes_list/1,
@@ -44,7 +47,6 @@
     list_file/1,
     list_dir/1,
     list_dir_range/1,
-    replicate_file_by_id/1,
     changes_stream_file_meta_test/1,
     changes_stream_xattr_test/1,
     changes_stream_json_metadata_test/1,
@@ -73,6 +75,9 @@ all() ->
         get_simple_file_distribution,
         replicate_file,
         replicate_dir,
+        replicate_file_by_id,
+        replicate_to_missing_provider,
+        replicate_to_nunsupporting_provider,
         posix_mode_get,
         posix_mode_put,
         attributes_list,
@@ -83,7 +88,6 @@ all() ->
         list_file,
         list_dir,
         list_dir_range,
-        replicate_file_by_id,
         changes_stream_file_meta_test,
         changes_stream_xattr_test,
         changes_stream_json_metadata_test,
@@ -230,6 +234,92 @@ replicate_dir(Config) ->
     assertLists(Distribution, DecodedBody1),
     assertLists(Distribution, DecodedBody2),
     assertLists(Distribution, DecodedBody3).
+
+replicate_file_by_id(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/space3/replicate_file_by_id">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+        [fslogic_uuid:guid_to_uuid(FileGuid), <<"space3">>])), 15),
+    timer:sleep(timer:seconds(2)), % for hooks
+    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileObjectId/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode_map(Body0),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
+
+    % then
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
+        <<"\",\"status\":\"completed\",\"path\":\"/space3/replicate_file_by_id\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
+    DecodedBody = json_utils:decode_map(Body),
+    assertLists(
+        [
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]},
+            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0,4]]}
+        ], DecodedBody).
+
+replicate_to_missing_provider(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/space3/replicate_to_missing_provider">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
+        [fslogic_uuid:guid_to_uuid(FileGuid), <<"space3">>])), 15),
+    timer:sleep(timer:seconds(2)), % for hooks
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space3/replicate_to_missing_provider?provider_id=missing_id">>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode_map(Body0),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
+
+    % then
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"targetProviderId\":\"">>, <<"missing_id">>,
+        <<"\",\"status\":\"failed\",\"path\":\"/space3/replicate_to_missing_provider\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5).
+
+replicate_to_nunsupporting_provider(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    File = <<"/space1/file">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
+    lfm_proxy:fsync(WorkerP1, Handle),
+
+    % when
+    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas/space1/file?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
+    DecodedBody0 = json_utils:decode_map(Body0),
+    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
+
+    % then
+    ExpectedTransferStatus = erlang:iolist_to_binary([
+        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
+        <<"\",\"status\":\"failed\",\"path\":\"/space1/file\"}">>
+    ]),
+    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
+        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
+    {ok, 200, _, Body2} = do_request(WorkerP1, <<"replicas/space1/file">>, get, [user_1_token_header(Config)], []),
+    DecodedBody2 = json_utils:decode_map(Body2),
+    assertLists(
+        [
+            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]}
+        ], DecodedBody2).
 
 posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -457,39 +547,6 @@ list_dir_range(Config) ->
         ],
         DecodedBody
     ).
-
-replicate_file_by_id(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    File = <<"/space3/replicate_file_by_id">>,
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    lfm_proxy:write(WorkerP1, Handle, 0, <<"test">>),
-    lfm_proxy:fsync(WorkerP1, Handle),
-
-    % when
-    ?assertMatch(4, length(rpc:call(WorkerP2, file_consistency, check_missing_components,
-        [fslogic_uuid:guid_to_uuid(FileGuid), <<"space3">>])), 15),
-    timer:sleep(timer:seconds(2)), % for hooks
-    {ok, FileObjectId} = cdmi_id:guid_to_objectid(FileGuid),
-    {ok, 200, _, Body0} = do_request(WorkerP1, <<"replicas-id/", FileObjectId/binary,"?provider_id=", (domain(WorkerP2))/binary>>, post, [user_1_token_header(Config)], []),
-    DecodedBody0 = json_utils:decode_map(Body0),
-    #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody0),
-
-    % then
-    ExpectedTransferStatus = erlang:iolist_to_binary([
-        <<"{\"targetProviderId\":\"">>, domain(WorkerP2),
-        <<"\",\"status\":\"completed\",\"path\":\"/space3/replicate_file_by_id\"}">>
-    ]),
-    ?assertMatch({ok, 200, _, ExpectedTransferStatus},
-        do_request(WorkerP1, <<"transfers/", Tid/binary>>, get, [user_1_token_header(Config)], []), 5),
-    {ok, 200, _, Body} = do_request(WorkerP2, <<"replicas-id/", FileObjectId/binary>>, get, [user_1_token_header(Config)], []),
-    DecodedBody = json_utils:decode_map(Body),
-    assertLists(
-        [
-            #{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0,4]]},
-            #{<<"providerId">> => domain(WorkerP2), <<"blocks">> => [[0,4]]}
-        ], DecodedBody).
 
 changes_stream_file_meta_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
