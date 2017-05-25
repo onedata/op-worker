@@ -282,7 +282,25 @@ handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch}, FileCtx) ->
     sync_req:synchronize_block(UserCtx, FileCtx, Block, Prefetch);
 handle_file_request(UserCtx, #synchronize_block_and_compute_checksum{block = Block}, FileCtx) ->
-    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block).
+    sync_req:synchronize_block_and_compute_checksum(UserCtx, FileCtx, Block);
+handle_file_request(UserCtx, #get_xattr{
+    name = XattrName,
+    inherited = Inherited
+}, FileCtx) ->
+    xattr_req:get_xattr(UserCtx, FileCtx, XattrName, Inherited);
+handle_file_request(UserCtx, #set_xattr{
+    xattr = Xattr,
+    create = Create,
+    replace = Replace
+}, FileCtx) ->
+    xattr_req:set_xattr(UserCtx, FileCtx, Xattr, Create, Replace);
+handle_file_request(UserCtx, #remove_xattr{name = XattrName}, FileCtx) ->
+    xattr_req:remove_xattr(UserCtx, FileCtx, XattrName);
+handle_file_request(UserCtx, #list_xattr{
+    inherited = Inherited,
+    show_internal = ShowInternal
+}, FileCtx) ->
+    xattr_req:list_xattr(UserCtx, FileCtx, Inherited, ShowInternal).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -300,38 +318,24 @@ handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
     guid_req:get_file_path(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_xattr{
-    name = XattrName,
-    inherited = Inherited
-}, FileCtx) ->
-    xattr_req:get_xattr(UserCtx, FileCtx, XattrName, Inherited);
-handle_provider_request(UserCtx, #set_xattr{xattr = Xattr}, FileCtx) ->
-    xattr_req:set_xattr(UserCtx, FileCtx, Xattr);
-handle_provider_request(UserCtx, #remove_xattr{name = XattrName}, FileCtx) ->
-    xattr_req:remove_xattr(UserCtx, FileCtx, XattrName);
-handle_provider_request(UserCtx, #list_xattr{
-    inherited = Inherited,
-    show_internal = ShowInternal
-}, FileCtx) ->
-    xattr_req:list_xattr(UserCtx, FileCtx, Inherited, ShowInternal);
 handle_provider_request(UserCtx, #get_acl{}, FileCtx) ->
     acl_req:get_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_acl{acl = Acl}, FileCtx) ->
-    acl_req:set_acl(UserCtx, FileCtx, Acl);
+    acl_req:set_acl(UserCtx, FileCtx, Acl, false, false);
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_transfer_encoding{}, FileCtx) ->
     cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_transfer_encoding{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Value);
+    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_cdmi_completion_status{}, FileCtx) ->
     cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_cdmi_completion_status{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Value);
+    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_mimetype{}, FileCtx) ->
     cdmi_metadata_req:get_mimetype(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #set_mimetype{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value);
+    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_metadata{
     type = Type,
     names = Names,
@@ -342,7 +346,7 @@ handle_provider_request(UserCtx, #set_metadata{
     metadata = #metadata{type = Type, value = Value},
     names = Names
 }, FileCtx) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Names);
+    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Names, false, false);
 handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->

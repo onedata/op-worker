@@ -13,12 +13,13 @@
 -module(xattr_req).
 -author("Tomasz Lichon").
 
+-include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4]).
+-export([get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4]).
 
 %%%===================================================================
 %%% API
@@ -30,16 +31,16 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(), Inherited :: boolean()) ->
-    fslogic_worker:provider_response().
+    fslogic_worker:fuse_response().
 get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
     case acl_req:get_acl(UserCtx, FileCtx) of
         #provider_response{
             status = #status{code = ?OK},
             provider_response = #acl{value = Acl}
         } ->
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr{
+                fuse_response = #xattr{
                     name = ?ACL_KEY,
                     value = acl_logic:from_acl_to_json_format(Acl)
                 }
@@ -53,9 +54,9 @@ get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
             status = #status{code = ?OK},
             provider_response = #mimetype{value = Mimetype}
         } ->
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr{
+                fuse_response = #xattr{
                     name = ?MIMETYPE_KEY,
                     value = Mimetype
                 }
@@ -69,9 +70,9 @@ get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
             status = #status{code = ?OK},
             provider_response = #transfer_encoding{value = Encoding}
         } ->
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr{
+                fuse_response = #xattr{
                     name = ?TRANSFER_ENCODING_KEY,
                     value = Encoding
                 }
@@ -85,9 +86,9 @@ get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
             status = #status{code = ?OK},
             provider_response = #cdmi_completion_status{value = Completion}
         } ->
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr{
+                fuse_response = #xattr{
                     name = ?CDMI_COMPLETION_STATUS_KEY,
                     value = Completion}
             };
@@ -100,9 +101,9 @@ get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
             status = #status{code = ?OK},
             provider_response = #metadata{value = JsonTerm}
         } ->
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr{
+                fuse_response = #xattr{
                     name = ?JSON_METADATA_KEY,
                     value = JsonTerm}
             };
@@ -115,9 +116,9 @@ get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
             status = #status{code = ?OK},
             provider_response = #metadata{value = Rdf}
         } ->
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr{
+                fuse_response = #xattr{
                     name = ?RDF_METADATA_KEY,
                     value = Rdf}
             };
@@ -136,33 +137,46 @@ get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
 %% Decides if xattr is normal or internal, and routes request to specific function
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
-    fslogic_worker:provider_response().
-set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}) ->
-    acl_req:set_acl(UserCtx, FileCtx, #acl{value = acl_logic:from_json_format_to_acl(Acl)});
-set_xattr(UserCtx, FileCtx, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}) ->
-    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Mimetype);
-set_xattr(UserCtx, FileCtx, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}) ->
-    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Encoding);
-set_xattr(UserCtx, FileCtx, #xattr{name = ?CDMI_COMPLETION_STATUS_KEY, value = Completion}) ->
-    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Completion);
-set_xattr(UserCtx, FileCtx, #xattr{name = ?JSON_METADATA_KEY, value = Json}) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, json, Json, []);
-set_xattr(UserCtx, FileCtx, #xattr{name = ?RDF_METADATA_KEY, value = Rdf}) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, rdf, Rdf, []);
-set_xattr(_UserCtx, _, #xattr{name = <<?CDMI_PREFIX_STR, _/binary>>}) ->
+-spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{},
+    Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:fuse_response().
+set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}, Create, Replace) ->
+    provider_to_fuse_response(
+        acl_req:set_acl(UserCtx, FileCtx, #acl{value = acl_logic:from_json_format_to_acl(Acl)}, Create, Replace)
+    );
+set_xattr(UserCtx, FileCtx, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}, Create, Replace) ->
+    provider_to_fuse_response(
+        cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Mimetype, Create, Replace)
+    );
+set_xattr(UserCtx, FileCtx, #xattr{name = ?TRANSFER_ENCODING_KEY, value = Encoding}, Create, Replace) ->
+    provider_to_fuse_response(
+        cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Encoding, Create, Replace)
+    );
+set_xattr(UserCtx, FileCtx, #xattr{name = ?CDMI_COMPLETION_STATUS_KEY, value = Completion}, Create, Replace) ->
+    provider_to_fuse_response(
+        cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Completion, Create, Replace)
+    );
+set_xattr(UserCtx, FileCtx, #xattr{name = ?JSON_METADATA_KEY, value = Json}, Create, Replace) ->
+    provider_to_fuse_response(
+        metadata_req:set_metadata(UserCtx, FileCtx, json, Json, [], Create, Replace)
+    );
+set_xattr(UserCtx, FileCtx, #xattr{name = ?RDF_METADATA_KEY, value = Rdf}, Create, Replace) ->
+    provider_to_fuse_response(
+        metadata_req:set_metadata(UserCtx, FileCtx, rdf, Rdf, [], Create, Replace)
+    );
+set_xattr(_UserCtx, _, #xattr{name = <<?CDMI_PREFIX_STR, _/binary>>}, _Create, _Replace) ->
     throw(?EPERM);
-set_xattr(_UserCtx, _, #xattr{name = <<?ONEDATA_PREFIX_STR, _/binary>>}) ->
+set_xattr(_UserCtx, _, #xattr{name = <<?ONEDATA_PREFIX_STR, _/binary>>}, _Create, _Replace) ->
     throw(?EPERM);
-set_xattr(UserCtx, FileCtx, Xattr) ->
-    set_custom_xattr(UserCtx, FileCtx, Xattr).
+set_xattr(UserCtx, FileCtx, Xattr, Create, Replace) ->
+    set_custom_xattr(UserCtx, FileCtx, Xattr, Create, Replace).
 
 %%--------------------------------------------------------------------
 %% @equiv remove_xattr_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
-    fslogic_worker:provider_response().
+    fslogic_worker:fuse_response().
 remove_xattr(_UserCtx, FileCtx, XattrName) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_metadata],
@@ -174,7 +188,7 @@ remove_xattr(_UserCtx, FileCtx, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
-    ShowInternal :: boolean()) -> fslogic_worker:provider_response().
+    ShowInternal :: boolean()) -> fslogic_worker:fuse_response().
 list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
     check_permissions:execute(
         [traverse_ancestors],
@@ -185,6 +199,15 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Convert provider_reponse to fuse_response
+%% @end
+%%--------------------------------------------------------------------
+-spec provider_to_fuse_response(fslogic_worker:provider_response()) ->
+    fslogic_worker:fuse_response().
+provider_to_fuse_response(#provider_response{status = Status}) ->
+    #fuse_response{status = Status}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -192,14 +215,14 @@ list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
-    fslogic_worker:provider_response().
+    fslogic_worker:fuse_response().
 remove_xattr_insecure(_UserCtx, FileCtx, XattrName) ->
     case xattr:delete_by_name(FileCtx, XattrName) of
         ok ->
             fslogic_times:update_ctime(FileCtx),
-            #provider_response{status = #status{code = ?OK}};
+            #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
-            #provider_response{status = #status{code = ?ENOENT}}
+            #fuse_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------
@@ -208,7 +231,7 @@ remove_xattr_insecure(_UserCtx, FileCtx, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
-    ShowInternal :: boolean()) -> fslogic_worker:provider_response().
+    ShowInternal :: boolean()) -> fslogic_worker:fuse_response().
 list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
     case file_ctx:file_exists_const(FileCtx) of
         true ->
@@ -224,12 +247,12 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
                             end, ?METADATA_INTERNAL_PREFIXES)
                     end, XattrList)
             end,
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr_list{names = FilteredXattrList}
+                fuse_response = #xattr_list{names = FilteredXattrList}
             };
         false ->
-            #provider_response{status = #status{code = ?ENOENT}}
+            #fuse_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------
@@ -238,7 +261,7 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
-    Inherited :: boolean()) -> fslogic_worker:provider_response().
+    Inherited :: boolean()) -> fslogic_worker:fuse_response().
 get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
     check_permissions:execute(
         [traverse_ancestors, ?read_metadata],
@@ -250,13 +273,14 @@ get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
 %% @equiv set_custom_xattr_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
-    fslogic_worker:provider_response().
-set_custom_xattr(_UserCtx, FileCtx, Xattr) ->
+-spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{},
+    Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:fuse_response().
+set_custom_xattr(_UserCtx, FileCtx, Xattr, Create, Replace) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, Xattr],
-        fun set_custom_xattr_insecure/3).
+        [_UserCtx, FileCtx, Xattr, Create, Replace],
+        fun set_custom_xattr_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -265,16 +289,16 @@ set_custom_xattr(_UserCtx, FileCtx, Xattr) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_custom_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
-    Inherited :: boolean()) -> fslogic_worker:provider_response().
+    Inherited :: boolean()) -> fslogic_worker:fuse_response().
 get_custom_xattr_insecure(_UserCtx, FileCtx, XattrName, Inherited) ->
     case xattr:get_by_name(FileCtx, XattrName, Inherited) of
         {ok, XattrValue} ->
-            #provider_response{
+            #fuse_response{
                 status = #status{code = ?OK},
-                provider_response = #xattr{name = XattrName, value = XattrValue}
+                fuse_response = #xattr{name = XattrName, value = XattrValue}
             };
         {error, {not_found, custom_metadata}} ->
-            #provider_response{status = #status{code = ?ENOATTR}}
+            #fuse_response{status = #status{code = ?ENOATTR}}
     end.
 
 %%--------------------------------------------------------------------
@@ -283,13 +307,16 @@ get_custom_xattr_insecure(_UserCtx, FileCtx, XattrName, Inherited) ->
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_custom_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), #xattr{}) ->
-    fslogic_worker:provider_response().
-set_custom_xattr_insecure(_UserCtx, FileCtx, #xattr{name = XattrName, value = XattrValue}) ->
-    case xattr:save(FileCtx, XattrName, XattrValue) of
+-spec set_custom_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), #xattr{},
+    Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:fuse_response().
+set_custom_xattr_insecure(_UserCtx, FileCtx,
+    #xattr{name = XattrName, value = XattrValue}, Create, Replace
+) ->
+    case xattr:set(FileCtx, XattrName, XattrValue, Create, Replace) of
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
-            #provider_response{status = #status{code = ?OK}};
+            #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
-            #provider_response{status = #status{code = ?ENOENT}}
+            #fuse_response{status = #status{code = ?ENOENT}}
     end.
