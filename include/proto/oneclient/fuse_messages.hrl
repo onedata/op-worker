@@ -99,12 +99,33 @@
     block :: #file_block{}
 }).
 
+-record(get_xattr, {
+    name :: xattr:name(),
+    inherited = false :: boolean()
+}).
+
+-record(set_xattr, {
+    xattr :: #xattr{},
+    create :: boolean(),
+    replace :: boolean()
+}).
+
+-record(remove_xattr, {
+    name :: xattr:name()
+}).
+
+-record(list_xattr, {
+    inherited = false :: boolean(),
+    show_internal = true :: boolean()
+}).
+
 -type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
-    #get_child_attr{}.
+    #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
+    #list_xattr{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -185,10 +206,15 @@
     guid :: fslogic_worker:file_guid()
 }).
 
+-record(xattr_list, {
+    names :: [xattr:name()]
+}).
+
 -type fuse_response_type() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
-    #file_opened{} | #file_renamed{} | #guid{} | undefined.
+    #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
+    undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},

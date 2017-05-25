@@ -19,7 +19,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_acl/2, set_acl/3, remove_acl/2]).
+-export([get_acl/2, set_acl/5, remove_acl/2]).
 
 %%%===================================================================
 %%% API
@@ -41,13 +41,13 @@ get_acl(_UserCtx, FileCtx) ->
 %% @equiv set_acl_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
-    fslogic_worker:provider_response().
-set_acl(_UserCtx, FileCtx, Acl) ->
+-spec set_acl(user_ctx:ctx(), file_ctx:ctx(), #acl{}, Create :: boolean(),
+    Replace :: boolean()) -> fslogic_worker:provider_response().
+set_acl(_UserCtx, FileCtx, Acl, Create, Replace) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_acl],
-        [_UserCtx, FileCtx, Acl],
-        fun set_acl_insecure/3).
+        [_UserCtx, FileCtx, Acl, Create, Replace],
+        fun set_acl_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @equiv remove_acl_insecure/2 with permission checks
@@ -90,10 +90,11 @@ get_acl_insecure(_UserCtx, FileCtx) ->
 %% Sets access control list of file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), #acl{}) ->
+-spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), #acl{},
+    Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:provider_response().
-set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}) ->
-    case xattr:save(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val)) of
+set_acl_insecure(_UserCtx, FileCtx, #acl{value = Val}, Create, Replace) ->
+    case xattr:set(FileCtx, ?ACL_KEY, acl_logic:from_acl_to_json_format(Val), Create, Replace) of
         {ok, _} ->
             ok = permissions_cache:invalidate(custom_metadata, FileCtx),
             ok = sfm_utils:chmod_storage_file(
