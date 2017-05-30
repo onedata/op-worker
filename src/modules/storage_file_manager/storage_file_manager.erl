@@ -25,7 +25,7 @@
 -export([new_handle/2, new_handle/6]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
-    truncate/2, unlink/1, fsync/1]).
+    truncate/2, unlink/1, fsync/2]).
 -export([open_at_creation/1]).
 
 -type handle() :: #sfm_handle{}.
@@ -62,7 +62,7 @@ new_handle(SessionId, FileCtx) ->
 -spec new_handle(session:id(), od_space:id(), file_meta:uuid(),
     Storage :: datastore:document(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
-new_handle(SessionId, SpaceId, FileUuid, #document{key=StorageId} = Storage, FileId, ShareId) ->
+new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage, FileId, ShareId) ->
     FSize = get_size({uuid, FileUuid}),
     StorageFileId = filename_mapping:to_storage_path(SpaceId, StorageId, FileId),
     #sfm_handle{
@@ -391,9 +391,9 @@ unlink(#sfm_handle{
 %% Assures that changes made on file are persistent.
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(handle()) -> ok | storage_file_manager:error_reply().
-fsync(#sfm_handle{file_handle = FileHandle}) -> %todo add fsync to file_req
-    helpers:fsync(FileHandle, true).
+-spec fsync(handle(), boolean()) -> ok | storage_file_manager:error_reply().
+fsync(#sfm_handle{file_handle = FileHandle}, DataOnly) ->
+    helpers:fsync(FileHandle, DataOnly).
 
 %%%===================================================================
 %%% Internal functions

@@ -281,9 +281,10 @@ fsync(Handle) ->
     FileGuid = lfm_context:get_guid(Handle),
     ProviderId = lfm_context:get_provider_id(Handle),
 
-    %todo fsync via fslogic
     lfm_event_utils:flush_event_queue(SessionId, ProviderId,
-        fslogic_uuid:guid_to_uuid(FileGuid)).
+        fslogic_uuid:guid_to_uuid(FileGuid)),
+    remote_utils:call_fslogic(SessionId, file_request,
+        FileGuid, #fsync{data_only = false}, fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @equiv write(FileHandle, Offset, Buffer, true)

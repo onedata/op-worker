@@ -404,8 +404,8 @@ translate_from_protobuf(#'SetMimetype'{value = Value}) ->
     #set_mimetype{value = Value};
 translate_from_protobuf(#'GetFilePath'{}) ->
     #get_file_path{};
-translate_from_protobuf(#'FSync'{}) ->
-    #fsync{};
+translate_from_protobuf(#'FSync'{data_only = DataOnly, handle_id = HandleId}) ->
+    #fsync{data_only = DataOnly, handle_id = HandleId};
 translate_from_protobuf(#'GetFileDistribution'{}) ->
     #get_file_distribution{};
 translate_from_protobuf(#'ReplicateFile'{provider_id = ProviderId,
@@ -828,8 +828,8 @@ translate_to_protobuf(#set_mimetype{value = Value}) ->
     {set_mimetype, #'SetMimetype'{value = Value}};
 translate_to_protobuf(#get_file_path{}) ->
     {get_file_path, #'GetFilePath'{}};
-translate_to_protobuf(#fsync{}) ->
-    {fsync, #'FSync'{}};
+translate_to_protobuf(#fsync{data_only = DataOnly, handle_id = HandleId}) ->
+    {fsync, #'FSync'{data_only = DataOnly, handle_id = HandleId}};
 translate_to_protobuf(#get_file_distribution{}) ->
     {get_file_distribution, #'GetFileDistribution'{}};
 translate_to_protobuf(#replicate_file{provider_id = ProviderId,

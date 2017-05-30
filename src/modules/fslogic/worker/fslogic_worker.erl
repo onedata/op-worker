@@ -299,7 +299,12 @@ handle_file_request(UserCtx, #list_xattr{
     inherited = Inherited,
     show_internal = ShowInternal
 }, FileCtx) ->
-    xattr_req:list_xattr(UserCtx, FileCtx, Inherited, ShowInternal).
+    xattr_req:list_xattr(UserCtx, FileCtx, Inherited, ShowInternal);
+handle_file_request(UserCtx, #fsync{
+    data_only = DataOnly,
+    handle_id = HandleId
+}, FileCtx) ->
+    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -353,10 +358,7 @@ handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
 handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
 handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx);
-handle_provider_request(_UserCtx, Req, _FileCtx) ->
-    ?log_bad_request(Req),
-    erlang:error({invalid_request, Req}).
+    share_req:remove_share(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @private
