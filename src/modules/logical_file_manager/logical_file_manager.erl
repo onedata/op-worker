@@ -50,7 +50,7 @@
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/2,  get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4,
+-export([stat/2, get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -385,13 +385,23 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
     ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited) end).
 
 %%--------------------------------------------------------------------
+%% @equiv set_xattr(SessId, FileKey, Xattr, false, false).
+%% @end
+%%--------------------------------------------------------------------
+-spec set_xattr(session:id(), file_key(), #xattr{}) ->
+    ok | error_reply().
+set_xattr(SessId, FileKey, Xattr) ->
+    set_xattr(SessId, FileKey, Xattr, false, false).
+
+%%--------------------------------------------------------------------
 %% @doc
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(session:id(), file_key(), #xattr{}) -> ok | error_reply().
-set_xattr(SessId, FileKey, Xattr) ->
-    ?run(fun() -> lfm_attrs:set_xattr(SessId, FileKey, Xattr) end).
+-spec set_xattr(session:id(), file_key(), #xattr{}, Create :: boolean(), Replace :: boolean()) ->
+    ok | error_reply().
+set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
+    ?run(fun() -> lfm_attrs:set_xattr(SessId, FileKey, Xattr, Create, Replace) end).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -21,7 +21,7 @@
 -export_type([file_attributes/0]).
 
 %% API
--export([stat/2, get_xattr/4, set_xattr/3, remove_xattr/3, list_xattr/4, update_times/5]).
+-export([stat/2, get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4, update_times/5]).
 -export([get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
     set_mimetype/3]).
@@ -77,7 +77,7 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
     {ok, #xattr{}} | logical_file_manager:error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_xattr{name = XattrName, inherited = Inherited},
         fun(#xattr{} = Xattr) ->
             {ok, Xattr}
@@ -89,12 +89,13 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(SessId :: session:id(),
-    FileKey :: logical_file_manager:file_key(), Xattr :: #xattr{}) ->
+    FileKey :: logical_file_manager:file_key(), Xattr :: #xattr{},
+    Create :: boolean(), Replace :: boolean()) ->
     ok | logical_file_manager:error_reply().
-set_xattr(SessId, FileKey, Xattr) ->
+set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_xattr{xattr = Xattr},
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #set_xattr{xattr = Xattr, create = Create, replace = Replace},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
@@ -107,7 +108,7 @@ set_xattr(SessId, FileKey, Xattr) ->
     ok | logical_file_manager:error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #remove_xattr{name = XattrName},
         fun(_) -> ok end).
 
@@ -121,7 +122,7 @@ remove_xattr(SessId, FileKey, XattrName) ->
     {ok, [xattr:name()]} | logical_file_manager:error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     {guid, FileGuid} = fslogic_uuid:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #list_xattr{inherited = Inherited, show_internal = ShowInternal},
         fun(#xattr_list{names = Names}) ->
             {ok, Names}

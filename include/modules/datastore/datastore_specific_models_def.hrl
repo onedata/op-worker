@@ -386,6 +386,7 @@
 %% Model that holds file's custom metadata
 -record(custom_metadata, {
     space_id :: undefined | od_space:id(),
+    file_objectid :: undefined | cdmi_id:object_id(), % undefined only for upgraded docs
     value = #{} :: maps:map()
 }).
 

@@ -30,6 +30,9 @@
     empty_xattr_test/1,
     crud_xattr_test/1,
     list_xattr_test/1,
+    xattr_create_flag/1,
+    xattr_replace_flag/1,
+    xattr_replace_and_create_flag_in_conflict/1,
     remove_file_test/1,
     modify_cdmi_attrs/1,
     create_and_get_view/1,
@@ -38,13 +41,18 @@
     has_custom_metadata_test/1,
     resolve_guid_of_root_should_return_root_guid/1,
     resolve_guid_of_space_should_return_space_guid/1,
-    resolve_guid_of_dir_should_return_dir_guid/1]).
+    resolve_guid_of_dir_should_return_dir_guid/1,
+    custom_metadata_doc_should_contain_file_objectid/1
+]).
 
 all() ->
     ?ALL([
         empty_xattr_test,
         crud_xattr_test,
         list_xattr_test,
+        xattr_create_flag,
+        xattr_replace_flag,
+        xattr_replace_and_create_flag_in_conflict,
         remove_file_test,
         modify_cdmi_attrs,
         create_and_get_view,
@@ -53,7 +61,8 @@ all() ->
         has_custom_metadata_test,
         resolve_guid_of_root_should_return_root_guid,
         resolve_guid_of_space_should_return_space_guid,
-        resolve_guid_of_dir_should_return_dir_guid
+        resolve_guid_of_dir_should_return_dir_guid,
+        custom_metadata_doc_should_contain_file_objectid
     ]).
 
 %%%====================================================================
@@ -109,6 +118,89 @@ list_xattr_test(Config) ->
     ?assertEqual({ok, [Name1, Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)),
     ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, Name1)),
     ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {guid, Guid}, false, true)).
+
+xattr_create_flag(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Path = <<"/space_name1/xattr_create_flag_file">>,
+    Name1 = <<"name">>,
+    Value1 = <<"value">>,
+    Xattr1 = #xattr{name = Name1, value = Value1},
+    Name2 = <<"name">>,
+    Value2 = <<"value2">>,
+    Xattr2 = #xattr{name = Name2, value = Value2},
+    OtherName = <<"other_name">>,
+    OtherValue = <<"other_value">>,
+    OtherXattr = #xattr{name = OtherName, value = OtherValue},
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    % create first xattr
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, false)),
+    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+
+    % fail to replace xattr
+    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, true, false)),
+
+    % create second xattr
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, true, false)),
+    ?assertEqual({ok, OtherXattr}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, OtherName)).
+
+xattr_replace_flag(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Path = <<"/space_name1/xattr_create_flag_file">>,
+    Name1 = <<"name">>,
+    Value1 = <<"value">>,
+    Xattr1 = #xattr{name = Name1, value = Value1},
+    Name2 = <<"name">>,
+    Value2 = <<"value2">>,
+    Xattr2 = #xattr{name = Name2, value = Value2},
+    OtherName = <<"other_name">>,
+    OtherValue = <<"other_value">>,
+    OtherXattr = #xattr{name = OtherName, value = OtherValue},
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    % fail to create first xattr with replace flag
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, true)),
+
+    % create first xattr
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, false)),
+    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+
+    % replace first xattr
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, false, true)),
+    ?assertEqual({ok, Xattr2}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+
+    % fail to create second xattr
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, false, true)).
+
+xattr_replace_and_create_flag_in_conflict(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    Path = <<"/space_name1/xattr_create_flag_file">>,
+    Name1 = <<"name">>,
+    Value1 = <<"value">>,
+    Xattr1 = #xattr{name = Name1, value = Value1},
+    Name2 = <<"name">>,
+    Value2 = <<"value2">>,
+    Xattr2 = #xattr{name = Name2, value = Value2},
+    OtherName = <<"other_name">>,
+    OtherValue = <<"other_value">>,
+    OtherXattr = #xattr{name = OtherName, value = OtherValue},
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    % fail to create first xattr due to replace flag
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, true, true)),
+
+    % create first xattr
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1, false, false)),
+    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {guid, Guid}, Name1)),
+
+    % fail to set xattr due to create flag
+    ?assertEqual({error, ?EEXIST}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2, true, true)),
+
+    % fail to create second xattr due to replace flag
+    ?assertEqual({error, ?ENODATA}, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, OtherXattr, true, true)).
 
 remove_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -239,6 +331,22 @@ resolve_guid_of_dir_should_return_dir_guid(Config) ->
 
     ?assertEqual({ok, Guid}, lfm_proxy:resolve_guid(Worker, SessId, DirPath)).
 
+custom_metadata_doc_should_contain_file_objectid(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    Path = <<"/", SpaceName/binary, "/custom_meta_file">>,
+    Xattr1 = #xattr{name = <<"name">>, value = <<"value">>},
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr1)),
+    FileUuid = fslogic_uuid:guid_to_uuid(Guid),
+
+    {ok, #document{value = #custom_metadata{file_objectid = FileObjectid}}} =
+        rpc:call(Worker, custom_metadata, get, [FileUuid]),
+
+    {ok, ExpectedFileObjectid} = cdmi_id:guid_to_objectid(Guid),
+    ?assertEqual(ExpectedFileObjectid, FileObjectid).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

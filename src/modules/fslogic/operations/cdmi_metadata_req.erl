@@ -18,9 +18,9 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_transfer_encoding/2, set_transfer_encoding/3,
-    get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
-    set_mimetype/3]).
+-export([get_transfer_encoding/2, set_transfer_encoding/5,
+    get_cdmi_completion_status/2, set_cdmi_completion_status/5, get_mimetype/2,
+    set_mimetype/5]).
 
 %%%===================================================================
 %%% API
@@ -43,12 +43,13 @@ get_transfer_encoding(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:transfer_encoding()) -> fslogic_worker:provider_response().
-set_transfer_encoding(_UserCtx, FileCtx, Encoding) ->
+    xattr:transfer_encoding(), Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:provider_response().
+set_transfer_encoding(_UserCtx, FileCtx, Encoding, Create, Replace) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_attributes],
-        [_UserCtx, FileCtx, Encoding],
-        fun set_transfer_encoding_insecure/3).
+        [_UserCtx, FileCtx, Encoding, Create, Replace],
+        fun set_transfer_encoding_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @equiv get_cdmi_completion_status_insecure/2 with permission checks
@@ -67,12 +68,13 @@ get_cdmi_completion_status(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:cdmi_completion_status()) -> fslogic_worker:provider_response().
-set_cdmi_completion_status(_UserCtx, FileCtx, CompletionStatus) ->
+    xattr:cdmi_completion_status(), Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:provider_response().
+set_cdmi_completion_status(_UserCtx, FileCtx, CompletionStatus, Create, Replace) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_attributes],
-        [_UserCtx, FileCtx, CompletionStatus],
-        fun set_cdmi_completion_status_insecure/3).
+        [_UserCtx, FileCtx, CompletionStatus, Create, Replace],
+        fun set_cdmi_completion_status_insecure/5).
 
 %%--------------------------------------------------------------------
 %% @equiv get_mimetype_insecure/2 with permission checks
@@ -91,12 +93,13 @@ get_mimetype(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_mimetype(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:mimetype()) -> fslogic_worker:provider_response().
-set_mimetype(_UserCtx, FileCtx, Mimetype) ->
+    xattr:mimetype(), Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:provider_response().
+set_mimetype(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
     check_permissions:execute(
         [traverse_ancestors, ?write_attributes],
-        [_UserCtx, FileCtx, Mimetype],
-        fun set_mimetype_insecure/3).
+        [_UserCtx, FileCtx, Mimetype, Create, Replace],
+        fun set_mimetype_insecure/5).
 
 %%%===================================================================
 %%% Internal functions
@@ -123,9 +126,10 @@ get_transfer_encoding_insecure(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:transfer_encoding()) -> fslogic_worker:provider_response().
-set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding) ->
-    case xattr:save(FileCtx, ?TRANSFER_ENCODING_KEY, Encoding) of
+    xattr:transfer_encoding(), Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:provider_response().
+set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
+    case xattr:set(FileCtx, ?TRANSFER_ENCODING_KEY, Encoding, Create, Replace) of
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
@@ -144,7 +148,10 @@ set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding) ->
 get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
     case xattr:get_by_name(FileCtx, ?CDMI_COMPLETION_STATUS_KEY) of
         {ok, Val} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #cdmi_completion_status{value = Val}};
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #cdmi_completion_status{value = Val}
+            };
         {error, {not_found, custom_metadata}} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
@@ -156,9 +163,10 @@ get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:cdmi_completion_status()) -> fslogic_worker:provider_response().
-set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus) ->
-    case xattr:save(FileCtx, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus) of
+    xattr:cdmi_completion_status(), Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:provider_response().
+set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create, Replace) ->
+    case xattr:set(FileCtx, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus, Create, Replace) of
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
         {error, {not_found, custom_metadata}} ->
@@ -186,9 +194,10 @@ get_mimetype_insecure(_UserCtx, FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_mimetype_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:mimetype()) -> fslogic_worker:provider_response().
-set_mimetype_insecure(_UserCtx, FileCtx, Mimetype) ->
-    case xattr:save(FileCtx, ?MIMETYPE_KEY, Mimetype) of
+    xattr:mimetype(), Create :: boolean(), Replace :: boolean()) ->
+    fslogic_worker:provider_response().
+set_mimetype_insecure(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
+    case xattr:set(FileCtx, ?MIMETYPE_KEY, Mimetype, Create, Replace) of
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};

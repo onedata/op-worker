@@ -815,7 +815,7 @@ bcast_status() ->
 on_status_received(ProviderId, SpaceId, SeqNum) ->
     ensure_global_stream_active(),
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
-    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
+    ?debug("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             case dbsync_utils:validate_space_access(oneprovider:get_provider_id(), SpaceId) of
