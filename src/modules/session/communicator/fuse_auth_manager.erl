@@ -36,7 +36,8 @@
 -spec handle_handshake(#client_message{}, #'OTPCertificate'{}) ->
     {ok, SessId :: session:id()} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = SessId, auth = Auth = #macaroon_auth{}}}, _) when is_binary(SessId) ->
+    session_id = SessId, auth = Auth}}, _)
+    when is_binary(SessId) andalso (is_record(Auth, macaroon_auth) orelse is_record(Auth, token_auth)) ->
     {ok, Iden} = authenticate_using_token(Auth),
     {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
     {ok, SessId};
