@@ -4,6 +4,28 @@
 CHANGELOG
 ---------
 
+### 3.0.0-rc15
+
+* Add token_auth translator.
+* Disable storage helpers buffering
+* VFS-3233 Add support for sig v2 to AWS S3 helper
+* VFS-3244 Switch level of dbsync periodic status logs to debug
+* VFS-3244 Do not fail on deletion_worker's init when we cannot list file handles for cleanup.
+* VFS-3244 Add file_objectid to custom_metadata document.
+* VFS-3251 Updating GUI to 3.0.0-rc15
+* VFS-3181 Add onezone URL to sessionDetails
+* Add service version info to sessionDetails in GUI
+* VFS-3213 Update cberl reference
+* VFS-3213 Add libcouchbase package dependency
+* VFS-3146 Update models specyfications
+* VFS-3146 Update hooks after datastore update
+* VFS-3146 Update datastore models to use new datastore API
+* VFS-3116 Handle chmod, truncate and updating timestamps in storage_sync
+* VFS-3088 Update dbsync state and events
+* VFS-3116 Refactor storage_import and space_sync_worker
+* VFS-3088 Integrate with refactored datastore
+
+
 ### 3.0.0-rc14
 
 * Dbsync uses datastore_pool to dump documents to db
