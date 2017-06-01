@@ -194,7 +194,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key,
                 {error, not_a_space} ->
                     skip;
                 {error, Reason} ->
-                    ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
+                    ?debug("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
             end,
             case Model of
