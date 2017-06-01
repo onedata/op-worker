@@ -21,7 +21,6 @@
 -export([uuid_to_path/2]).
 -export([uuid_to_guid/2, uuid_to_guid/1, guid_to_uuid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
--export([uuid_to_phantom_uuid/1, phantom_uuid_to_uuid/1]).
 -export([uuid_to_share_guid/3, unpack_share_guid/1]).
 -export([guid_to_share_guid/2, share_guid_to_guid/1, is_share_guid/1,
     guid_to_share_id/1, guid_to_space_id/1]).
@@ -139,25 +138,6 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
         _ ->
             throw({not_a_space, {uuid, SpaceUuid}}) %todo remove this throw and return undefined instead
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given file Uuid generates phantom's Uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec uuid_to_phantom_uuid(file_meta:uuid()) -> file_meta:uuid().
-uuid_to_phantom_uuid(FileUuid) ->
-    http_utils:base64url_encode(term_to_binary({phantom, FileUuid})).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% For given file Uuid generates phantom's Uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec phantom_uuid_to_uuid(file_meta:uuid()) -> file_meta:uuid(). %todo why is it unused
-phantom_uuid_to_uuid(PhantomUuid) ->
-    {phantom, FileUuid} = binary_to_term(http_utils:base64url_decode(PhantomUuid)),
-    FileUuid.
 
 %%--------------------------------------------------------------------
 %% @doc

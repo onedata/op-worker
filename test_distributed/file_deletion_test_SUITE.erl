@@ -15,6 +15,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -27,7 +28,11 @@
     init_should_clear_open_files_test/1,
     open_file_deletion_request_test/1,
     deletion_of_not_open_file_test/1,
-    deletion_of_open_file_test/1]).
+    file_shouldnt_be_listed_after_deletion/1,
+    file_stat_should_return_enoent_after_deletion/1,
+    file_open_should_return_enoent_after_deletion/1,
+    file_handle_should_work_after_deletion/1
+]).
 
 -define(TEST_CASES, [
     counting_file_open_and_release_test,
@@ -35,7 +40,10 @@
     init_should_clear_open_files_test,
     open_file_deletion_request_test,
     deletion_of_not_open_file_test,
-    deletion_of_open_file_test
+    file_shouldnt_be_listed_after_deletion,
+    file_stat_should_return_enoent_after_deletion,
+    file_open_should_return_enoent_after_deletion,
+    file_handle_should_work_after_deletion
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -209,37 +217,52 @@ deletion_of_not_open_file_test(Config) ->
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2).
 
-deletion_of_open_file_test(Config) ->
+file_shouldnt_be_listed_after_deletion(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    FileGuid = create_test_file(Config, Worker, SessId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 1),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
+    {ok, #file_attr{guid = SpaceGuid}} = lfm_proxy:stat(Worker, SessId, {path, <<"/", SpaceName/binary>>}),
+    {ok, Children} = lfm_proxy:ls(Worker, SessId, {guid, SpaceGuid}, 0,10),
+    ?assertMatch(#{FileGuid := <<"test_file">>}, maps:from_list(Children)),
 
-    ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, SessId, 1])),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUuid])),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
 
-    ?assertEqual(ok, ?req(Worker, {fslogic_deletion_request, UserCtx, FileCtx, false})),
-    ?assertEqual(true, rpc:call(Worker, file_handles, exists, [FileUuid])),
+    {ok, NewChildren} = lfm_proxy:ls(Worker, SessId, {guid, SpaceGuid}, 0,10),
+    ?assertNotMatch(#{FileGuid := <<"test_file">>}, maps:from_list(NewChildren)).
 
-    %% File should be marked to remove and renamed.
-    test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 1),
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 0),
-    %% Calls from rename
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, mv, 2, 1),
+file_stat_should_return_enoent_after_deletion(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
 
-    %% Release of file mark to remove should remove it.
-    ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, SessId, 1])),
-    ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
 
-    test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
-    %% Calls rename
-    test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 1, 2).
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})).
 
+file_open_should_return_enoent_after_deletion(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
+
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read)).
+
+file_handle_should_work_after_deletion(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
+    {ok, Handle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, rdwr),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
+
+    ?assertEqual({ok, 12}, lfm_proxy:write(Worker, Handle, 0, <<"test_content">>)),
+    ?assertEqual({ok, <<"test_content">>}, lfm_proxy:read(Worker, Handle, 0, 15)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -272,7 +295,11 @@ init_per_testcase(Case, Config) when
     Case =:= init_should_clear_open_files_test;
     Case =:= open_file_deletion_request_test;
     Case =:= deletion_of_not_open_file_test;
-    Case =:= deletion_of_open_file_test ->
+    Case =:= file_shouldnt_be_listed_after_deletion;
+    Case =:= file_stat_should_return_enoent_after_deletion;
+    Case =:= file_open_should_return_enoent_after_deletion;
+    Case =:= file_handle_should_work_after_deletion
+    ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, [storage_file_manager, rename_req,
@@ -299,7 +326,11 @@ end_per_testcase(Case, Config) when
     Case =:= init_should_clear_open_files_test;
     Case =:= open_file_deletion_request_test;
     Case =:= deletion_of_not_open_file_test;
-    Case =:= deletion_of_open_file_test ->
+    Case =:= file_shouldnt_be_listed_after_deletion;
+    Case =:= file_stat_should_return_enoent_after_deletion;
+    Case =:= file_open_should_return_enoent_after_deletion;
+    Case =:= file_handle_should_work_after_deletion
+    ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),

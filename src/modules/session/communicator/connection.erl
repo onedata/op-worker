@@ -77,6 +77,7 @@ start_link(SessionId, Hostname, Port, Transport, Timeout) ->
 -spec init(Args :: term(), Socket :: etls:socket(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts) ->
+    process_flag(trap_exit, true),
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
@@ -310,7 +311,6 @@ terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
     session:remove_connection(SessId, self()),
     etls:close(Socket),
-    etls:close(State#state.socket),
     ok.
 
 %%--------------------------------------------------------------------

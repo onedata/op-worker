@@ -37,7 +37,7 @@
     ok | {error, Reason :: term()}.
 emit_file_attr_changed(FileCtx, ExcludedSessions) ->
     #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx),
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, true),
     event:emit(#file_attr_changed_event{file_attr = FileAttr},
         {exclude, ExcludedSessions}).
 
@@ -50,7 +50,7 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
     ok | {error, Reason :: term()}.
 emit_sizeless_file_attrs_changed(FileCtx) ->
     #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx),
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, true),
     event:emit(#file_attr_changed_event{
         file_attr = FileAttr#file_attr{size = undefined}
     }).

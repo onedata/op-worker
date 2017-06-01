@@ -99,5 +99,13 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent)  ->
 -spec delete_insecure(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) ->
     fslogic_worker:fuse_response().
 delete_insecure(UserCtx, FileCtx, Silent) ->
-    fslogic_deletion_worker:request_deletion(UserCtx, FileCtx, Silent),
+    {ParentFileCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
+    {ParentDoc, _ParentFileCtx2} = file_ctx:get_file_doc(ParentFileCtx),
+    {#document{value = #file_meta{name = FileName}}, FileCtx3} =
+        file_ctx:get_file_doc(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    {ok, _} = file_meta:update(FileUuid, #{deleted => true}),
+    ok = file_meta:delete_child_link(ParentDoc, FileName),
+
+    fslogic_deletion_worker:request_deletion(UserCtx, FileCtx3, Silent),
     #fuse_response{status = #status{code = ?OK}}.

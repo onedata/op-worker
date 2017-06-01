@@ -119,13 +119,18 @@
     show_internal = true :: boolean()
 }).
 
+-record(fsync, {
+    data_only :: boolean(),
+    handle_id :: undefined | binary()
+}).
+
 -type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-    #list_xattr{}.
+    #list_xattr{} | #fsync{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),

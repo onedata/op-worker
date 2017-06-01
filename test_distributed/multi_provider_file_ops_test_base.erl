@@ -974,7 +974,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     ok = storage_file_manager:create(SFMHandle1, 8#775),
     {ok, SFMHandle2} = storage_file_manager:open(SFMHandle1, write),
     {ok, 3} = storage_file_manager:write(SFMHandle2, 0, <<"abc">>),
-    storage_file_manager:fsync(SFMHandle2),
+    storage_file_manager:fsync(SFMHandle2, false),
     ok.
 
 set_link_to_location(Doc, _ParentDoc, LocId, _Path) ->
@@ -1200,7 +1200,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 %%        ct:print("Links ~lp", [{DSize, VerAns}]),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, VerAns),
-        SList = lists:filter(fun(S) -> S == 2*DSize + 1 end, VerAns),
+        SList = lists:filter(fun(S) -> S == DSize + 1 end, VerAns),
         {length(ZerosList), length(SList)}
     end,
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
