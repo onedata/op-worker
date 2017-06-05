@@ -440,7 +440,8 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
         case {IsProvider, Msg0} of
             %% If message comes from provider and proxy session is requested - proceed
             %% with authorization and switch context to the proxy session.
-            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth = #macaroon_auth{}}} when ProxySessionId =/= undefined ->
+            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}}
+                when ProxySessionId =/= undefined, Auth =/= undefined ->
                 ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
                 {Msg0, ProxySessionId};

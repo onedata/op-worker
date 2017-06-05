@@ -20,7 +20,7 @@
     message_id :: undefined | message_id:id(),
     session_id :: undefined | session:id(),
     proxy_session_id :: undefined | session:id(),
-    proxy_session_auth :: undefined | #macaroon_auth{},
+    proxy_session_auth :: undefined | #macaroon_auth{} | #token_auth{},
     message_stream :: undefined | #message_stream{},
     message_body :: tuple()
 }).
